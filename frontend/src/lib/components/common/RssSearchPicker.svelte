@@ -1,7 +1,7 @@
 <!--
-  TubeVault – RssSearchPicker v1.5.64
+  TubeVault -  RssSearchPicker v1.5.64
   Durchsucht lokale RSS-Feeds nach Videos.
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../../api/client.js';

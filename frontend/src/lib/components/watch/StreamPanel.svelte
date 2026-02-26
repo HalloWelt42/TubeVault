@@ -1,5 +1,5 @@
 <!--
-  StreamPanel – Stream-Analyse, Audio-Switching, Offset, Kombinationen.
+  StreamPanel -  Stream-Analyse, Audio-Switching, Offset, Kombinationen.
   © HalloWelt42
 -->
 <script>

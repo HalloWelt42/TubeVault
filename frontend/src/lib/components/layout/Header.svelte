@@ -1,7 +1,7 @@
 <!--
-  TubeVault – Header v1.5.88
+  TubeVault -  Header v1.5.88
   Mit integrierter Universal-Suche (SearchDropdown).
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { route, navigate } from '../../router/router.js';

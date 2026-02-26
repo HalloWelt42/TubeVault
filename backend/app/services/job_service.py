@@ -1,7 +1,7 @@
 """
-TubeVault – Job Service v1.6.36
+TubeVault -  Job Service v1.6.36
 Zentrales Job-System mit Stale-Recovery, Auto-Cleanup, Abbruch und Pause/Resume
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 
 Job-Typen:
 - download:      Video-Download
@@ -96,7 +96,7 @@ class JobService:
     # ─── Pause / Resume ─────────────────────────────────
 
     async def pause_queue(self, reason: str = "user"):
-        """Queue pausieren – laufende Jobs laufen fertig, keine neuen starten."""
+        """Queue pausieren -  laufende Jobs laufen fertig, keine neuen starten."""
         self._paused = True
         self._pause_reason = reason
         self._paused_at = now_sqlite()
@@ -114,7 +114,7 @@ class JobService:
         })
 
     async def resume_queue(self):
-        """Queue fortsetzen – neue Jobs werden wieder gestartet."""
+        """Queue fortsetzen -  neue Jobs werden wieder gestartet."""
         was_paused = self._paused
         self._paused = False
         self._pause_reason = ""
@@ -137,7 +137,7 @@ class JobService:
             self._pause_reason = await db.fetch_val(
                 "SELECT value FROM settings WHERE key = 'queue.pause_reason'") or "user"
             self._paused_at = now_sqlite()
-            logger.info(f"[STARTUP] Queue war pausiert (Grund: {self._pause_reason}) – bleibt pausiert")
+            logger.info(f"[STARTUP] Queue war pausiert (Grund: {self._pause_reason}) -  bleibt pausiert")
 
     def is_paused(self) -> bool:
         """Prüft ob die Queue pausiert ist."""
@@ -188,7 +188,7 @@ class JobService:
             # Andere aktive Jobs: als unterbrochen markieren
             await db.execute(
                 """UPDATE jobs SET status = 'error',
-                   error_message = 'Unterbrochen durch Neustart – Retry möglich',
+                   error_message = 'Unterbrochen durch Neustart -  Retry möglich',
                    completed_at = ?
                    WHERE id = ?""",
                 (now_sqlite(), job["id"])
@@ -322,7 +322,7 @@ class JobService:
         return job
 
     async def cancel(self, job_id: int) -> dict:
-        """Job abbrechen – signalisiert laufenden Tasks den Abbruch."""
+        """Job abbrechen -  signalisiert laufenden Tasks den Abbruch."""
         self._cancelled.add(job_id)
         now = now_sqlite()
         await db.execute(
@@ -421,7 +421,7 @@ class JobService:
     # --- Exklusive Ausführung (max 1 Job gleichzeitig) ---
 
     async def run_exclusive(self, job_id: int, coro_fn, *args, **kwargs):
-        """Job exklusiv ausführen – wartet bis kein anderer Job läuft.
+        """Job exklusiv ausführen -  wartet bis kein anderer Job läuft.
         coro_fn bekommt job_id als erstes Argument.
         Setzt Status automatisch: queued → active → done/error."""
         if not self._semaphore:

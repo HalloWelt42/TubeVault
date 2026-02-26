@@ -1,8 +1,8 @@
 """
-TubeVault – Categories Router v1.5.85
+TubeVault -  Categories Router v1.5.85
 Vollständige Kategorie-Verwaltung mit korrekten Zählungen.
 Alle Video-Queries filtern auf status='ready'.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException, Query

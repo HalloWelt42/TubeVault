@@ -1,5 +1,5 @@
 /**
- * TubeVault – Store Tests v1.5.2
+ * TubeVault -  Store Tests v1.5.2
  * © HalloWelt42
  */
 

@@ -1,7 +1,7 @@
 """
-TubeVault – Streams Router v1.3.2
+TubeVault -  Streams Router v1.3.2
 Stream-Analyse, Audio-Spuren, Kombinationen
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException

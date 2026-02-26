@@ -1,6 +1,6 @@
 """
-TubeVault – Eigene Videos Router v1.8.76
-© HalloWelt42 – Private Nutzung
+TubeVault -  Eigene Videos Router v1.8.76
+© HalloWelt42 -  Private Nutzung
 
 API-Endpoints für Smart-Scan (Job-basiert), Import-Wizard und Verwaltung eigener Videos.
 """
@@ -173,7 +173,7 @@ async def delete_scan_session(session_id: int):
 
 @router.post("/scan")
 async def scan_directory(req: ScanRequest):
-    """Verzeichnis scannen (SYNCHRON – nur für kleine Verzeichnisse!).
+    """Verzeichnis scannen (SYNCHRON -  nur für kleine Verzeichnisse!).
     Für große Verzeichnisse /scan-job verwenden."""
     try:
         result = await import_service.scan_directory(
@@ -258,7 +258,7 @@ async def own_video_stats():
 
 @router.delete("/{video_id}")
 async def delete_own_video(video_id: str):
-    """Import rückgängig machen – Video aus DB entfernen.
+    """Import rückgängig machen -  Video aus DB entfernen.
     Datei auf Festplatte bleibt erhalten!
     """
     from app.database import db
@@ -308,7 +308,7 @@ async def search_rss_entries(
     channel: Optional[str] = None,
     limit: int = Query(20, ge=1, le=50),
 ):
-    """RSS-Entries durchsuchen – für manuelles Matching aus der Scan-Liste.
+    """RSS-Entries durchsuchen -  für manuelles Matching aus der Scan-Liste.
     Liefert Titel, Kanal, Video-ID, Thumbnail-Verfügbarkeit.
     """
     from app.database import db

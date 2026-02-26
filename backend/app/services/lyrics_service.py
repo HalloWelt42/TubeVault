@@ -1,7 +1,7 @@
 """
-TubeVault – Lyrics Service v1.8.20
+TubeVault -  Lyrics Service v1.8.20
 Multi-Provider: YouTube Music (ytmusicapi) + LRCLIB + Untertitel.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import re
@@ -196,7 +196,7 @@ MUSIC_PATTERNS = [
 ]
 MUSIC_RE = re.compile("|".join(MUSIC_PATTERNS), re.IGNORECASE)
 
-# Typische YouTube-Trennzeichen: "Artist - Title", "Artist – Title", "Artist | Title"
+# Typische YouTube-Trennzeichen: "Artist - Title", "Artist -  Title", "Artist | Title"
 ARTIST_TITLE_RE = re.compile(
     r"^(.+?)\s*[-–—|]\s*(.+?)(?:\s*[\(\[].*)?$"
 )

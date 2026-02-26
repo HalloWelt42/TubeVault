@@ -1,7 +1,7 @@
 <!--
-  TubeVault – MultiFilter v1.5.52
+  TubeVault -  MultiFilter v1.5.52
   Wiederverwendbare Filter-Leiste: Typ, Kanal, Kategorie, Tags (Mehrfachauswahl)
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { onMount } from 'svelte';
@@ -62,7 +62,7 @@
     { id: '3600-0', label: '> 1 Std', min: 3600, max: 0 },
   ];
 
-  // Einmalig laden – KEIN $effect (verhindert Reset bei Parent-Rerender)
+  // Einmalig laden -  KEIN $effect (verhindert Reset bei Parent-Rerender)
   onMount(async () => {
     if (showChannels) {
       try {

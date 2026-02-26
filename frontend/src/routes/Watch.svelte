@@ -410,7 +410,7 @@
       if (e.chapter_thumbs > 0) { await loadChapters(id); }
       if (e.subtitles > 0) { await loadSubtitles(id); reloaded = true; }
       if (e.thumbnail) { thumbKey = Date.now(); }
-    } catch(e) { /* Stille Fehler – kein Toast */ }
+    } catch(e) { /* Stille Fehler -  kein Toast */ }
   }
 
   async function startPlaylistFromStrip(pl) {
@@ -604,7 +604,7 @@
         // Prüfe ob die video_id übereinstimmt
         const vid = j.metadata?.video_id || j.video_id || '';
         if (vid === $route.id) {
-          toast.success('Download abgeschlossen – Seite wird aktualisiert');
+          toast.success('Download abgeschlossen -  Seite wird aktualisiert');
           setTimeout(() => loadVideo(), 1000);
         }
       }
@@ -1148,11 +1148,11 @@
           {/if}
           {#if streamDialog.selectedVideoItag && !streamDialog.selectedAudioItag && !isProgressive}
             {#if selVideo && !selVideo.is_progressive}
-              <p class="stream-hint"><i class="fa-solid fa-circle-info"></i> Video-only gewählt – wähle auch einen Audio-Stream oder aktiviere "Audio einmischen".</p>
+              <p class="stream-hint"><i class="fa-solid fa-circle-info"></i> Video-only gewählt -  wähle auch einen Audio-Stream oder aktiviere "Audio einmischen".</p>
             {/if}
           {/if}
           {#if isProgressive}
-            <p class="stream-hint stream-hint-ok"><i class="fa-solid fa-circle-check"></i> Progressiver Stream gewählt – Audio ist bereits enthalten.</p>
+            <p class="stream-hint stream-hint-ok"><i class="fa-solid fa-circle-check"></i> Progressiver Stream gewählt -  Audio ist bereits enthalten.</p>
           {/if}
         </div>
 

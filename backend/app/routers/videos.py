@@ -1,6 +1,6 @@
 """
-TubeVault – Videos Router v1.3.0
-© HalloWelt42 – Private Nutzung
+TubeVault -  Videos Router v1.3.0
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -245,7 +245,7 @@ async def get_video_neighbors(video_id: str):
 
 @router.get("/{video_id}")
 async def get_video(video_id: str):
-    """Einzelnes Video abrufen – inkl. Archiv-Status."""
+    """Einzelnes Video abrufen -  inkl. Archiv-Status."""
     video = await metadata_service.get_video(video_id)
     if not video:
         raise HTTPException(status_code=404, detail="Video nicht gefunden")

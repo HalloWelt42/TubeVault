@@ -1,9 +1,9 @@
 <!--
-  TubeVault – QuickPlaylistBtn v1.6.0
+  TubeVault -  QuickPlaylistBtn v1.6.0
   One-Click Button: Video zur gepinnten Playlist hinzufügen.
   Props: videoId (required), title/channelName/channelId (optional, für Stub-Erstellung)
   Varianten: size="sm" (Overlay), size="md" (Action-Bar)
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../../api/client.js';

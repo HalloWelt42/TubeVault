@@ -1,9 +1,9 @@
 <!--
-  TubeVault – MiniPlayer v1.9.12
+  TubeVault -  MiniPlayer v1.9.12
   Kompakter Player in der Sidebar für persistente Wiedergabe.
   Playlist-Queue-Navigation + Bibliothek-Fallback.
   Audio: Auto-Advance. Video: manuell skippen.
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { miniPlayer, deactivateMiniPlayer, updateMiniPlayerTime, activateMiniPlayer } from '../../stores/miniPlayer.js';

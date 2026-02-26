@@ -1,5 +1,5 @@
 <!--
-  ThumbnailAI v1.6.24 – AI-Thumbnail-Analyse Dashboard
+  ThumbnailAI v1.6.24 -  AI-Thumbnail-Analyse Dashboard
   Verbindung zu LM Studio, Konfiguration, Queue, Live-Log.
   © HalloWelt42
 -->

@@ -1,7 +1,7 @@
 /**
- * TubeVault – Playlist Queue Store v1.5.91
+ * TubeVault -  Playlist Queue Store v1.5.91
  * Verwaltet die aktuelle Wiedergabe-Queue (Playlist → Autoplay nächstes Video).
- * © HalloWelt42 – Private Nutzung
+ * © HalloWelt42 -  Private Nutzung
  */
 import { writable, get } from 'svelte/store';
 

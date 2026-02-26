@@ -1,8 +1,8 @@
 <script>
   /**
-   * TubeVault – Feed v1.5.54
+   * TubeVault -  Feed v1.5.54
    * Feed-Tabs (Aktiv/Spaeter/Archiv/Ausgeblendet), Schnellaktionen, Infinite Scroll
-   * © HalloWelt42 – Private Nutzung
+   * © HalloWelt42 -  Private Nutzung
    */
   import { api } from '../lib/api/client.js';
   import { toast } from '../lib/stores/notifications.js';
@@ -299,7 +299,7 @@
       const label = priority >= 10 ? 'Sofort-Download' : 'In Queue gelegt';
       toast.success(`${label}: ${entry.title || entry.video_id}`);
       streamDialog = null;
-      // Eintrag nicht sofort entfernen – bleibt bis Benutzer dismissed
+      // Eintrag nicht sofort entfernen -  bleibt bis Benutzer dismissed
     } catch (e) { toast.error(e.message); }
     finally {
       downloading.delete(entry.video_id);

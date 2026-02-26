@@ -1,9 +1,9 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  TubeVault – Setup Script v1.1.0                            ║
+# ║  TubeVault -  Setup Script v1.1.0                            ║
 # ║  Erstellt Verzeichnisse und .env für Erstinstallation.      ║
 # ║  Unterstützt: Linux (Raspberry Pi, Debian, Ubuntu), macOS   ║
-# ║  © HalloWelt42 – Private Nutzung                           ║
+# ║  © HalloWelt42 -  Private Nutzung                           ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 set -e
@@ -12,7 +12,7 @@ PLATFORM="$(uname -s)"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║  TubeVault – Setup                       ║"
+echo "║  TubeVault -  Setup                       ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -90,7 +90,7 @@ if [ ! -f ".env" ]; then
     echo "📝 .env erstellt (aus .env.example)"
     echo "   → Passe die Werte in .env nach Bedarf an."
 else
-    echo "📝 .env existiert bereits – wird nicht überschrieben."
+    echo "📝 .env existiert bereits -  wird nicht überschrieben."
 fi
 echo ""
 
@@ -144,7 +144,7 @@ fi
 
 if [ "$DISK_FREE_KB" -lt 10485760 ] 2>/dev/null; then
     echo "⚠️  Weniger als 10 GB frei!"
-    echo "   TubeVault speichert Videos lokal – für größere Sammlungen"
+    echo "   TubeVault speichert Videos lokal -  für größere Sammlungen"
     echo "   wird mehr Speicherplatz empfohlen."
     echo ""
 fi

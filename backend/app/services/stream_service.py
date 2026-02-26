@@ -1,7 +1,7 @@
 """
-TubeVault – Stream Analysis Service v1.3.2
+TubeVault -  Stream Analysis Service v1.3.2
 FFprobe-basierte Stream-Analyse
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import asyncio

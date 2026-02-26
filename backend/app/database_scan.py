@@ -1,7 +1,7 @@
 """
-TubeVault – Scan-Index Datenbank v1.5.61
+TubeVault -  Scan-Index Datenbank v1.5.61
 Separate DB für persistenten Datei-Index.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import aiosqlite

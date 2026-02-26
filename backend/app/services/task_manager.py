@@ -1,8 +1,8 @@
 """
-TubeVault – Task Manager v1.8.94
+TubeVault -  Task Manager v1.8.94
 Zentrale Verwaltung aller Hintergrund-Tasks.
 Stop/Restart via API, Auto-Restart bei Crash.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import asyncio

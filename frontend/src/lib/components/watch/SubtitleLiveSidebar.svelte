@@ -1,8 +1,8 @@
 <!--
-  TubeVault – SubtitleLiveSidebar v1.8.49
+  TubeVault -  SubtitleLiveSidebar v1.8.49
   Mitlaufende Untertitel-Anzeige (wie Lyrics)
   Synchronisiert mit Videozeit, VTT-Parser
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../../api/client.js';

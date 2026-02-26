@@ -1,6 +1,6 @@
 """
-TubeVault – Thumbnail AI Router v1.6.26
-© HalloWelt42 – Private Nutzung
+TubeVault -  Thumbnail AI Router v1.6.26
+© HalloWelt42 -  Private Nutzung
 
 API-Endpunkte für Thumbnail-AI-Analyse via LM Studio Vision.
 """

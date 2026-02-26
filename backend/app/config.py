@@ -1,6 +1,6 @@
 """
-TubeVault Backend – Konfiguration v1.5.1
-© HalloWelt42 – Private Nutzung
+TubeVault Backend -  Konfiguration v1.5.1
+© HalloWelt42 -  Private Nutzung
 """
 
 import os
@@ -45,7 +45,7 @@ CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", str(1024 * 1024)))  # 1MB
 VERSION = "1.9.13"
 APP_NAME = "TubeVault"
 
-# CORS – immer offen, keine Einschränkungen
+# CORS -  immer offen, keine Einschränkungen
 CORS_ORIGINS = ["*"]
 
 

@@ -1,6 +1,6 @@
 """
-TubeVault – Thumbnail AI Service v1.6.21
-© HalloWelt42 – Private Nutzung
+TubeVault -  Thumbnail AI Service v1.6.21
+© HalloWelt42 -  Private Nutzung
 
 Analysiert Video-Thumbnails per LM Studio Vision-Modell (Mac).
 Erkennt: video_type (video/short/live), Kategorie-Vorschläge, Beschreibung.

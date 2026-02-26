@@ -1,7 +1,7 @@
 """
-TubeVault – Import Router v1.3.0
+TubeVault -  Import Router v1.3.0
 YouTube-Playlist Import, URL-Listen, lokale Video-Registrierung
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import asyncio

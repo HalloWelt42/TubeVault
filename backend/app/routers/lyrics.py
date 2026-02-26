@@ -1,7 +1,7 @@
 """
-TubeVault – Lyrics Router v1.8.0
+TubeVault -  Lyrics Router v1.8.0
 API-Endpunkte für Songtext-Verwaltung.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import asyncio

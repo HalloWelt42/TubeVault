@@ -1,7 +1,7 @@
 """
-TubeVault – Subscriptions Router v1.5.1
+TubeVault -  Subscriptions Router v1.5.1
 RSS-Abo-Verwaltung + Kanal-Details + Avatare + Shorts/Live/Debug
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
@@ -219,7 +219,7 @@ async def get_channel_videos(
     per_page: int = Query(50, ge=1, le=200),
     include_dismissed: bool = False,
 ):
-    """Alle Videos eines Kanals – mit Typ-Filter und Sortierung.
+    """Alle Videos eines Kanals -  mit Typ-Filter und Sortierung.
 
     source: all | rss | downloaded
     video_type: all | video | short | live
@@ -557,7 +557,7 @@ async def get_missing_videos(
 
 @router.get("/channel/{channel_id}/debug")
 async def get_channel_debug(channel_id: str):
-    """Debug-Infos für Kanal-Diagnose – zeigt DB-Zustand und Scan-Details."""
+    """Debug-Infos für Kanal-Diagnose -  zeigt DB-Zustand und Scan-Details."""
     import json
 
     sub = await db.fetch_one(

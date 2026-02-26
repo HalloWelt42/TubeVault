@@ -1,5 +1,5 @@
 /**
- * TubeVault – API Client Tests v1.5.2
+ * TubeVault -  API Client Tests v1.5.2
  * © HalloWelt42
  */
 

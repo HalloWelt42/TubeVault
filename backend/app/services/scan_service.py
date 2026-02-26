@@ -1,8 +1,8 @@
 """
-TubeVault – Scan Service v1.5.61
+TubeVault -  Scan Service v1.5.61
 Inkrementeller Datei-Scan → Identifizieren → Registrieren (ins Vault kopieren).
 Separate scan_index.db für persistenten Index.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import asyncio
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 DISCOVER_BATCH = 100
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".flv", ".wmv", ".ts"}
 
-# YouTube-ID Patterns (konservativ – lieber keine ID als falsche)
+# YouTube-ID Patterns (konservativ -  lieber keine ID als falsche)
 YT_ID_PATTERNS = [
     re.compile(r'\[([a-zA-Z0-9_-]{11})\]'),        # [dQw4w9WgXcQ]
     re.compile(r'\(([a-zA-Z0-9_-]{11})\)'),         # (dQw4w9WgXcQ)

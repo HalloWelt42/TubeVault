@@ -1,8 +1,8 @@
 <!--
-  TubeVault – DonateOverlay v1.0.0
+  TubeVault -  DonateOverlay v1.0.0
   Glasmorphism Spenden-Overlay
   Ko-fi + Crypto (BTC, DOGE, ETH)
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   // Sichtbarkeit des Overlays
@@ -61,7 +61,7 @@
     <!-- Ko-fi Button -->
     <a href="https://ko-fi.com/HalloWelt42" target="_blank" rel="noopener" class="kofi-btn">
       <span class="kofi-icon">☕</span>
-      <span>Ko-fi – Kaffee spendieren</span>
+      <span>Ko-fi -  Kaffee spendieren</span>
     </a>
 
     <!-- Crypto Label -->

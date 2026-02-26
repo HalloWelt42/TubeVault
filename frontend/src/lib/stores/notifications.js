@@ -1,5 +1,5 @@
 /**
- * TubeVault – Notifications Store v1.5.52
+ * TubeVault -  Notifications Store v1.5.52
  * Toast-Benachrichtigungen (keine Browser-Popups!)
  * © HalloWelt42
  */

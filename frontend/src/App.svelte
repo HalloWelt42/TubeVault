@@ -126,7 +126,7 @@
   :global(a) { color: var(--accent-primary); text-decoration: none; }
   :global(a:hover) { text-decoration: underline; }
 
-  /* Material Design Icon-Farben – hohe Sättigung, guter Kontrast */
+  /* Material Design Icon-Farben -  hohe Sättigung, guter Kontrast */
   :global(.fa-solid.fa-download, .fa-solid.fa-cloud-arrow-down) { color: #42A5F5; }
   :global(.fa-solid.fa-play) { color: #66BB6A; }
   :global(.fa-solid.fa-satellite-dish) { color: #AB47BC; }

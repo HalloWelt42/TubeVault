@@ -1,7 +1,7 @@
 <!--
-  TubeVault – YouTubeSearchPicker v1.5.64
+  TubeVault -  YouTubeSearchPicker v1.5.64
   Wiederverwendbare YT-Such-Komponente für Link-Dialoge.
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../../api/client.js';

@@ -1,6 +1,6 @@
 <!--
-  TubeVault – Categories v1.5.91
-  © HalloWelt42 – Private Nutzung
+  TubeVault -  Categories v1.5.91
+  © HalloWelt42 -  Private Nutzung
   Material Design Farbpalette statt freier Farbauswahl
 -->
 <script>

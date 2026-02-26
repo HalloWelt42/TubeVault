@@ -1,5 +1,5 @@
 <!--
-  LyricsPanel – Songtext-Verwaltung für Watch-Seite.
+  LyricsPanel -  Songtext-Verwaltung für Watch-Seite.
   Musik-Erkennung, LRCLIB-Suche, synced/plain Lyrics.
   © HalloWelt42
 -->
@@ -119,7 +119,7 @@
     try {
       const res = await api.detectMusic(videoId);
       if (res.is_music) {
-        toast.success(`Erkannt: ${res.artist} – ${res.song_title}`);
+        toast.success(`Erkannt: ${res.artist} -  ${res.song_title}`);
         info.is_music = true;
         info.artist = res.artist || '';
         info.title = res.song_title || '';
@@ -416,7 +416,7 @@
     <button class="info-toggle" onclick={toggleInfo}>
       <i class="fa-solid {infoCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}"></i>
       {#if infoCollapsed && info.is_music}
-        <span class="info-summary">{info.artist} – {info.title}</span>
+        <span class="info-summary">{info.artist} -  {info.title}</span>
       {:else}
         <span>Musik-Info</span>
       {/if}
@@ -517,7 +517,7 @@
         {#each searchResults as r}
           <button class="result-item" onclick={() => pickResult(r)}>
             <div class="result-main">
-              <span class="result-name">{r.artist} – {r.title}</span>
+              <span class="result-name">{r.artist} -  {r.title}</span>
               {#if r.album}<span class="result-album">{r.album}</span>{/if}
             </div>
             <div class="result-tags">

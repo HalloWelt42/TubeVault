@@ -1,8 +1,8 @@
 <!--
-  TubeVault – Archive v1.5.91
+  TubeVault -  Archive v1.5.91
   Archivierte Videos: Gleiche Such-/Filter-Logik wie Bibliothek.
   Videos hier sind aus der Bibliothek ausgeblendet.
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../lib/api/client.js';

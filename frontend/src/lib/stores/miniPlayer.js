@@ -1,7 +1,7 @@
 /**
- * TubeVault – Mini-Player Store v1.8.72
+ * TubeVault -  Mini-Player Store v1.8.72
  * Persistente Wiedergabe: Video läuft weiter wenn Watch-Seite verlassen wird.
- * © HalloWelt42 – Private Nutzung
+ * © HalloWelt42 -  Private Nutzung
  */
 import { writable, get } from 'svelte/store';
 

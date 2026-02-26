@@ -1,8 +1,8 @@
 """
-TubeVault – Feed Router
+TubeVault -  Feed Router
 RSS-Feed Endpoints: Channels, Tags, Videos, Status-Aktionen.
 Extrahiert aus subscriptions.py für bessere Modularität.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/subscriptions", tags=["Feed"])
 
 @router.get("/feed/channels")
 async def get_feed_channels(feed_tab: str = Query("active")):
-    """Alle abonnierten Kanaele fuer Feed-Filter – IMMER alle, auch ohne Entries."""
+    """Alle abonnierten Kanaele fuer Feed-Filter -  IMMER alle, auch ohne Entries."""
     status_filter = ""
     if feed_tab == "active":
         status_filter = "AND COALESCE(r.feed_status, 'active') = 'active'"
@@ -84,7 +84,7 @@ async def get_feed_videos(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
 ):
-    """Neue Videos aus RSS-Feeds – mit Mehrfach-Typ/Kanal/Tag/Dauer-Filter, Feed-Tabs und Pagination."""
+    """Neue Videos aus RSS-Feeds -  mit Mehrfach-Typ/Kanal/Tag/Dauer-Filter, Feed-Tabs und Pagination."""
     return await rss_service.get_new_videos(
         channel_id, channel_ids, video_type, video_types, feed_tab, page, per_page,
         keywords=keywords, duration_min=duration_min, duration_max=duration_max

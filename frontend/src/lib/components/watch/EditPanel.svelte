@@ -1,5 +1,5 @@
 <!--
-  EditPanel v1.8.51 – Bearbeiten-Tab für Watch-Seite.
+  EditPanel v1.8.51 -  Bearbeiten-Tab für Watch-Seite.
   Titel, Beschreibung, Video-Typ, Kategorien, Tags, Werkzeuge.
   Notizen → NotesSidebar (rechts), Kanalname → readonly.
   Qualität-Upgrade zeigt aktuelle Streams + Zielauswahl.
@@ -169,7 +169,7 @@
 </script>
 
 <div class="edit-section">
-  <!-- Sub-Tabs (ohne Notizen – die sind jetzt in der Sidebar) -->
+  <!-- Sub-Tabs (ohne Notizen -  die sind jetzt in der Sidebar) -->
   <div class="edit-tabs">
     <button class="etab" class:active={activeEditTab === 'meta'} onclick={() => activeEditTab = 'meta'}>
       <i class="fa-solid fa-pen"></i> Metadaten

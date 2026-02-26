@@ -1,6 +1,6 @@
 """
-TubeVault – Settings Router v1.0.0
-© HalloWelt42 – Private Nutzung
+TubeVault -  Settings Router v1.0.0
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException

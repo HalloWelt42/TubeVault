@@ -1,7 +1,7 @@
 """
-TubeVault – Rate Limiter v1.7.2
+TubeVault -  Rate Limiter v1.7.2
 Globales Rate-Limiting für alle YouTube-Anfragen
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 
 Kategorien + Standard-Limits:
 - rss:           0.5s  (RSS XML, harmlos, öffentlich)

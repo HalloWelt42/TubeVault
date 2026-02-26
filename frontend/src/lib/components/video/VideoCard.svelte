@@ -1,8 +1,8 @@
 <script>
   /**
-   * TubeVault – VideoCard v1.6.18
+   * TubeVault -  VideoCard v1.6.18
    * Typ-Badges klickbar (video→short→live), Like/Dislike Bar, QPL.
-   * © HalloWelt42 – Private Nutzung
+   * © HalloWelt42 -  Private Nutzung
    */
   import { api } from '../../api/client.js';
   import { navigate } from '../../router/router.js';

@@ -1,7 +1,7 @@
 """
-TubeVault – System Router v1.5.54
+TubeVault -  System Router v1.5.54
 System-Status, Rate-Limiter Stats, Health, Live-Logs
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import logging
@@ -50,7 +50,7 @@ _LOGGER_CAT_MAP = {
 class LogBuffer(logging.Handler):
     """Ring-Buffer + gebatchter WebSocket-Stream.
     _push() ist synchron und schnell (nur deque.append).
-    WS-Broadcast alle 250ms gebatcht – blockiert nie den Haupt-Thread."""
+    WS-Broadcast alle 250ms gebatcht -  blockiert nie den Haupt-Thread."""
 
     def __init__(self, maxlen: int = LOG_BUFFER_SIZE):
         super().__init__()
@@ -122,7 +122,7 @@ class LogBuffer(logging.Handler):
         self._push(entry)
 
     def _push(self, entry: dict):
-        """Schnell & synchron – nur deque-Append, kein I/O."""
+        """Schnell & synchron -  nur deque-Append, kein I/O."""
         self.buffer.append(entry)
         if self.connections:
             self._pending.append(entry)
@@ -175,7 +175,7 @@ _stdout = logging.StreamHandler()
 _stdout.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%H:%M:%S"))
 _stdout.setLevel(logging.INFO)
 _root.addHandler(_stdout)
-# Root-Logger Level explizit setzen – basicConfig() in main.py greift nicht,
+# Root-Logger Level explizit setzen -  basicConfig() in main.py greift nicht,
 # weil dieser Handler bereits existiert bevor basicConfig aufgerufen wird.
 _root.setLevel(logging.INFO)
 # Noisy Third-Party Logger auf WARNING setzen
@@ -399,7 +399,7 @@ async def get_system_stats():
 
 @router.get("/status")
 async def get_full_status():
-    """Gesamtstatus aller Services – für Frontend-Header/Footer.
+    """Gesamtstatus aller Services -  für Frontend-Header/Footer.
 
     Zeigt: Rate-Limiter, RSS-Worker, Download-Queue, Service-Health, Jobs.
     Frontend pollt z.B. alle 10s für Live-Status-Anzeige mit LEDs.

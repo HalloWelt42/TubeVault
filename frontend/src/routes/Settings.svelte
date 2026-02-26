@@ -1,6 +1,6 @@
 <!--
-  TubeVault – Settings v1.5.52
-  © HalloWelt42 – Private Nutzung
+  TubeVault -  Settings v1.5.52
+  © HalloWelt42 -  Private Nutzung
   Alle Einstellungen sichtbar, erklärt, transparent
 -->
 <script>
@@ -33,7 +33,7 @@
   const SETTING_DEFS = {
     'rss.enabled': { label: 'Scanner aktiv', desc: 'Prüft automatisch alle abonnierten Kanäle auf neue Videos per RSS-Feed', type: 'toggle', category: 'scanner' },
     'rss.interval': { label: 'Basis-Prüfintervall', desc: 'Startintervall für neue Abos. Verdoppelt sich bei jedem Poll ohne neue Videos (bis max 7 Tage). Neue Videos setzen auf diesen Wert zurück.', type: 'duration', category: 'scanner', min: 300, max: 86400 },
-    'rss.max_age_days': { label: 'Maximales Video-Alter', desc: 'Videos älter als X Tage werden ignoriert. YouTube-RSS liefert max. 15 Videos – bei inaktiven Kanälen können alle älter sein.', type: 'number', category: 'scanner', min: 7, max: 365, unit: 'Tage' },
+    'rss.max_age_days': { label: 'Maximales Video-Alter', desc: 'Videos älter als X Tage werden ignoriert. YouTube-RSS liefert max. 15 Videos -  bei inaktiven Kanälen können alle älter sein.', type: 'number', category: 'scanner', min: 7, max: 365, unit: 'Tage' },
     'feed.hide_shorts': { label: 'Shorts ausblenden', desc: 'Shorts im Feed nicht anzeigen (über Typ-Filter erreichbar)', type: 'toggle', category: 'feed' },
     'feed.auto_classify': { label: 'Auto-Erkennung (Short/Live)', desc: 'Neue RSS-Videos automatisch als Short oder Livestream klassifizieren', type: 'toggle', category: 'feed' },
     'feed.auto_refresh': { label: 'Kanal-Rescan im Hintergrund', desc: 'Ältere Kanäle periodisch neu scannen (Metadaten, Avatare)', type: 'toggle', category: 'feed' },

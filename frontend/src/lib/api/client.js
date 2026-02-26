@@ -1,6 +1,6 @@
 /**
- * TubeVault – API Client v1.5.91
- * © HalloWelt42 – Private Nutzung
+ * TubeVault -  API Client v1.5.91
+ * © HalloWelt42 -  Private Nutzung
  */
 
 export const FE_VERSION = '1.9.13';

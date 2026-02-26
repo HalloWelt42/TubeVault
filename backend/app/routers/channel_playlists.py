@@ -1,7 +1,7 @@
 """
-TubeVault – Channel Playlists Router v1.7.0
-YouTube-Playlist-Abruf und Import – Job-basiert mit Fortschritt.
-© HalloWelt42 – Private Nutzung
+TubeVault -  Channel Playlists Router v1.7.0
+YouTube-Playlist-Abruf und Import -  Job-basiert mit Fortschritt.
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
@@ -91,7 +91,7 @@ async def get_channel_playlists(channel_id: str):
 
 @router.post("/channel/{channel_id}/fetch-playlists")
 async def fetch_channel_playlists(channel_id: str, background_tasks: BackgroundTasks):
-    """YouTube-Playlists eines Kanals abrufen – als Background-Job."""
+    """YouTube-Playlists eines Kanals abrufen -  als Background-Job."""
     from app.services.playlist_service import fetch_channel_playlists_job
 
     sub = await db.fetch_one(
@@ -117,7 +117,7 @@ async def fetch_channel_playlists(channel_id: str, background_tasks: BackgroundT
 
 @router.post("/playlists/{playlist_id}/fetch-videos")
 async def fetch_playlist_videos(playlist_id: str, background_tasks: BackgroundTasks):
-    """Video-IDs einer YouTube-Playlist laden – als Background-Job."""
+    """Video-IDs einer YouTube-Playlist laden -  als Background-Job."""
     from app.services.playlist_service import fetch_playlist_videos_job
 
     row = await db.fetch_one(
@@ -145,7 +145,7 @@ async def fetch_playlist_videos(playlist_id: str, background_tasks: BackgroundTa
 
 @router.post("/playlists/{playlist_id}/import")
 async def import_playlist_to_local(playlist_id: str, background_tasks: BackgroundTasks):
-    """YouTube-Playlist als lokale Playlist importieren – als Background-Job.
+    """YouTube-Playlist als lokale Playlist importieren -  als Background-Job.
     Registriert alle Videos (auch nicht-heruntergeladene) als Platzhalter.
     """
     from app.services.playlist_service import import_playlist_to_local_job

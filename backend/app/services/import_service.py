@@ -1,6 +1,6 @@
 """
-TubeVault – Import Service v1.8.76
-© HalloWelt42 – Private Nutzung
+TubeVault -  Import Service v1.8.76
+© HalloWelt42 -  Private Nutzung
 
 Smart-Scan für eigene Videos: NFO-Parsing, Thumbnail-Erkennung,
 Fuzzy-Matching gegen RSS/Bibliothek, Batch-Import.

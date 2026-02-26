@@ -1,6 +1,6 @@
 """
-TubeVault – File Utilities v1.5.54
-© HalloWelt42 – Private Nutzung
+TubeVault -  File Utilities v1.5.54
+© HalloWelt42 -  Private Nutzung
 """
 
 import os

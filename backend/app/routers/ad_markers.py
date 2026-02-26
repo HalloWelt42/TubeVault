@@ -1,8 +1,8 @@
 """
-TubeVault – Ad-Markers Router v1.5.49
+TubeVault -  Ad-Markers Router v1.5.49
 Werbemarken + SponsorBlock-Integration
 Eigene Marker (manual) + externe (sponsorblock), voll editierbar
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import logging
@@ -93,7 +93,7 @@ class AdMarkerUpdate(BaseModel):
 
 @router.get("/{video_id}")
 async def get_ad_markers(video_id: str):
-    """Alle Werbemarken eines Videos – eigene + SponsorBlock."""
+    """Alle Werbemarken eines Videos -  eigene + SponsorBlock."""
     rows = await db.fetch_all(
         "SELECT * FROM ad_markers WHERE video_id = ? ORDER BY start_time ASC",
         (video_id,)

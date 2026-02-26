@@ -1,7 +1,7 @@
 """
-TubeVault – Thumbnail Utilities
+TubeVault -  Thumbnail Utilities
 Zentrale Funktionen für YouTube-Thumbnail-Downloads und ffmpeg-Generierung.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import logging

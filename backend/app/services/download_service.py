@@ -1,17 +1,17 @@
 """
-TubeVault – Download Service v1.8.40
+TubeVault -  Download Service v1.8.40
 Live-Progress, Stufen, FFmpeg-Merge, Rate-Limiting, Resume, Job-Tracking, Adaptive Cooldown
 pytubefix: Chapters, Captions, Audio-Only nativ
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 
 Download-Stufen:
-1. resolving         – Video-Info von YouTube laden
-2. resolved          – Streams erkannt
-3. downloading_video – Video-Spur wird heruntergeladen
-4. downloading_audio – Audio-Spur wird heruntergeladen (nur adaptive)
-5. merging           – FFmpeg merged Video+Audio
-6. finalizing        – Thumbnail, DB-Eintrag
-7. done              – Fertig
+1. resolving         -  Video-Info von YouTube laden
+2. resolved          -  Streams erkannt
+3. downloading_video -  Video-Spur wird heruntergeladen
+4. downloading_audio -  Audio-Spur wird heruntergeladen (nur adaptive)
+5. merging           -  FFmpeg merged Video+Audio
+6. finalizing        -  Thumbnail, DB-Eintrag
+7. done              -  Fertig
 """
 
 import asyncio
@@ -544,7 +544,7 @@ class DownloadService:
         logger.info("Download Worker gestartet")
 
     def _on_worker_done(self, task):
-        """Callback wenn Worker-Task endet – loggt Fehler und plant Neustart."""
+        """Callback wenn Worker-Task endet -  loggt Fehler und plant Neustart."""
         try:
             exc = task.exception()
             if exc:
@@ -563,7 +563,7 @@ class DownloadService:
             await asyncio.sleep(30)
             try:
                 if not self._worker_task or self._worker_task.done():
-                    logger.warning("[Watchdog] Worker tot – Neustart…")
+                    logger.warning("[Watchdog] Worker tot -  Neustart…")
                     self._worker_task = asyncio.create_task(self._queue_loop())
                     self._worker_task.add_done_callback(self._on_worker_done)
                     self._loop = asyncio.get_event_loop()
@@ -634,7 +634,7 @@ class DownloadService:
                     continue
 
                 # Warten wenn ein SYSTEM-Job aktiv ist (Channel-Scan, Cleanup etc.)
-                # RSS-Cycles laufen parallel zu Downloads – KEIN gegenseitiges Blockieren!
+                # RSS-Cycles laufen parallel zu Downloads -  KEIN gegenseitiges Blockieren!
                 has_blocking_job = await db.fetch_val(
                     """SELECT COUNT(*) FROM jobs
                        WHERE status='active'
@@ -683,7 +683,7 @@ class DownloadService:
                             await asyncio.sleep(3)
                             continue
 
-                    # JETZT erst als aktiv markieren – Download startet wirklich
+                    # JETZT erst als aktiv markieren -  Download startet wirklich
                     await db.execute(
                         "UPDATE jobs SET status = 'active' WHERE id = ?", (job_id,))
 
@@ -818,7 +818,7 @@ class DownloadService:
                  str(final_path), file_size, 1 if not merged else 0)
             )
 
-            # Kapitel speichern (pytubefix chapters) – NACH video INSERT
+            # Kapitel speichern (pytubefix chapters) -  NACH video INSERT
             auto_chapters = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.auto_chapters'")
             if auto_chapters != "false" and meta.get("chapters"):
                 for ch in meta["chapters"]:
@@ -899,7 +899,7 @@ class DownloadService:
             ])
 
             if is_unavailable:
-                # Sofort parken – kein Retry sinnvoll
+                # Sofort parken -  kein Retry sinnvoll
                 await db.execute(
                     "UPDATE jobs SET status='parked', error_message=? WHERE id=?",
                     (f"Nicht verfügbar: {err[:200]}", job_id)
@@ -909,7 +909,7 @@ class DownloadService:
                     "progress": 0, "stage": "parked", "stage_label": f"Geparkt: {err[:80]}",
                 })
                 await job_service.notify(await job_service.get(job_id))
-                logger.warning(f"[PARKED] {vid}: Nicht verfügbar – {err[:120]}")
+                logger.warning(f"[PARKED] {vid}: Nicht verfügbar -  {err[:120]}")
 
             elif (is_throttle or is_temporary) and retry_count < max_retries:
                 # Exponentieller Backoff: 2min, 5min, 15min
@@ -919,7 +919,7 @@ class DownloadService:
                 new_meta = {**meta_raw, "retry_count": retry_count + 1, "retry_after": retry_after}
                 await db.execute(
                     "UPDATE jobs SET status='retry_wait', error_message=?, metadata=? WHERE id=?",
-                    (f"Retry {retry_count + 1}/{max_retries} in {delay // 60}min – {err[:200]}",
+                    (f"Retry {retry_count + 1}/{max_retries} in {delay // 60}min -  {err[:200]}",
                      json.dumps(new_meta), job_id)
                 )
                 await self._ws_broadcast({
@@ -954,7 +954,7 @@ class DownloadService:
                     "progress": 0, "stage": "parked", "stage_label": f"Geparkt (Retries erschöpft)",
                 })
                 await job_service.notify(await job_service.get(job_id))
-                logger.warning(f"[PARKED] {vid}: {max_retries} Retries erschöpft – geparkt")
+                logger.warning(f"[PARKED] {vid}: {max_retries} Retries erschöpft -  geparkt")
             else:
                 try:
                     await job_service.fail(job_id, err[:200])

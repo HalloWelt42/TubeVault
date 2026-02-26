@@ -1,5 +1,5 @@
 # TubeVault Docker Compose v1.4.1
-# © HalloWelt42 – Private Nutzung
+# © HalloWelt42 -  Private Nutzung
 #
 # Backend: Port 8031
 # Frontend: Port 8032
@@ -10,7 +10,7 @@
 
 services:
   # ==========================================
-  # BACKEND – FastAPI + pytubefix + FFmpeg
+  # BACKEND -  FastAPI + pytubefix + FFmpeg
   # ==========================================
   tubevault-backend:
     build:
@@ -59,7 +59,7 @@ services:
           memory: 2G
 
   # ==========================================
-  # FRONTEND – Svelte 5 + Nginx
+  # FRONTEND -  Svelte 5 + Nginx
   # ==========================================
   tubevault-frontend:
     build:

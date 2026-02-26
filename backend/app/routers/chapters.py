@@ -1,7 +1,7 @@
 """
-TubeVault – Chapters Router v1.3.0
+TubeVault -  Chapters Router v1.3.0
 Video-Kapitel (YouTube + manuell erstellte)
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import asyncio

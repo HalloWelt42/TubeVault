@@ -60,7 +60,7 @@
     finally { loading = false; loadingMore = false; }
   }
 
-  // Debounced loadVideos – verhindert Request-Flut bei schnellen Filter-Änderungen
+  // Debounced loadVideos -  verhindert Request-Flut bei schnellen Filter-Änderungen
   function loadVideosDebounced() {
     clearTimeout(_loadTimer);
     _loadTimer = setTimeout(() => loadVideos(), 80);

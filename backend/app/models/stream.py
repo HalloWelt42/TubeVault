@@ -1,6 +1,6 @@
 """
-TubeVault – Stream Models v1.0.0
-© HalloWelt42 – Private Nutzung
+TubeVault -  Stream Models v1.0.0
+© HalloWelt42 -  Private Nutzung
 """
 
 from pydantic import BaseModel

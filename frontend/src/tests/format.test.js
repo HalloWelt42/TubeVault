@@ -1,5 +1,5 @@
 /**
- * TubeVault – Format Utilities Tests v1.5.2
+ * TubeVault -  Format Utilities Tests v1.5.2
  * © HalloWelt42
  */
 
@@ -127,7 +127,7 @@ describe('formatSize', () => {
 // formatDate
 // ============================================================
 describe('formatDate', () => {
-  it('gibt – für null/undefined', () => {
+  it('gibt -  für null/undefined', () => {
     expect(formatDate(null)).toBe('–');
     expect(formatDate(undefined)).toBe('–');
     expect(formatDate('')).toBe('–');
@@ -149,7 +149,7 @@ describe('formatDate', () => {
 // formatDateRelative
 // ============================================================
 describe('formatDateRelative', () => {
-  it('gibt – für null/undefined', () => {
+  it('gibt -  für null/undefined', () => {
     expect(formatDateRelative(null)).toBe('–');
     expect(formatDateRelative(undefined)).toBe('–');
     expect(formatDateRelative('')).toBe('–');
@@ -191,7 +191,7 @@ describe('formatDateRelative', () => {
 // formatViews
 // ============================================================
 describe('formatViews', () => {
-  it('gibt – für null/undefined/0', () => {
+  it('gibt -  für null/undefined/0', () => {
     expect(formatViews(null)).toBe('–');
     expect(formatViews(undefined)).toBe('–');
     expect(formatViews(0)).toBe('–');

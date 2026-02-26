@@ -1,12 +1,12 @@
 """
-TubeVault – Channel Scanner v1.8.94
+TubeVault -  Channel Scanner v1.8.94
 Vollständiger Kanal-Scan via pytubefix (Videos/Shorts/Live).
 Pre-Count via video_urls, paketweises Speichern, Phase-Transparenz.
 Memory-Fix: ch.url_generator() statt ch.videos/shorts/live
 → DeferredGeneratorList cached ALLE YouTube-Objekte in _elements
 → Bei 3500+ Videos = hunderte MB RAM, OOM auf Pi 16GB
 → url_generator() ist der rohe Generator OHNE Caching.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import asyncio
@@ -209,7 +209,7 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
         name = channel_meta["channel_name"] or channel_name
         scan_state["phase_label"] = f"Metadaten geladen: {name}"
 
-        # initial_data kann mehrere MB JSON sein – sofort freigeben
+        # initial_data kann mehrere MB JSON sein -  sofort freigeben
         try:
             if hasattr(ch, '_initial_data'):
                 ch._initial_data = None
@@ -235,7 +235,7 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
         if precount > 0:
             scan_state["phase_label"] = f"~{precount} Videos erwartet (letzter Scan)"
         else:
-            scan_state["phase_label"] = "Erster Scan – Videoanzahl unbekannt"
+            scan_state["phase_label"] = "Erster Scan -  Videoanzahl unbekannt"
 
         if cancel_event.is_set():
             del ch; import gc; gc.collect()
@@ -329,7 +329,7 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
             if hasattr(ch, '_initial_data'): ch._initial_data = None
             if hasattr(ch, '_html'): ch._html = None
             del ch; import gc; gc.collect()
-            logger.info(f"[Scan] Abbruch nach Videos – Channel-Objekt freigegeben")
+            logger.info(f"[Scan] Abbruch nach Videos -  Channel-Objekt freigegeben")
             with scan_state["entries_lock"]:
                 return channel_meta, list(scan_state["entries_buffer"]), counts, errors
 
@@ -369,7 +369,7 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
             if hasattr(ch, '_initial_data'): ch._initial_data = None
             if hasattr(ch, '_html'): ch._html = None
             del ch; import gc; gc.collect()
-            logger.info(f"[Scan] Abbruch nach Shorts – Channel-Objekt freigegeben")
+            logger.info(f"[Scan] Abbruch nach Shorts -  Channel-Objekt freigegeben")
             with scan_state["entries_lock"]:
                 return channel_meta, list(scan_state["entries_buffer"]), counts, errors
 
@@ -485,7 +485,7 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
         except asyncio.CancelledError:
             pass
 
-        # Abbruch nach Fetch – trotzdem gefundene Einträge speichern
+        # Abbruch nach Fetch -  trotzdem gefundene Einträge speichern
         cancelled_early = cancel_event.is_set() or job_service.is_cancelled(job_id)
 
         # ─── Phase 4: Rest-Einträge speichern (was Batch nicht erwischt hat) ───
@@ -500,7 +500,7 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
         total_entries = already_saved + total_to_save  # Gesamtzahl
 
         if cancelled_early:
-            summary = f"Abbruch – speichere {total_entries} gefundene Einträge…"
+            summary = f"Abbruch -  speichere {total_entries} gefundene Einträge…"
             await job_service.progress(job_id, 0.70, summary)
 
         if total_to_save > 0:

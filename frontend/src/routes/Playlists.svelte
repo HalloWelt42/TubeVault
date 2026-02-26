@@ -1,7 +1,7 @@
 <!--
-  TubeVault – Playlists v1.5.91
+  TubeVault -  Playlists v1.5.91
   Playlist-Verwaltung: Erstellen, Abspielen, Videos hinzufügen, Drag&Drop Sortieren.
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../lib/api/client.js';
@@ -193,7 +193,7 @@
           if (autoPlay && plVideos.length > 0) playAll(0);
         })();
       } else if (!pl && selectedPl?.id !== Number(openId)) {
-        // Playlist nicht in Liste (z.B. channel-only) – direkt laden
+        // Playlist nicht in Liste (z.B. channel-only) -  direkt laden
         (async () => {
           try {
             const res = await api.getPlaylist(openId);

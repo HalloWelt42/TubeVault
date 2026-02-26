@@ -1,7 +1,7 @@
 /**
- * TubeVault – Quick Playlist Store v1.6.0
+ * TubeVault -  Quick Playlist Store v1.6.0
  * Speichert die "gepinnte" Playlist für One-Click-Hinzufügen.
- * © HalloWelt42 – Private Nutzung
+ * © HalloWelt42 -  Private Nutzung
  */
 import { writable, get } from 'svelte/store';
 

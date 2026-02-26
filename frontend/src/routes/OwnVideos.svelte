@@ -1,8 +1,8 @@
 <!--
-  TubeVault – Import-Wizard v1.8.76
+  TubeVault -  Import-Wizard v1.8.76
   3-Panel: Bibliothek | Aktion | Dateien
   Async Scan-Job, Staging-DB, Duration-Matching
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../lib/api/client.js';

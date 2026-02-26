@@ -1,5 +1,5 @@
 /**
- * TubeVault – Test Setup v1.5.2
+ * TubeVault -  Test Setup v1.5.2
  * Mocks für Browser-APIs die in jsdom fehlen
  * © HalloWelt42
  */

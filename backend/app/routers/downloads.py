@@ -1,6 +1,6 @@
 """
-TubeVault – Downloads Router v1.3.5
-© HalloWelt42 – Private Nutzung
+TubeVault -  Downloads Router v1.3.5
+© HalloWelt42 -  Private Nutzung
 """
 
 import json

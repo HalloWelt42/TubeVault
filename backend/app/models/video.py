@@ -1,6 +1,6 @@
 """
-TubeVault – Video Models v1.3.0
-© HalloWelt42 – Private Nutzung
+TubeVault -  Video Models v1.3.0
+© HalloWelt42 -  Private Nutzung
 """
 
 from pydantic import BaseModel, Field

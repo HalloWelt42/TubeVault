@@ -1,6 +1,6 @@
 """
-TubeVault – Playlists Router v1.3.0
-© HalloWelt42 – Private Nutzung
+TubeVault -  Playlists Router v1.3.0
+© HalloWelt42 -  Private Nutzung
 """
 
 import json

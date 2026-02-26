@@ -1,7 +1,7 @@
 /**
- * TubeVault – Filter Persistence v1.7.4
+ * TubeVault -  Filter Persistence v1.7.4
  * Speichert Filter-/Sortier-States pro Seite in localStorage.
- * © HalloWelt42 – Private Nutzung
+ * © HalloWelt42 -  Private Nutzung
  */
 
 const PREFIX = 'tv_filters_';

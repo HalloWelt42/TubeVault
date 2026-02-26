@@ -1,8 +1,8 @@
 <!--
-  TubeVault – StreamDialog v1.5.83
+  TubeVault -  StreamDialog v1.5.83
   Zentrale Download-Optionen: Video + Audio separat wählbar.
   Progressive Streams (V+A) deaktivieren Audio-Auswahl automatisch.
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   let {
@@ -64,7 +64,7 @@
         {#if forceAudioOnly}
           <!-- AUDIO-ONLY KANAL -->
           <div class="sd-audio-only-banner">
-            <i class="fa-solid fa-podcast"></i> Audio-Only Kanal – nur Audiospuren verfügbar
+            <i class="fa-solid fa-podcast"></i> Audio-Only Kanal -  nur Audiospuren verfügbar
           </div>
 
           <div class="sd-section">
@@ -161,10 +161,10 @@
             </label>
           {/if}
           {#if !isProgressive && dialog.selectedVideoItag && !dialog.selectedAudioItag && !dialog.mergeAudio}
-            <p class="sd-hint"><i class="fa-solid fa-triangle-exclamation"></i> Kein Audio gewählt – Video wird stumm sein!</p>
+            <p class="sd-hint"><i class="fa-solid fa-triangle-exclamation"></i> Kein Audio gewählt -  Video wird stumm sein!</p>
           {/if}
           {#if isProgressive}
-            <p class="sd-hint sd-hint-ok"><i class="fa-solid fa-circle-check"></i> Progressiver Stream – Audio ist enthalten.</p>
+            <p class="sd-hint sd-hint-ok"><i class="fa-solid fa-circle-check"></i> Progressiver Stream -  Audio ist enthalten.</p>
           {/if}
         </div>
 

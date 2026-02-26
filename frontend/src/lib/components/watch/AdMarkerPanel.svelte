@@ -1,5 +1,5 @@
 <!--
-  AdMarkerPanel – Werbemarker-Verwaltung (manuell + SponsorBlock).
+  AdMarkerPanel -  Werbemarker-Verwaltung (manuell + SponsorBlock).
   © HalloWelt42
 -->
 <script>
@@ -84,7 +84,7 @@
               title={m.source === 'sponsorblock' ? `SB: ${m.category || 'sponsor'}${m.votes != null ? ' · ' + m.votes + ' Votes' : ''}` : 'Eigene Marke'}>
           <i class={m.source === 'sponsorblock' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-user'}></i>
         </span>
-        <span class="range">{formatDuration(m.start_time)} – {formatDuration(m.end_time)}</span>
+        <span class="range">{formatDuration(m.start_time)} -  {formatDuration(m.end_time)}</span>
         <span class="dur">{formatDuration(m.end_time - m.start_time)}</span>
         <span class="label" class:sb-cat={m.source === 'sponsorblock'}>{m.label || 'Werbung'}</span>
         <button class="seek-btn" title="Zum Start" onclick={() => onSeek(m.start_time)}>

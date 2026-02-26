@@ -1,7 +1,7 @@
 /**
- * TubeVault – Globale Styles v1.5.52
+ * TubeVault -  Globale Styles v1.5.52
  * Zentrale CSS-Klassen für alle Routes
- * © HalloWelt42 – Private Nutzung
+ * © HalloWelt42 -  Private Nutzung
  *
  * Importiert in App.svelte als :global()
  * Ersetzt lokale Duplikate in: Archives, Categories, Downloads,
@@ -104,7 +104,7 @@
 .btn-xs:hover:not(:disabled) { border-color: var(--accent-primary); color: var(--text-primary); }
 .btn-xs:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Checkboxen – einheitliches Styling */
+/* Checkboxen -  einheitliches Styling */
 input[type="checkbox"], .chk {
   appearance: none; -webkit-appearance: none;
   width: 16px; height: 16px; border-radius: 4px;

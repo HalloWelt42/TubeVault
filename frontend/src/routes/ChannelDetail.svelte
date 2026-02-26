@@ -1,6 +1,6 @@
 <!--
-  TubeVault – Channel Detail v1.5.52
-  © HalloWelt42 – Private Nutzung
+  TubeVault -  Channel Detail v1.5.52
+  © HalloWelt42 -  Private Nutzung
 
   Kanal-Übersicht mit Banner, Tabs (Videos/Shorts/Live),
   Sortierung, Debug-Panel, erweiterte Statistiken.
@@ -113,7 +113,7 @@
     scanning = true;
     try {
       await api.fetchAllChannelVideos(cid);
-      toast.success('Kanal-Scan gestartet – Fortschritt in der Aktivitätenleiste');
+      toast.success('Kanal-Scan gestartet -  Fortschritt in der Aktivitätenleiste');
       pollScanStatus(cid);
     } catch (e) {
       toast.error(e.message);
@@ -138,7 +138,7 @@
           if (tc.video) parts.push(`${tc.video} Videos`);
           if (tc.short) parts.push(`${tc.short} Shorts`);
           if (tc.live) parts.push(`${tc.live} Live`);
-          toast.success(`Scan abgeschlossen – ${parts.join(', ') || (detail.rss_entry_count || 0) + ' Einträge'}`);
+          toast.success(`Scan abgeschlossen -  ${parts.join(', ') || (detail.rss_entry_count || 0) + ' Einträge'}`);
         }
       } catch {}
       if (attempts > 60) {
@@ -284,7 +284,7 @@
         clearInterval(poll);
         if (fetchingPlaylistVideos === playlistId) {
           fetchingPlaylistVideos = null;
-          toast.warning('Timeout – prüfe Aktivitäten für Status');
+          toast.warning('Timeout -  prüfe Aktivitäten für Status');
         }
       }, 120000);
     } catch (e) { toast.error(e.message); fetchingPlaylistVideos = null; }
@@ -323,7 +323,7 @@
       const pendingCount = (queue.jobs || []).filter(j => j.status === 'queued' || j.status === 'active').length;
 
       if (pendingCount >= BATCH_SIZE) {
-        toast.warning(`Bereits ${pendingCount} Downloads in Warteschlange – warte bis Platz frei ist`);
+        toast.warning(`Bereits ${pendingCount} Downloads in Warteschlange -  warte bis Platz frei ist`);
         batchQueueing = false;
         return;
       }
@@ -343,7 +343,7 @@
         const remaining = (pl.video_count - pl.have_count) - queued;
         toast.success(`${queued} Videos in Warteschlange${remaining > 0 ? ` · ${remaining} weitere verfügbar` : ''}`);
       } else if (errors > 0) {
-        toast.info(`Keine neuen Videos – ${errors} bereits geladen/in Queue`);
+        toast.info(`Keine neuen Videos -  ${errors} bereits geladen/in Queue`);
       } else {
         toast.info('Keine neuen Videos zum Laden');
       }
@@ -472,7 +472,7 @@
           {#if channel.subscribed}
             <button class="meta-btn-suggest" class:excluded={channel.suggest_exclude}
               onclick={(e) => { e.stopPropagation(); toggleChannelSuggest(); }}
-              title={channel.suggest_exclude ? 'Aus Zufallsvorschlägen ausgeschlossen – Klick zum Einschließen' : 'In Zufallsvorschlägen – Klick zum Ausschließen'}>
+              title={channel.suggest_exclude ? 'Aus Zufallsvorschlägen ausgeschlossen -  Klick zum Einschließen' : 'In Zufallsvorschlägen -  Klick zum Ausschließen'}>
               <i class="fa-solid fa-dice"></i>
             </button>
           {/if}
@@ -575,7 +575,7 @@
         {/if}
       </button>
       {#if channel.needs_scan}
-        <span class="scan-hint">Noch nicht gescannt – klicke um alle Inhalte zu laden</span>
+        <span class="scan-hint">Noch nicht gescannt -  klicke um alle Inhalte zu laden</span>
       {:else if channel.last_scanned}
         <span class="scan-hint">Letzter Scan: {formatDateRelative(channel.last_scanned)}</span>
       {/if}
@@ -677,7 +677,7 @@
                 {#if pl.video_ids?.length > 0}
                   <!-- Schritt 2: Lokal speichern / Aktualisieren -->
                   <button class="btn-sm" onclick={() => importPlaylist(pl.playlist_id)}
-                    title={pl.local_playlist_id ? 'Playlist aktualisieren (neue Videos, Reihenfolge)' : 'Erstellt eine lokale Playlist – bereits heruntergeladene Videos werden verknüpft'}>
+                    title={pl.local_playlist_id ? 'Playlist aktualisieren (neue Videos, Reihenfolge)' : 'Erstellt eine lokale Playlist -  bereits heruntergeladene Videos werden verknüpft'}>
                     {#if pl.local_playlist_id}
                       <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
                     {:else}
@@ -753,7 +753,7 @@
                   <i class="fa-solid fa-external-link"></i> Öffnen
                 </button>
                 <button class="btn-sm" onclick={() => toggleVisibility(lp)}
-                  title={lp.visibility === 'channel' ? 'Nur auf Kanal-Seite sichtbar – klick für global' : 'Global sichtbar – klick für nur Kanal'}>
+                  title={lp.visibility === 'channel' ? 'Nur auf Kanal-Seite sichtbar -  klick für global' : 'Global sichtbar -  klick für nur Kanal'}>
                   {#if lp.visibility === 'channel'}
                     <i class="fa-solid fa-eye-slash"></i> Kanal
                   {:else}

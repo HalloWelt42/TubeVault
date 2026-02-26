@@ -1,6 +1,6 @@
 /**
- * TubeVault – Keyboard Shortcuts v1.6.29
- * © HalloWelt42 – Private Nutzung
+ * TubeVault -  Keyboard Shortcuts v1.6.29
+ * © HalloWelt42 -  Private Nutzung
  */
 
 import { navigate } from '../router/router.js';

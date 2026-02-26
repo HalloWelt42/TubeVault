@@ -1,7 +1,7 @@
 """
-TubeVault – API Endpoints Router v1.5.90
+TubeVault -  API Endpoints Router v1.5.90
 CRUD + Test für registrierte API-Endpunkte.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import logging

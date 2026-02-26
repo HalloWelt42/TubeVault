@@ -1,5 +1,5 @@
 /**
- * TubeVault – App Store v1.6.29
+ * TubeVault -  App Store v1.6.29
  * Kompatibilitäts-Bridge → delegiert an Router.
  * Alte Imports funktionieren weiterhin:
  *   import { currentRoute, currentVideoId } from '../stores/app.js'

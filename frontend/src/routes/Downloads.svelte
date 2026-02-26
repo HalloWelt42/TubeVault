@@ -717,7 +717,7 @@
                       {#if shortCount > 0}{videoCount > 0 ? ', ' : ''}{shortCount} Shorts{/if}
                       {#if liveCount > 0}{(videoCount + shortCount) > 0 ? ', ' : ''}{liveCount} Live{/if}
                       {#if precountExceeded}
-                        <span class="scan-exceeded"> – +{precountExtra} weitere gefunden</span>
+                        <span class="scan-exceeded"> -  +{precountExtra} weitere gefunden</span>
                       {:else if showEst}
                         / ~{estTotal} erwartet
                       {/if}
@@ -843,7 +843,7 @@
   .qi-priority { font-size:0.65rem; padding:1px 5px; border-radius:4px; background:var(--bg-tertiary); color:var(--text-tertiary); font-weight:700; }
   .qi-priority.high { background:var(--status-warning-bg, #fef3c7); color:var(--status-warning); }
 
-  /* Alter Progress-Balken entfernt – siehe DownloadProgress.svelte */
+  /* Alter Progress-Balken entfernt -  siehe DownloadProgress.svelte */
 
   .qi-error { font-size:0.75rem; color:var(--status-error); margin-top:4px; word-break:break-word; }
 

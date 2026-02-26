@@ -1,27 +1,35 @@
-# 📺 TubeVault
+# TubeVault
 
-**Dein selbstgehostetes Video-Vault – Videos archivieren, streamen und verwalten.**
+**Dein selbstgehostetes Video-Vault -  Videos archivieren, streamen und verwalten.**
 
-TubeVault läuft komplett auf deinem eigenen Raspberry Pi (oder jedem anderen Linux-Server). Keine Cloud, kein Tracking, keine Werbung. Deine Videos, dein Server, deine Daten.
+TubeVault läuft komplett auf deinem eigenen Raspberry Pi, MAc (oder jedem anderen Linux-Server). 
+- Keine Cloud
+- kein Tracking
+- keine Werbung
+
+### Deine Videos, dein Server, deine Daten.
+
 
 <!-- Screenshot-Platzhalter: Ersetze die URL mit einem echten Screenshot -->
-<!-- ![TubeVault Screenshot](docs/screenshot.png) -->
+![TubeVault Screenshot](media/screen_1.png)
+
 
 ---
 
+
 ## Was kann TubeVault?
 
-**Videos herunterladen & archivieren** – YouTube-Videos in gewünschter Qualität lokal speichern. Automatisch Thumbnails, Metadaten und Untertitel mitziehen.
+**Videos herunterladen & archivieren** -  YouTube-Videos in gewünschter Qualität lokal speichern. Automatisch Thumbnails, Metadaten und Untertitel mitziehen.
 
-**Kanäle abonnieren** – RSS-Feeds deiner Lieblingskanäle verfolgen. Neue Videos erscheinen im Feed, optional mit Auto-Download.
+**Kanäle abonnieren** -  RSS-Feeds deiner Lieblingskanäle verfolgen. Neue Videos erscheinen im Feed, optional mit Auto-Download.
 
-**Lokales Streaming** – Alle gespeicherten Videos direkt im Browser abspielen. Kapitelmarken, Wiedergabeposition, Lyrics-Anzeige.
+**Lokales Streaming** -  Alle gespeicherten Videos direkt im Browser abspielen. Kapitelmarken, Wiedergabeposition, Lyrics-Anzeige.
 
-**Bibliothek verwalten** – Kategorien, Playlists, Favoriten, Tags, Bewertungen. Volltextsuche über Titel, Beschreibungen und Notizen.
+**Bibliothek verwalten** -  Kategorien, Playlists, Favoriten, Tags, Bewertungen. Volltextsuche über Titel, Beschreibungen und Notizen.
 
-**Eigene Videos einbinden** – Lokale Videodateien scannen, indexieren und in die Bibliothek aufnehmen.
+**Eigene Videos einbinden** -  Lokale Videodateien scannen, indexieren und in die Bibliothek aufnehmen.
 
-**Backup & Export** – Datenbank-Backups erstellen, wiederherstellen und herunterladen.
+**Backup & Export** -  Datenbank-Backups erstellen, wiederherstellen und herunterladen.
 
 ### Weitere Features
 
@@ -120,10 +128,10 @@ nano .env
 
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
-| `TUBEVAULT_BACKEND_PORT` | `8031` | Backend API Port |
-| `TUBEVAULT_FRONTEND_PORT` | `8032` | Frontend Web-UI Port |
-| `MAX_CONCURRENT_DOWNLOADS` | `2` | Gleichzeitige Downloads (Pi 4: besser `1`) |
-| `DEFAULT_QUALITY` | `720p` | Standard-Qualität: `360p` `480p` `720p` `1080p` `best` |
+| `TUBEVAULT_BACKEND_PORT` | `8031`  | Backend API Port |
+| `TUBEVAULT_FRONTEND_PORT` | `8032`  | Frontend Web-UI Port |
+| `MAX_CONCURRENT_DOWNLOADS` | `1`     | Gleichzeitige Downloads (Pi 4: besser `1`) |
+| `DEFAULT_QUALITY` | `720p`  | Standard-Qualität: `360p` `480p` `720p` `1080p` `best` |
 
 Nach Änderungen neu starten:
 
@@ -146,7 +154,7 @@ Beispiel: USB-Festplatte unter `/mnt/usb` gemountet:
 - /mnt/usb/tubevault/videos:/app/data/videos
 ```
 
-Das geht für jeden Unterordner einzeln – du kannst z.B. Videos und Audio auf die Platte legen, Thumbnails und DB aber auf der schnelleren SD-Karte lassen.
+Das geht für jeden Unterordner einzeln -  du kannst z.B. Videos und Audio auf die Platte legen, Thumbnails und DB aber auf der schnelleren SD-Karte lassen.
 
 ---
 
@@ -220,6 +228,7 @@ TubeVault/
 
 ## Ports
 
+
 | Service | Port | Beschreibung |
 |---------|------|-------------|
 | Frontend | `8032` | Web-UI (Nginx → Svelte SPA) |
@@ -246,13 +255,16 @@ Für ernsthafte Sammlungen: Externe Festplatte anschließen (siehe oben).
 
 TubeVault ist ein privates Open-Source-Projekt aus Sachsen-Anhalt. Kein Tracking, keine Werbung, keine Kompromisse.
 
-Wenn dir das Projekt gefällt, kannst du über den ❤️-Button in der Sidebar "Danke sagen" – oder direkt hier:
+Wenn dir das Projekt gefällt, kannst du über den ❤️-Button in der Sidebar "Danke sagen" -  oder direkt hier:
 
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/HalloWelt42)
 
+
+
 **Crypto:**
+
 | Coin | Adresse |
-|------|---------|
+| ------ | --------- |
 | BTC | `bc1qnd599khdkv3v3npmj9ufxzf6h4fzanny2acwqr` |
 | DOGE | `DL7tuiYCqm3xQjMDXChdxeQxqUGMACn1ZV` |
 | ETH | `0x8A28fc47bFFFA03C8f685fa0836E2dBe1CA14F27` |
@@ -261,11 +273,12 @@ Wenn dir das Projekt gefällt, kannst du über den ❤️-Button in der Sidebar 
 
 ## Lizenz
 
-**Nicht-kommerzielle Nutzung** – Siehe [LICENSE](LICENSE)
+**Nicht-kommerzielle Nutzung** -  Siehe [LICENSE](LICENSE)
 
 ✅ Private Nutzung, Installation, persönliche Anpassungen, Teilen mit Quellenangabe
+
 ❌ Kommerzielle Nutzung, Verkauf, Einbindung in kommerzielle Produkte
 
 ---
 
-© 2025-2026 [HalloWelt42](https://github.com/HalloWelt42) – Nicht-kommerzielle Nutzung / Non-commercial use only
+© 2025-2026 [HalloWelt42](https://github.com/HalloWelt42) -  Nicht-kommerzielle Nutzung / Non-commercial use only

@@ -1,6 +1,6 @@
 /**
  * TubeVault Frontend v1.5.52
- * © HalloWelt42 – Private Nutzung
+ * © HalloWelt42 -  Private Nutzung
  */
 
 import '@fortawesome/fontawesome-free/css/all.min.css';

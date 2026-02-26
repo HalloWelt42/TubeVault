@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 LABEL maintainer="HalloWelt42"
 LABEL version="1.1.0"
-LABEL description="TubeVault Backend – Video-Vault & Streaming API"
+LABEL description="TubeVault Backend -  Video-Vault & Streaming API"
 
 # System-Abhängigkeiten
 RUN apt-get update && \
@@ -23,7 +23,7 @@ COPY app/ ./app/
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# Daten-Verzeichnisse (keine Brace Expansion – sh/dash kompatibel)
+# Daten-Verzeichnisse (keine Brace Expansion -  sh/dash kompatibel)
 RUN mkdir -p /app/data/videos \
              /app/data/audio \
              /app/data/thumbnails \

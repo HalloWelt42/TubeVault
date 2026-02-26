@@ -64,7 +64,7 @@
         auto_download: autoDownload,
         download_quality: defaultQuality,
       });
-      toast.success('Abo hinzugefügt – Avatar wird geladen…');
+      toast.success('Abo hinzugefügt -  Avatar wird geladen…');
       channelInput = '';
       setTimeout(loadSubs, 3000);
     } catch (e) { toast.error(e.message); }
@@ -161,7 +161,7 @@
   }
 
   function dripTooltip(sub) {
-    if (sub.drip_completed_at) return 'Komplett – alle Videos geladen';
+    if (sub.drip_completed_at) return 'Komplett -  alle Videos geladen';
     const missing = (sub.rss_count||0) - (sub.downloaded_count||0);
     const next = sub.drip_next_run ? new Date(sub.drip_next_run).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) : '?';
     return sub.drip_enabled
@@ -284,7 +284,7 @@
     <span><i class="fa-solid fa-circle-info"></i>
       {subs.length} von {total} Kanälen geladen.
       {#if uncheckedCount > 0}
-        {uncheckedCount} Kanäle warten noch auf den ersten Scan – der Scheduler arbeitet diese automatisch ab.
+        {uncheckedCount} Kanäle warten noch auf den ersten Scan -  der Scheduler arbeitet diese automatisch ab.
       {:else}
         Alle Kanäle wurden mindestens einmal geprüft.
       {/if}
@@ -405,7 +405,7 @@
                 onclick={()=>toggleDripArchive(sub)} title="Geladenes direkt archivieren"><i class="fa-solid fa-box-archive"></i></button>
         {/if}
         <button class="tag" class:tag-warn={sub.suggest_exclude}
-                onclick={()=>toggleSuggestExclude(sub)} title={sub.suggest_exclude ? 'Aus Vorschlägen ausgeschlossen – Klick zum Einschließen' : 'In Vorschlägen – Klick zum Ausschließen'}>
+                onclick={()=>toggleSuggestExclude(sub)} title={sub.suggest_exclude ? 'Aus Vorschlägen ausgeschlossen -  Klick zum Einschließen' : 'In Vorschlägen -  Klick zum Ausschließen'}>
           <i class="fa-solid fa-dice" class:strikethrough={sub.suggest_exclude}></i>
         </button>
         <button class="tag" class:tag-on={sub.enabled} onclick={()=>toggleEnabled(sub)}>{sub.enabled?'An':'Aus'}</button>

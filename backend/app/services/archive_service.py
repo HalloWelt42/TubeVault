@@ -1,7 +1,7 @@
 """
-TubeVault – Archive Service v1.1.0
+TubeVault -  Archive Service v1.1.0
 Externes Archiv-Management mit Mount-Erkennung und Background-Scan
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 
 Konzept:
 - Externe Platten (USB, NAS) als Archive registrieren

@@ -1,9 +1,9 @@
 <!--
-  TubeVault – ConfirmDialog v1.6.3
+  TubeVault -  ConfirmDialog v1.6.3
   Wiederverwendbarer Bestätigungsdialog für destruktive Aktionen.
   Usage: <ConfirmDialog bind:this={confirmRef} />
          confirmRef.ask('Video löschen?', 'Unwiderruflich.').then(ok => ...)
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   let open = $state(false);

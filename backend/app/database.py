@@ -1,6 +1,6 @@
 """
-TubeVault Backend – Datenbank v1.5.1
-© HalloWelt42 – Private Nutzung
+TubeVault Backend -  Datenbank v1.5.1
+© HalloWelt42 -  Private Nutzung
 """
 
 import aiosqlite
@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS channel_playlists (
 
 """
 
-# Indizes separat – werden NACH Migration ausgeführt
+# Indizes separat -  werden NACH Migration ausgeführt
 INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
 CREATE INDEX IF NOT EXISTS idx_videos_archived ON videos(is_archived);
@@ -772,7 +772,7 @@ class Database:
                         await self._connection.execute(
                             "UPDATE rss_entries SET keywords = ? WHERE id = ?", (new, row[0]))
                         cleaned_r += 1
-                logger.info(f"Migration v21: Tags bereinigt – {cleaned_v} Videos, {cleaned_s} Subs, {cleaned_r} RSS")
+                logger.info(f"Migration v21: Tags bereinigt -  {cleaned_v} Videos, {cleaned_s} Subs, {cleaned_r} RSS")
             except Exception as e:
                 logger.warning(f"Migration v21 Fehler: {e}")
 

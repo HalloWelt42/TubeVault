@@ -1,7 +1,7 @@
 <!--
-  TubeVault – ApiEndpoints v1.8.38
+  TubeVault -  ApiEndpoints v1.8.38
   Externe Dienste verwalten: URLs bearbeiten, testen, aktivieren/deaktivieren.
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api } from '../../api/client.js';

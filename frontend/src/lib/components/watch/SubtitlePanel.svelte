@@ -1,5 +1,5 @@
 <!--
-  SubtitlePanel – Untertitel laden, aktivieren, herunterladen.
+  SubtitlePanel -  Untertitel laden, aktivieren, herunterladen.
   © HalloWelt42
 -->
 <script>

@@ -1,7 +1,7 @@
 """
-TubeVault – Tag Sanitization v1.7.4
+TubeVault -  Tag Sanitization v1.7.4
 Bereinigt kaputte Tags aus YouTube-Metadaten.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import re
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 INVALID_TAG_PATTERNS = [
     r'^[\(\)\[\]\{\}]+$',        # Nur Klammern: "(", ")", "((", etc.
     r'^\W+$',                     # Nur Sonderzeichen
-    r'^#\w+$',                    # Hashtags wie #shorts (optional – auskommentieren wenn gewünscht)
+    r'^#\w+$',                    # Hashtags wie #shorts (optional -  auskommentieren wenn gewünscht)
 ]
 
 # Fragmente die typisch für schlecht gesplittete Titel sind

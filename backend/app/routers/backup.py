@@ -1,7 +1,7 @@
 """
-TubeVault – Backup Router v1.5.79
+TubeVault -  Backup Router v1.5.79
 DB-Backup erstellen, herunterladen, wiederherstellen.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import shutil
@@ -197,7 +197,7 @@ async def restore_from_upload(file: UploadFile = File(...)):
 
     content = await file.read()
     if len(content) < 100:
-        raise HTTPException(status_code=400, detail="Datei zu klein – keine gültige DB")
+        raise HTTPException(status_code=400, detail="Datei zu klein -  keine gültige DB")
 
     # SQLite Magic Number Check
     if content[:16] != b"SQLite format 3\x00":

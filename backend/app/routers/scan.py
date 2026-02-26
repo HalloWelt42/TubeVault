@@ -1,7 +1,7 @@
 """
-TubeVault – Scan Router v1.5.61
+TubeVault -  Scan Router v1.5.61
 Inkrementeller Scan → Identifizieren → Registrieren → Original löschen.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import os

@@ -1,7 +1,7 @@
 """
-TubeVault – Jobs Router v1.6.36
+TubeVault -  Jobs Router v1.6.36
 Unified Activity Tracking mit Pause/Resume
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import json
@@ -48,7 +48,7 @@ async def get_queue_status():
 
 @router.post("/queue/pause")
 async def pause_queue(reason: str = "user"):
-    """Queue pausieren – laufende Jobs laufen fertig."""
+    """Queue pausieren -  laufende Jobs laufen fertig."""
     await job_service.pause_queue(reason)
     return {"paused": True, "reason": reason}
 

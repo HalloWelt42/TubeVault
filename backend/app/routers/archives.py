@@ -1,7 +1,7 @@
 """
-TubeVault – Archives Router v1.1.0
+TubeVault -  Archives Router v1.1.0
 Externes Archiv-Management API
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 from fastapi import APIRouter, HTTPException

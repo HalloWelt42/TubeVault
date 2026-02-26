@@ -1,5 +1,5 @@
 /**
- * TubeVault – Keyboard Shortcuts Tests v1.5.2
+ * TubeVault -  Keyboard Shortcuts Tests v1.5.2
  * © HalloWelt42
  */
 

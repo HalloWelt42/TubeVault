@@ -1,7 +1,7 @@
 /**
- * TubeVault – Format Utilities v1.5.52
- * Zentrale Formatierungsfunktionen – keine lokalen Duplikate mehr nötig
- * © HalloWelt42 – Private Nutzung
+ * TubeVault -  Format Utilities v1.5.52
+ * Zentrale Formatierungsfunktionen -  keine lokalen Duplikate mehr nötig
+ * © HalloWelt42 -  Private Nutzung
  */
 
 /**

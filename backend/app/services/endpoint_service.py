@@ -1,9 +1,9 @@
 """
-TubeVault – Endpoint Service v1.8.38
+TubeVault -  Endpoint Service v1.8.38
 Zentraler Zugriff auf konfigurierbare Service-URLs aus api_endpoints.
 Alle externen Dienste lesen ihre Base-URL hierüber.
 Fallback auf hardcoded Default falls DB nicht erreichbar.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import logging
@@ -11,7 +11,7 @@ from app.database import db
 
 logger = logging.getLogger(__name__)
 
-# Hardcoded Fallbacks – werden NUR genutzt wenn DB-Lookup fehlschlägt
+# Hardcoded Fallbacks -  werden NUR genutzt wenn DB-Lookup fehlschlägt
 _DEFAULTS = {
     "ryd_api": "https://returnyoutubedislikeapi.com",
     "lrclib_api": "https://lrclib.net/api",

@@ -1,6 +1,6 @@
 """
-TubeVault Backend – Main Application v1.3.0
-© HalloWelt42 – Private Nutzung
+TubeVault Backend -  Main Application v1.3.0
+© HalloWelt42 -  Private Nutzung
 
 Selbstgehostetes Video-Vault & Streaming-System
 FastAPI Backend mit pytubefix, FFmpeg und SQLite
@@ -268,7 +268,7 @@ async def lifespan(app: FastAPI):
 # --- App erstellen ---
 app = FastAPI(
     title=APP_NAME,
-    description="Selbstgehostetes Video-Vault & Streaming-System – YouTube + eigene Videos",
+    description="Selbstgehostetes Video-Vault & Streaming-System -  YouTube + eigene Videos",
     version=VERSION,
     lifespan=lifespan,
     docs_url="/docs",

@@ -1,5 +1,5 @@
 <!--
-  ChapterPanel – Kapitel-Verwaltung für Watch-Seite.
+  ChapterPanel -  Kapitel-Verwaltung für Watch-Seite.
   Liste, hinzufügen, löschen, YouTube-Import, Vorschaubilder.
   © HalloWelt42
 -->

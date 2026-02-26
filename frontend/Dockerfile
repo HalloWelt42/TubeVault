@@ -8,7 +8,7 @@ RUN npm run build
 FROM nginx:alpine
 LABEL maintainer="HalloWelt42"
 LABEL version="1.1.0"
-LABEL description="TubeVault Frontend – Svelte 5 SPA"
+LABEL description="TubeVault Frontend -  Svelte 5 SPA"
 
 # curl für Healthcheck
 RUN apk add --no-cache curl

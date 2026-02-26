@@ -1,5 +1,5 @@
 /**
- * TubeVault – Settings Store v1.5.75
+ * TubeVault -  Settings Store v1.5.75
  * Lädt Einstellungen aus dem Backend und stellt sie reaktiv bereit.
  * © HalloWelt42
  */

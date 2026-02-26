@@ -1,5 +1,5 @@
 <!--
-  MetaPanel – Technische Metadaten eines Videos.
+  MetaPanel -  Technische Metadaten eines Videos.
   DB-Daten + ffprobe Analyse (Codec, Bitrate, Auflösung, etc.)
   © HalloWelt42
 -->

@@ -1,8 +1,8 @@
 <script>
   /**
-   * TubeVault – Pagination v1.5.52
+   * TubeVault -  Pagination v1.5.52
    * Einfache Seitennavigation
-   * © HalloWelt42 – Private Nutzung
+   * © HalloWelt42 -  Private Nutzung
    */
   let { page = 1, totalPages = 1, onchange = () => {} } = $props();
 </script>

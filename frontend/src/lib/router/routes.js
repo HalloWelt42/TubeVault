@@ -1,8 +1,8 @@
 /**
- * TubeVault – Route Registry v1.6.29
+ * TubeVault -  Route Registry v1.6.29
  * Zentrale Routen-Definitionen (vergleichbar Symfony debug:router).
  * Alle Pfade, Labels, Icons, Parameter an einer Stelle.
- * © HalloWelt42 – Private Nutzung
+ * © HalloWelt42 -  Private Nutzung
  */
 
 /**

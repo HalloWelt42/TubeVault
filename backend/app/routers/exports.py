@@ -1,8 +1,8 @@
 """
-TubeVault – Export Router v1.5.80
+TubeVault -  Export Router v1.5.80
 CSV/JSON-Exporte für Videos, Abos, Playlists.
 Backup-Funktionen sind in backup.py.
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import json

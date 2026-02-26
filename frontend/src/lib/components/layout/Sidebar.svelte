@@ -1,6 +1,6 @@
 <!--
-  TubeVault – Sidebar v1.5.55
-  © HalloWelt42 – Private Nutzung
+  TubeVault -  Sidebar v1.5.55
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { route, navigate } from '../../router/router.js';
@@ -89,7 +89,7 @@
   </div>
 
   <div class="sidebar-footer">
-    © HalloWelt42 – TubeVault
+    © HalloWelt42 -  TubeVault
   </div>
   <button class="donate-btn" onclick={() => showDonate = true}>
     Jetzt Danke sagen! ❤️

@@ -1,8 +1,8 @@
 <!--
-  TubeVault – ActivityPanel v1.8.65
+  TubeVault -  ActivityPanel v1.8.65
   Unified Bar (ersetzt Footer + altes ActivityPanel)
   Detail-Panel mit Phasen-Fortschritt, Pause/Resume, Cleanup
-  © HalloWelt42 – Private Nutzung
+  © HalloWelt42 -  Private Nutzung
 -->
 <script>
   import { api, createActivitySocket, FE_VERSION } from '../../api/client.js';
@@ -17,7 +17,7 @@
   let stats = $state({ active: 0, queued: 0, done: 0, errors: 0, paused: false, pause_reason: '' });
   let expanded = $state(false);
   let activitySocket = $state(null);
-  // Live WS-Status – EXAKT wie liveStatus in Downloads.svelte
+  // Live WS-Status -  EXAKT wie liveStatus in Downloads.svelte
   let liveStatus = $state({});
 
   // Scan-ETA Tracking
@@ -269,7 +269,7 @@
 
   let activeJobs = $derived(jobs.filter(j => j.status === 'active'));
 
-  // Live-Status Lookup – EXAKT wie in Downloads.svelte
+  // Live-Status Lookup -  EXAKT wie in Downloads.svelte
   function getLive(jobId) {
     return liveStatus[jobId] || null;
   }
@@ -349,7 +349,7 @@
             <i class="fa-solid {stats.pause_reason === 'rate_limit' ? 'fa-shield-halved' : 'fa-pause-circle'}"></i>
             <div class="pause-info">
               <div class="pause-title">
-                Queue pausiert{stats.pause_reason === 'rate_limit' ? ' – YouTube Rate-Limit' : ''}
+                Queue pausiert{stats.pause_reason === 'rate_limit' ? ' -  YouTube Rate-Limit' : ''}
               </div>
               <div class="pause-detail">
                 {stats.pause_reason === 'rate_limit'
@@ -445,7 +445,7 @@
                       {#if shortCount > 0}{videoCount > 0 ? ' · ' : ''}{shortCount} Shorts{/if}
                       {#if liveCount > 0}{(videoCount + shortCount) > 0 ? ' · ' : ''}{liveCount} Live{/if}
                       {#if precountExceeded}
-                        <span class="ji-scan-est"> – +{precountExtra} weitere gefunden</span>
+                        <span class="ji-scan-est"> -  +{precountExtra} weitere gefunden</span>
                       {:else if showEst && phase !== 'saving'}
                         <span class="ji-scan-est"> / ~{estTotal} erwartet</span>
                       {/if}

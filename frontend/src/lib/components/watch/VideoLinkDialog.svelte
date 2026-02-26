@@ -1,5 +1,5 @@
 <!--
-  VideoLinkDialog – Beschreibungs-Video-Links verknüpfen.
+  VideoLinkDialog -  Beschreibungs-Video-Links verknüpfen.
   Öffnet Such-Dialog mit vorausgefüllter Video-ID.
   Prüft lokal → RSS → YouTube, erstellt Verknüpfung.
   © HalloWelt42
@@ -113,7 +113,7 @@
 
       {:else if dialog.status === 'found_local'}
         <div class="vld-result">
-          <div class="vld-badge ok"><i class="fa-solid fa-check-circle"></i> In Bibliothek – automatisch verknüpft</div>
+          <div class="vld-badge ok"><i class="fa-solid fa-check-circle"></i> In Bibliothek -  automatisch verknüpft</div>
           <div class="vld-video">
             {#if dialog.result.thumbnail_path}
               <img src="/api/player/{dialog.videoId}/thumbnail" alt="" class="vld-thumb">

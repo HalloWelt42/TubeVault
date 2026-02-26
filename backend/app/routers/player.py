@@ -1,8 +1,8 @@
 """
-TubeVault – Player Router v1.3.0
+TubeVault -  Player Router v1.3.0
 Video-Streaming mit Range Requests + Archive-Support
 Subtitles, Audio-Extraktion
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 """
 
 import os
@@ -23,7 +23,7 @@ CHUNK_SIZE = 1024 * 1024  # 1MB
 
 @router.get("/{video_id}")
 async def stream_video(video_id: str, request: Request):
-    """Video streamen – prüft lokale + Archiv-Pfade."""
+    """Video streamen -  prüft lokale + Archiv-Pfade."""
     video = await db.fetch_one(
         "SELECT file_path, file_size, storage_type, status FROM videos WHERE id = ?",
         (video_id,)
@@ -156,7 +156,7 @@ async def stream_specific(video_id: str, stream_id: int, request: Request):
 
 @router.get("/{video_id}/thumbnail")
 async def get_thumbnail(video_id: str):
-    """Thumbnail abrufen – mit Cache-Control für Browser/Nginx."""
+    """Thumbnail abrufen -  mit Cache-Control für Browser/Nginx."""
     video = await db.fetch_one(
         "SELECT thumbnail_path FROM videos WHERE id = ?", (video_id,)
     )

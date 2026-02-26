@@ -1,8 +1,8 @@
 """
-TubeVault – RSS Service v1.5.54
+TubeVault -  RSS Service v1.5.54
 YouTube RSS Feed Polling + Channel Scan (Videos/Shorts/Live)
 Phasen-Fortschritt, Abbruch-Unterstützung, Fehler-Transparenz
-© HalloWelt42 – Private Nutzung
+© HalloWelt42 -  Private Nutzung
 
 Strategie für 800+ Abos:
 - Feeds in Batches, gestaffeltes Polling über 24h verteilt
@@ -52,7 +52,7 @@ AUTO_DL_DAILY_LIMIT = 20
 
 
 class RSSService:
-    """YouTube RSS Feed Manager – produktionsreif."""
+    """YouTube RSS Feed Manager -  produktionsreif."""
 
     def __init__(self):
         self._running = False
@@ -70,7 +70,7 @@ class RSSService:
     async def start_worker(self):
         """RSS-Service initialisieren (kein Background-Loop mehr, Cron übernimmt)."""
         self._running = True
-        logger.info("RSS Service bereit – Feed-Checks werden per Cron ausgelöst")
+        logger.info("RSS Service bereit -  Feed-Checks werden per Cron ausgelöst")
 
     async def stop_worker(self):
         """RSS-Service stoppen."""
@@ -93,7 +93,7 @@ class RSSService:
         """
         # Parallele Ausführung verhindern
         if self._polling:
-            logger.info("[TICK] Übersprungen – vorheriger Durchlauf läuft noch")
+            logger.info("[TICK] Übersprungen -  vorheriger Durchlauf läuft noch")
             return {"status": "skipped", "message": "Vorheriger Durchlauf läuft noch"}
         
         self._polling = True
@@ -116,7 +116,7 @@ class RSSService:
             timeout=30,
         )
         if not idle:
-            return {"status": "skipped", "message": "System-Job aktiv (Scan/Cleanup) – RSS wartet"}
+            return {"status": "skipped", "message": "System-Job aktiv (Scan/Cleanup) -  RSS wartet"}
 
         # Fällige Feeds holen
         subs = await db.fetch_all(
@@ -149,7 +149,7 @@ class RSSService:
         ) or 0
         self._feeds_pending = total_pending
 
-        # Job erstellen (sichtbar im Frontend) – RSS hat höhere Priorität als Downloads
+        # Job erstellen (sichtbar im Frontend) -  RSS hat höhere Priorität als Downloads
         job = await job_service.create(
             job_type="rss_cycle",
             title=f"RSS-Tick ({len(subs)}/{total_pending} fällig)",
@@ -225,7 +225,7 @@ class RSSService:
                            last_checked = ?
                            WHERE id = ?""",
                         (error_count,
-                         f"[404] Feed nicht erreichbar ({error_count}x) – nächster Versuch in {new_interval//3600}h",
+                         f"[404] Feed nicht erreichbar ({error_count}x) -  nächster Versuch in {new_interval//3600}h",
                          new_interval, now_sqlite(), sub["id"])
                     )
                     logger.warning(
@@ -314,7 +314,7 @@ class RSSService:
 
         # Ungültige channel_ids überspringen (z.B. URLs statt IDs)
         if not channel_id or not channel_id.startswith("UC") or len(channel_id) != 24:
-            logger.warning(f"Ungültige channel_id übersprungen: {channel_id[:60]}… – deaktiviere")
+            logger.warning(f"Ungültige channel_id übersprungen: {channel_id[:60]}… -  deaktiviere")
             await db.execute(
                 "UPDATE subscriptions SET enabled = 0, last_error = ? WHERE id = ?",
                 (f"Ungültige channel_id: {channel_id[:100]}", sub["id"])
@@ -472,7 +472,7 @@ class RSSService:
     # ─── Auto-Download (limitiert) ───────────────────────
 
     async def _auto_queue_video(self, video_id: str, sub: dict):
-        """Video automatisch zur Queue – mit Tageslimit."""
+        """Video automatisch zur Queue -  mit Tageslimit."""
         # Tageslimit prüfen
         today = datetime.now().strftime("%Y-%m-%d")
         if self._auto_dl_date != today:
@@ -788,7 +788,7 @@ class RSSService:
     # ─── Avatar Background-Fetch (resume-fähig) ─────────
 
     async def _fetch_avatars_background(self, channel_ids: list[str]):
-        """Avatare im Hintergrund laden – rate-limited, resume-fähig."""
+        """Avatare im Hintergrund laden -  rate-limited, resume-fähig."""
         job = await job_service.create(
             job_type="avatar_fetch",
             title=f"Avatare laden ({len(channel_ids)} Kanäle)",
@@ -1013,7 +1013,7 @@ class RSSService:
             tuple(all_params)
         ) or 0
 
-        # Typ-Counts (fuer Filter-Badges) – basieren auf gleichem Status-Tab + Keyword-Filter
+        # Typ-Counts (fuer Filter-Badges) -  basieren auf gleichem Status-Tab + Keyword-Filter
         type_counts = {}
         for vt, cond in [("video", "COALESCE(r.video_type, 'video') = 'video'"),
                          ("short", "r.video_type = 'short'"),
@@ -1226,7 +1226,7 @@ class RSSService:
         }
 
     async def get_scheduler_status(self) -> dict:
-        """Aktueller Scheduler-Status für Frontend-Anzeige – volle Transparenz."""
+        """Aktueller Scheduler-Status für Frontend-Anzeige -  volle Transparenz."""
         # Gesamtstatistiken
         total = await db.fetch_val("SELECT COUNT(*) FROM subscriptions") or 0
         enabled = await db.fetch_val("SELECT COUNT(*) FROM subscriptions WHERE enabled = 1") or 0
