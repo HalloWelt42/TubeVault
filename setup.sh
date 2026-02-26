@@ -86,7 +86,7 @@ echo ""
 
 # ── .env erstellen ─────────────────────────────────────────────
 if [ ! -f ".env" ]; then
-    cp .env.example .env
+    cp ..env.example .env
     echo "📝 .env erstellt (aus .env.example)"
     echo "   → Passe die Werte in .env nach Bedarf an."
 else
