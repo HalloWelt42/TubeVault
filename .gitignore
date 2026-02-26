@@ -1,0 +1,52 @@
+# ╔══════════════════════════════════════════╗
+# ║  TubeVault – .gitignore v1.0.0           ║
+# ║  © HalloWelt42 – Private Nutzung         ║
+# ╚══════════════════════════════════════════╝
+
+# ── Projektdaten (Docker Volumes) ──────────
+data/
+config/
+
+# ── Environment ────────────────────────────
+.env
+
+# ── Frontend (Node/Svelte/Vite) ────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.svelte-kit/
+frontend/package-lock.json
+
+# ── Backend (Python) ───────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+.venv/
+venv/
+
+# ── macOS ──────────────────────────────────
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon?
+
+# ── JetBrains IDE ──────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# ── Docker ─────────────────────────────────
+*.log
+
+# ── Backups / Temp ─────────────────────────
+*.bak
+*.tmp
+*.swp
+*~

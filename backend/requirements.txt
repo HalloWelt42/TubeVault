@@ -1,0 +1,13 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pytubefix>=8.0.0
+aiofiles==24.1.0
+aiosqlite==0.20.0
+pydantic>=2.10.0
+python-multipart==0.0.19
+websockets==14.1
+httpx==0.28.1
+Pillow>=11.0.0
+mutagen>=1.47.0
+rapidfuzz>=3.0.0
+ytmusicapi>=1.8.0

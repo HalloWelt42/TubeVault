@@ -1,0 +1,90 @@
+# TubeVault Docker Compose v1.4.1
+# © HalloWelt42 – Private Nutzung
+#
+# Backend: Port 8031
+# Frontend: Port 8032
+#
+# Generische Installation für Raspberry Pi 4/5 (ohne extra Laufwerke).
+# Alle Daten liegen unter ./data/ im Projektverzeichnis.
+# Optional: .env Datei für individuelle Anpassungen.
+
+services:
+  # ==========================================
+  # BACKEND – FastAPI + pytubefix + FFmpeg
+  # ==========================================
+  tubevault-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tubevault-backend
+    ports:
+      - "${TUBEVAULT_BACKEND_PORT:-8031}:8031"
+    volumes:
+      # Alle Daten im Projektverzeichnis (kein externes Laufwerk nötig)
+      - ./data/db:/app/data/db
+      - ./data/videos:/app/data/videos
+      - ./data/audio:/app/data/audio
+      - ./data/thumbnails:/app/data/thumbnails
+      - ./data/avatars:/app/data/avatars
+      - ./data/metadata:/app/data/metadata
+      - ./data/banners:/app/data/banners
+      - ./data/subtitles:/app/data/subtitles
+      - ./data/exports:/app/data/exports
+      - ./data/temp:/app/data/temp
+      - ./data/rss_thumbs:/app/data/rss_thumbs
+      - ./data/texts:/app/data/texts
+      - ./data/scan:/app/data/scan
+      - ./data/backups:/app/data/backups
+      - ./config:/app/config
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TUBEVAULT_DATA_DIR=/app/data
+      - TUBEVAULT_CONFIG_DIR=/app/config
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-2}
+      - DEFAULT_QUALITY=${DEFAULT_QUALITY:-720p}
+      - TUBEVAULT_HOST_DATA=${TUBEVAULT_HOST_DATA:-./data}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8031/api/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - tubevault-net
+    # Pi 4/5 Optimierungen
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ==========================================
+  # FRONTEND – Svelte 5 + Nginx
+  # ==========================================
+  tubevault-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tubevault-frontend
+    ports:
+      - "${TUBEVAULT_FRONTEND_PORT:-8032}:80"
+    restart: unless-stopped
+    depends_on:
+      tubevault-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tubevault-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+networks:
+  tubevault-net:
+    name: tubevault-net
+    driver: bridge
