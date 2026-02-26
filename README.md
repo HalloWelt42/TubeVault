@@ -7,7 +7,7 @@ Beachte:
 
 ### **Dein selbstgehostetes Video-Vault -  Videos archivieren, streamen und verwalten.**
 
-TubeVault läuft komplett auf deinem eigenen Raspberry Pi, MAc (oder jedem anderen Linux-Server). 
+TubeVault läuft komplett auf deinem eigenen Raspberry Pi, Mac (oder jedem anderen Linux-Server). 
 - Keine Cloud
 - kein Tracking
 - keine Werbung
