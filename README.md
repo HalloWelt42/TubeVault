@@ -1,6 +1,11 @@
-# TubeVault
+# TubeVault (BETA Version)
 
-**Dein selbstgehostetes Video-Vault -  Videos archivieren, streamen und verwalten.**
+
+Beachte: 
+    Aktuell wird kein API-KEY und https-Support bereitgestellt. Daher nur in sicheren Netzwerk Zuhause betreiben.
+
+
+### **Dein selbstgehostetes Video-Vault -  Videos archivieren, streamen und verwalten.**
 
 TubeVault läuft komplett auf deinem eigenen Raspberry Pi, MAc (oder jedem anderen Linux-Server). 
 - Keine Cloud
