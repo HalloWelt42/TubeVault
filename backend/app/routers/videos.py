@@ -280,7 +280,7 @@ async def save_notes(video_id: str, body: dict):
     return {"saved": True}
 
 
-
+@router.patch("/{video_id}/rating")
 async def set_rating(video_id: str, rating: int = Query(ge=0, le=5)):
     """Schnell-Bewertung setzen (0 = Reset)."""
     await db.execute(
