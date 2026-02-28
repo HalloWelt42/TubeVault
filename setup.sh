@@ -3,12 +3,31 @@
 # ║  TubeVault -  Setup Script v1.1.0                            ║
 # ║  Erstellt Verzeichnisse und .env für Erstinstallation.      ║
 # ║  Unterstützt: Linux (Raspberry Pi, Debian, Ubuntu), macOS   ║
+# ║  Windows: setup.ps1 verwenden                               ║
 # ║  © HalloWelt42 -  Private Nutzung                           ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 set -e
 
 PLATFORM="$(uname -s)"
+
+# ── Windows-Erkennung (Git Bash / MSYS / MINGW) ─────────────
+case "$PLATFORM" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo ""
+        echo "⚠️  Windows erkannt ($PLATFORM)"
+        echo ""
+        echo "   Dieses Skript ist für Linux/macOS."
+        echo "   Verwende stattdessen das PowerShell-Skript:"
+        echo ""
+        echo "   powershell -ExecutionPolicy Bypass -File setup.ps1"
+        echo ""
+        echo "   Oder in PowerShell direkt:"
+        echo "   .\\setup.ps1"
+        echo ""
+        exit 1
+        ;;
+esac
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
