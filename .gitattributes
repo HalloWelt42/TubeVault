@@ -1,0 +1,46 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  TubeVault - Git Attribute Configuration                    ║
+# ║  Erzwingt LF-Zeilenenden für Docker-kompatible Dateien.     ║
+# ║  Verhindert CRLF-Probleme auf Windows.                     ║
+# ║  © HalloWelt42 - Private Nutzung                           ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+# Alle Textdateien standardmäßig auto-normalisieren
+* text=auto
+
+# Shell-Skripte MÜSSEN LF behalten (sonst crasht Docker)
+*.sh text eol=lf
+
+# Docker-Dateien MÜSSEN LF behalten
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+# Config-Dateien
+*.conf text eol=lf
+*.cfg text eol=lf
+*.env text eol=lf
+.env.example text eol=lf
+
+# Python
+*.py text eol=lf
+*.txt text eol=lf
+
+# Frontend
+*.js text eol=lf
+*.svelte text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+
+# Binärdateien nicht anfassen
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
