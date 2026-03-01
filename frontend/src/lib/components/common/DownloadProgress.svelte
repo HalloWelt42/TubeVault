@@ -2,7 +2,8 @@
   TubeVault -  DownloadProgress v1.8.60
   Mehrstufiger Fortschrittsbalken mit vorausgefüllten Phasen-Farben.
   Jedes Segment zeigt dunkle Grundfarbe + helle Füllfarbe für hohen Kontrast.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   /**

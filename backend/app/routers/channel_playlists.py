@@ -1,7 +1,8 @@
 """
 TubeVault -  Channel Playlists Router v1.7.0
 YouTube-Playlist-Abruf und Import -  Job-basiert mit Fortschritt.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks

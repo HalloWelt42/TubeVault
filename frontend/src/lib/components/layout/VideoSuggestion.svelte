@@ -2,7 +2,8 @@
   TubeVault -  VideoSuggestion v1.8.76
   Zeigt zufällige Video-Empfehlung in der Sidebar wenn kein Mini-Player aktiv.
   Ein Cycle-Toggle schaltet durch die Pools: Alle → Bibliothek → Musik → Eigene → Archiv.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

@@ -1,7 +1,8 @@
 <!--
   MetaPanel -  Technische Metadaten eines Videos.
   DB-Daten + ffprobe Analyse (Codec, Bitrate, Auflösung, etc.)
-  © HalloWelt42
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

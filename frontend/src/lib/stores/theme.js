@@ -1,7 +1,8 @@
 /**
  * TubeVault -  Theme Store v1.5.52
  * 27 CSS Variablen, Dark/Light + Custom
- * © HalloWelt42 -  Private Nutzung
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 import { writable } from 'svelte/store';

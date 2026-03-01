@@ -1,7 +1,8 @@
 """
 TubeVault -  Archives Router v1.1.0
 Externes Archiv-Management API
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 from fastapi import APIRouter, HTTPException

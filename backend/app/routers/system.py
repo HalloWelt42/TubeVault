@@ -1,7 +1,8 @@
 """
 TubeVault -  System Router v1.5.54
 System-Status, Rate-Limiter Stats, Health, Live-Logs
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import logging

@@ -1,6 +1,7 @@
 <!--
   TubeVault -  Channel Detail v1.5.52
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
   Kanal-Übersicht mit Banner, Tabs (Videos/Shorts/Live),
   Sortierung, Debug-Panel, erweiterte Statistiken.

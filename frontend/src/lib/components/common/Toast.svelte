@@ -1,3 +1,8 @@
+<!--
+  TubeVault
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
+-->
 <script>
   import { toast } from '../../stores/notifications.js';
 

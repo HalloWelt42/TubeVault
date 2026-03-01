@@ -2,7 +2,8 @@
   /**
    * TubeVault -  VideoCard v1.6.18
    * Typ-Badges klickbar (video→short→live), Like/Dislike Bar, QPL.
-   * © HalloWelt42 -  Private Nutzung
+   * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
    */
   import { api } from '../../api/client.js';
   import { navigate } from '../../router/router.js';

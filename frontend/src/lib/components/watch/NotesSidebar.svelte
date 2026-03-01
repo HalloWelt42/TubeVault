@@ -2,7 +2,8 @@
   TubeVault -  NotesSidebar v1.8.49
   Live-Preview Markdown Editor für Video-Notizen
   Auto-Save nach 1s Tippause
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

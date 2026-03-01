@@ -3,7 +3,8 @@
   One-Click Button: Video zur gepinnten Playlist hinzufügen.
   Props: videoId (required), title/channelName/channelId (optional, für Stub-Erstellung)
   Varianten: size="sm" (Overlay), size="md" (Action-Bar)
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

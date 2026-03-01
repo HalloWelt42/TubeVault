@@ -2,7 +2,8 @@
 # ║  TubeVault - Git Attribute Configuration                    ║
 # ║  Erzwingt LF-Zeilenenden für Docker-kompatible Dateien.     ║
 # ║  Verhindert CRLF-Probleme auf Windows.                     ║
-# ║  © HalloWelt42 - Private Nutzung                           ║
+# ║  © HalloWelt42 – Nicht-kommerzielle Nutzung                 ║
+# ║  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0      ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 # Alle Textdateien standardmäßig auto-normalisieren

@@ -2,7 +2,8 @@
   TubeVault -  LikeBar v1.5.90
   Wiederverwendbare Like/Dislike-Ratio-Anzeige.
   Modes: 'bar' (Variante A), 'compact' (für Cards/Meta), 'thumbnail' (Variante E).
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { formatViews } from '../../utils/format.js';

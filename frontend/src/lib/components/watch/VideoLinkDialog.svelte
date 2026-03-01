@@ -2,7 +2,8 @@
   VideoLinkDialog -  Beschreibungs-Video-Links verknüpfen.
   Öffnet Such-Dialog mit vorausgefüllter Video-ID.
   Prüft lokal → RSS → YouTube, erstellt Verknüpfung.
-  © HalloWelt42
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

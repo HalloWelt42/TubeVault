@@ -3,7 +3,8 @@
  * Kompatibilitäts-Bridge → delegiert an Router.
  * Alte Imports funktionieren weiterhin:
  *   import { currentRoute, currentVideoId } from '../stores/app.js'
- * © HalloWelt42
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 import { writable } from 'svelte/store';

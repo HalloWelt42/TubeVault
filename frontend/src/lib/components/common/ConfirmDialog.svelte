@@ -3,7 +3,8 @@
   Wiederverwendbarer Bestätigungsdialog für destruktive Aktionen.
   Usage: <ConfirmDialog bind:this={confirmRef} />
          confirmRef.ask('Video löschen?', 'Unwiderruflich.').then(ok => ...)
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   let open = $state(false);
