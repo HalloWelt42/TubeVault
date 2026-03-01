@@ -1,8 +1,8 @@
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  TubeVault - Setup Script v1.1.0 (Windows PowerShell)       ║
-# ║  Erstellt Verzeichnisse und .env für Erstinstallation.      ║
-# ║  Benötigt: Docker Desktop für Windows mit WSL 2             ║
-# ║  © HalloWelt42 - Private Nutzung                           ║
+# ║  TubeVault - Setup Script v1.1.0 (Windows PowerShell)        ║
+# ║  Erstellt Verzeichnisse und .env für Erstinstallation.       ║
+# ║  Benötigt: Docker Desktop für Windows mit WSL 2              ║
+# ║  © HalloWelt42 - Private Nutzung                             ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 $ErrorActionPreference = "Stop"
