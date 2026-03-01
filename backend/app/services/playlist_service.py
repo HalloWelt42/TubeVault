@@ -2,7 +2,8 @@
 TubeVault -  Playlist Service v1.7.0
 Job-basierte YouTube-Playlist-Operationen.
 Alle YouTube-Calls laufen als Background-Jobs mit Fortschritt.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import asyncio

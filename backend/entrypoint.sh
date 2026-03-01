@@ -1,7 +1,8 @@
 #!/bin/bash
 # TubeVault Backend Entrypoint v1.5.59
 # Startet NUR Uvicorn -  RSS-Polling wird extern per System-Cron angestoßen
-# © HalloWelt42 -  Private Nutzung
+# © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+# SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 set -e
 

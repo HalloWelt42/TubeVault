@@ -3,7 +3,8 @@
   Kompakter Player in der Sidebar für persistente Wiedergabe.
   Playlist-Queue-Navigation + Bibliothek-Fallback.
   Audio: Auto-Advance. Video: manuell skippen.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { miniPlayer, deactivateMiniPlayer, updateMiniPlayerTime, activateMiniPlayer } from '../../stores/miniPlayer.js';

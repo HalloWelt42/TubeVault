@@ -1,7 +1,8 @@
 <!--
   ThumbnailAI v1.6.24 -  AI-Thumbnail-Analyse Dashboard
   Verbindung zu LM Studio, Konfiguration, Queue, Live-Log.
-  © HalloWelt42
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { onMount } from 'svelte';

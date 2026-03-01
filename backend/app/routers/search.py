@@ -2,7 +2,8 @@
 TubeVault -  Search Router v1.5.96
 YouTube-Suche via pytubefix Search + lokale DB-Suche
 Unified: Ein Search()-Call liefert Videos, Shorts, Playlists, Channels
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import asyncio

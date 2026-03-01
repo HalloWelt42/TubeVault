@@ -1,5 +1,6 @@
 # TubeVault Docker Compose v1.4.1
-# © HalloWelt42 -  Private Nutzung
+# © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+# SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 #
 # Backend: Port 8031
 # Frontend: Port 8032

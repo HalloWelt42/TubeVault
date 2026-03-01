@@ -3,7 +3,8 @@
   Titel, Beschreibung, Video-Typ, Kategorien, Tags, Werkzeuge.
   Notizen → NotesSidebar (rechts), Kanalname → readonly.
   Qualität-Upgrade zeigt aktuelle Streams + Zielauswahl.
-  © HalloWelt42
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

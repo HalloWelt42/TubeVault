@@ -1,7 +1,8 @@
 """
 TubeVault -  Thumbnail Utilities
 Zentrale Funktionen für YouTube-Thumbnail-Downloads und ffmpeg-Generierung.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import logging

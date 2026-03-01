@@ -2,7 +2,8 @@
 TubeVault -  Player Router v1.3.0
 Video-Streaming mit Range Requests + Archive-Support
 Subtitles, Audio-Extraktion
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import os

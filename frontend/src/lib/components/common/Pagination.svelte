@@ -2,7 +2,8 @@
   /**
    * TubeVault -  Pagination v1.5.52
    * Einfache Seitennavigation
-   * © HalloWelt42 -  Private Nutzung
+   * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
    */
   let { page = 1, totalPages = 1, onchange = () => {} } = $props();
 </script>

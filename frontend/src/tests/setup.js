@@ -1,7 +1,8 @@
 /**
  * TubeVault -  Test Setup v1.5.2
  * Mocks für Browser-APIs die in jsdom fehlen
- * © HalloWelt42
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 // localStorage Mock

@@ -2,7 +2,8 @@
   TubeVault -  ActivityPanel v1.8.65
   Unified Bar (ersetzt Footer + altes ActivityPanel)
   Detail-Panel mit Phasen-Fortschritt, Pause/Resume, Cleanup
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api, createActivitySocket, FE_VERSION } from '../../api/client.js';

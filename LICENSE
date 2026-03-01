@@ -1,62 +1,237 @@
-TubeVault -  Non-Commercial License / Nicht-kommerzielle Lizenz
+TubeVault — Non-Commercial License v2.0
+Nicht-kommerzielle Lizenz v2.0
+
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 Copyright (c) 2025-2026 HalloWelt42
-https://github.com/HalloWelt42
+https://github.com/HalloWelt42/TubeVault
+
+Dieses Werk ist lizenziert unter der Creative Commons
+Namensnennung - Nicht kommerziell - Keine Bearbeitungen 4.0 International Lizenz
+(CC BY-NC-ND 4.0), ergänzt durch die nachstehenden Zusatzbestimmungen.
+
+Volltext CC BY-NC-ND 4.0: https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode.de
+This work is licensed under CC BY-NC-ND 4.0, with the additional terms below.
+Full text: https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
 
 ================================================================================
-DEUTSCH
+ZUSATZBESTIMMUNGEN DES RECHTEINHABERS / ADDITIONAL TERMS BY THE COPYRIGHT HOLDER
 ================================================================================
 
-ERLAUBT:
-- Private, nicht-kommerzielle Nutzung der Software
-- Installation und Verwendung für persönliche Zwecke
-- Anpassung und Modifikation für den eigenen, privaten Gebrauch
-- Teilen des unveränderten Originalcodes mit Quellenangabe
+Die folgenden Bestimmungen ergänzen die CC BY-NC-ND 4.0 Lizenz.
+Bei Widersprüchen gelten diese Zusatzbestimmungen.
 
-NICHT ERLAUBT:
-- Kommerzielle Nutzung jeglicher Art
-- Verkauf, Vermietung oder Lizenzierung der Software oder Teilen davon
-- Verwendung in kommerziellen Produkten, Dienstleistungen oder Angeboten
-- Veröffentlichung modifizierter Versionen ohne schriftliche Genehmigung
-- Entfernung oder Änderung von Copyright-Hinweisen oder Autorenangaben
-- Weiterverbreitung unter einer anderen Lizenz
+The following terms supplement the CC BY-NC-ND 4.0 license.
+In case of conflict, these additional terms shall prevail.
 
-BEDINGUNGEN:
-- Der Copyright-Hinweis und diese Lizenz müssen in allen Kopien oder
-  wesentlichen Teilen der Software enthalten sein
-- Bei Weiterverbreitung muss auf das Original-Repository verwiesen werden
-- Beiträge (Pull Requests) werden unter dieser Lizenz akzeptiert
+────────────────────────────────────────────────────────────────────────────────
+1. ZUSÄTZLICHE ERLAUBNIS: PRIVATE MODIFIKATION
+   ADDITIONAL PERMISSION: PRIVATE MODIFICATION
+────────────────────────────────────────────────────────────────────────────────
 
-HAFTUNGSAUSSCHLUSS:
-DIE SOFTWARE WIRD "WIE SIE IST" BEREITGESTELLT, OHNE JEGLICHE GEWÄHRLEISTUNG,
-WEDER AUSDRÜCKLICH NOCH STILLSCHWEIGEND. IN KEINEM FALL SIND DIE AUTOREN
-HAFTBAR FÜR ANSPRÜCHE, SCHÄDEN ODER ANDERE VERBINDLICHKEITEN.
+DEUTSCH:
+Abweichend von der ND-Klausel (Keine Bearbeitungen) der CC BY-NC-ND 4.0 wird
+hiermit die Erlaubnis erteilt, die Software für den eigenen, privaten und
+nicht-kommerziellen Gebrauch anzupassen und zu modifizieren, unter folgenden
+Bedingungen:
+
+  a) Die Modifikation darf ausschließlich für den persönlichen Gebrauch
+     des Modifizierenden erfolgen.
+  b) Modifizierte Versionen dürfen nicht öffentlich verbreitet, gehostet
+     oder Dritten zugänglich gemacht werden.
+  c) Alle Copyright-Hinweise und Lizenzangaben müssen vollständig und
+     unverändert erhalten bleiben.
+
+ENGLISH:
+Notwithstanding the ND clause (No Derivatives) of CC BY-NC-ND 4.0, permission
+is hereby granted to adapt and modify the software for personal, private,
+non-commercial use only, subject to the following conditions:
+
+  a) Modifications may only be made for the personal use of the individual
+     making the modification.
+  b) Modified versions may not be publicly distributed, hosted, or made
+     available to third parties.
+  c) All copyright notices and license references must remain complete
+     and unmodified.
+
+────────────────────────────────────────────────────────────────────────────────
+2. FORK-REGELUNG / FORK POLICY
+────────────────────────────────────────────────────────────────────────────────
+
+DEUTSCH:
+Das Erstellen von Forks (z.B. auf GitHub) ist unter folgenden Bedingungen
+gestattet:
+
+  a) Forks dürfen ausschließlich für private, nicht-kommerzielle Zwecke
+     genutzt werden (z.B. eigene Bugfixes, lokale Anpassungen).
+  b) Forks dürfen nicht als eigenständiges Projekt veröffentlicht,
+     beworben oder unter eigenem Namen vertrieben werden.
+  c) Forks dürfen keine Copyright-Hinweise, Autorenangaben oder Verweise
+     auf das Original-Repository entfernen oder verändern.
+  d) Pull Requests an das Original-Repository sind ausdrücklich erwünscht
+     und willkommen (siehe Abschnitt 4 - Contributor License).
+  e) Bei Unsicherheit, ob eine Nutzung zulässig ist, ist vorab die
+     schriftliche Genehmigung des Rechteinhabers einzuholen (E-Mail oder
+     GitHub Issue gelten als schriftlich).
+
+ENGLISH:
+Creating forks (e.g., on GitHub) is permitted under the following conditions:
+
+  a) Forks may only be used for private, non-commercial purposes (e.g.,
+     personal bug fixes, local adaptations).
+  b) Forks may not be published, advertised, or distributed as an
+     independent project under a different name.
+  c) Forks may not remove or modify copyright notices, author credits,
+     or references to the original repository.
+  d) Pull requests to the original repository are expressly encouraged
+     and welcome (see Section 4 - Contributor License).
+  e) If in doubt whether a particular use is permitted, written permission
+     from the copyright holder must be obtained in advance (email or
+     GitHub issue qualifies as written permission).
+
+────────────────────────────────────────────────────────────────────────────────
+3. TERMINIERUNGSKLAUSEL / TERMINATION CLAUSE
+────────────────────────────────────────────────────────────────────────────────
+
+DEUTSCH:
+  a) Bei Verstoß gegen eine der Bestimmungen dieser Lizenz erlischt die
+     Nutzungsberechtigung automatisch und sofort, ohne dass es einer
+     Benachrichtigung bedarf.
+  b) Nach Erlöschen der Lizenz sind alle Kopien der Software und davon
+     abgeleitete Werke unverzüglich zu löschen.
+  c) Der Rechteinhaber behält sich das Recht vor, bei Verstößen
+     weitergehende rechtliche Schritte einzuleiten.
+  d) Eine erneute Lizenzerteilung nach Terminierung liegt im alleinigen
+     Ermessen des Rechteinhabers.
+
+ENGLISH:
+  a) Any violation of the terms of this license shall result in automatic
+     and immediate termination of the right to use the software, without
+     the need for prior notice.
+  b) Upon termination, all copies of the software and any derived works
+     must be deleted without delay.
+  c) The copyright holder reserves the right to pursue further legal
+     action in case of violations.
+  d) Re-granting of the license after termination is at the sole
+     discretion of the copyright holder.
+
+────────────────────────────────────────────────────────────────────────────────
+4. CONTRIBUTOR LICENSE AGREEMENT (CLA)
+────────────────────────────────────────────────────────────────────────────────
+
+DEUTSCH:
+Mit dem Einreichen eines Beitrags (Pull Request, Patch, Code, Dokumentation
+oder anderes Material) an dieses Projekt erklärt der Beitragende:
+
+  a) Der Beitrag ist ein Originalwerk des Beitragenden oder der
+     Beitragende hat die Berechtigung, den Beitrag einzureichen.
+  b) Der Beitragende überträgt dem Rechteinhaber (HalloWelt42) ein
+     unwiderrufliches, weltweites, gebührenfreies Nutzungsrecht an dem
+     Beitrag unter dieser Lizenz.
+  c) Der Beitrag unterliegt vollständig dieser Lizenz (LicenseRef-
+     TubeVault-NC-2.0). Der Beitragende kann keine abweichenden
+     Lizenzbedingungen für seinen Beitrag geltend machen.
+  d) Der Beitragende behält das Recht, seinen Beitrag anderweitig zu
+     verwenden, solange dies nicht im Widerspruch zu dieser Lizenz steht.
+
+ENGLISH:
+By submitting a contribution (pull request, patch, code, documentation, or
+other material) to this project, the contributor agrees that:
+
+  a) The contribution is the contributor's original work, or the
+     contributor has the right to submit it.
+  b) The contributor grants the copyright holder (HalloWelt42) an
+     irrevocable, worldwide, royalty-free right to use the contribution
+     under this license.
+  c) The contribution is fully subject to this license (LicenseRef-
+     TubeVault-NC-2.0). The contributor may not claim different license
+     terms for their contribution.
+  d) The contributor retains the right to use their contribution
+     elsewhere, provided this does not conflict with this license.
+
+────────────────────────────────────────────────────────────────────────────────
+5. COPYRIGHT-SCHUTZ / COPYRIGHT PROTECTION
+────────────────────────────────────────────────────────────────────────────────
+
+DEUTSCH:
+  a) Alle Copyright-Hinweise, Autorenangaben, Lizenzverweise und
+     SPDX-Identifier in Quelldateien, Dokumentation und Konfiguration
+     dürfen nicht entfernt, verändert, verdeckt oder unkenntlich
+     gemacht werden.
+  b) Dies gilt insbesondere für:
+     - Die Datei LICENSE im Wurzelverzeichnis
+     - Copyright-Header in Quelldateien (© HalloWelt42)
+     - SPDX-License-Identifier in Quelldateien
+     - Autorenangaben in package.json, Dockerfile und Konfiguration
+  c) Bei Weiterverbreitung (soweit gestattet) muss auf das
+     Original-Repository verwiesen werden:
+     https://github.com/HalloWelt42/TubeVault
+
+ENGLISH:
+  a) All copyright notices, author credits, license references, and
+     SPDX identifiers in source files, documentation, and configuration
+     may not be removed, modified, obscured, or made illegible.
+  b) This applies in particular to:
+     - The LICENSE file in the root directory
+     - Copyright headers in source files (© HalloWelt42)
+     - SPDX-License-Identifier in source files
+     - Author credits in package.json, Dockerfile, and configuration
+  c) Any redistribution (to the extent permitted) must reference the
+     original repository:
+     https://github.com/HalloWelt42/TubeVault
 
 ================================================================================
-ENGLISH
+HAFTUNGSAUSSCHLUSS / DISCLAIMER
 ================================================================================
 
-PERMITTED:
-- Private, non-commercial use of the software
-- Installation and use for personal purposes
-- Adaptation and modification for personal, private use
-- Sharing of unmodified original code with attribution
+DEUTSCH:
+DIE SOFTWARE WIRD "WIE SIE IST" BEREITGESTELLT, OHNE JEGLICHE
+GEWÄHRLEISTUNG, WEDER AUSDRÜCKLICH NOCH STILLSCHWEIGEND, EINSCHLIESSLICH,
+ABER NICHT BESCHRÄNKT AUF DIE GEWÄHRLEISTUNG DER MARKTGÄNGIGKEIT, DER
+EIGNUNG FÜR EINEN BESTIMMTEN ZWECK UND DER NICHTVERLETZUNG VON RECHTEN
+DRITTER. IN KEINEM FALL SIND DIE AUTOREN ODER RECHTEINHABER HAFTBAR FÜR
+ANSPRÜCHE, SCHÄDEN ODER ANDERE VERBINDLICHKEITEN, OB AUS VERTRAG,
+UNERLAUBTER HANDLUNG ODER ANDERWEITIG, DIE SICH AUS ODER IN VERBINDUNG
+MIT DER SOFTWARE ODER DER NUTZUNG ODER ANDEREN GESCHÄFTEN MIT DER
+SOFTWARE ERGEBEN.
 
-NOT PERMITTED:
-- Commercial use of any kind
-- Sale, rental or licensing of the software or parts thereof
-- Use in commercial products, services or offerings
-- Publication of modified versions without written permission
-- Removal or modification of copyright notices or author credits
-- Redistribution under a different license
-
-CONDITIONS:
-- The copyright notice and this license must be included in all copies
-  or substantial portions of the software
-- Redistribution must reference the original repository
-- Contributions (pull requests) are accepted under this license
-
-DISCLAIMER:
+ENGLISH:
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIMS, DAMAGES OR
-OTHER LIABILITY.
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+================================================================================
+ZUSAMMENFASSUNG / SUMMARY
+================================================================================
+
+  ✅  Private, nicht-kommerzielle Nutzung
+  ✅  Installation und Verwendung für persönliche Zwecke
+  ✅  Private Modifikation für eigenen Gebrauch (Zusatzerlaubnis)
+  ✅  Private Forks für eigene Bugfixes/Anpassungen
+  ✅  Pull Requests an das Original-Repository
+  ✅  Teilen des unveränderten Originalcodes mit Quellenangabe
+
+  ❌  Kommerzielle Nutzung jeglicher Art
+  ❌  Verkauf, Vermietung oder Unterlizenzierung
+  ❌  Veröffentlichung modifizierter Versionen
+  ❌  Forks als eigenständiges Projekt veröffentlichen
+  ❌  Entfernung von Copyright-Hinweisen
+  ❌  Weiterverbreitung unter anderer Lizenz
+
+  ✅  Private, non-commercial use
+  ✅  Installation and use for personal purposes
+  ✅  Private modification for personal use (additional permission)
+  ✅  Private forks for personal bug fixes/adaptations
+  ✅  Pull requests to the original repository
+  ✅  Sharing unmodified original code with attribution
+
+  ❌  Commercial use of any kind
+  ❌  Sale, rental, or sublicensing
+  ❌  Publication of modified versions
+  ❌  Publishing forks as independent projects
+  ❌  Removal of copyright notices
+  ❌  Redistribution under a different license

@@ -2,7 +2,8 @@
 TubeVault -  Ad-Markers Router v1.5.49
 Werbemarken + SponsorBlock-Integration
 Eigene Marker (manual) + externe (sponsorblock), voll editierbar
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import logging

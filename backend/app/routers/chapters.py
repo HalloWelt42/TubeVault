@@ -1,7 +1,8 @@
 """
 TubeVault -  Chapters Router v1.3.0
 Video-Kapitel (YouTube + manuell erstellte)
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import asyncio

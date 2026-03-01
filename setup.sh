@@ -4,7 +4,8 @@
 # ║  Erstellt Verzeichnisse und .env für Erstinstallation.      ║
 # ║  Unterstützt: Linux (Raspberry Pi, Debian, Ubuntu), macOS   ║
 # ║  Windows: setup.ps1 verwenden                               ║
-# ║  © HalloWelt42 -  Private Nutzung                           ║
+# ║  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+# SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0                           ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 set -e

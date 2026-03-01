@@ -1,7 +1,8 @@
 """
 TubeVault -  RYD (Return YouTube Dislike) Service v1.5.90
 Ruft Like/Dislike-Daten von returnyoutubedislikeapi.com ab und cached sie in der DB.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import logging

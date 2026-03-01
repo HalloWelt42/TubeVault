@@ -1,7 +1,8 @@
 /**
  * TubeVault -  Notifications Store v1.5.52
  * Toast-Benachrichtigungen (keine Browser-Popups!)
- * © HalloWelt42
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 import { writable } from 'svelte/store';

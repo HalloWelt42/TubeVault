@@ -1,7 +1,8 @@
 """
 TubeVault -  Job Service v1.6.36
 Zentrales Job-System mit Stale-Recovery, Auto-Cleanup, Abbruch und Pause/Resume
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 Job-Typen:
 - download:      Video-Download

@@ -2,7 +2,8 @@
   TubeVault -  Import-Wizard v1.8.76
   3-Panel: Bibliothek | Aktion | Dateien
   Async Scan-Job, Staging-DB, Duration-Matching
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../lib/api/client.js';
