@@ -43,36 +43,36 @@ User klickt Download
        │
        ▼
 ┌─────────────────┐
-│ 1. QUEUE         │  Video wird in Job-Queue eingereiht
-│    job_type=     │  Qualität + Format gespeichert
-│    "download"    │  Status: pending
+│ 1. QUEUE        │  Video wird in Job-Queue eingereiht
+│    job_type=    │  Qualität + Format gespeichert
+│    "download"   │  Status: pending
 └────────┬────────┘
          │  Semaphore (MAX_CONCURRENT_DOWNLOADS)
          ▼
 ┌─────────────────┐
-│ 2. RESOLVE       │  pytubefix.YouTube(url) → Metadaten
-│                  │  Titel, Kanal, Dauer, Thumbnail-URL
-│                  │  Stream-Auswahl nach Qualität
+│ 2. RESOLVE      │  pytubefix.YouTube(url) → Metadaten
+│                 │  Titel, Kanal, Dauer, Thumbnail-URL
+│                 │  Stream-Auswahl nach Qualität
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 3. DOWNLOAD      │  Video-Stream + Audio-Stream separat
-│                  │  Fortschritt via WebSocket /api/downloads/ws
-│                  │  Dateien: temp/{video_id}_video.mp4
-│                  │           temp/{video_id}_audio.m4a
+│ 3. DOWNLOAD     │  Video-Stream + Audio-Stream separat
+│                 │  Fortschritt via WebSocket /api/downloads/ws
+│                 │  Dateien: temp/{video_id}_video.mp4
+│                 │           temp/{video_id}_audio.m4a
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 4. MERGE (FFmpeg)│  ffmpeg -i video -i audio -c copy output.mp4
-│                  │  Zusammenführung von Video + Audio
-│                  │  Temp-Dateien werden gelöscht
+│ 4.MERGE (FFmpeg)│  ffmpeg -i video -i audio -c copy output.mp4
+│                 │  Zusammenführung von Video + Audio
+│                 │  Temp-Dateien werden gelöscht
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 5. FINALIZE      │  Verschieben nach videos/{video_id}/
-│                  │  Thumbnail herunterladen
-│                  │  DB-Eintrag: status='ready'
-│                  │  Tags, Metadaten, Dateigröße speichern
+│ 5. FINALIZE     │  Verschieben nach videos/{video_id}/
+│                 │  Thumbnail herunterladen
+│                 │  DB-Eintrag: status='ready'
+│                 │  Tags, Metadaten, Dateigröße speichern
 └─────────────────┘
 ```
 
@@ -258,12 +258,12 @@ pending → running → completed
 ### Status-Flow
 
 ```
-                ┌──────────┐
-    Neues   ──► │  active   │ ◄── restore
-    Video       └────┬──┬──┘
-                     │  │
-            "Später" │  │ "Gelesen"
-                     ▼  ▼
+                 ┌──────────┐
+     Neues   ──► │  active  │ ◄── restore
+     Video       └────┬──┬──┘
+                      │  │
+             "Später" │  │ "Gelesen"
+                      ▼  ▼
               ┌────────┐ ┌───────────┐
               │ later  │ │ dismissed │
               └────┬───┘ └─────┬─────┘
@@ -349,7 +349,7 @@ pending → running → completed
 
 ```
 Stufe 1: Playlists laden          Stufe 2: Videos laden          Stufe 3: Importieren
-POST .../fetch-playlists    →     POST .../fetch-videos    →    POST .../import
+POST .../fetch-playlists    →     POST .../fetch-videos    →     POST .../import
        │                                 │                             │
        ▼                                 ▼                             ▼
 pytubefix.Channel.playlists     pytubefix.Playlist.video_urls    Lokale Playlist
@@ -380,15 +380,15 @@ channel_playlists Tabelle        video_ids als JSON Array         playlists +
 Phase 1: DISCOVERY (Automatisch)               Phase 2: REGISTRIERUNG (Manuell)
 ┌─────────────────────────────────┐            ┌──────────────────────────────┐
 │ Verzeichnis rekursiv scannen    │            │ User wählt Einträge aus      │
-│ Filter: .mp4, .mkv, .webm, ... │            │ POST /api/scan/register      │
+│ Filter: .mp4, .mkv, .webm, ...  │            │ POST /api/scan/register      │
 │         .avi, .mov, .m4v, ...   │            │                              │
 │                                 │            │ → Datei kopieren nach        │
 │ YouTube-ID aus Dateiname:       │            │   videos/{video_id}/         │
-│   [dQw4w9WgXcQ]                │            │                              │
-│   (dQw4w9WgXcQ)                │            │ → ffprobe: Dauer, Auflösung  │
+│   [dQw4w9WgXcQ]                 │            │                              │
+│   (dQw4w9WgXcQ)                 │            │ → ffprobe: Dauer, Auflösung  │
 │                                 │            │                              │
 │ Begleitdateien erkennen:        │            │ → Thumbnail: YouTube > lokal │
-│   .nfo, .srt, .vtt, Thumbs     │            │   > ffmpeg (5-Sek-Frame)     │
+│   .nfo, .srt, .vtt, Thumbs      │            │   > ffmpeg (5-Sek-Frame)     │
 │                                 │            │                              │
 │ → INSERT in scan_index          │            │ → INSERT in videos           │
 │   (separate scan_db)            │            │   status='ready'             │
@@ -456,12 +456,12 @@ Verzeichnis scannen
 └────────┬─────────────────┘
          ▼
 ┌──────────────────────────┐
-│ 4. ENTSCHEIDUNGEN        │  link      → Mit bestehendem Video verknüpfen
-│    AUSFÜHREN             │  link_rss  → Mit RSS-Eintrag verknüpfen
+│ 4. ENTSCHEIDUNGEN        │  link       → Mit bestehendem Video verknüpfen
+│    AUSFÜHREN             │  link_rss   → Mit RSS-Eintrag verknüpfen
 │                          │  import_new → Als neues Video importieren
-│                          │  skip      → Ignorieren
-│                          │  replace   → Bestehende Datei ersetzen
-│                          │  delete    → Datei löschen
+│                          │  skip       → Ignorieren
+│                          │  replace    → Bestehende Datei ersetzen
+│                          │  delete     → Datei löschen
 └──────────────────────────┘
 ```
 
@@ -913,15 +913,15 @@ Prüft `enrichment_log` für jeden Typ — wiederholt Erfolge nicht, wartet 24h 
 
 ```
 ┌─────────────────────┐
-│ SponsorBlock-Marker  │  Falls keine vorhanden → importieren
+│ SponsorBlock-Marker │  Falls keine vorhanden → importieren
 ├─────────────────────┤
-│ YouTube-Kapitel      │  Falls keine vorhanden → abrufen
+│ YouTube-Kapitel     │  Falls keine vorhanden → abrufen
 ├─────────────────────┤
-│ Kapitel-Thumbnails   │  Falls Kapitel + Videodatei → generieren
+│ Kapitel-Thumbnails  │  Falls Kapitel + Videodatei → generieren
 ├─────────────────────┤
-│ Untertitel           │  Falls keine → DE oder EN herunterladen
+│ Untertitel          │  Falls keine → DE oder EN herunterladen
 ├─────────────────────┤
-│ Thumbnail            │  Falls fehlt → YouTube hqdefault laden
+│ Thumbnail           │  Falls fehlt → YouTube hqdefault laden
 └─────────────────────┘
 ```
 
@@ -959,7 +959,7 @@ Prüft `enrichment_log` für jeden Typ — wiederholt Erfolge nicht, wartet 24h 
 ```
 POST /api/system/cleanup-full
 
- 1. Ghost-Videos     → status='ready' aber Datei fehlt → status='ghost'
+ 1. Ghost-Videos           → status='ready' aber Datei fehlt → status='ghost'
  2. Verwaiste Kategorien   → video_categories ohne gültiges Video
  3. Verwaiste Playlists    → playlist_videos ohne gültiges Video
  4. Verwaiste Favoriten    → favorites ohne gültiges Video
@@ -999,18 +999,18 @@ POST /api/system/cleanup-full
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        EXTERNE QUELLEN                               │
-│  YouTube  ·  Lokale Dateien  ·  Archive  ·  FreeTube  ·  Takeout    │
-└───────┬───────────┬──────────────┬──────────────┬────────────┬──────┘
-        │           │              │              │            │
-        ▼           ▼              ▼              ▼            ▼
+│   YouTube  ·  Lokale Dateien  ·  Archive  ·  FreeTube  ·  Takeout    │
+└────────┬───────────┬──────────────┬──────────────┬────────────┬──────┘
+         │           │              │              │            │
+         ▼           ▼              ▼              ▼            ▼
    ┌─────────┐ ┌────────┐   ┌──────────┐  ┌──────────┐ ┌──────────┐
    │Download │ │  Scan  │   │  Import  │  │ Archiv   │ │  RSS     │
    │Workflow │ │Workflow│   │ Workflow │  │ Workflow │ │ Polling  │
    └────┬────┘ └───┬────┘   └────┬─────┘  └────┬─────┘ └────┬─────┘
-        │          │              │              │            │
-        └──────────┴──────┬───────┴──────────────┘            │
-                          │                                   │
-                          ▼                                   ▼
+        │          │             │             │            │
+        └──────────┴──────┬──────┴─────────────┘            │
+                          │                                 │
+                          ▼                                 ▼
                    ┌─────────────┐                     ┌───────────┐
                    │   videos    │◄────────────────────│rss_entries│
                    │  (Tabelle)  │     Auto-Download   │ (Tabelle) │
