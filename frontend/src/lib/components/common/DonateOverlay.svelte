@@ -2,7 +2,8 @@
   TubeVault -  DonateOverlay v1.0.0
   Glasmorphism Spenden-Overlay
   Ko-fi + Crypto (BTC, DOGE, ETH)
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   // Sichtbarkeit des Overlays

@@ -1,7 +1,8 @@
 <!--
   TubeVault -  ApiEndpoints v1.8.38
   Externe Dienste verwalten: URLs bearbeiten, testen, aktivieren/deaktivieren.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

@@ -2,7 +2,8 @@
  * TubeVault -  Beschreibungs-Formatter
  * Konvertiert YouTube-Beschreibungen in klickbares HTML.
  * Verknüpfte Videos werden als Inline-Karten mit Thumbnail + Titel angezeigt.
- * © HalloWelt42
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 /**

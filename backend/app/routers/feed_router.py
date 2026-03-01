@@ -2,7 +2,8 @@
 TubeVault -  Feed Router
 RSS-Feed Endpoints: Channels, Tags, Videos, Status-Aktionen.
 Extrahiert aus subscriptions.py für bessere Modularität.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 from fastapi import APIRouter, HTTPException, Query

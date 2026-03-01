@@ -1,6 +1,7 @@
 """
 TubeVault -  Eigene Videos Router v1.8.76
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 API-Endpoints für Smart-Scan (Job-basiert), Import-Wizard und Verwaltung eigener Videos.
 """

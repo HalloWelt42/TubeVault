@@ -2,7 +2,8 @@
  * TubeVault -  Router Store v1.6.29
  * SPA-Router mit history.pushState, Logging, Fallbacks.
  * URL ist Single Source of Truth.
- * © HalloWelt42 -  Private Nutzung
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 import { writable, derived, get } from 'svelte/store';

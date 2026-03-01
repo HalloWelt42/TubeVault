@@ -2,7 +2,8 @@
   TubeVault -  MiniProgress v1.8.60
   Kompakte Phasen-Leiste (4px) ohne Labels.
   Vorausgefüllte dunkle Phasenfarben + helle Füllung für Kontrast.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   let { progress = 0, stage = '', phases = null, status = '' } = $props();

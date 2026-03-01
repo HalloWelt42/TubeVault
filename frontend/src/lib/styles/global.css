@@ -1,7 +1,8 @@
 /**
  * TubeVault -  Globale Styles v1.5.52
  * Zentrale CSS-Klassen für alle Routes
- * © HalloWelt42 -  Private Nutzung
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+# SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  *
  * Importiert in App.svelte als :global()
  * Ersetzt lokale Duplikate in: Archives, Categories, Downloads,

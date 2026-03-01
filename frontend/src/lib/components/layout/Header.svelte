@@ -1,7 +1,8 @@
 <!--
   TubeVault -  Header v1.5.88
   Mit integrierter Universal-Suche (SearchDropdown).
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { route, navigate } from '../../router/router.js';

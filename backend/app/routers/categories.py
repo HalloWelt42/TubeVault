@@ -2,7 +2,8 @@
 TubeVault -  Categories Router v1.5.85
 Vollständige Kategorie-Verwaltung mit korrekten Zählungen.
 Alle Video-Queries filtern auf status='ready'.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 from fastapi import APIRouter, HTTPException, Query

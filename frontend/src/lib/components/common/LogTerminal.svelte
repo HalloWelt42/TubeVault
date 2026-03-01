@@ -1,7 +1,8 @@
 <!--
   TubeVault -  LogTerminal v1.9.1
   Live-Log + Job-Monitor. Jobs-Tab zeigt aktive Jobs mit Kill-Button.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { onMount, onDestroy } from 'svelte';

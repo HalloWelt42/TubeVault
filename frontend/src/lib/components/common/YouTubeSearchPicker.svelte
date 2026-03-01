@@ -1,7 +1,8 @@
 <!--
   TubeVault -  YouTubeSearchPicker v1.5.64
   Wiederverwendbare YT-Such-Komponente für Link-Dialoge.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

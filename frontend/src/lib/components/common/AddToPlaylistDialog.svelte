@@ -2,7 +2,8 @@
   TubeVault -  AddToPlaylistDialog v1.5.91
   Dialog zum Hinzufügen eines Videos zu einer oder mehreren Playlists.
   Aufruf: <AddToPlaylistDialog bind:videoId={selectedVideoId} />
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

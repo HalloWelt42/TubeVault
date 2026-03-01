@@ -1,7 +1,8 @@
 <!--
   LyricsPanel -  Songtext-Verwaltung für Watch-Seite.
   Musik-Erkennung, LRCLIB-Suche, synced/plain Lyrics.
-  © HalloWelt42
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

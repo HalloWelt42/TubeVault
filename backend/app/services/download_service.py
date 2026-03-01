@@ -2,7 +2,8 @@
 TubeVault -  Download Service v1.8.40
 Live-Progress, Stufen, FFmpeg-Merge, Rate-Limiting, Resume, Job-Tracking, Adaptive Cooldown
 pytubefix: Chapters, Captions, Audio-Only nativ
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 Download-Stufen:
 1. resolving         -  Video-Info von YouTube laden

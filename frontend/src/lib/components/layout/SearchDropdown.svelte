@@ -2,7 +2,8 @@
   TubeVault -  SearchDropdown v1.5.98
   Zentrale Suche: Lokal, RSS, YouTube, Favoriten, Playlists.
   URL-Erkennung: YouTube-URLs → Downloads-Seite mit Auto-Resolve.
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { api } from '../../api/client.js';

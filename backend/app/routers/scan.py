@@ -1,7 +1,8 @@
 """
 TubeVault -  Scan Router v1.5.61
 Inkrementeller Scan → Identifizieren → Registrieren → Original löschen.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import os

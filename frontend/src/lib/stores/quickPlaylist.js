@@ -1,7 +1,8 @@
 /**
  * TubeVault -  Quick Playlist Store v1.6.0
  * Speichert die "gepinnte" Playlist für One-Click-Hinzufügen.
- * © HalloWelt42 -  Private Nutzung
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 import { writable, get } from 'svelte/store';
 

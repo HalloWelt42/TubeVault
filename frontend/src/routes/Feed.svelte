@@ -2,7 +2,8 @@
   /**
    * TubeVault -  Feed v1.5.54
    * Feed-Tabs (Aktiv/Spaeter/Archiv/Ausgeblendet), Schnellaktionen, Infinite Scroll
-   * © HalloWelt42 -  Private Nutzung
+   * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
    */
   import { api } from '../lib/api/client.js';
   import { toast } from '../lib/stores/notifications.js';

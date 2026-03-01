@@ -1,6 +1,7 @@
 """
 TubeVault -  Import Service v1.8.76
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 Smart-Scan für eigene Videos: NFO-Parsing, Thumbnail-Erkennung,
 Fuzzy-Matching gegen RSS/Bibliothek, Batch-Import.

@@ -1,7 +1,8 @@
 /**
  * TubeVault -  Filter Persistence v1.7.4
  * Speichert Filter-/Sortier-States pro Seite in localStorage.
- * © HalloWelt42 -  Private Nutzung
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 const PREFIX = 'tv_filters_';

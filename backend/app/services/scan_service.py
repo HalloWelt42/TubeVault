@@ -2,7 +2,8 @@
 TubeVault -  Scan Service v1.5.61
 Inkrementeller Datei-Scan → Identifizieren → Registrieren (ins Vault kopieren).
 Separate scan_index.db für persistenten Index.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import asyncio

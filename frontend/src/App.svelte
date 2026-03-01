@@ -1,3 +1,8 @@
+<!--
+  TubeVault
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
+-->
 <script>
   import { route } from './lib/router/router.js';
   import { routeDefinitions } from './lib/router/routes.js';

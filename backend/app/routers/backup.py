@@ -1,7 +1,8 @@
 """
 TubeVault -  Backup Router v1.5.79
 DB-Backup erstellen, herunterladen, wiederherstellen.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import shutil

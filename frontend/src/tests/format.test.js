@@ -1,6 +1,7 @@
 /**
  * TubeVault -  Format Utilities Tests v1.5.2
- * © HalloWelt42
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 import { describe, it, expect } from 'vitest';

@@ -6,7 +6,8 @@ Memory-Fix: ch.url_generator() statt ch.videos/shorts/live
 → DeferredGeneratorList cached ALLE YouTube-Objekte in _elements
 → Bei 3500+ Videos = hunderte MB RAM, OOM auf Pi 16GB
 → url_generator() ist der rohe Generator OHNE Caching.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import asyncio

@@ -1,7 +1,8 @@
 <!--
   TubeVault -  MultiFilter v1.5.52
   Wiederverwendbare Filter-Leiste: Typ, Kanal, Kategorie, Tags (Mehrfachauswahl)
-  © HalloWelt42 -  Private Nutzung
+  © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+  SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 -->
 <script>
   import { onMount } from 'svelte';

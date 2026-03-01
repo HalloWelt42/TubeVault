@@ -1,6 +1,7 @@
 """
 TubeVault -  Thumbnail AI Service v1.6.21
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 Analysiert Video-Thumbnails per LM Studio Vision-Modell (Mac).
 Erkennt: video_type (video/short/live), Kategorie-Vorschläge, Beschreibung.

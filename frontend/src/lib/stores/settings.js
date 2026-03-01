@@ -1,7 +1,8 @@
 /**
  * TubeVault -  Settings Store v1.5.75
  * Lädt Einstellungen aus dem Backend und stellt sie reaktiv bereit.
- * © HalloWelt42
+ * © HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+ * SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
  */
 
 import { writable, get } from 'svelte/store';

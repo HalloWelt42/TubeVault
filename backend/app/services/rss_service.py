@@ -2,7 +2,8 @@
 TubeVault -  RSS Service v1.5.54
 YouTube RSS Feed Polling + Channel Scan (Videos/Shorts/Live)
 Phasen-Fortschritt, Abbruch-Unterstützung, Fehler-Transparenz
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 
 Strategie für 800+ Abos:
 - Feeds in Batches, gestaffeltes Polling über 24h verteilt

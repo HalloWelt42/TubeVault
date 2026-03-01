@@ -1,7 +1,8 @@
 """
 TubeVault -  Tag Sanitization v1.7.4
 Bereinigt kaputte Tags aus YouTube-Metadaten.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import re

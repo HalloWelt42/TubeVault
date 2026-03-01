@@ -3,7 +3,8 @@ TubeVault -  Endpoint Service v1.8.38
 Zentraler Zugriff auf konfigurierbare Service-URLs aus api_endpoints.
 Alle externen Dienste lesen ihre Base-URL hierüber.
 Fallback auf hardcoded Default falls DB nicht erreichbar.
-© HalloWelt42 -  Private Nutzung
+© HalloWelt42 – Nicht-kommerzielle Nutzung / Non-commercial use only
+SPDX-License-Identifier: LicenseRef-TubeVault-NC-2.0
 """
 
 import logging
