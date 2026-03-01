@@ -1,10 +1,10 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  TubeVault -  Setup Script v1.1.0                            ║
-# ║  Erstellt Verzeichnisse und .env für Erstinstallation.      ║
-# ║  Unterstützt: Linux (Raspberry Pi, Debian, Ubuntu), macOS   ║
-# ║  Windows: setup.ps1 verwenden                               ║
-# ║  © HalloWelt42 -  Private Nutzung                           ║
+# ║  Erstellt Verzeichnisse und .env für Erstinstallation.       ║
+# ║  Unterstützt: Linux (Raspberry Pi, Debian, Ubuntu), macOS    ║
+# ║  Windows: setup.ps1 verwenden                                ║
+# ║  © HalloWelt42 -  Private Nutzung                            ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 set -e
