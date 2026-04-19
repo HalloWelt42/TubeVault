@@ -583,7 +583,7 @@
               <i class="fa-solid fa-rotate-right"></i> Alle erneut ({queue.failed_count})
             </button>
           {/if}
-          <button class="link-btn" onclick={fixStale}>Stale fixen</button>
+          <button class="link-btn" onclick={fixStale} title="Festhängende Downloads zurück in die Warteschlange">Festhänger befreien</button>
           <button class="link-btn" onclick={clearDone}>Fertige entfernen</button>
           <button class="link-btn link-danger" onclick={clearAll}>Alle bereinigen</button>
         </div>
@@ -607,7 +607,7 @@
             <div class="qi-top">
               <span class="qi-vid">{item.title || item.video_id}</span>
               {#if item.priority > 0}
-                <span class="qi-priority" class:high={item.priority >= 5}>P{item.priority}</span>
+                <span class="qi-priority" class:high={item.priority >= 5} title="Priorität">Prio {item.priority}</span>
               {/if}
             </div>
 
@@ -675,7 +675,7 @@
               <span class="qi-type-tag">{JOB_TYPE_LABELS[job.type] || job.type}</span>
               <span class="qi-vid">{job.title || ''}</span>
               {#if job.priority > 0}
-                <span class="qi-priority" class:high={job.priority >= 5}>P{job.priority}</span>
+                <span class="qi-priority" class:high={job.priority >= 5} title="Priorität">Prio {job.priority}</span>
               {/if}
             </div>
 

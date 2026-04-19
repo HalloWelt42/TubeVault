@@ -148,7 +148,7 @@
              oninput={applyOffset} class="offset-slider" />
       <button class="btn-xs" onclick={() => adjustOffset(10)}>+10</button>
       <button class="btn-xs" onclick={() => adjustOffset(100)}>+100</button>
-      <button class="btn-xs" onclick={() => { audioOffset = 0; applyOffset(); }}>Reset</button>
+      <button class="btn-xs" onclick={() => { audioOffset = 0; applyOffset(); }}>Zurücksetzen</button>
     </div>
   </div>
 
