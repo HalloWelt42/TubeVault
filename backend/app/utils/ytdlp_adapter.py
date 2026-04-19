@@ -43,6 +43,13 @@ _YDL_BASE_OPTS = {
     "skip_download": True,
     "noprogress": True,
     "socket_timeout": 20,
+    # Bot-Erkennung abschwächen: TV/iOS Player-Clients statt Default-Web
+    # (TV hat bestes Umgehen von Sign-in-required-Block; Fallbacks auf iOS/web_safari)
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["tv", "ios", "web_safari"],
+        }
+    },
 }
 
 
@@ -276,6 +283,12 @@ class StreamAdapter:
             "overwrites": True,
             # Kein Post-Processing — wir übernehmen Merge im download_service selbst.
             "postprocessors": [],
+            # Bot-Erkennung: Player-Client-Rotation (tv/ios/web_safari statt Default-Web)
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["tv", "ios", "web_safari"],
+                }
+            },
         }
         # Throttling aus Settings – 3 Modi:
         #   realtime  → ratelimit = filesize / duration (passt jedem Video an,
