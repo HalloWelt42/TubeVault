@@ -217,20 +217,46 @@ async def get_video_preview(video_id: str):
         result["is_downloaded"] = result.get("status") == "ready"
         return result
 
-    # 4) Nicht lokal/RSS → Basisdaten per YouTube-ID zurückgeben
-    return {
-        "id": video_id,
-        "title": video_id,
-        "channel_name": None,
-        "channel_id": None,
-        "thumbnail_url": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
-        "published": None,
-        "duration": None,
-        "view_count": None,
-        "description": None,
-        "preview_mode": True,
-        "is_downloaded": False,
-    }
+    # 4) Nicht lokal/RSS → via yt-dlp live von YouTube holen (ohne Download).
+    # Liefert: title, description, duration, view_count, channel, thumbnail etc.
+    try:
+        from app.utils.ytdlp_adapter import _ydl_extract
+        info = _ydl_extract(f"https://www.youtube.com/watch?v={video_id}")
+        return {
+            "id": video_id,
+            "title": info.get("title") or video_id,
+            "channel_name": info.get("channel") or info.get("uploader"),
+            "channel_id": info.get("channel_id") or info.get("uploader_id"),
+            "thumbnail_url": (info.get("thumbnail")
+                              or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
+            "published": info.get("upload_date") or info.get("release_date"),
+            "upload_date": info.get("upload_date"),
+            "duration": info.get("duration"),
+            "view_count": info.get("view_count"),
+            "like_count": info.get("like_count"),
+            "description": info.get("description"),
+            "tags": info.get("tags") or [],
+            "categories": info.get("categories") or [],
+            "preview_mode": True,
+            "is_downloaded": False,
+        }
+    except Exception as e:
+        logger.warning(f"[Preview] yt-dlp enrichment failed for {video_id}: {e}")
+        # Fallback: Basis-ID
+        return {
+            "id": video_id,
+            "title": video_id,
+            "channel_name": None,
+            "channel_id": None,
+            "thumbnail_url": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+            "published": None,
+            "duration": None,
+            "view_count": None,
+            "description": None,
+            "preview_mode": True,
+            "is_downloaded": False,
+            "enrich_failed": True,
+        }
 
 
 @router.get("/{video_id}/neighbors")
