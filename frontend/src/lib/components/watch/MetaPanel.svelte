@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { toast } from '../../stores/notifications.js';
   import { formatDuration, formatSize, formatDate } from '../../utils/format.js';
 
   let { video } = $props();
@@ -39,6 +40,35 @@
   function copyId() {
     navigator.clipboard.writeText(video.id);
   }
+
+  async function copyFilePath() {
+    const path = meta?.db?.file_path;
+    if (!path) return;
+    try {
+      await navigator.clipboard.writeText(path);
+      toast.success('Pfad kopiert – im Finder mit ⌘⇧G einfügen');
+    } catch {
+      toast.error('Kopieren fehlgeschlagen');
+    }
+  }
+
+  // Ordner-Pfad (ohne Dateiname) für "Ordner zeigen"
+  function parentDir(path) {
+    if (!path) return '';
+    const idx = path.lastIndexOf('/');
+    return idx > 0 ? path.substring(0, idx) : path;
+  }
+
+  async function copyParentDir() {
+    const dir = parentDir(meta?.db?.file_path);
+    if (!dir) return;
+    try {
+      await navigator.clipboard.writeText(dir);
+      toast.success('Ordner-Pfad kopiert – im Finder mit ⌘⇧G einfügen');
+    } catch {
+      toast.error('Kopieren fehlgeschlagen');
+    }
+  }
 </script>
 
 {#if loading}
@@ -67,7 +97,21 @@
       <h4><i class="fa-solid fa-hard-drive"></i> Datei</h4>
       <div class="mp-grid">
         <span class="mp-label">Pfad</span>
-        <span class="mp-val mp-path"><code>{meta.db.file_path || '–'}</code></span>
+        <span class="mp-val mp-path">
+          <code>{meta.db.file_path || '–'}</code>
+          {#if meta.db.file_path}
+            <span class="mp-path-actions">
+              <button class="mp-path-btn" onclick={copyFilePath}
+                      title="Datei-Pfad in Zwischenablage kopieren – im Finder mit ⌘⇧G einfügen">
+                <i class="fa-regular fa-copy"></i> Pfad
+              </button>
+              <button class="mp-path-btn" onclick={copyParentDir}
+                      title="Ordner-Pfad in Zwischenablage kopieren">
+                <i class="fa-solid fa-folder-open"></i> Ordner
+              </button>
+            </span>
+          {/if}
+        </span>
         <span class="mp-label">Dateigröße</span>
         <span class="mp-val">{meta.file.file_exists ? formatSize(meta.file.file_size_actual) : 'Datei nicht gefunden'}</span>
         <span class="mp-label">Status</span>
@@ -181,8 +225,18 @@
   .mp-label { font-size: 0.78rem; color: var(--text-tertiary); padding: 2px 0; }
   .mp-val { font-size: 0.82rem; color: var(--text-primary); padding: 2px 0; word-break: break-all; }
   .mp-val code { font-size: 0.78rem; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; }
-  .mp-path { max-width: 100%; overflow: hidden; }
-  .mp-path code { font-size: 0.72rem; }
+  .mp-path { max-width: 100%; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
+  .mp-path code { font-size: 0.72rem; word-break: break-all; }
+  .mp-path-actions { display: flex; gap: 6px; }
+  .mp-path-btn {
+    background: var(--bg-tertiary); border: 1px solid var(--border-primary);
+    color: var(--text-secondary); cursor: pointer;
+    padding: 3px 10px; border-radius: 4px; font-size: 0.72rem;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: all 0.12s;
+  }
+  .mp-path-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+  .mp-path-btn i { font-size: 0.68rem; }
   .mp-url { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .mp-url a { color: var(--accent-primary); text-decoration: none; font-size: 0.78rem; }
   .mp-url a:hover { text-decoration: underline; }

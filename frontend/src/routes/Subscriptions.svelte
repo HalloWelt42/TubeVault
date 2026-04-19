@@ -398,6 +398,9 @@
           <option value="1080p">1080p</option>
           <option value="720p">720p</option>
           <option value="480p">480p</option>
+          <option value="360p">360p</option>
+          <option value="240p">240p</option>
+          <option value="144p">144p</option>
         </select>
         <button class="btn-primary" onclick={addBatch} disabled={importing||!batchInput.trim()}>
           {importing?'Importiere…':`${batchInput.split('\n').filter(l=>l.trim()).length} importieren`}
@@ -515,6 +518,8 @@
               <option value="720p">720p</option>
               <option value="480p">480p</option>
               <option value="360p">360p</option>
+              <option value="240p">240p</option>
+              <option value="144p">144p</option>
             </select>
           {/if}
           <button class="tag" class:tag-on={sub.audio_only} onclick={() => toggleAudioOnly(sub)}
