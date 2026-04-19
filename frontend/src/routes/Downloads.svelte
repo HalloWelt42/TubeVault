@@ -841,7 +841,11 @@
   .qi-vid { font-size:0.82rem; font-weight:600; color:var(--text-primary); font-family:monospace; }
   .qi-stage-text { font-size:0.72rem; color:var(--text-secondary); margin-top:4px; display:block; }
   
-  .qi-priority { font-size:0.65rem; padding:1px 5px; border-radius:4px; background:var(--bg-tertiary); color:var(--text-tertiary); font-weight:700; }
+  .qi-priority {
+    font-size:0.65rem; padding:1px 5px; border-radius:4px;
+    background:var(--bg-tertiary); color:var(--text-tertiary); font-weight:700;
+    white-space: nowrap; flex-shrink: 0;
+  }
   .qi-priority.high { background:var(--status-warning-bg, #fef3c7); color:var(--status-warning); }
 
   /* Alter Progress-Balken entfernt – siehe DownloadProgress.svelte */
