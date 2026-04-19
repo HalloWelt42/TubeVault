@@ -1,6 +1,6 @@
 <script>
   /**
-   * TubeVault – VideoCard v1.7.0
+   * TubeVault – VideoCard v1.8.0
    * Typ-Badges klickbar (video→short→live), Like/Dislike Bar, QPL.
    * © HalloWelt42 – Private Nutzung
    */
@@ -90,6 +90,23 @@
     {#if video.like_count && video.dislike_count != null}
       <LikeBar likes={video.like_count} dislikes={video.dislike_count} mode="thumbnail" />
     {/if}
+    <!-- Hover-Aktionen: große runde Overlay-Buttons nur im Thumbnail-Bereich
+         (analog Feed-Card). Alle Funktionen erhalten. -->
+    <div class="card-hover-actions">
+      <div class="hover-action-group">
+        <div class="hover-action-btn" title="Zu Playlist hinzufügen">
+          <QuickPlaylistBtn videoId={video.id} title={video.title}
+                            channelName={video.channel_name}
+                            channelId={video.channel_id} size="sm" />
+        </div>
+        {#if showArchiveBtn && !video.is_archived}
+          <button class="hover-action-btn hover-btn-archive"
+                  onclick={archiveVideo} title="Archivieren">
+            <i class="fa-solid fa-box-archive"></i>
+          </button>
+        {/if}
+      </div>
+    </div>
   </div>
   <div class="video-info">
     <h3 class="video-title">{video.title}</h3>
@@ -111,35 +128,46 @@
     </div>
   </div>
 </div>
-  {#if showArchiveBtn && !video.is_archived}
-    <button class="btn-archive" onclick={archiveVideo} title="Archivieren">
-      <i class="fa-solid fa-box-archive"></i>
-    </button>
-  {/if}
-  <div class="btn-qpl-overlay">
-    <QuickPlaylistBtn videoId={video.id} title={video.title} channelName={video.channel_name} channelId={video.channel_id} size="sm" />
-  </div>
 </div>
 {/if}
 
 <style>
   .card-wrap { position: relative; }
-  .btn-archive {
-    position: absolute; top: 8px; right: 8px; z-index: 3;
-    width: 28px; height: 28px; border-radius: 50%;
-    background: rgba(0,0,0,0.7); color: #fff; border: none;
-    cursor: pointer; font-size: 0.7rem; display: flex;
-    align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 0.15s;
-  }
-  .card-wrap:hover .btn-archive { opacity: 1; }
-  .btn-archive:hover { background: var(--accent-primary); }
 
-  .btn-qpl-overlay {
-    position: absolute; top: 8px; left: 8px; z-index: 3;
-    opacity: 0; transition: opacity 0.15s;
+  /* Hover-Action-Overlay: große runde Buttons mittig im Thumbnail-Bereich
+     (analog Feed-Card). Liegt INNERHALB .thumbnail-wrap, deckt also
+     nur das Thumbnail ab — Info-Section unten bleibt unberührt. */
+  .card-hover-actions {
+    position: absolute;
+    inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.35);
   }
-  .card-wrap:hover .btn-qpl-overlay { opacity: 1; }
+  .card-wrap:hover .card-hover-actions {
+    opacity: 1; pointer-events: auto;
+  }
+
+  .hover-action-group {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .hover-action-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95); color: #111;
+    border: none; cursor: pointer;
+    font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: transform 0.1s, background 0.12s, color 0.12s;
+  }
+  .hover-action-btn:hover {
+    transform: scale(1.08);
+    background: var(--accent-primary); color: #fff;
+  }
+  .hover-btn-archive { color: #f59e0b; }
+  .hover-btn-archive:hover { background: #f59e0b; color: #fff; }
 
   .video-card {
     display: flex; flex-direction: column; background: var(--bg-secondary);
@@ -153,6 +181,13 @@
   }
   .thumbnail-wrap { position: relative; aspect-ratio: 16/9; background: var(--bg-tertiary); overflow: hidden; }
   .thumbnail { width: 100%; height: 100%; object-fit: cover; }
+  /* Thumbnail-Layout (konsistent, keine Überlappungen):
+     Top-Right:    type-badge (VIDEO/SHORT/LIVE)
+     Top-Left:     status-badge (pending/error) — nur wenn nicht ready
+     Bottom-Right: duration-badge
+     Mitte (Hover-Overlay): große runde Action-Buttons (Quick-Playlist,
+                            Archivieren) — analog Feed-Card-Stil */
+
   .duration-badge {
     position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8);
     color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;
@@ -160,21 +195,24 @@
   .status-badge {
     position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 4px;
     font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    z-index: 1;
   }
   .status-pending { background: var(--status-pending); color: #fff; }
   .status-downloading { background: var(--status-info); color: #fff; }
   .status-error { background: var(--status-error); color: #fff; }
   .type-badge {
-    position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 4px;
+    position: absolute; top: 8px; right: 8px;
+    padding: 3px 8px; border-radius: 4px;
     font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.03em; display: flex; align-items: center; gap: 4px;
-    border: none; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+    border: none; cursor: pointer; transition: transform 0.1s;
+    z-index: 1;
   }
   .type-badge:hover { transform: scale(1.05); }
   .type-short { background: rgba(171, 71, 188, 0.9); color: #fff; }
   .type-live { background: rgba(244, 67, 54, 0.9); color: #fff; }
-  .type-video { background: rgba(100, 100, 100, 0.6); color: #fff; opacity: 0; transition: opacity 0.15s; }
-  .card-wrap:hover .type-video { opacity: 1; }
+  /* type-video semi-transparent, etwas zurückgenommen */
+  .type-video { background: rgba(0, 0, 0, 0.65); color: #fff; }
   .video-info { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
   .video-title {
     font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin: 0;

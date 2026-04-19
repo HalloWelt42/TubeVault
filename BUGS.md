@@ -43,6 +43,46 @@ Status: `[open]` · `[partial]` · `[done]` · `[deferred]` · `[wont-fix]`
 
 ## Offene Features / Wünsche
 
+### [open] Mehrfachauswahl überall + Drag-to-Select mit Maus-Rechteck
+- **Bereich:** frontend (Library, Archives, Favorites, History, OwnVideos, ChannelDetail, Playlists)
+- **Wunsch:** User-Zitat: "mehrfachauswahl sollte überall verfügbar sein und es sollte auch markiert werden durch drüberziehen mit der maus, wie ein rechteck ziehen."
+- **Anforderungen:**
+  - Select-Mode auf allen Karten-Listen konsistent verfügbar (aktuell: Library ✓, Archives ✓, andere?)
+  - Drag-to-Select: Mausdrücken auf Leerfläche → Rechteck aufziehen → alle Karten innerhalb werden selektiert (wie Finder / Windows-Explorer)
+  - Shift-Klick = Range-Selection, Ctrl/Cmd-Klick = Toggle (üblich)
+- **Prio:** 🟠 mittel (Workflow-Verbesserung für Batch-Aktionen)
+
+### [open] Eigene YouTube-Suchergebnis-Seite (eigenes Menü, umfassend)
+- **Bereich:** frontend (neue Route + Sidebar-Eintrag)
+- **Wunsch:** User-Zitat: "die ergebnisse der suchen sollte 1. eine separate suchseite öffnen 2. die ergebnisse sollte umfassender sein kanalinfos, größere thumnails pagineirung über die gesamte seite alles als eigene menü eigene seite, alles grund umfassend"
+- **Anforderungen:**
+  - Neue Route, z.B. `/youtube-suche?q=...&page=N`
+  - Große Thumbnails im Grid
+  - Kanal-Infos pro Video (Avatar klickbar, Name klickbar)
+  - Echte Pagination-Controls (Prev / Seiten / Next)
+  - Separate Bereiche für Shorts/Playlists/Channels
+  - Vom SearchDropdown aus erreichbar ("Alle Treffer")
+- **Prio:** 🟠 mittel (Feature — gute UX für ausführliche Suche)
+
+### [open] Tag-Filter zeigt globale Tags statt nur der angezeigten Liste
+- **Bereich:** frontend + backend (Library, Archives)
+- **Symptom:** Bibliothek filtert auf 20 Videos, Tag-Filter zeigt aber 64514 Tags. User-Zitat: "20 videos aber tausenden tags, das kann nie sein."
+- **Ursache:** Tags werden global aus `videos.tags` aggregiert, nicht nur aus den aktuell angezeigten/gefilterten Videos.
+- **Fix:** Tag-Liste basiert auf den gerade angezeigten Videos (nach Filter-Anwendung). Bei unveränderten Filtern muss Tag-Liste neu berechnet werden.
+- **Prio:** 🟠 mittel
+
+### [open] Feed-Bereich: fehlende Filter / schwache Filter-Optionen
+- **Bereich:** frontend (Feed-Seite)
+- **Symptom:** User-Zitat: "in feeds dagegen fehlt das filtern völlig und nur wenige option sind da."
+- **Fix-Plan:** Feed bekommt gleichwertige Filter wie Library (Typen, Kanäle, Kategorien, Tags), plus Feed-spezifische (Zeitraum, gelesen/ungelesen).
+- **Prio:** 🟠 mittel
+
+### [open] Sortier-Optionen erweitern (Upload-Datum + Favoriten)
+- **Bereich:** frontend (Library, Archives, ChannelDetail) + backend (falls nicht da)
+- **Wunsch:** Neben "Datum/Titel/Dauer/Größe/Bewertung/Abgespielt" auch "Upload-Datum" und "Favoriten" als Sortier-Option.
+- **Backend:** `sort_by=upload_date` + `sort_by=is_favorite` im Videos-API.
+- **Prio:** 🟠 mittel (schon als Ticket `Sortierung nach YT-Upload-Datum` angelegt, hier präzisiert)
+
 ### [open] Video/Shorts-Kategorisierung nachträglich korrigieren (aktiv triggerbar)
 - **Bereich:** backend (rss_entries + videos) + frontend (Button in Settings)
 - **Geschichte:** früher wurde mit pytubefix + typ-getrennten Feeds kategorisiert — fehleranfällig. Seit yt-dlp-Migration (v2.0.0) nutzen wir `duration ≤ 60` = short, sonst video. Neue Einträge sind sauber.
