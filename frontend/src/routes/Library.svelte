@@ -36,7 +36,17 @@
   const PER_PAGE = getSettingNum('general.videos_per_page', 24);
 
   async function loadTags() {
-    try { allTags = (await api.getAllTags()) || []; } catch {}
+    // Tags werden gefiltert wie die aktuelle Video-Liste, damit nicht global
+    // 64k Tags angezeigt werden, wenn nur 20 Videos gefiltert sind.
+    try {
+      const filters = {
+        archived: false,
+        video_types: multiFilter.types || undefined,
+        channel_ids: multiFilter.channels || undefined,
+        category_ids: multiFilter.categories || undefined,
+      };
+      allTags = (await api.getAllTags(filters)) || [];
+    } catch {}
   }
 
   async function loadVideos(reset = true) {
@@ -110,7 +120,12 @@
     syncToUrl();
   }
 
-  function onFilterChange(f) { multiFilter = f; syncToUrl(); }
+  function onFilterChange(f) {
+    multiFilter = f;
+    syncToUrl();
+    // Tags an neuen Filter anpassen (z.B. nur Tags der Shorts wenn video_type=short)
+    loadTags();
+  }
 
   function changeSort(field) {
     if (sortBy === field) sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';

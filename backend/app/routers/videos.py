@@ -57,9 +57,22 @@ async def get_video_stats():
 
 
 @router.get("/tags")
-async def get_all_tags():
-    """Alle verwendeten Tags mit Anzahl."""
-    return await metadata_service.get_all_tags()
+async def get_all_tags(
+    video_type: str = None,
+    video_types: str = None,
+    channel_ids: str = None,
+    category_ids: str = None,
+    archived: bool = False,
+):
+    """Tags mit Anzahl — identische Filter wie /api/videos, damit der Tag-Filter
+    nur die Tags der aktuell angezeigten Videos listet (nicht alle globalen)."""
+    return await metadata_service.get_all_tags(
+        video_type=video_type,
+        video_types=video_types,
+        channel_ids=channel_ids,
+        category_ids=category_ids,
+        is_archived=archived,
+    )
 
 
 @router.get("/channels")

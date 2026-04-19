@@ -114,7 +114,16 @@ export const api = {
   clearHistory: () => request('/api/videos/history', { method: 'DELETE' }),
 
   // Tags
-  getAllTags: () => request('/api/videos/tags'),
+  getAllTags: (filters = {}) => {
+    const p = new URLSearchParams();
+    if (filters.video_type) p.set('video_type', filters.video_type);
+    if (filters.video_types) p.set('video_types', filters.video_types);
+    if (filters.channel_ids) p.set('channel_ids', filters.channel_ids);
+    if (filters.category_ids) p.set('category_ids', filters.category_ids);
+    if (filters.archived) p.set('archived', 'true');
+    const qs = p.toString();
+    return request(`/api/videos/tags${qs ? '?' + qs : ''}`);
+  },
   getVideoChannels: () => request('/api/videos/channels'),
 
   // YouTube Search

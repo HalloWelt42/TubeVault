@@ -364,11 +364,64 @@ class MetadataService:
         await db.execute("DELETE FROM watch_history")
         await db.execute("UPDATE videos SET play_count = 0, last_played = NULL, last_position = 0")
 
-    async def get_all_tags(self) -> list[dict]:
-        """Alle verwendeten Tags mit Anzahl."""
-        rows = await db.fetch_all(
-            "SELECT tags FROM videos WHERE status = 'ready' AND tags != '[]'"
-        )
+    async def get_all_tags(
+        self,
+        video_type: str = None,
+        video_types: str = None,
+        channel_ids: str = None,
+        category_ids: str = None,
+        is_archived: bool = False,
+    ) -> list[dict]:
+        """Tags aggregieren — optional gefiltert auf dieselben Kriterien
+        wie /api/videos. Damit zeigt der Tag-Filter nur Tags der aktuell
+        sichtbaren Liste (keine globalen 64k Tags mehr).
+
+        Args:
+          video_type:   'video' | 'short' | 'live' | 'music' | None
+          video_types:  komma-getrennte Typ-Liste (hat Vorrang vor video_type)
+          channel_ids:  komma-getrennte channel_id-Liste
+          category_ids: komma-getrennte category_id-Liste (M2M über video_categories)
+          is_archived:  True → nur archivierte, False → nur nicht-archivierte
+        """
+        conditions = ["status = 'ready'", "tags != '[]'"]
+        params: list = []
+
+        if is_archived:
+            conditions.append("COALESCE(is_archived, 0) = 1")
+        else:
+            conditions.append("COALESCE(is_archived, 0) = 0")
+
+        if video_types:
+            vtypes = [v.strip() for v in video_types.split(",") if v.strip()]
+            if vtypes:
+                placeholders = ",".join("?" * len(vtypes))
+                conditions.append(f"COALESCE(video_type, 'video') IN ({placeholders})")
+                params.extend(vtypes)
+        elif video_type == "music":
+            conditions.append("is_music = 1")
+        elif video_type in ("video", "short", "live"):
+            conditions.append("COALESCE(video_type, 'video') = ?")
+            params.append(video_type)
+
+        if channel_ids:
+            cids = [c.strip() for c in channel_ids.split(",") if c.strip()]
+            if cids:
+                placeholders = ",".join("?" * len(cids))
+                conditions.append(f"channel_id IN ({placeholders})")
+                params.extend(cids)
+
+        if category_ids:
+            catids = [c.strip() for c in category_ids.split(",") if c.strip()]
+            if catids:
+                placeholders = ",".join("?" * len(catids))
+                conditions.append(
+                    f"id IN (SELECT video_id FROM video_categories WHERE category_id IN ({placeholders}))"
+                )
+                params.extend(catids)
+
+        where = " AND ".join(conditions)
+        rows = await db.fetch_all(f"SELECT tags FROM videos WHERE {where}", tuple(params))
+
         tag_count = {}
         for row in rows:
             try:

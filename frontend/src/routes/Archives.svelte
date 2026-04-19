@@ -31,7 +31,16 @@
   let multiFilter = $state({ types: null, channels: null, categories: null });
 
   async function loadTags() {
-    try { allTags = await api.getAllTags() || []; } catch {}
+    // Tags nur für die im Archiv gefilterten Videos — nicht global.
+    try {
+      const filters = {
+        archived: true,
+        video_types: multiFilter.types || undefined,
+        channel_ids: multiFilter.channels || undefined,
+        category_ids: multiFilter.categories || undefined,
+      };
+      allTags = (await api.getAllTags(filters)) || [];
+    } catch {}
   }
 
   async function loadVideos() {
@@ -54,7 +63,11 @@
 
   function toggleTag(tag) { activeTags = activeTags.includes(tag) ? activeTags.filter(t => t !== tag) : [...activeTags, tag]; page = 1; }
   function clearFilters() { activeTags = []; multiFilter = { types: null, channels: null, categories: null }; page = 1; }
-  function onFilterChange(f) { multiFilter = f; page = 1; }
+  function onFilterChange(f) {
+    multiFilter = f;
+    page = 1;
+    loadTags();
+  }
   function changeSort(field) {
     if (sortBy === field) sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
     else { sortBy = field; sortOrder = 'desc'; }
