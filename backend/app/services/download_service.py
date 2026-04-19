@@ -1,5 +1,5 @@
 """
-TubeVault – Download Service v1.8.45
+TubeVault – Download Service v1.8.46
 Live-Progress, Stufen, FFmpeg-Merge, Rate-Limiting, Resume, Job-Tracking, Adaptive Cooldown
 pytubefix: Chapters, Captions, Audio-Only nativ
 © HalloWelt42 – Private Nutzung
@@ -123,6 +123,7 @@ class DownloadService:
         self._phases_cache: dict[int, list] = {}  # job_id → letzte phases
         self._last_db_write: dict[int, float] = {}  # job_id → timestamp des letzten DB-Writes
         self._job_opts: dict[int, dict] = {}  # job_id → download_options (für _stage Phasen-Wahl)
+        self._rate_samples: dict[int, list] = {}  # job_id → [(t_s, bytes_done), ...] für ETA-Berechnung
         # Cooldown-State (initialisiert in _queue_loop, hier Defaults für get_cooldown_state)
         self._cooldown = 30
         self._cooldown_base = 30
@@ -997,6 +998,7 @@ class DownloadService:
         finally:
             _last_ws_time.pop(job_id, None)
             self._job_opts.pop(job_id, None)
+            self._rate_samples.pop(job_id, None)
             # Safety-Net: falls der Job trotzdem noch auf 'active' steht
             # (Exception im Exception-Handler, Netz-Ausfall etc.) → auf error setzen.
             # Verhindert Zombie-"active"-Einträge wie in der pytubefix-Nacht.
@@ -1085,15 +1087,48 @@ class DownloadService:
                 return
             _last_ws_time[job_id] = now_t
 
+            # Rate + ETA aus rollendem 10s-Fenster der Progress-Samples
+            samples = self._rate_samples.setdefault(job_id, [])
+            samples.append((now_t, done))
+            cutoff = now_t - 10.0
+            while samples and samples[0][0] < cutoff:
+                samples.pop(0)
+            eta_sec = None
+            rate_bps = None
+            if len(samples) >= 2:
+                dt = samples[-1][0] - samples[0][0]
+                db = samples[-1][1] - samples[0][1]
+                if dt > 0.2 and db > 0:
+                    rate_bps = db / dt
+                    remaining_bytes = max(0, total - done)
+                    eta_sec = int(remaining_bytes / rate_bps) if rate_bps > 0 else None
+
             mb_d = done / 1048576
             mb_t = total / 1048576
             phase_label = "Video" if dl["phase"] == "video" else "Audio"
+            label_parts = [f"{phase_label}: {mb_d:.1f}/{mb_t:.1f} MB ({pct*100:.0f}%)"]
+            if eta_sec is not None and eta_sec > 0:
+                if eta_sec < 60:
+                    label_parts.append(f"~{eta_sec}s")
+                elif eta_sec < 3600:
+                    label_parts.append(f"~{eta_sec // 60}min {eta_sec % 60}s")
+                else:
+                    label_parts.append(f"~{eta_sec // 3600}h {(eta_sec % 3600) // 60}min")
+            if rate_bps and rate_bps > 10_000:
+                mbps = rate_bps / 1_048_576
+                if mbps >= 1:
+                    label_parts.append(f"{mbps:.1f} MB/s")
+                else:
+                    label_parts.append(f"{rate_bps/1024:.0f} KB/s")
+
             self._ws_broadcast_sync({
                 "job_id": job_id, "queue_id": job_id, "video_id": vid, "status": "active",
                 "progress": round(overall, 3),
                 "stage": f"downloading_{dl['phase']}",
-                "stage_label": f"{phase_label}: {mb_d:.1f}/{mb_t:.1f} MB ({pct*100:.0f}%)",
+                "stage_label": " · ".join(label_parts),
                 "bytes_done": done, "bytes_total": total,
+                "eta_seconds": eta_sec,
+                "rate_bps": rate_bps,
             })
 
         def _do():
