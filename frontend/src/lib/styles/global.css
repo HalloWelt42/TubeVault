@@ -468,22 +468,20 @@ label:has(input[type="checkbox"]) {
 .md-content img, .md-preview img { max-width: 100%; border-radius: 6px; }
 
 /* ═══════════════════════════════════════════════
-   CARD HOVER ACTIONS – zentrales Feed-Design
+   CARD HOVER ACTIONS – 1:1 vom Feed übernommen
    ═══════════════════════════════════════════════
+   Damit VideoCard (Library/Dashboard/Archiv) und Playlists
+   das identische Overlay-Design wie der Feed haben.
+   Feed selbst nutzt seine eigenen .thumb-overlay/.overlay-btn
+   und wird hiervon NICHT berührt. */
 
-   Ursprüngliches Feed-Overlay: 42px runde Buttons, dunkler Overlay,
-   farbige Variants (accent/success/warn-yellow/warn/danger).
-   Verwendet in: Feed, VideoCard (Library/Dashboard), Playlists.
-*/
 .card-hover-actions {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  gap: 10px; opacity: 0; pointer-events: none;
-  transition: opacity 0.2s;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; opacity: 0; transition: opacity 0.2s;
+  z-index: 2; pointer-events: none;
 }
-.card-hover-trigger:hover .card-hover-actions,
 .card-wrap:hover .card-hover-actions,
 .video-card:hover .card-hover-actions,
 .playlist-card:hover .card-hover-actions,
@@ -493,39 +491,23 @@ label:has(input[type="checkbox"]) {
 
 .hover-action-btn {
   width: 42px; height: 42px; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95); color: #111;
-  border: none; cursor: pointer;
-  font-size: 1.1rem;
+  border: none;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  transition: transform 0.15s, background 0.15s;
+  cursor: pointer; font-size: 1.1rem;
+  transition: transform 0.15s;
+  background: rgba(255, 255, 255, 0.15); color: #fff;
   padding: 0;
 }
 .hover-action-btn:hover { transform: scale(1.1); }
 .hover-action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-/* Farb-Variants (wie Original-Feed) */
+/* Variants – exakt wie Feed */
 .hover-action-btn.accent   { background: var(--accent-primary); color: #fff; }
-.hover-action-btn.accent:hover   { background: var(--accent-hover, var(--accent-primary)); filter: brightness(1.1); }
-
 .hover-action-btn.success  { background: var(--status-success); color: #fff; }
-.hover-action-btn.success:hover  { filter: brightness(1.15); }
-
-/* Gelb (Blitz / Schnell-Download) */
-.hover-action-btn.flash    { background: #fbbf24; color: #111; }
-.hover-action-btn.flash:hover    { background: #f59e0b; color: #fff; }
-
-/* Orange (Archivieren/Weglegen) */
-.hover-action-btn.warn     { background: #f59e0b; color: #fff; }
-.hover-action-btn.warn:hover     { background: #d97706; }
-
-/* Rot (Ausblenden/Löschen) */
-.hover-action-btn.danger   { background: var(--status-error); color: #fff; }
-.hover-action-btn.danger:hover   { filter: brightness(1.15); }
-
-/* Gepinnt (Playlist Quick-Pin) */
+.hover-action-btn.warn:hover    { background: rgba(245,158,11,0.6); }   /* archive-btn */
+.hover-action-btn.danger:hover  { background: rgba(255,80,80,0.6); }    /* dismiss-btn */
+.hover-action-btn.flash:hover   { background: rgba(255,200,0,0.5); }    /* queue-btn / Blitz */
 .hover-action-btn.pinned   { background: rgba(245, 158, 11, 0.95); color: #fff; }
-.hover-action-btn.pinned:hover   { background: #f59e0b; }
 
 /* Größenvarianten */
 .hover-action-btn.sm { width: 34px; height: 34px; font-size: 0.9rem; }

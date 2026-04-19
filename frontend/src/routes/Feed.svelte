@@ -290,10 +290,8 @@
     downloading.add(entry.video_id);
     downloading = new Set(downloading);
     try {
-      // Quality-Logik:
-      // - Audio-Only → 'audio_only'
-      // - Abo-spezifische Qualität (download_quality) hat Vorrang
-      // - Sonst quality weglassen → Backend nutzt Settings-Default (download.quality)
+      // Quality: Audio → 'audio_only', sonst Abo-Quality oder weglassen
+      // (Backend nimmt dann Settings-Default statt hardcoded 'best')
       const payload = {
         url: `https://www.youtube.com/watch?v=${entry.video_id}`,
         itag: isAudioOnly ? null : itag,
@@ -304,7 +302,6 @@
       };
       if (isAudioOnly) payload.quality = 'audio_only';
       else if (entry.download_quality) payload.quality = entry.download_quality;
-      // else: kein quality → Backend nimmt Settings
       await api.addDownload(payload);
       const label = priority >= 10 ? 'Sofort-Download' : 'In Queue gelegt';
       toast.success(`${label}: ${entry.title || entry.video_id}`);
@@ -318,11 +315,7 @@
   }
 
   async function quickDownload(entry) {
-    // Defense-in-Depth: falls der Button doch mal nicht deaktiviert wurde
-    if (entry.is_in_queue) {
-      toast.info('Bereits in der Warteschlange');
-      return;
-    }
+    if (entry.is_in_queue) { toast.info('Bereits in der Warteschlange'); return; }
     await startDownload(entry, { audioOnly: !!entry.audio_only, priority: 0 });
   }
 
@@ -578,41 +571,41 @@
               <span class="play-badge"><i class="fa-solid fa-play"></i> Abspielen</span>
             {/if}
 
-            <!-- Hover-Overlay: Original-Feed-Design (globale Klassen aus global.css) -->
-            <div class="card-hover-actions">
+            <!-- Overlay -->
+            <div class="thumb-overlay">
               {#if entry.video_status === 'ready'}
-                <button class="hover-action-btn success" onclick={(e) => { e.stopPropagation(); openVideo(entry); }} title="Abspielen">
+                <button class="overlay-btn play-btn" onclick={(e) => { e.stopPropagation(); openVideo(entry); }} title="Abspielen">
                   <i class="fa-solid fa-play"></i>
                 </button>
               {:else if entry.is_in_queue}
-                <!-- Bereits in Queue: Download-Buttons ersetzt durch Status-Indikator -->
-                <button class="hover-action-btn accent" disabled
+                <!-- In Queue: Status-Indikator statt DL-Button (nicht anklickbar) -->
+                <button class="overlay-btn dl-btn" disabled
                   title={entry.queue_status === 'active' ? 'Wird gerade heruntergeladen' : entry.queue_status === 'retry_wait' ? 'Wartet auf Retry' : 'Bereits in der Warteschlange'}>
                   <i class="fa-solid {entry.queue_status === 'active' ? 'fa-spinner fa-spin' : entry.queue_status === 'retry_wait' ? 'fa-hourglass-half' : 'fa-clock'}"></i>
                 </button>
               {:else}
-                <button class="hover-action-btn accent" onclick={(e) => { e.stopPropagation(); openStreamDialog(entry); }}
+                <button class="overlay-btn dl-btn" onclick={(e) => { e.stopPropagation(); openStreamDialog(entry); }}
                   disabled={downloading.has(entry.video_id)} title={entry.audio_only ? 'Audio-Stream wählen' : 'Stream waehlen & laden'}>
                   <i class="fa-solid {entry.audio_only ? 'fa-podcast' : 'fa-download'}"></i>
                 </button>
-                <button class="hover-action-btn flash" onclick={(e) => { e.stopPropagation(); quickDownload(entry); }}
+                <button class="overlay-btn queue-btn" onclick={(e) => { e.stopPropagation(); quickDownload(entry); }}
                   disabled={downloading.has(entry.video_id)} title={entry.audio_only ? 'Audio laden' : 'Schnell-Download'}>
                   <i class="fa-solid fa-bolt"></i>
                 </button>
               {/if}
               <!-- Schnellaktionen je nach Tab -->
               {#if feedTab === 'active'}
-                <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'later'); }} title="Später anschauen">
+                <button class="overlay-btn later-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'later'); }} title="Spaeter anschauen">
                   <i class="fa-solid fa-bookmark"></i>
                 </button>
-                <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'archived'); }} title="Weglegen">
+                <button class="overlay-btn archive-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'archived'); }} title="Archivieren">
                   <i class="fa-solid fa-box-archive"></i>
                 </button>
-                <button class="hover-action-btn danger" onclick={(e) => { e.stopPropagation(); dismissEntry(entry); }} title="Ausblenden">
+                <button class="overlay-btn dismiss-btn" onclick={(e) => { e.stopPropagation(); dismissEntry(entry); }} title="Ausblenden">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
               {:else}
-                <button class="hover-action-btn success" onclick={(e) => { e.stopPropagation(); restoreEntry(entry); }} title="Wiederherstellen">
+                <button class="overlay-btn restore-btn" onclick={(e) => { e.stopPropagation(); restoreEntry(entry); }} title="Wiederherstellen">
                   <i class="fa-solid fa-rotate-left"></i>
                 </button>
               {/if}
@@ -806,13 +799,28 @@
   .badge-live { background:#EF5350; color:#fff; }
   .badge-audio { background:#2196F3; color:#fff; cursor:default; }
 
-  /* .card-hover-actions / .hover-action-btn – zentral in global.css (gleich wie VideoCard, Playlists) */
+  .thumb-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; gap:10px; opacity:0; transition:opacity 0.2s; }
+  .video-card:hover .thumb-overlay { opacity:1; }
+
+  .overlay-btn { width:42px; height:42px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:1.1rem; transition:transform 0.15s; }
+  .overlay-btn:hover { transform:scale(1.1); }
+  .overlay-btn:disabled { opacity:0.5; }
+  .dl-btn { background:var(--accent-primary); color:#fff; }
+  .queue-btn { background:rgba(255,255,255,0.2); color:#fff; }
+  .queue-btn:hover { background:rgba(255,200,0,0.5); }
+  .dismiss-btn { background:rgba(255,255,255,0.15); color:#fff; }
+  .dismiss-btn:hover { background:rgba(255,80,80,0.6); }
+  .later-btn { background:rgba(255,255,255,0.15); color:#fff; }
+  .later-btn:hover { background:rgba(59,130,246,0.6); }
+  .archive-btn { background:rgba(255,255,255,0.15); color:#fff; }
+  .archive-btn:hover { background:rgba(245,158,11,0.6); }
+  .restore-btn { background:rgba(255,255,255,0.15); color:#fff; }
+  .restore-btn:hover { background:rgba(34,197,94,0.6); }
+  .play-btn { background:var(--status-success); color:#fff; }
   .play-badge { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.8); color:var(--status-success); font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:4px; }
 
 
-  /* Gelber Rahmen während Video in Queue wartet (queued/retry_wait) */
   .video-card.queued .thumb-wrap { border:2px solid var(--status-warning, #f59e0b); box-shadow: 0 0 0 1px rgba(245,158,11,0.3); }
-  /* Blauer Rahmen während Download gerade läuft (active) */
   .video-card.in-progress .thumb-wrap { border:2px solid var(--status-info); box-shadow: 0 0 0 1px rgba(59,130,246,0.3); }
   .video-card.downloaded .thumb-wrap { border:2px solid var(--status-success); }
 
