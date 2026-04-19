@@ -10,7 +10,34 @@ Stand: 2026-04-19. Neue Einträge unten anhängen. Format pro Eintrag:
 - **Prio:** 🔴 hoch / 🟠 mittel / 🟡 niedrig
 ```
 
-Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
+Status: `[open]` · `[partial]` · `[done]` · `[deferred]` · `[wont-fix]`
+
+---
+
+## Release-Log (was hat welcher Commit geflickt?)
+
+| Version | Kern-Fixes |
+|---------|-----------|
+| **v2.0.0** | yt-dlp-Migration, Job-Tracking-Refactor, BotDetection & Cipher behoben, Phasenleiste, WS-Sync nach Done, Adapter für Channel.videos (RSS-404-Ersatz) |
+| **v2.0.1** | Phase-Rendering bei fertigen Jobs korrekt (buildPhases) |
+| **v2.0.2** | Pre-Commit-Hooks gegen verbotene Begriffe |
+| **v2.0.3** | Deutsch-Audit (P100 → Prio, Stale fixen → Festhänger befreien, Reset → Zurücksetzen) |
+| **v2.0.4** | ETA + Download-Rate im Progress-Label |
+| **v2.0.5** | ActivityPanel X-Button keine absolute Überlappung mehr |
+| **v2.0.6** | Lyrics-Sidebar öffnet nicht mehr automatisch wenn andere Sidebar aktiv |
+| **v2.0.7** | Tab-Leiste Video-Detail: sauberes flex-wrap |
+| **v2.0.8** | Subtitle-Download Rate-Limit (caption-Kategorie) + schlanker Log |
+| **v2.1.0** | 144p/240p Qualitäten + Datei-Pfad-Kopieren im Meta-Panel |
+| **v2.1.1** | Dashboard-Download-Feld mit Qualitäts + Audio-Toggle |
+| **v2.1.2** | Prio-Badge nowrap (war zu „Pri"+„5" gebrochen) |
+| **v2.1.3** | Downloads-Seite Queue-Item-Actions nicht mehr absolut |
+| **v2.1.4** | FE_VERSION aus package.json via Vite define |
+| **v2.1.5** | Channel-Poll mit /videos→/shorts→/streams-Fallback, Endlos-Retry-Loop bei non-404-Fehlern gestoppt |
+| **v2.1.6** | YT-Suche `/full` Shorts-Erkennung + pytubefix-Singular-Aliase |
+| **v2.1.7** | Listen-Reaktivität: VideoCard ruft onUpdate → Parents laden neu. Feed-Tab „Archiv" → „Weggelegt" |
+| **v2.1.8** | category_id beim Auto-Download übernommen, Qualitäts-Picker nicht mehr 4K statt 1080p, auto-archive auch ohne drip_enabled |
+| **v2.1.9** | Medaillen-Regel: prozentual (≥90 % Silber, ≥70 % Bronze; Groß-Kanal-Gold bei ≤1 fehlend) |
+| **v2.1.10** | Zentrale VIDEO_QUALITIES (inkl. 4K/2K), Tag-Liste „+64499 mehr" → Hinweis auf Suchfeld |
 
 ---
 
@@ -73,7 +100,7 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 
 ## Offene Bugs
 
-### [open] YouTube-Suche `/full`: Shorts/Playlists/Channels leer
+### [done] YouTube-Suche `/full`: Shorts/Playlists/Channels leer (v2.1.6, pytubefix-Singular-Aliase + Shorts via Duration-Filter)
 - **Bereich:** backend (`ytdlp_adapter.SearchAdapter`)
 - **Symptom:** `/api/search/youtube/full?q=...` gibt `videos` korrekt, aber `shorts=[]`, `playlists=[]`, `channels=[]`, `suggestions=[]`. Frontend-Dropdown zeigt leere Tabs.
 - **Ursache 1:** Router nutzt pytubefix-Singular-Properties `s.playlist`, `s.channel`, `s.completion_suggestions` — Adapter hat Plural `playlists`/`channels`/`suggestions`. AttributeError wird von try/except geschluckt, bleibt leer.
@@ -87,7 +114,7 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Fix-Plan:** yt-dlp `ytsearch{N}:q` mit großem N (z.B. 200) + Server-Side-Pagination in der API (offset/limit). Frontend: Infinite-Scroll oder "Weitere Seiten"-Button.
 - **Prio:** 🟠 mittel (Feature, nachdem der leere-Tabs-Bug oben gelöst ist)
 
-### [open] Tag-Liste zeigt „+64499 mehr" – unsinnig
+### [partial] Tag-Liste zeigt „+64499 mehr" – unsinnig
 - **Bereich:** frontend (Tag-Filter) + backend (Tag-Bereinigung)
 - **Symptom:** Tag-Panel zeigt die Top-Tags und dahinter „+64499 mehr" — sinnlos bei 64.514 Gesamt-Tags. Max ~60 sinnvoll darstellbar.
 - **Ursachen:** 
@@ -106,13 +133,13 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Architektur:** Jeder Aufräum-Job als eigener job_type, über job_service laufen (mit Fortschritt). Frontend: Liste der Aufräum-Jobs mit "Jetzt ausführen"-Button + letzter Lauf + Konfig-Parametern.
 - **Prio:** 🟠 mittel (nützlich, nicht dringend)
 
-### [open] Kanal-Einstellungen: category_id wird bei Download nicht übernommen
+### [done] Kanal-Einstellungen: category_id wird bei Download nicht übernommen (v2.1.8, video_categories-M2M wird nach Download angelegt)
 - **Bereich:** backend (`download_service._process`)
 - **Symptom:** Wenn ein Abo einer Kategorie zugewiesen ist (`subscriptions.category_id`), wird das heruntergeladene Video NICHT automatisch dieser Kategorie zugeordnet. INSERT INTO videos enthält kein `category_id`.
 - **Fix:** In `_process` den `sub.category_id` abfragen (via channel_id → subscriptions) und beim INSERT/UPDATE des Videos setzen. Siehe aber: `videos.category_id` existiert NICHT in der Spalte — separate Tabelle `video_categories`? Ggf. über `video_categories`-Zuordnung.
 - **Prio:** 🟠 mittel (wird explizit vom User vermisst)
 
-### [open] Listen/Cards: Darstellung reaktiv fehlerhaft nach Archiv-Aktion
+### [partial] Listen/Cards: Darstellung reaktiv fehlerhaft nach Archiv-Aktion
 - **Bereich:** frontend (Library, Archives, Channel-Detail — alle Card-Listen)
 - **Symptom:** Nach "Video ins Archiv verschieben" bleiben Karten angezeigt, die dort nicht mehr hingehören. Erst ein Reload aktualisiert die Darstellung. User-Zitat: "fehlen oft welche wenn man einige in den archiv verschiebt und nur reload erneuert die darstellung. die darstellung ist allg mega verbuggt, falsch und inkonsistent"
 - **Vermutete Ursache:** Listen-State wird nicht nach Mutation invalidiert. Backend-API erfolgreich → aber lokale `videos`-Array nicht synchronisiert. Fehlendes Event/Store-Update.
