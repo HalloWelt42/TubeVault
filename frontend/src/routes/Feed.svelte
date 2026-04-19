@@ -318,6 +318,11 @@
   }
 
   async function quickDownload(entry) {
+    // Defense-in-Depth: falls der Button doch mal nicht deaktiviert wurde
+    if (entry.is_in_queue) {
+      toast.info('Bereits in der Warteschlange');
+      return;
+    }
     await startDownload(entry, { audioOnly: !!entry.audio_only, priority: 0 });
   }
 
@@ -536,7 +541,8 @@
           {/if}
         {/if}
         <div class="video-card"
-             class:queued={entry.status === 'queued'}
+             class:queued={entry.is_in_queue || entry.queue_status === 'queued' || entry.queue_status === 'retry_wait'}
+             class:in-progress={entry.queue_status === 'active'}
              class:downloaded={entry.video_status === 'ready'}
              class:is-short={entry.video_type_safe === 'short' || entry.video_type === 'short'}
              class:is-live={entry.video_type_safe === 'live' || entry.video_type === 'live'}
@@ -572,18 +578,24 @@
               <span class="play-badge"><i class="fa-solid fa-play"></i> Abspielen</span>
             {/if}
 
-            <!-- Hover-Overlay: zentrale Klassen aus global.css (gleich wie VideoCard + Playlists) -->
+            <!-- Hover-Overlay: Original-Feed-Design (globale Klassen aus global.css) -->
             <div class="card-hover-actions">
               {#if entry.video_status === 'ready'}
-                <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); openVideo(entry); }} title="Abspielen">
+                <button class="hover-action-btn success" onclick={(e) => { e.stopPropagation(); openVideo(entry); }} title="Abspielen">
                   <i class="fa-solid fa-play"></i>
                 </button>
+              {:else if entry.is_in_queue}
+                <!-- Bereits in Queue: Download-Buttons ersetzt durch Status-Indikator -->
+                <button class="hover-action-btn accent" disabled
+                  title={entry.queue_status === 'active' ? 'Wird gerade heruntergeladen' : entry.queue_status === 'retry_wait' ? 'Wartet auf Retry' : 'Bereits in der Warteschlange'}>
+                  <i class="fa-solid {entry.queue_status === 'active' ? 'fa-spinner fa-spin' : entry.queue_status === 'retry_wait' ? 'fa-hourglass-half' : 'fa-clock'}"></i>
+                </button>
               {:else}
-                <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); openStreamDialog(entry); }}
+                <button class="hover-action-btn accent" onclick={(e) => { e.stopPropagation(); openStreamDialog(entry); }}
                   disabled={downloading.has(entry.video_id)} title={entry.audio_only ? 'Audio-Stream wählen' : 'Stream waehlen & laden'}>
                   <i class="fa-solid {entry.audio_only ? 'fa-podcast' : 'fa-download'}"></i>
                 </button>
-                <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); quickDownload(entry); }}
+                <button class="hover-action-btn flash" onclick={(e) => { e.stopPropagation(); quickDownload(entry); }}
                   disabled={downloading.has(entry.video_id)} title={entry.audio_only ? 'Audio laden' : 'Schnell-Download'}>
                   <i class="fa-solid fa-bolt"></i>
                 </button>
@@ -593,14 +605,14 @@
                 <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'later'); }} title="Später anschauen">
                   <i class="fa-solid fa-bookmark"></i>
                 </button>
-                <button class="hover-action-btn warn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'archived'); }} title="Weglegen">
+                <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'archived'); }} title="Weglegen">
                   <i class="fa-solid fa-box-archive"></i>
                 </button>
                 <button class="hover-action-btn danger" onclick={(e) => { e.stopPropagation(); dismissEntry(entry); }} title="Ausblenden">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
               {:else}
-                <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); restoreEntry(entry); }} title="Wiederherstellen">
+                <button class="hover-action-btn success" onclick={(e) => { e.stopPropagation(); restoreEntry(entry); }} title="Wiederherstellen">
                   <i class="fa-solid fa-rotate-left"></i>
                 </button>
               {/if}
@@ -798,7 +810,10 @@
   .play-badge { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.8); color:var(--status-success); font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:4px; }
 
 
-  .video-card.queued .thumb-wrap { border:2px solid var(--status-info); }
+  /* Gelber Rahmen während Video in Queue wartet (queued/retry_wait) */
+  .video-card.queued .thumb-wrap { border:2px solid var(--status-warning, #f59e0b); box-shadow: 0 0 0 1px rgba(245,158,11,0.3); }
+  /* Blauer Rahmen während Download gerade läuft (active) */
+  .video-card.in-progress .thumb-wrap { border:2px solid var(--status-info); box-shadow: 0 0 0 1px rgba(59,130,246,0.3); }
   .video-card.downloaded .thumb-wrap { border:2px solid var(--status-success); }
 
   /* Card Body */

@@ -1083,10 +1083,23 @@ class RSSService:
             tab_counts[tab] = tc
 
         # Ergebnisse
+        # is_in_queue + queue_status via EXISTS-Subquery auf jobs-Tabelle
+        # (analog subscriptions.py – Feed-Card zeigt gelben Rahmen + disabled DL-Button)
         rows = await db.fetch_all(
             f"""SELECT r.*, s.channel_name, s.download_quality, s.audio_only,
                        v.status as video_status,
-                       COALESCE(r.video_type, 'video') as video_type_safe
+                       COALESCE(r.video_type, 'video') as video_type_safe,
+                       CASE WHEN (SELECT j.id FROM jobs j
+                                  WHERE j.type='download'
+                                    AND json_extract(j.metadata, '$.video_id') = r.video_id
+                                    AND j.status IN ('queued','active','retry_wait')
+                                  LIMIT 1) IS NOT NULL
+                            THEN 1 ELSE 0 END as is_in_queue,
+                       COALESCE((SELECT j.status FROM jobs j
+                                 WHERE j.type='download'
+                                   AND json_extract(j.metadata, '$.video_id') = r.video_id
+                                   AND j.status IN ('queued','active','retry_wait')
+                                 LIMIT 1), '') as queue_status
                 FROM rss_entries r
                 JOIN subscriptions s ON r.channel_id = s.channel_id
                 LEFT JOIN videos v ON r.video_id = v.id

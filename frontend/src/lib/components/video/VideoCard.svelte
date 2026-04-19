@@ -92,7 +92,7 @@
     {#if video.like_count && video.dislike_count != null}
       <LikeBar likes={video.like_count} dislikes={video.dislike_count} mode="thumbnail" />
     {/if}
-    <!-- Zentraler Hover-Overlay (Stil in global.css: .card-hover-actions + .hover-action-btn) -->
+    <!-- Zentraler Hover-Overlay (Feed-Design aus global.css) -->
     <div class="card-hover-actions">
       <div class="hover-action-btn" title="Zu Playlist hinzufügen">
         <QuickPlaylistBtn videoId={video.id} title={video.title}
@@ -100,7 +100,7 @@
                           channelId={video.channel_id} size="sm" />
       </div>
       {#if showArchiveBtn && !video.is_archived}
-        <button class="hover-action-btn warn"
+        <button class="hover-action-btn"
                 onclick={archiveVideo} title="Archivieren">
           <i class="fa-solid fa-box-archive"></i>
         </button>

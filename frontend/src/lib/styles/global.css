@@ -468,28 +468,19 @@ label:has(input[type="checkbox"]) {
 .md-content img, .md-preview img { max-width: 100%; border-radius: 6px; }
 
 /* ═══════════════════════════════════════════════
-   CARD HOVER ACTIONS (zentral – Feed, Playlists, Archiv, etc.)
+   CARD HOVER ACTIONS – zentrales Feed-Design
    ═══════════════════════════════════════════════
 
-   Verwendung:
-   <div class="thumb-wrap">
-     <img ... />
-     <div class="card-hover-actions">
-       <button class="hover-action-btn" title="…"><i class="fa-…"></i></button>
-       <button class="hover-action-btn danger" title="…"><i class="fa-…"></i></button>
-     </div>
-   </div>
-
-   Der Container (.thumb-wrap / .card-wrap) muss position:relative haben und
-   eine .card-hover-trigger-Klasse (oder den Hover-Parent) — oder einfacher:
-   der Hover-Parent ruft .card-hover-actions auf seinen Hover hin ein.
+   Ursprüngliches Feed-Overlay: 42px runde Buttons, dunkler Overlay,
+   farbige Variants (accent/success/warn-yellow/warn/danger).
+   Verwendet in: Feed, VideoCard (Library/Dashboard), Playlists.
 */
 .card-hover-actions {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   gap: 10px; opacity: 0; pointer-events: none;
-  transition: opacity 0.15s;
-  background: rgba(0, 0, 0, 0.45);
+  transition: opacity 0.2s;
+  background: rgba(0, 0, 0, 0.5);
   z-index: 2;
 }
 .card-hover-trigger:hover .card-hover-actions,
@@ -501,37 +492,44 @@ label:has(input[type="checkbox"]) {
 }
 
 .hover-action-btn {
-  width: 40px; height: 40px; border-radius: 50%;
+  width: 42px; height: 42px; border-radius: 50%;
   background: rgba(255, 255, 255, 0.95); color: #111;
   border: none; cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  transition: transform 0.1s, background 0.12s, color 0.12s;
+  transition: transform 0.15s, background 0.15s;
   padding: 0;
 }
-.hover-action-btn:hover {
-  transform: scale(1.08);
-  background: var(--accent-primary); color: #fff;
-}
-.hover-action-btn.warn { color: #f59e0b; }
-.hover-action-btn.warn:hover { background: #f59e0b; color: #fff; }
-.hover-action-btn.danger { color: var(--status-error); }
-.hover-action-btn.danger:hover { background: var(--status-error); color: #fff; }
-.hover-action-btn.active,
-.hover-action-btn.pinned {
-  background: rgba(245, 158, 11, 0.95); color: #fff;
-}
-.hover-action-btn.pinned:hover { background: #f59e0b; }
+.hover-action-btn:hover { transform: scale(1.1); }
+.hover-action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-/* Kleinere Variante (für kompakte Listen) */
-.hover-action-btn.sm {
-  width: 32px; height: 32px; font-size: 0.82rem;
-}
-/* Größere Variante */
-.hover-action-btn.lg {
-  width: 48px; height: 48px; font-size: 1.2rem;
-}
+/* Farb-Variants (wie Original-Feed) */
+.hover-action-btn.accent   { background: var(--accent-primary); color: #fff; }
+.hover-action-btn.accent:hover   { background: var(--accent-hover, var(--accent-primary)); filter: brightness(1.1); }
+
+.hover-action-btn.success  { background: var(--status-success); color: #fff; }
+.hover-action-btn.success:hover  { filter: brightness(1.15); }
+
+/* Gelb (Blitz / Schnell-Download) */
+.hover-action-btn.flash    { background: #fbbf24; color: #111; }
+.hover-action-btn.flash:hover    { background: #f59e0b; color: #fff; }
+
+/* Orange (Archivieren/Weglegen) */
+.hover-action-btn.warn     { background: #f59e0b; color: #fff; }
+.hover-action-btn.warn:hover     { background: #d97706; }
+
+/* Rot (Ausblenden/Löschen) */
+.hover-action-btn.danger   { background: var(--status-error); color: #fff; }
+.hover-action-btn.danger:hover   { filter: brightness(1.15); }
+
+/* Gepinnt (Playlist Quick-Pin) */
+.hover-action-btn.pinned   { background: rgba(245, 158, 11, 0.95); color: #fff; }
+.hover-action-btn.pinned:hover   { background: #f59e0b; }
+
+/* Größenvarianten */
+.hover-action-btn.sm { width: 34px; height: 34px; font-size: 0.9rem; }
+.hover-action-btn.lg { width: 50px; height: 50px; font-size: 1.3rem; }
 
 /* ═══ QuickPlaylistBtn: Fixed-Position Tooltip + Picker ═══ */
 .qpl-tooltip-fixed {

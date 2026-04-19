@@ -354,9 +354,9 @@
                 {:else}
                   <div class="pl-cover-fallback"><i class="fa-solid fa-music"></i></div>
                 {/if}
-                <!-- Hover-Overlay: Feed-Stil (zentrale runde Buttons, weiss auf dunkel) -->
+                <!-- Hover-Overlay: zentrales Feed-Design aus global.css -->
                 <div class="card-hover-actions">
-                  <button class="hover-action-btn" onclick={() => selectPlaylist(pl)} title="Öffnen">
+                  <button class="hover-action-btn success" onclick={() => selectPlaylist(pl)} title="Öffnen">
                     <i class="fa-solid fa-play"></i>
                   </button>
                   <button class="hover-action-btn"
