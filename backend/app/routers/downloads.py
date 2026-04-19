@@ -111,8 +111,9 @@ async def restart_worker():
 
 @router.put("/cooldown")
 async def set_cooldown(seconds: int = 30):
-    """Cooldown-Basis (Sekunden zwischen Downloads) live setzen."""
-    seconds = max(0, min(seconds, 3600))
+    """Cooldown-Basis (Sekunden zwischen Downloads) live setzen.
+    Mindestwert 5s – komplett 0 ist nicht sinnvoll (YouTube-Bot-Schutz)."""
+    seconds = max(5, min(seconds, 3600))
     await db.execute(
         "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.cooldown_base_s', ?)",
         (str(seconds),)

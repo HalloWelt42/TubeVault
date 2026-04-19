@@ -44,11 +44,18 @@
     await saveThrottle();
   }
   async function saveCooldown(v) {
+    // Validierung: leere/ungültige Eingaben nicht übernehmen
+    const num = parseInt(v);
+    if (isNaN(num) || num < 0 || num > 3600) {
+      // zurücksetzen auf letzten gültigen Wert
+      cooldownSec = cooldownSec > 0 ? cooldownSec : 30;
+      return;
+    }
     settingsSaving = true;
     try {
-      await api.setDownloadCooldown(v);
-      cooldownSec = v;
-      toast.success(`Wartezeit: ${v}s zwischen Downloads`);
+      await api.setDownloadCooldown(num);
+      cooldownSec = num;
+      toast.success(`Wartezeit: ${num}s zwischen Downloads`);
     } catch (e) { toast.error(e.message); }
     settingsSaving = false;
   }
