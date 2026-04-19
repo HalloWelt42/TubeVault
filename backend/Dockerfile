@@ -9,7 +9,23 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ffmpeg \
         curl \
+        ca-certificates \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Deno für yt-dlp JavaScript-Runtime (löst n-challenge + signature).
+# Architektur-agnostisch (arm64 auf Pi, x86_64 auf x86).
+RUN ARCH=$(uname -m) && \
+    case "$ARCH" in \
+        aarch64|arm64) DENO_ARCH="aarch64-unknown-linux-gnu" ;; \
+        x86_64) DENO_ARCH="x86_64-unknown-linux-gnu" ;; \
+        *) echo "Unbekannte Architektur: $ARCH"; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/denoland/deno/releases/latest/download/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip && \
+    unzip /tmp/deno.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/deno && \
+    rm /tmp/deno.zip && \
+    deno --version
 
 # Arbeitsverzeichnis
 WORKDIR /app

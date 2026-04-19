@@ -78,6 +78,25 @@ services:
         limits:
           memory: 256M
 
+  # ==========================================
+  # PO-TOKEN PROVIDER (bgutil) – YouTube Bot-Umgehung
+  # Liefert PO-Tokens via HTTP, wird von yt-dlp per Plugin abgefragt.
+  # https://github.com/Brainicism/bgutil-ytdlp-pot-provider
+  # ==========================================
+  tubevault-pot:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: tubevault-pot
+    restart: unless-stopped
+    # Kein externer Port – nur intern erreichbar über tubevault-net
+    expose:
+      - "4416"
+    networks:
+      - tubevault-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
 networks:
   tubevault-net:
     name: tubevault-net

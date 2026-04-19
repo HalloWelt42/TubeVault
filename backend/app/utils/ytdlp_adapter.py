@@ -37,19 +37,31 @@ def _set_current_throttle_kbps(v: int):
     _CURRENT_THROTTLE_KBPS = int(v or 0)
 
 
+# bgutil-PO-Token-Provider läuft als Docker-Service 'tubevault-pot:4416'
+# Override per ENV möglich (z.B. in docker-compose)
+import os as _os
+_POT_BASE_URL = _os.getenv("POT_PROVIDER_URL", "http://tubevault-pot:4416")
+
 _YDL_BASE_OPTS = {
     "quiet": True,
     "no_warnings": True,
     "skip_download": True,
     "noprogress": True,
     "socket_timeout": 20,
-    # Bot-Erkennung abschwächen: TV/iOS Player-Clients statt Default-Web
-    # (TV hat bestes Umgehen von Sign-in-required-Block; Fallbacks auf iOS/web_safari)
+    # Bot-Erkennung:
+    # - PO-Token Provider (bgutil-http) liefert gültige Tokens für web/mweb/ios.
+    # - remote_components ejs:github: laedt das Signature/N-Challenge-Solver
+    #   Script von GitHub – freischalten von 1080p+ / AV1 / Opus Formaten.
+    # - Clients: default, tv als Fallback (tv braucht kein PO-Token).
     "extractor_args": {
         "youtube": {
-            "player_client": ["tv", "ios", "web_safari"],
-        }
+            "player_client": ["default", "tv"],
+        },
+        "youtubepot-bgutilhttp": {
+            "base_url": [_POT_BASE_URL],
+        },
     },
+    "remote_components": ["ejs:github"],
 }
 
 
@@ -283,12 +295,16 @@ class StreamAdapter:
             "overwrites": True,
             # Kein Post-Processing — wir übernehmen Merge im download_service selbst.
             "postprocessors": [],
-            # Bot-Erkennung: Player-Client-Rotation (tv/ios/web_safari statt Default-Web)
+            # Bot-Erkennung: default-Clients + tv Fallback + PO-Token + EJS-Solver
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["tv", "ios", "web_safari"],
-                }
+                    "player_client": ["default", "tv"],
+                },
+                "youtubepot-bgutilhttp": {
+                    "base_url": [_POT_BASE_URL],
+                },
             },
+            "remote_components": ["ejs:github"],
         }
         # Throttling aus Settings – 3 Modi:
         #   realtime  → ratelimit = filesize / duration (passt jedem Video an,

@@ -2,6 +2,8 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pytubefix>=8.0.0
 yt-dlp>=2026.3.17
+# PO-Token-Provider Plugin – holt Tokens von bgutil-Container (tubevault-pot:4416)
+bgutil-ytdlp-pot-provider>=1.2.0
 aiofiles==24.1.0
 aiosqlite==0.20.0
 pydantic>=2.10.0
