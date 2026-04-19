@@ -354,18 +354,18 @@
                 {:else}
                   <div class="pl-cover-fallback"><i class="fa-solid fa-music"></i></div>
                 {/if}
-                <!-- Hover-Overlay: zentrales Feed-Design aus global.css -->
+                <!-- Hover-Overlay: exakt Feed-Design aus global.css -->
                 <div class="card-hover-actions">
                   <button class="hover-action-btn success" onclick={() => selectPlaylist(pl)} title="Öffnen">
                     <i class="fa-solid fa-play"></i>
                   </button>
-                  <button class="hover-action-btn"
+                  <button class="hover-action-btn later"
                           class:pinned={$quickPlaylist?.id === pl.id}
                           onclick={(e) => { e.stopPropagation(); togglePin(pl); }}
                           title={$quickPlaylist?.id === pl.id ? 'Quick-Playlist lösen' : 'Als Quick-Playlist pinnen'}>
                     <i class="fa-solid fa-thumbtack"></i>
                   </button>
-                  <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); startEditPl(pl); }} title="Bearbeiten">
+                  <button class="hover-action-btn later" onclick={(e) => { e.stopPropagation(); startEditPl(pl); }} title="Bearbeiten">
                     <i class="fa-solid fa-pen"></i>
                   </button>
                   <button class="hover-action-btn danger" onclick={(e) => { e.stopPropagation(); deletePlaylist(pl.id); }} title="Löschen">

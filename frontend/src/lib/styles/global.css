@@ -494,20 +494,24 @@ label:has(input[type="checkbox"]) {
   border: none;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: 1.1rem;
-  transition: transform 0.15s;
+  transition: transform 0.15s, background 0.15s;
+  /* EXAKT wie Feed .overlay-btn: 15% weiss-transparent, Icon weiss.
+     Hover-Farbe kommt aus dem jeweiligen Variant. */
   background: rgba(255, 255, 255, 0.15); color: #fff;
   padding: 0;
 }
 .hover-action-btn:hover { transform: scale(1.1); }
 .hover-action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-/* Variants – exakt wie Feed */
-.hover-action-btn.accent   { background: var(--accent-primary); color: #fff; }
-.hover-action-btn.success  { background: var(--status-success); color: #fff; }
-.hover-action-btn.warn:hover    { background: rgba(245,158,11,0.6); }   /* archive-btn */
-.hover-action-btn.danger:hover  { background: rgba(255,80,80,0.6); }    /* dismiss-btn */
-.hover-action-btn.flash:hover   { background: rgba(255,200,0,0.5); }    /* queue-btn / Blitz */
-.hover-action-btn.pinned   { background: rgba(245, 158, 11, 0.95); color: #fff; }
+/* Farb-Variants – exakt wie Feed (Default bleibt weiss-transparent, Farbe nur im Hover) */
+.hover-action-btn.accent        { background: var(--accent-primary); color: #fff; }   /* .dl-btn: blau */
+.hover-action-btn.success       { background: var(--status-success); color: #fff; }   /* .play-btn: gruen */
+.hover-action-btn.flash:hover   { background: rgba(255,200,0,0.5); }                  /* .queue-btn hover: gelb */
+.hover-action-btn.later:hover   { background: rgba(59,130,246,0.6); }                 /* .later-btn hover: blau */
+.hover-action-btn.warn:hover    { background: rgba(245,158,11,0.6); }                 /* .archive-btn hover: orange */
+.hover-action-btn.danger:hover  { background: rgba(255,80,80,0.6); }                  /* .dismiss-btn hover: rot */
+.hover-action-btn.restore:hover { background: rgba(34,197,94,0.6); }                  /* .restore-btn hover: gruen */
+.hover-action-btn.pinned        { background: rgba(245, 158, 11, 0.95); color: #fff; }
 
 /* Größenvarianten */
 .hover-action-btn.sm { width: 34px; height: 34px; font-size: 0.9rem; }

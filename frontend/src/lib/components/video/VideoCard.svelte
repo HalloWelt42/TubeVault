@@ -94,13 +94,12 @@
     {/if}
     <!-- Zentraler Hover-Overlay (Feed-Design aus global.css) -->
     <div class="card-hover-actions">
-      <div class="hover-action-btn" title="Zu Playlist hinzufügen">
-        <QuickPlaylistBtn videoId={video.id} title={video.title}
-                          channelName={video.channel_name}
-                          channelId={video.channel_id} size="sm" />
-      </div>
+      <!-- QuickPlaylistBtn rendert bereits einen eigenen runden Button (28px sm) -->
+      <QuickPlaylistBtn videoId={video.id} title={video.title}
+                        channelName={video.channel_name}
+                        channelId={video.channel_id} size="sm" />
       {#if showArchiveBtn && !video.is_archived}
-        <button class="hover-action-btn"
+        <button class="hover-action-btn warn"
                 onclick={archiveVideo} title="Archivieren">
           <i class="fa-solid fa-box-archive"></i>
         </button>
