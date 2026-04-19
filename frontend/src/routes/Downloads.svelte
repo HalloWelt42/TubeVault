@@ -226,6 +226,20 @@
       loadQueue();
     } catch (e) { toast.error(e.message); }
   }
+
+  // Priorität eines Queue-Items zyklisch ändern: 0 → 5 → 10 → 0
+  const PRIORITY_CYCLE = [0, 5, 10];
+  const PRIORITY_LABELS = { 0: 'Normal', 5: 'Hoch', 10: 'Sofort' };
+  async function cyclePriority(id, currentPrio, e) {
+    e?.stopPropagation?.();
+    const idx = PRIORITY_CYCLE.indexOf(currentPrio);
+    const next = PRIORITY_CYCLE[(idx + 1) % PRIORITY_CYCLE.length];
+    try {
+      await api.setDownloadPriority(id, next);
+      toast.success(`Priorität → ${PRIORITY_LABELS[next]}`);
+      loadQueue();
+    } catch (e) { toast.error('Priorität: ' + e.message); }
+  }
   async function clearDone() {
     try {
       await api.clearCompleted();
@@ -606,7 +620,15 @@
           <div class="qi-body">
             <div class="qi-top">
               <span class="qi-vid">{item.title || item.video_id}</span>
-              {#if item.priority > 0}
+              {#if item.status === 'queued' || item.status === 'retry_wait'}
+                <button class="qi-priority qi-priority-btn"
+                        class:high={item.priority >= 5}
+                        class:sofort={item.priority >= 10}
+                        onclick={(e) => cyclePriority(item.id, item.priority || 0, e)}
+                        title="Klick: Priorität wechseln (Normal → Hoch → Sofort → Normal)">
+                  {PRIORITY_LABELS[item.priority] || `Prio ${item.priority}`}
+                </button>
+              {:else if item.priority > 0}
                 <span class="qi-priority" class:high={item.priority >= 5} title="Priorität">Prio {item.priority}</span>
               {/if}
             </div>
@@ -847,6 +869,16 @@
     white-space: nowrap; flex-shrink: 0;
   }
   .qi-priority.high { background:var(--status-warning-bg, #fef3c7); color:var(--status-warning); }
+  /* Button-Variante: klickbar, Klick cycled durch Prio-Stufen */
+  .qi-priority-btn {
+    border: 1px solid var(--border-primary);
+    cursor: pointer; transition: all 0.12s;
+  }
+  .qi-priority-btn:hover { border-color: var(--accent-primary); }
+  .qi-priority-btn.sofort {
+    background: rgba(239,68,68,0.15); color: var(--status-error);
+    border-color: var(--status-error);
+  }
 
   /* Alter Progress-Balken entfernt – siehe DownloadProgress.svelte */
 

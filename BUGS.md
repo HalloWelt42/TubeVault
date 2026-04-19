@@ -43,6 +43,77 @@ Status: `[open]` · `[partial]` · `[done]` · `[deferred]` · `[wont-fix]`
 
 ## Offene Features / Wünsche
 
+### [open] Settings-Seite: jeden Eintrag auditieren (greift er, sinnvoll?)
+- **Bereich:** backend + frontend (Einstellungen)
+- **Wunsch:** User-Zitat: "in den einstellungen muss jeder einzele punkt geprüft werden ob der greift, überhaupt sinnvoll ist und so."
+- **Plan:** Matrix-Audit aller settings-Keys: für jeden Eintrag prüfen
+    - Wird er im Backend gelesen?
+    - Beeinflusst er tatsächlich Verhalten?
+    - Ist die Default-Wahl sinnvoll?
+    - Ist das Label verständlich (deutsch)?
+    - Fehlen wichtige Einstellungen, die es nicht gibt?
+  Offensichtlich tote Einstellungen → entfernen oder markieren. Fehlende wichtige → ergänzen.
+- **Prio:** 🟠 mittel (nach dem größten Bug-Brandlöschen)
+
+### [open] Video-Ignore-Liste: gelöschte/unverfügbare Videos nicht erneut auto-laden
+- **Bereich:** backend (_auto_queue_video, DELETE-Endpoint) + frontend (ChannelDetail)
+- **Symptom/Wunsch:** Videos die geparkt sind (nicht verfügbar) oder vom User gelöscht wurden, werden aktuell beim nächsten Abo-Zyklus wieder in die Queue gestellt. User-Zitat: "kanäle, die video haben die nie geladen werden können oder die wir explizit gelöscht haben dürfen beim abo nicht erneut dieses markierte video laden."
+- **Aktuelle Lücke:**
+  - `_auto_queue_video` prüft nur `status='error'`, nicht `'parked'` → geparkte kommen zurück in Queue
+  - Wenn User Video DELETE'd (aus `videos`-Tabelle), aber Eintrag in `rss_entries` bleibt, wird es wieder gezogen
+- **Fix-Plan:**
+  1. DB: `rss_entries` bekommt `download_blocked BOOLEAN DEFAULT 0` (oder neuer Wert in feed_status `'blocked'`)
+  2. `_auto_queue_video` prüft zusätzlich: `rss_entries.download_blocked=1` → skip; auch jobs mit status `'parked'` (nicht nur 'error') → skip
+  3. DELETE-Endpoint `/api/videos/{id}` erhält Option `block_redownload=true` (setzt rss_entries.download_blocked=1)
+  4. Frontend: Beim Löschen Dialog „Nur aus Sammlung / Endgültig ignorieren"
+  5. **ChannelDetail:** Neue Sektion unter der Video-Liste: „🚫 N Videos werden nicht geladen" mit Liste (Grund: unavailable, parked, manuell ignoriert) + Button „Sperre aufheben"
+- **Wird durch v2.0.0-Problem-Videos-Panel teilweise abgedeckt** (parked jobs sind schon sichtbar), aber die „manuell gelöscht"-Logik fehlt komplett.
+- **Prio:** 🟠 mittel (vermeidet frustrierende Wiederholungen)
+
+### [open] Batch-Upgrade: Videos unter 1080p global + pro Kanal aufbessern
+- **Bereich:** backend (neue Endpoints) + frontend (Settings-Aufräumjob + Kanal-Detail)
+- **Ziel:** Videos in der Sammlung, die < 1080p haben, sollen per Batch neu heruntergeladen werden. Ein-Klick-Aktion an zwei Stellen (A + B).
+- **Backend-Plan:**
+  - `GET  /api/videos/upgrade-candidates?min_quality=1080p&channel_id=UC...`
+  - `POST /api/videos/upgrade-batch?min_quality=1080p&channel_id=UC...&priority=-1`
+  - Filter: streams.quality-Höhe < min_quality UND source='youtube' UND status='ready'
+  - Niedrige Prio (−1) damit normale Downloads Vorrang haben
+- **Frontend-Platzierung (beide):**
+  - **A** (global): Einstellungen → Aufräum-Jobs → "Qualität aufbessern" mit Dropdown für min_quality
+  - **B** (pro Kanal): Kanal-Detail-Seite → Banner "⚠ N Videos unter 1080p — [Aufbessern]"
+- **Mindest-Qualität einstellbar:** default 1080p, User kann 720p/1440p/2160p wählen.
+- **User-Zitat:** "ich strebe 1080p als minimum an, wenn der kanal das hat und wenn das aktuelle video in der sammlung zu niedrige auflösung hat."
+- **Prio:** 🟠 mittel (sinnvoller Aufräum-Job für Altbestand)
+
+### [open] Verwaister Code / Dead-Code-Audit
+- **Bereich:** backend + frontend
+- **User-Zitat:** "allg müssen wir auch mal sehen was alles verbessert werden kann auch verwaister code."
+- **Plan:**
+  - Backend: ungenutzte Funktionen, nicht mehr erreichte Endpoints (z.B. pytubefix-Reste die nach yt-dlp-Migration nur noch Fallback sind), doppelte Logik zwischen services
+  - Frontend: nicht mehr importierte Komponenten, nicht mehr referenzierte CSS-Klassen, stale $state-Variablen, doppelte Funktionen (z.B. gleiche Logik in Library + Archives)
+  - Tools: `grep`-basierter Inventur-Scan, oder eslint + dead-code-detection
+- **Approach:** einen dedizierten Audit-Lauf, findings in einer Liste sammeln, dann schrittweise aufräumen (nie alles auf einmal löschen).
+- **Prio:** 🟡 niedrig (Qualität, kein Bug) — aber gut für Architektur-Gesundheit
+
+### [open] Adaptives Poll-Intervall pro Kanal aus Upload-Muster
+- **Bereich:** backend (rss_service + Scheduler)
+- **Problem der jetzigen Logik:** `check_interval` wird bei Miss verdoppelt (max 7 Tage). Nachts uploadet niemand → Interval explodiert unnötig. Creator mit "jeden Montag 18:00"-Schema werden bei perfekter Vorhersage überoptimiert (Check läuft zu selten). Zufallsuploader werden zu oft/selten gepollt.
+- **User-Idee:** Upload-Muster **aus den Metadaten bestehender Videos** lernen und daraus den nächsten sinnvollen Check-Zeitpunkt berechnen.
+- **Plan:**
+  1. **Datenmodell** (in `subscriptions` oder separate Tabelle `channel_upload_profile`):
+     - `avg_interval_seconds` – mittlerer Abstand zwischen Uploads
+     - `dow_histogram` – Wochentags-Verteilung (7 Werte, 0=So..6=Sa)
+     - `hour_histogram` – Tageszeit-Verteilung (24 Werte UTC oder lokal)
+     - `variance` / `entropy` – erkennt Muster vs. Zufall
+     - `last_upload_at`, `upload_count_analyzed`, `profile_updated_at`
+  2. **Analyse-Job** (einmalig + periodisch): Aus `rss_entries.published` pro Kanal die Histogramme + Intervalle berechnen. Läuft auch **rückwirkend** auf Alt-Bestand (User-Idee).
+  3. **Scheduler-Logik ersetzt das simple Verdoppeln:**
+     - Wenn Muster klar (hohe Konzentration in wenigen DoW/Stunden): nächsten Check auf nächstes "wahrscheinliches Fenster" legen (z.B. Montag 17:30 für "Montag 18:00"-Kanal)
+     - Wenn reine Zufallsverteilung (hohe Entropie): Poisson-Modell mit avg_interval — dann Intervall um avg_interval/2 anlegen, bei Miss mild verlängern
+     - Nachts (gegen globale Upload-Verteilung außerhalb Kernzeit): immer deprioritisieren
+  4. **Fallback:** Wenn kein Profil (neuer Kanal, <5 Videos), alte Logik (Standard-Interval + Verdoppeln).
+- **Prio:** 🟠 mittel (klarer Gewinn, aber braucht sauberes Design + Tests)
+
 ### [open] Mehrfachauswahl überall + Drag-to-Select mit Maus-Rechteck
 - **Bereich:** frontend (Library, Archives, Favorites, History, OwnVideos, ChannelDetail, Playlists)
 - **Wunsch:** User-Zitat: "mehrfachauswahl sollte überall verfügbar sein und es sollte auch markiert werden durch drüberziehen mit der maus, wie ein rechteck ziehen."

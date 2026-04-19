@@ -344,6 +344,8 @@ export const api = {
     request(`/api/downloads/${jobId}/retry`, { method: 'POST' }),
   cancelDownload: (jobId) =>
     request(`/api/downloads/${jobId}`, { method: 'DELETE' }),
+  setDownloadPriority: (jobId, priority) =>
+    request(`/api/downloads/${jobId}/priority?priority=${priority}`, { method: 'PATCH' }),
   fetchAllChannelVideos: (channelId) =>
     request(`/api/subscriptions/channel/${channelId}/fetch-all`, { method: 'POST' }),
   getChannelDebug: (channelId) =>
