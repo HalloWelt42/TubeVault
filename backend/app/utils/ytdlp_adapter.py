@@ -1,5 +1,5 @@
 """
-TubeVault – yt-dlp Adapter v1.1.0
+TubeVault – yt-dlp Adapter v1.2.0
 Stellt pytubefix-kompatible Objekte bereit, die intern yt-dlp nutzen.
 
 Damit können alle bestehenden Call-Sites (yt.title, yt.streams, yt.chapters,
@@ -853,10 +853,17 @@ class PlaylistAdapter:
 # ═══════════════════════════════════════════════════════════════════
 
 class SearchAdapter:
-    """pytubefix.Search-kompatibel (vereinfacht).
+    """pytubefix.Search-kompatibel.
 
-    Nutzt ytsearchN:query — liefert i.d.R. Videos (keine Shorts/Playlists/Channels
-    getrennt). Shorts werden anhand duration<=60s herausgefiltert.
+    yt-dlp 'ytsearchN:query' liefert nur Videos (keine kategorisierte Aufteilung
+    in Playlists/Channels wie bei YouTube-UI). Wir extrahieren:
+      - videos: direkt aus entries
+      - shorts: Videos mit duration ≤ 60s
+      - playlists/channels: leere Liste (yt-dlp kann das über ytsearch nicht)
+
+    Für pytubefix-Kompatibilität gibt es die Singular-Aliase playlist/channel/
+    completion_suggestions zusätzlich — damit der bestehende Router-Code
+    (s.playlist[:6], s.channel[:4]) nicht in AttributeError läuft.
     """
 
     def __init__(self, query: str, *, max_results: int = 25, **_kwargs):
@@ -872,6 +879,11 @@ class SearchAdapter:
             )
         return self._info
 
+    # ── Video-Kategorien (aus ytsearch) ─────────────────────────────
+    # videos enthält ALLE Treffer (auch Shorts) — damit UIs, die nur
+    # 'videos' lesen, keine Shorts verlieren. shorts ist die Untermenge
+    # mit duration ≤ 60s, für UIs die beides getrennt anzeigen wollen.
+
     @property
     def videos(self) -> list[ChannelVideoItem]:
         entries = self._ensure().get("entries") or []
@@ -881,9 +893,13 @@ class SearchAdapter:
     def shorts(self) -> list[ChannelVideoItem]:
         return [v for v in self.videos if 0 < v.length <= 60]
 
+    # ── Playlists / Channels: nicht verfügbar über ytsearch ─────────
+
     @property
     def playlists(self) -> list[PlaylistSummary]:
-        # ytsearch liefert keine Playlists als eigene Kategorie — leer
+        # yt-dlp ytsearch liefert keine Playlist-Entries — wäre separater
+        # Call nötig (YouTube-Search-URL mit sp=Filter). Bleibt leer bis
+        # echter Bedarf.
         return []
 
     @property
@@ -893,3 +909,20 @@ class SearchAdapter:
     @property
     def suggestions(self) -> list[str]:
         return []
+
+    # ── pytubefix-Kompat: Singular-Aliase ───────────────────────────
+    # Alter Router-Code (search.py) nutzt s.playlist / s.channel /
+    # s.completion_suggestions (pytubefix-Namen). Wir mappen auf unsere
+    # Plural-Properties, damit try/except nicht mehr alle Fehler schluckt.
+
+    @property
+    def playlist(self) -> list[PlaylistSummary]:
+        return self.playlists
+
+    @property
+    def channel(self) -> list:
+        return self.channels
+
+    @property
+    def completion_suggestions(self) -> list[str]:
+        return self.suggestions
