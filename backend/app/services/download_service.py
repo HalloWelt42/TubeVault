@@ -1003,9 +1003,19 @@ class DownloadService:
                 # retry_count 0 → 1 Tag, sonst 7 Tage
                 delay_days = 1 if retry_count == 0 else 7
                 retry_after = future_sqlite(seconds=delay_days * 86400)
+                # Originalen YouTube-Fehlertext im error_message mitführen –
+                # sonst geht der Grund (z.B. "Early Access & Science") verloren.
+                err_clean = err.replace("ERROR: [youtube]", "").strip()
+                # video_id im Text weglassen (steht eh am Anfang)
+                for prefix in (f"{vid}:", f" {vid}:"):
+                    if err_clean.startswith(prefix):
+                        err_clean = err_clean[len(prefix):].strip()
+                err_short = err_clean[:400]
+                delay_label = f"{delay_days} Tag" if delay_days == 1 else f"{delay_days} Tagen"
+                full_msg = f"Members-Only – Retry in {delay_label} · {err_short}"
                 await job_service.retry_wait(
                     job_id,
-                    error=f"Members-Only – Retry in {delay_days} Tag{'en' if delay_days > 1 else ''}",
+                    error=full_msg,
                     retry_after=retry_after,
                     retry_count=retry_count + 1,
                 )
@@ -1014,7 +1024,7 @@ class DownloadService:
                     "status": "retry_wait", "progress": 0, "stage": "retry_wait",
                     "stage_label": f"Members-Only – Retry in {delay_days}d",
                 })
-                logger.info(f"[MEMBERS-ONLY] {vid}: Retry in {delay_days}d (count={retry_count + 1})")
+                logger.info(f"[MEMBERS-ONLY] {vid}: Retry in {delay_days}d (count={retry_count + 1}) – {err_short[:100]}")
 
             elif is_unavailable:
                 # Sofort parken – kein Retry sinnvoll
