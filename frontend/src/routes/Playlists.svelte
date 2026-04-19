@@ -12,6 +12,8 @@
   import { startQueue } from '../lib/stores/playlistQueue.js';
   import { quickPlaylist, pinPlaylist, unpinPlaylist } from '../lib/stores/quickPlaylist.js';
   import LikeBar from '../lib/components/common/LikeBar.svelte';
+  import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
+  import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
 
   function togglePin(pl) {
     if ($quickPlaylist?.id === pl.id) {
@@ -354,24 +356,22 @@
                 {:else}
                   <div class="pl-cover-fallback"><i class="fa-solid fa-music"></i></div>
                 {/if}
-                <!-- Hover-Overlay: exakt Feed-Design aus global.css -->
-                <div class="card-hover-actions">
-                  <button class="hover-action-btn success" onclick={() => selectPlaylist(pl)} title="Öffnen">
+                <HoverActionOverlay>
+                  <HoverActionBtn variant="success" onclick={() => selectPlaylist(pl)} title="Öffnen">
                     <i class="fa-solid fa-play"></i>
-                  </button>
-                  <button class="hover-action-btn later"
-                          class:pinned={$quickPlaylist?.id === pl.id}
-                          onclick={(e) => { e.stopPropagation(); togglePin(pl); }}
-                          title={$quickPlaylist?.id === pl.id ? 'Quick-Playlist lösen' : 'Als Quick-Playlist pinnen'}>
+                  </HoverActionBtn>
+                  <HoverActionBtn variant={$quickPlaylist?.id === pl.id ? 'pinned' : 'later'}
+                                  onclick={() => togglePin(pl)}
+                                  title={$quickPlaylist?.id === pl.id ? 'Quick-Playlist lösen' : 'Als Quick-Playlist pinnen'}>
                     <i class="fa-solid fa-thumbtack"></i>
-                  </button>
-                  <button class="hover-action-btn later" onclick={(e) => { e.stopPropagation(); startEditPl(pl); }} title="Bearbeiten">
+                  </HoverActionBtn>
+                  <HoverActionBtn variant="later" onclick={() => startEditPl(pl)} title="Bearbeiten">
                     <i class="fa-solid fa-pen"></i>
-                  </button>
-                  <button class="hover-action-btn danger" onclick={(e) => { e.stopPropagation(); deletePlaylist(pl.id); }} title="Löschen">
-                    <i class="fa-regular fa-trash-can"></i>
-                  </button>
-                </div>
+                  </HoverActionBtn>
+                  <HoverActionBtn variant="danger" onclick={() => deletePlaylist(pl.id)} title="Löschen">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </HoverActionBtn>
+                </HoverActionOverlay>
               </div>
               <button class="pl-card-info" onclick={() => selectPlaylist(pl)}>
                 <h3 class="pl-name">{pl.name}</h3>

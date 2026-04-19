@@ -1,14 +1,15 @@
 <!--
-  TubeVault – QuickPlaylistBtn v1.6.0
+  TubeVault – QuickPlaylistBtn v1.7.0
   One-Click Button: Video zur gepinnten Playlist hinzufügen.
   Props: videoId (required), title/channelName/channelId (optional, für Stub-Erstellung)
-  Varianten: size="sm" (Overlay), size="md" (Action-Bar)
+  Varianten: size="sm" (nutzt HoverActionBtn), size="md" (lokale Action-Bar Variante)
   © HalloWelt42 – Private Nutzung
 -->
 <script>
   import { api } from '../../api/client.js';
   import { toast } from '../../stores/notifications.js';
   import { quickPlaylist } from '../../stores/quickPlaylist.js';
+  import HoverActionBtn from './HoverActionBtn.svelte';
 
   let {
     videoId,
@@ -122,27 +123,37 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="qpl-wrap" class:qpl-sm={size === 'sm'} class:qpl-md={size === 'md'}
      bind:this={wrapRef} onmouseenter={checkMembership}>
-  <button
-    class="qpl-btn"
-    class:qpl-active={added}
-    class:qpl-adding={adding}
-    class:qpl-no-target={!$quickPlaylist}
-    onclick={quickAdd}
-    title={$quickPlaylist ? (added ? `Aus „${$quickPlaylist.name}" entfernen` : `Zu „${$quickPlaylist.name}" hinzufügen`) : 'Quick-Playlist wählen'}
-  >
-    {#if adding}
-      <i class="fa-solid fa-spinner fa-spin"></i>
-    {:else if added}
-      <i class="fa-solid fa-bookmark"></i>
-    {:else if $quickPlaylist}
-      <i class="fa-regular fa-bookmark"></i>
-    {:else}
-      <i class="fa-solid fa-bookmark" style="opacity:0.4"></i>
-    {/if}
-    {#if showLabel && $quickPlaylist}
-      <span class="qpl-label">{$quickPlaylist.name}</span>
-    {/if}
-  </button>
+  {#if size === 'sm'}
+    <!-- Im Overlay: zentrale HoverActionBtn Komponente (keine lokalen Styles) -->
+    <HoverActionBtn
+      variant={added ? 'accent' : null}
+      onclick={quickAdd}
+      title={$quickPlaylist ? (added ? `Aus „${$quickPlaylist.name}" entfernen` : `Zu „${$quickPlaylist.name}" hinzufügen`) : 'Quick-Playlist wählen'}>
+      {#if adding}
+        <i class="fa-solid fa-spinner fa-spin"></i>
+      {:else}
+        <i class="fa-solid fa-bookmark"></i>
+      {/if}
+    </HoverActionBtn>
+  {:else}
+    <button
+      class="qpl-btn"
+      class:qpl-active={added}
+      class:qpl-adding={adding}
+      class:qpl-no-target={!$quickPlaylist}
+      onclick={quickAdd}
+      title={$quickPlaylist ? (added ? `Aus „${$quickPlaylist.name}" entfernen` : `Zu „${$quickPlaylist.name}" hinzufügen`) : 'Quick-Playlist wählen'}
+    >
+      {#if adding}
+        <i class="fa-solid fa-spinner fa-spin"></i>
+      {:else}
+        <i class="fa-solid fa-bookmark"></i>
+      {/if}
+      {#if showLabel && $quickPlaylist}
+        <span class="qpl-label">{$quickPlaylist.name}</span>
+      {/if}
+    </button>
+  {/if}
 
   {#if showPicker}
     <div class="qpl-picker-overlay" onclick={closePicker}></div>
@@ -188,13 +199,8 @@
   .qpl-btn.qpl-no-target { color: var(--text-tertiary); }
   .qpl-btn.qpl-no-target:hover { color: var(--text-secondary); }
 
-  /* Size: sm (Overlay auf Thumbnail) */
-  .qpl-sm .qpl-btn {
-    width: 28px; height: 28px; border-radius: 50%;
-    background: rgba(0,0,0,0.7); color: #fff; font-size: 0.72rem;
-  }
-  .qpl-sm .qpl-btn:hover { background: var(--accent-primary); color: #fff; }
-  .qpl-sm .qpl-btn.qpl-active { background: rgba(245,158,11,0.9); color: #fff; }
+  /* Size: sm – nutzt zentrale .hover-action-btn aus global.css
+     (42px weiss-transparent, gleich wie alle anderen Overlay-Buttons). */
 
   /* Size: md (Action-Bar) */
   .qpl-md .qpl-btn {

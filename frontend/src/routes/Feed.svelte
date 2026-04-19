@@ -15,6 +15,8 @@
   import { onMount, onDestroy } from 'svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
+  import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
+  import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
 
   // Feed State
   let entries = $state([]);
@@ -571,45 +573,43 @@
               <span class="play-badge"><i class="fa-solid fa-play"></i> Abspielen</span>
             {/if}
 
-            <!-- Overlay -->
-            <div class="thumb-overlay">
+            <!-- Hover-Overlay: zentrale Komponenten (keine lokalen CSS-Duplikate) -->
+            <HoverActionOverlay>
               {#if entry.video_status === 'ready'}
-                <button class="overlay-btn play-btn" onclick={(e) => { e.stopPropagation(); openVideo(entry); }} title="Abspielen">
+                <HoverActionBtn variant="success" onclick={() => openVideo(entry)} title="Abspielen">
                   <i class="fa-solid fa-play"></i>
-                </button>
+                </HoverActionBtn>
               {:else if entry.is_in_queue}
-                <!-- In Queue: Status-Indikator statt DL-Button (nicht anklickbar) -->
-                <button class="overlay-btn dl-btn" disabled
+                <HoverActionBtn variant="accent" disabled
                   title={entry.queue_status === 'active' ? 'Wird gerade heruntergeladen' : entry.queue_status === 'retry_wait' ? 'Wartet auf Retry' : 'Bereits in der Warteschlange'}>
                   <i class="fa-solid {entry.queue_status === 'active' ? 'fa-spinner fa-spin' : entry.queue_status === 'retry_wait' ? 'fa-hourglass-half' : 'fa-clock'}"></i>
-                </button>
+                </HoverActionBtn>
               {:else}
-                <button class="overlay-btn dl-btn" onclick={(e) => { e.stopPropagation(); openStreamDialog(entry); }}
+                <HoverActionBtn variant="accent" onclick={() => openStreamDialog(entry)}
                   disabled={downloading.has(entry.video_id)} title={entry.audio_only ? 'Audio-Stream wählen' : 'Stream waehlen & laden'}>
                   <i class="fa-solid {entry.audio_only ? 'fa-podcast' : 'fa-download'}"></i>
-                </button>
-                <button class="overlay-btn queue-btn" onclick={(e) => { e.stopPropagation(); quickDownload(entry); }}
+                </HoverActionBtn>
+                <HoverActionBtn variant="flash" onclick={() => quickDownload(entry)}
                   disabled={downloading.has(entry.video_id)} title={entry.audio_only ? 'Audio laden' : 'Schnell-Download'}>
                   <i class="fa-solid fa-bolt"></i>
-                </button>
+                </HoverActionBtn>
               {/if}
-              <!-- Schnellaktionen je nach Tab -->
               {#if feedTab === 'active'}
-                <button class="overlay-btn later-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'later'); }} title="Spaeter anschauen">
+                <HoverActionBtn variant="later" onclick={() => setStatus(entry, 'later')} title="Später anschauen">
                   <i class="fa-solid fa-bookmark"></i>
-                </button>
-                <button class="overlay-btn archive-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'archived'); }} title="Archivieren">
+                </HoverActionBtn>
+                <HoverActionBtn variant="warn" onclick={() => setStatus(entry, 'archived')} title="Archivieren">
                   <i class="fa-solid fa-box-archive"></i>
-                </button>
-                <button class="overlay-btn dismiss-btn" onclick={(e) => { e.stopPropagation(); dismissEntry(entry); }} title="Ausblenden">
+                </HoverActionBtn>
+                <HoverActionBtn variant="danger" onclick={() => dismissEntry(entry)} title="Ausblenden">
                   <i class="fa-solid fa-xmark"></i>
-                </button>
+                </HoverActionBtn>
               {:else}
-                <button class="overlay-btn restore-btn" onclick={(e) => { e.stopPropagation(); restoreEntry(entry); }} title="Wiederherstellen">
+                <HoverActionBtn variant="restore" onclick={() => restoreEntry(entry)} title="Wiederherstellen">
                   <i class="fa-solid fa-rotate-left"></i>
-                </button>
+                </HoverActionBtn>
               {/if}
-            </div>
+            </HoverActionOverlay>
           </div>
 
           <div class="card-body">
@@ -799,24 +799,8 @@
   .badge-live { background:#EF5350; color:#fff; }
   .badge-audio { background:#2196F3; color:#fff; cursor:default; }
 
-  .thumb-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; gap:10px; opacity:0; transition:opacity 0.2s; }
-  .video-card:hover .thumb-overlay { opacity:1; }
-
-  .overlay-btn { width:42px; height:42px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:1.1rem; transition:transform 0.15s; }
-  .overlay-btn:hover { transform:scale(1.1); }
-  .overlay-btn:disabled { opacity:0.5; }
-  .dl-btn { background:var(--accent-primary); color:#fff; }
-  .queue-btn { background:rgba(255,255,255,0.2); color:#fff; }
-  .queue-btn:hover { background:rgba(255,200,0,0.5); }
-  .dismiss-btn { background:rgba(255,255,255,0.15); color:#fff; }
-  .dismiss-btn:hover { background:rgba(255,80,80,0.6); }
-  .later-btn { background:rgba(255,255,255,0.15); color:#fff; }
-  .later-btn:hover { background:rgba(59,130,246,0.6); }
-  .archive-btn { background:rgba(255,255,255,0.15); color:#fff; }
-  .archive-btn:hover { background:rgba(245,158,11,0.6); }
-  .restore-btn { background:rgba(255,255,255,0.15); color:#fff; }
-  .restore-btn:hover { background:rgba(34,197,94,0.6); }
-  .play-btn { background:var(--status-success); color:#fff; }
+  /* Hover-Overlay-Buttons: HoverActionOverlay + HoverActionBtn Komponenten.
+     Alle Styles in global.css (.card-hover-actions / .hover-action-btn). */
   .play-badge { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.8); color:var(--status-success); font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:4px; }
 
 

@@ -12,6 +12,8 @@
   import { formatDuration, formatSize, formatDateRelative, formatViews } from '../../utils/format.js';
   import LikeBar from '../common/LikeBar.svelte';
   import QuickPlaylistBtn from '../common/QuickPlaylistBtn.svelte';
+  import HoverActionOverlay from '../common/HoverActionOverlay.svelte';
+  import HoverActionBtn from '../common/HoverActionBtn.svelte';
 
   let { video, showArchiveBtn = true, onUpdate = null } = $props();
   let hidden = $state(false);
@@ -92,19 +94,16 @@
     {#if video.like_count && video.dislike_count != null}
       <LikeBar likes={video.like_count} dislikes={video.dislike_count} mode="thumbnail" />
     {/if}
-    <!-- Zentraler Hover-Overlay (Feed-Design aus global.css) -->
-    <div class="card-hover-actions">
-      <!-- QuickPlaylistBtn rendert bereits einen eigenen runden Button (28px sm) -->
+    <HoverActionOverlay>
       <QuickPlaylistBtn videoId={video.id} title={video.title}
                         channelName={video.channel_name}
                         channelId={video.channel_id} size="sm" />
       {#if showArchiveBtn && !video.is_archived}
-        <button class="hover-action-btn warn"
-                onclick={archiveVideo} title="Archivieren">
+        <HoverActionBtn variant="warn" onclick={archiveVideo} title="Archivieren">
           <i class="fa-solid fa-box-archive"></i>
-        </button>
+        </HoverActionBtn>
       {/if}
-    </div>
+    </HoverActionOverlay>
   </div>
   <div class="video-info">
     <h3 class="video-title">{video.title}</h3>
