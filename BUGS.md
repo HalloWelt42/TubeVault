@@ -119,6 +119,13 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Fix-Richtung:** Klare Design-Tokens: Buttons bekommen Hover/Active-States, Shadow, Border-Style; Badges bleiben flache Labels ohne Hover-Interaktion. CSS-Audit der Badge-/Button-Komponenten, Duplikate konsolidieren.
 - **Prio:** 🟠 mittel (UX-Reibung)
 
+### [open] Queue-Box X-Button überdeckt andere Bedienelemente
+- **Bereich:** frontend (Queue-Box / Action-Buttons)
+- **Symptom:** Der X-Button (Abbrechen) in der rechten Action-Spalte überlappt mit darunter/dahinter liegenden Elementen (Badge, Medaille, Status-Icon). Sichtbar im Fertig-Panel.
+- **Vermutete Ursache:** absolute Positionierung ohne z-index-Hierarchie, oder fehlendes padding/margin im Button-Container.
+- **Fix:** z-index-Layer-Vergabe, ggf. Flex-Container statt absolutem Stacking.
+- **Prio:** 🟠 mittel (macht Bedienung unzuverlässig)
+
 ### [open] Layout-Überdeckungen/Überschneidungen systemisch in der gesamten App
 - **Bereich:** frontend (Layout / CSS / Komponenten-Stacking)
 - **Symptom:** Elemente überdecken sich gegenseitig, Texte und Inhalte sind teils nicht lesbar. Zieht sich durch alle Bereiche.

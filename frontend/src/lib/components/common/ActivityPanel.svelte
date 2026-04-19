@@ -1,5 +1,5 @@
 <!--
-  TubeVault – ActivityPanel v1.8.66
+  TubeVault – ActivityPanel v1.9.0
   Unified Bar (ersetzt Footer + altes ActivityPanel)
   Detail-Panel mit Phasen-Fortschritt, Pause/Resume, Cleanup
   © HalloWelt42 – Private Nutzung
@@ -289,6 +289,71 @@
   function getLive(jobId) {
     return liveStatus[jobId] || null;
   }
+
+  // ─── Phasen-Liste ableiten (Single Source of Truth für Queue-Box-Phasen) ───
+  // Backend sendet bei aktiven Jobs eine phases-Liste im WS. Wenn die fehlt
+  // (Job vor Backend-Fix, WS-Event verloren, Job aus DB-Initial-Load), dann
+  // leiten wir aus job.metadata.download_options den passenden Phasensatz ab.
+  const PHASES_AUDIO = [
+    { id: 'resolving',         label: 'Auflösen',  start: 0.00, end: 0.05, color: '#90A4AE' },
+    { id: 'downloading_audio', label: 'Audio ↓',   start: 0.05, end: 0.90, color: '#2196F3' },
+    { id: 'finalizing',        label: 'Abschluss', start: 0.90, end: 1.00, color: '#9C27B0' },
+  ];
+  const PHASES_PROGRESSIVE = [
+    { id: 'resolving',         label: 'Auflösen',  start: 0.00, end: 0.05, color: '#90A4AE' },
+    { id: 'downloading_video', label: 'Video ↓',   start: 0.05, end: 0.90, color: '#4CAF50' },
+    { id: 'finalizing',        label: 'Abschluss', start: 0.90, end: 1.00, color: '#9C27B0' },
+  ];
+  const PHASES_ADAPTIVE = [
+    { id: 'resolving',         label: 'Auflösen',  start: 0.00, end: 0.05, color: '#90A4AE' },
+    { id: 'downloading_video', label: 'Video ↓',   start: 0.05, end: 0.60, color: '#4CAF50' },
+    { id: 'downloading_audio', label: 'Audio ↓',   start: 0.60, end: 0.90, color: '#2196F3' },
+    { id: 'merging',           label: 'Merge',      start: 0.90, end: 0.96, color: '#FF9800' },
+    { id: 'finalizing',        label: 'Abschluss',  start: 0.96, end: 1.00, color: '#9C27B0' },
+  ];
+
+  function jobOpts(job) {
+    let m = job?.metadata;
+    if (typeof m === 'string') { try { m = JSON.parse(m); } catch { m = {}; } }
+    return (m && m.download_options) || {};
+  }
+
+  function pickPhaseTemplate(job) {
+    const opts = jobOpts(job);
+    if (opts.audio_only) return PHASES_AUDIO;
+    if (opts.merge_audio === false) return PHASES_PROGRESSIVE;
+    // Default: adaptive (5-phasig). Progressive 720p ohne Merge-Option würde hier
+    // auch reinfallen — optisch nur minimal störend, Backend-phases überschreiben ohnehin.
+    return PHASES_ADAPTIVE;
+  }
+
+  function buildPhases(job, live) {
+    // Backend-phases haben Vorrang
+    if (live?.phases?.length) return live.phases;
+
+    const tmpl = pickPhaseTemplate(job);
+    const status = live?.status || job?.status || 'queued';
+    const stage = live?.stage || '';
+    const progress = live?.progress ?? job?.progress ?? 0;
+
+    const terminal = ['done', 'error', 'cancelled', 'parked'];
+
+    if (status === 'done' || stage === 'done') {
+      return tmpl.map(p => ({ ...p, status: 'done' }));
+    }
+    if (terminal.includes(status) || terminal.includes(stage)) {
+      return tmpl.map(p => ({ ...p, status: progress >= p.end ? 'done' : 'pending' }));
+    }
+
+    // Aktiv-Fall: aktuelle Phase anhand stage finden
+    const stageMap = { resolved: 'resolving' };
+    const phaseId = stageMap[stage] || stage;
+    const idx = tmpl.findIndex(p => p.id === phaseId);
+    return tmpl.map((p, i) => ({
+      ...p,
+      status: i < idx ? 'done' : i === idx ? 'active' : 'pending',
+    }));
+  }
   let queuedJobs = $derived(jobs.filter(j => j.status === 'queued').slice(0, 10));
   let moreQueued = $derived(Math.max(0, (stats.queued || 0) - queuedJobs.length));
   let doneJobs = $derived(
@@ -399,7 +464,7 @@
           {@const progress = live?.progress ?? job.progress ?? 0}
           {@const stage = live?.stage || 'resolving'}
           {@const stageLabel = live?.stage_label || ''}
-          {@const phases = live?.phases || null}
+          {@const phases = buildPhases(job, live)}
           <div class="ji-active" class:fading={stats.paused}>
             <div class="ji-active-top">
               <i class="fa-solid {typeIcons[job.type] || 'fa-circle'}" style="color:var(--status-info)"></i>
