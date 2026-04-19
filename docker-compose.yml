@@ -1,0 +1,84 @@
+# TubeVault Docker Compose v1.3.0
+# © HalloWelt42 – Private Nutzung
+#
+# Backend: Port 8031
+# Frontend: Port 8032
+#
+# Container sind 100% unabhängig voneinander.
+# Gemeinsamer Projektordner, aber eigene Builds.
+
+services:
+  # ==========================================
+  # BACKEND – FastAPI + pytubefix + FFmpeg
+  # ==========================================
+  tubevault-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tubevault-backend
+    ports:
+      - "8031:8031"
+    volumes:
+      # Basis: DB + temp auf NVMe
+      - /mnt/data/tubevault/data:/app/data
+      - ./config:/app/config
+      # Metadaten auf NVMe (überlagern Basis-Mount)
+      - /mnt/data/tubevault/thumbnails:/app/data/thumbnails
+      - /mnt/data/tubevault/avatars:/app/data/avatars
+      - /mnt/data/tubevault/metadata:/app/data/metadata
+      - /mnt/data/tubevault/banners:/app/data/banners
+      # Medien auf USB-Platte (30TB)
+      - /mnt/tb26/tubevault/videos:/app/data/videos
+      - /mnt/tb26/tubevault/audio:/app/data/audio
+      - /mnt/tb26/tubevault/subtitles:/app/data/subtitles
+      - /mnt/tb26/tubevault/exports:/app/data/exports
+      # Eigene Videos zum Scannen
+      - /mnt/tb26/youtube:/app/data/scan/youtube
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TUBEVAULT_DATA_DIR=/app/data
+      - TUBEVAULT_CONFIG_DIR=/app/config
+      - MAX_CONCURRENT_DOWNLOADS=1
+      - DEFAULT_QUALITY=720p
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8031/api/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - tubevault-net
+    # Pi 5 Optimierungen
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ==========================================
+  # FRONTEND – Svelte 5 + Nginx
+  # ==========================================
+  tubevault-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tubevault-frontend
+    ports:
+      - "8032:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tubevault-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+networks:
+  tubevault-net:
+    name: tubevault-net
+    driver: bridge

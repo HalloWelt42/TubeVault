@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.svelte-kit/
+frontend/build/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+config/secrets.*
+config/*.secret.*
+
+# Daten, die im Projektordner landen könnten (eigentlich alle unter /mnt/data und /mnt/tb26)
+data/
+backend/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build-Artefakte
+*.pyc
+dist/
+build/
