@@ -96,3 +96,33 @@ async def set_setting(test_db):
             (key, str(value)),
         )
     return _set
+
+
+@pytest.fixture
+def make_test_app():
+    """Factory für eine minimale FastAPI-App mit nur den gewünschten Routern.
+    So testen wir Endpoints isoliert, ohne main.py's Startup-Hooks."""
+    from fastapi import FastAPI
+
+    def _make(*routers):
+        app = FastAPI()
+        for r in routers:
+            app.include_router(r)
+        return app
+    return _make
+
+
+@pytest_asyncio.fixture
+async def async_client_factory(test_db, make_test_app):
+    """Async-HTTP-Client gegen eine Test-App. Verwendung:
+
+        async with await async_client_factory(blocked_channels.router) as client:
+            r = await client.get('/api/blocked-channels')
+    """
+    from httpx import AsyncClient, ASGITransport
+
+    async def _make(*routers):
+        app = make_test_app(*routers)
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://testserver")
+    return _make
