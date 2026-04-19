@@ -3,7 +3,9 @@
  * © HalloWelt42 – Private Nutzung
  */
 
-export const FE_VERSION = '1.9.35';
+// Wird zum Build-Zeitpunkt aus package.json gesetzt (siehe vite.config.js → define).
+// Fallback falls Build-Step den Wert nicht ersetzt (z.B. im Dev-Modus ohne Define).
+export const FE_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
 
 // Über Nginx-Proxy (Port 8032) → relative Pfade, Nginx leitet an Backend weiter
 // Im Dev-Modus (vite:5173) → vite proxy in vite.config.js

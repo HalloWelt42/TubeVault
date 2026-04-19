@@ -1,5 +1,5 @@
 """
-TubeVault – RSS Service v1.6.1
+TubeVault – RSS Service v1.6.2
 YouTube RSS Feed Polling + Channel Scan (Videos/Shorts/Live)
 Phasen-Fortschritt, Abbruch-Unterstützung, Fehler-Transparenz
 © HalloWelt42 – Private Nutzung
@@ -234,11 +234,15 @@ class RSSService:
                     )
                 else:
                     new_interval = min(sub.get("check_interval", 1800) * 2, 86400)
+                    # WICHTIG: last_checked hier AUCH setzen, damit der Kanal nicht
+                    # beim nächsten Tick erneut sofort fällig ist → Endlos-Retry-Loop.
+                    # Der erhöhte check_interval wirkt nur in Kombination mit last_checked.
                     await db.execute(
                         """UPDATE subscriptions SET
-                           error_count = ?, last_error = ?, check_interval = ?
+                           error_count = ?, last_error = ?, check_interval = ?,
+                           last_checked = ?
                            WHERE id = ?""",
-                        (error_count, error_msg, new_interval, sub["id"])
+                        (error_count, error_msg, new_interval, now_sqlite(), sub["id"])
                     )
                 logger.warning(f"RSS Cron-Feed Fehler {sub['channel_id']}: {e}")
 
@@ -328,12 +332,32 @@ class RSSService:
 
         loop = asyncio.get_event_loop()
 
-        def _fetch():
+        def _fetch_tab(subpath: str):
             ch = make_channel(
-                f"https://www.youtube.com/channel/{channel_id}/videos",
+                f"https://www.youtube.com/channel/{channel_id}{subpath}",
                 max_videos=max_new,
             )
             return ch.channel_name, list(ch.videos)
+
+        def _fetch():
+            # Primär /videos. Wenn der Kanal nur Shorts/Live hat, existiert der
+            # Tab nicht (yt-dlp: "does not have a videos tab") → Fallback.
+            try:
+                return _fetch_tab("/videos")
+            except Exception as e:
+                msg = str(e).lower()
+                if "does not have a videos tab" not in msg and "no videos" not in msg:
+                    raise
+                # Fallback-Reihenfolge: shorts → streams → root (/)
+                for sub_tab in ("/shorts", "/streams", ""):
+                    try:
+                        name, vids = _fetch_tab(sub_tab)
+                        if vids or sub_tab == "":
+                            return name, vids
+                    except Exception:
+                        continue
+                # Alles leer: als erfolgreicher Poll ohne neue Videos zurückgeben
+                return channel_id, []
 
         channel_name, videos = await loop.run_in_executor(None, _fetch)
 

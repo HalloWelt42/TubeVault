@@ -16,6 +16,14 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 
 ## Offene Features / Wünsche
 
+### [open] Video/Shorts-Kategorisierung nachträglich korrigieren (aktiv triggerbar)
+- **Bereich:** backend (rss_entries + videos) + frontend (Button in Settings)
+- **Geschichte:** früher wurde mit pytubefix + typ-getrennten Feeds kategorisiert — fehleranfällig. Seit yt-dlp-Migration (v2.0.0) nutzen wir `duration ≤ 60` = short, sonst video. Neue Einträge sind sauber.
+- **Problem:** Alt-Bestand kann falsche video_type-Werte haben.
+- **Feature:** Aktiver "Reklassifizieren"-Durchlauf — iteriert über rss_entries + videos, setzt video_type basierend auf duration neu. Häppchen-mode (nicht alle auf einmal).
+- **Prio:** 🟡 niedrig (nice-to-have, nicht datenkritisch)
+
+
 ### [open] Metadaten schon beim Scanning in Suchindex aufnehmen
 - **Bereich:** backend (scanner, search index)
 - **Beschreibung:** Beschreibung, Tags, Untertitel bereits beim Kanal-Scan laden und in Suchindex packen — bessere Suche ohne echten Download. In Einstellungen de-/aktivierbar.
@@ -42,26 +50,16 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Beschreibung:** Analog zu Kanal-Abos: Playlisten abonnieren, neue Videos auto-downloaden. Fallback: nur einmalig runterladen via Playlist-URL.
 - **Prio:** 🟠 mittel
 
-### [open] Transkript bei Download automatisch erstellen
-- **Bereich:** backend (download_service → transcript_service)
-- **Beschreibung:** Wenn keine Untertitel verfügbar, via Whisper/ASR automatisch transkribieren. In Einstellungen de-/aktivierbar.
-- **Abhängigkeit:** ASR-Runtime (whisper.cpp o.ä.) auf Pi 5 — CPU-intensiv, evtl. nur für bestimmte Kanäle.
-- **Prio:** 🟠 mittel
-
-### [open] Transkript nachträglich erstellen (per Auswahl)
-- **Bereich:** frontend (Video-Detail, Massen-Aktion) + backend
-- **Beschreibung:** Für ausgewählte vorhandene Videos Transkript nachträglich erzeugen.
-- **Prio:** 🟠 mittel (direkt nach dem vorherigen)
-
-### [open] Transkripte separat ablegen (TubeVault/data/transcripts/…)
-- **Bereich:** backend (Pfad-Struktur, Metadaten)
-- **Beschreibung:** Eigener Ordnerbaum `data/transcripts/…`, Metadaten-Infos pro Transkript (Kanal, Datum, Titel) — damit man im Finder filtern/durchsuchen kann.
-- **Prio:** 🟠 mittel (Teil des Transkript-Features)
-
-### [open] Transkripte in Such-Index
-- **Bereich:** backend (search index)
-- **Beschreibung:** Alle Transkripte volltext-durchsuchbar. Nach Möglichkeit schon beim Scanning.
-- **Prio:** 🟠 mittel
+### [deferred] Transkript-Service (später, explizit nachgelagert)
+- **Zustand:** aktuell keine Priorität (User-Entscheidung).
+- **Fixe Vorgaben für später:**
+  - **Nur Whisper-Large** (keine kleinen Modelle)
+  - **Nativ laufen**, nicht in Docker (eigener systemd-Service)
+  - Trigger **nur** wenn keine YouTube-Untertitel vorhanden
+  - Trigger **nur** explizit vom User (kein Auto-Batch, kein Auto-on-Download)
+  - Ablage `data/transcripts/…`, Pfad-Schema bei Umsetzung festlegen
+  - Transkripte in FTS5-Such-Index
+- **Umfasst die früheren Tickets:** "Transkript bei Download", "nachträglich erstellen", "separat ablegen", "im Such-Index"
 
 ---
 
@@ -93,13 +91,9 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Fix:** Nur matching/gewünschte Sprachen loggen, oder Anzahl + erste 5 als Debug.
 - **Prio:** 🟡 niedrig (kosmetisch, aber nervig)
 
-### [open] Phasenleiste: eine Komponente, verschiedene Zustände (statt 3 Varianten)
-- **Bereich:** frontend + backend (bereits erledigt)
-- **Symptom:** Bei Audio-Only wird "✓ Video ↓" als abgehakt, Audio-Phase fehlt. Backend hat 3 Phasen-Definitionen (PHASES, PHASES_PROGRESSIVE, PHASES_AUDIO) — im Frontend vermutlich kopierter/parallel-implementierter Render-Code.
-- **Ziel:** **Eine** Phasenleisten-Komponente im Frontend, die eine Liste aus dem Backend entgegennimmt (je nach Download-Typ) und den aktiven Zustand visualisiert. Keine Sonderlocken-Rendering für Progressiv/Adaptive/Audio.
-- **Backend-Fix:** Backend sendet je nach Download-Typ die richtige Phasen-Liste (erledigt in 1.3).
-- **Frontend-Fix:** Render-Logik auf eine Komponente reduzieren. Gehört in Block 3.
-- **Prio:** 🟠 mittel
+### [done] Phasenleiste: eine Komponente, verschiedene Zustände
+- **Gelöst in v2.0.1:** `ActivityPanel.buildPhases()` wählt die richtige Phasen-Liste aus (PHASES_AUDIO/PROGRESSIVE/ADAPTIVE) basierend auf `job.metadata.download_options`. `DownloadProgress` rendert stur, was reinkommt. Backend ist Wahrheit (sendet `phases` im WS), Frontend hat Fallback-Templates für den Fall, dass Backend-phases fehlen.
+- **Trade-off:** Phasen-Templates existieren redundant in Backend + Frontend. Akzeptiert für Einfachheit.
 
 ### [open] Englisches Prio-Label "P100" in Queue-Box
 - **Bereich:** frontend (Queue-Box Badge)
