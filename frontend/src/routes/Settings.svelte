@@ -20,6 +20,34 @@
   let cleanupProtocol = $state(null);
   let loading = $state(true);
 
+  // Cookies-Status
+  let cookiesStatus = $state(null);
+  let cookiesBusy = $state(false);
+  async function loadCookiesStatus() {
+    try { cookiesStatus = await api.getCookiesStatus(); } catch {}
+  }
+  async function uploadCookiesFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    cookiesBusy = true;
+    try {
+      cookiesStatus = await api.uploadCookies(file);
+      toast.success('Cookies aktualisiert');
+    } catch (err) { toast.error(err.message); }
+    cookiesBusy = false;
+    e.target.value = '';
+  }
+  async function deleteCookiesFile() {
+    if (!confirm('Cookies wirklich entfernen?')) return;
+    cookiesBusy = true;
+    try {
+      await api.deleteCookies();
+      cookiesStatus = { present: false };
+      toast.info('Cookies entfernt');
+    } catch (err) { toast.error(err.message); }
+    cookiesBusy = false;
+  }
+
   // Backup
   let backups = $state([]);
   let backupStats = $state(null);
@@ -71,6 +99,7 @@
     load();
     loadScheduler();
     loadBackups();
+    loadCookiesStatus();
     pollTimer = setInterval(loadScheduler, 5000);
     return () => clearInterval(pollTimer);
   });
@@ -391,6 +420,41 @@
       </div>
     </div>
     <div class="setting-card">
+      <div class="card-header"><i class="fa-solid fa-cookie-bite"></i><h3>YouTube Cookies (optional)</h3></div>
+      <p class="card-desc">
+        Cookies aus dem Browser-Login umgehen hartnäckige Bot-Blocks. Benötigt wird eine
+        <code>cookies.txt</code> im Netscape-Format. Browser-Extensions wie
+        „Get cookies.txt LOCALLY" erstellen die Datei.
+      </p>
+      {#if cookiesStatus?.present}
+        <div class="cookies-status ok">
+          <i class="fa-solid fa-circle-check"></i>
+          <span>Cookies aktiv – {cookiesStatus.cookie_count || 0} Einträge, {Math.round((cookiesStatus.size || 0)/1024)} KB</span>
+        </div>
+        <div class="action-row">
+          <label class="action-btn" for="cookies-upload-change">
+            <i class="fa-solid fa-upload"></i> Ersetzen
+            <input id="cookies-upload-change" type="file" accept=".txt" onchange={uploadCookiesFile} hidden />
+          </label>
+          <button class="action-btn danger" onclick={deleteCookiesFile} disabled={cookiesBusy}>
+            <i class="fa-solid fa-trash-can"></i> Entfernen
+          </button>
+        </div>
+      {:else}
+        <div class="cookies-status">
+          <i class="fa-solid fa-circle-xmark"></i>
+          <span>Keine Cookies hinterlegt</span>
+        </div>
+        <div class="action-row">
+          <label class="action-btn accent" for="cookies-upload">
+            <i class="fa-solid {cookiesBusy ? 'fa-spinner fa-spin' : 'fa-upload'}"></i> cookies.txt hochladen
+            <input id="cookies-upload" type="file" accept=".txt" onchange={uploadCookiesFile} hidden />
+          </label>
+        </div>
+      {/if}
+    </div>
+
+    <div class="setting-card">
       <div class="card-header"><i class="fa-solid fa-wrench"></i><h3>Wartung</h3></div>
       <div class="action-row">
         <button class="action-btn accent" onclick={runFullCleanup} disabled={runningFullCleanup}>
@@ -667,4 +731,16 @@
   .cp-detail { flex: 1; }
   .action-btn.accent { background: var(--accent-muted); border-color: var(--accent-primary); color: var(--accent-primary); }
   .action-btn.accent:hover { background: var(--accent-primary); color: #fff; }
+
+  /* Cookies-Panel */
+  .card-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px; }
+  .card-desc code { background: var(--bg-tertiary); padding: 1px 6px; border-radius: 4px; font-size: 0.78rem; }
+  .cookies-status {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 8px; margin-bottom: 10px;
+    background: var(--bg-tertiary); color: var(--text-tertiary);
+    font-size: 0.84rem;
+  }
+  .cookies-status.ok { background: rgba(34,197,94,0.08); color: var(--status-success); border: 1px solid rgba(34,197,94,0.3); }
+  .cookies-status i { font-size: 0.95rem; }
 </style>

@@ -32,12 +32,15 @@ function setConnectionStatus(ok) {
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
+  // Bei FormData KEIN Content-Type setzen (Browser setzt multipart-Boundary selbst)
+  const isFormData = options.body instanceof FormData;
+  const defaultHeaders = isFormData ? {} : { 'Content-Type': 'application/json' };
   const config = {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
+    headers: { ...defaultHeaders, ...options.headers },
   };
-  // Auto-stringify body if it's an object
-  if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
+  // Auto-stringify body if it's an object (aber nicht FormData)
+  if (config.body && typeof config.body === 'object' && !isFormData) {
     config.body = JSON.stringify(config.body);
   }
 
@@ -282,6 +285,16 @@ export const api = {
       body: JSON.stringify({ video_id, channel_id, reason }) }),
   unignoreVideo: (video_id) =>
     request(`/api/ignored-videos/${video_id}`, { method: 'DELETE' }),
+
+  // Cookies (yt-dlp Login-Session, optional)
+  getCookiesStatus: () => request('/api/cookies'),
+  uploadCookies: (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    // Content-Type explizit weglassen, damit fetch den multipart boundary setzt
+    return request('/api/cookies', { method: 'POST', body: fd, headers: {} });
+  },
+  deleteCookies: () => request('/api/cookies', { method: 'DELETE' }),
   getJobStats: () => request('/api/jobs/stats'),
   getJob: (id) => request(`/api/jobs/${id}`),
   cancelJob: (id) => request(`/api/jobs/${id}/cancel`, { method: 'POST' }),

@@ -42,6 +42,14 @@ def _set_current_throttle_kbps(v: int):
 import os as _os
 _POT_BASE_URL = _os.getenv("POT_PROVIDER_URL", "http://tubevault-pot:4416")
 
+# Optionale Cookies aus config/cookies.txt (Netscape-Format).
+# Falls vorhanden, nutzt yt-dlp die eingeloggten Session-Cookies → umgeht
+# auch hartnäckige Bot-Blocks (IP-basiert etc.). User legt Datei ins
+# Config-Volume oder lädt per API hoch.
+def _cookiefile() -> str | None:
+    p = "/app/config/cookies.txt"
+    return p if _os.path.isfile(p) and _os.path.getsize(p) > 0 else None
+
 _YDL_BASE_OPTS = {
     "quiet": True,
     "no_warnings": True,
@@ -68,6 +76,9 @@ _YDL_BASE_OPTS = {
 def _ydl_extract(url: str, extra_opts: Optional[dict] = None) -> dict:
     """Zentraler yt-dlp Extract-Call."""
     opts = {**_YDL_BASE_OPTS}
+    cf = _cookiefile()
+    if cf:
+        opts["cookiefile"] = cf
     if extra_opts:
         opts.update(extra_opts)
     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -306,6 +317,10 @@ class StreamAdapter:
             },
             "remote_components": ["ejs:github"],
         }
+        # Optional: cookies.txt aus config-Volume (Option 3 Bot-Umgehung)
+        _cf = _cookiefile()
+        if _cf:
+            opts["cookiefile"] = _cf
         # Throttling aus Settings – 3 Modi:
         #   realtime  → ratelimit = filesize / duration (passt jedem Video an,
         #               wirkt für YouTube wie Streaming → weniger Bot-Verdacht)
