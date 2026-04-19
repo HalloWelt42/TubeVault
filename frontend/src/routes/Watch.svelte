@@ -125,12 +125,15 @@
 
         // Lyrics-Sidebar aus URL oder Auto
         const urlLyrics = params.lyrics;
+        const anotherSidebarActive = showSubtitleSidebar || showNotesSidebar || $playlistQueue.active;
         if (urlLyrics === '1') {
           showLyricsSidebar = true;
           lyricsLocked = true;
         } else if (lyricsLocked) {
           showLyricsSidebar = true;
-        } else if (!lyricsManualClose) {
+        } else if (!lyricsManualClose && !anotherSidebarActive) {
+          // Auto-Open nur wenn keine andere Sidebar (Subtitle/Notes/Playlist-Queue) offen ist.
+          // Grund: zwei Sidebars + Hauptvideo = Titel quetscht auf 100px (User-Feedback).
           try {
             const lyr = await api.getLyrics(id);
             showLyricsSidebar = lyr.is_music || lyr.has_lyrics || false;
