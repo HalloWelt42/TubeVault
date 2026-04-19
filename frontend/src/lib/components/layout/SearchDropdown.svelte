@@ -203,8 +203,13 @@
       const all = res.videos || [];
       const localIds = new Set(localResults.map(v => v.id));
       const rssIds = new Set(rssResults.map(v => v.video_id || v.id));
+      // Dedup: YT-Paginierung liefert gelegentlich dieselbe ID mehrfach
+      const seen = new Set();
       ytResults = all
-        .filter(v => !localIds.has(v.id))
+        .filter(v => {
+          if (!v?.id || seen.has(v.id) || localIds.has(v.id)) return false;
+          seen.add(v.id); return true;
+        })
         .map(v => ({ ...v, in_rss: rssIds.has(v.id) }));
       ytPlaylists = (res.playlists || []).slice(0, 4);
       ytChannels = (res.channels || []).slice(0, 3);
@@ -224,7 +229,10 @@
       const localIds = new Set(localResults.map(v => v.id));
       const rssIds = new Set(rssResults.map(v => v.video_id || v.id));
       const more = (res.videos || [])
-        .filter(v => !known.has(v.id) && !localIds.has(v.id))
+        .filter(v => {
+          if (!v?.id || known.has(v.id) || localIds.has(v.id)) return false;
+          known.add(v.id); return true;
+        })
         .map(v => ({ ...v, in_rss: rssIds.has(v.id) }));
       ytResults = [...ytResults, ...more];
       ytPage = nextPage;
