@@ -1,5 +1,5 @@
 <!--
-  TubeVault – ActivityPanel v1.9.0
+  TubeVault – ActivityPanel v1.9.1
   Unified Bar (ersetzt Footer + altes ActivityPanel)
   Detail-Panel mit Phasen-Fortschritt, Pause/Resume, Cleanup
   © HalloWelt42 – Private Nutzung
@@ -846,7 +846,7 @@
     padding: 6px 8px; border-radius: 6px;
     background: var(--bg-tertiary); margin-bottom: 4px;
     border: 1px solid var(--border-secondary);
-    contain: layout style; position: relative;
+    contain: layout style;
   }
   .ji-active.fading { opacity: 0.7; }
   .ji-active-top {
@@ -866,15 +866,15 @@
     font-variant-numeric: tabular-nums; flex-shrink: 0;
   }
   .ji-cancel {
-    position: absolute; top: 4px; right: 4px; z-index: 2;
+    /* Flex-Platz, nicht absolut → keine Überlappung mit Text/Badges */
     background: var(--bg-tertiary); border: 1px solid var(--border-primary);
     color: var(--text-tertiary); cursor: pointer; border-radius: 4px;
     width: 22px; height: 22px; display: flex; align-items: center;
     justify-content: center; font-size: 0.6rem; flex-shrink: 0;
-    opacity: 0; transition: all 0.15s;
+    opacity: 0.7; transition: all 0.15s;
   }
   .ji-active:hover .ji-cancel { opacity: 1; }
-  .ji-cancel:hover { border-color: var(--status-error); color: var(--status-error); }
+  .ji-cancel:hover { border-color: var(--status-error); color: var(--status-error); opacity: 1; }
   .ji-cancel i { color: inherit; }
   .ji-active-dl { margin: 2px 0; }
   .ji-active-desc {
@@ -922,7 +922,6 @@
     display: flex; align-items: flex-start; gap: 5px;
     padding: 3px 6px; border-radius: 4px; font-size: 0.72rem;
     margin-bottom: 1px; border-left: 3px solid transparent;
-    position: relative;
   }
   .ji-compact:hover { background: var(--bg-tertiary); }
 
@@ -959,13 +958,13 @@
   .ji-badge.pos { background: rgba(167, 139, 250, 0.12); color: var(--status-pending); }
   .ji-badge.paused { color: var(--status-warning); font-weight: 600; font-size: 0.6rem; }
   .ji-c-cancel {
-    position: absolute; top: 2px; right: 2px; z-index: 2;
+    /* Flex-Platz neben Badges, nicht absolut → keine Überlappung */
     background: var(--bg-tertiary); border: none; color: var(--text-tertiary);
-    cursor: pointer; font-size: 0.55rem; padding: 2px 4px; border-radius: 3px;
-    opacity: 0; transition: opacity 0.12s;
+    cursor: pointer; font-size: 0.7rem; padding: 2px 6px; border-radius: 3px;
+    opacity: 0.7; transition: opacity 0.12s; flex-shrink: 0;
   }
   .ji-compact:hover .ji-c-cancel { opacity: 1; }
-  .ji-c-cancel:hover { color: var(--status-error); }
+  .ji-c-cancel:hover { color: var(--status-error); opacity: 1; }
   .ji-c-cancel i { color: inherit; }
   .ji-c-unpark {
     background: none; border: none; padding: 0 2px; cursor: pointer;
