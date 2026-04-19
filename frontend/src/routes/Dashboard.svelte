@@ -206,7 +206,7 @@
       </div>
       <div class="video-grid">
         {#each videos as video (video.id)}
-          <VideoCard {video} />
+          <VideoCard {video} onUpdate={() => loadData()} />
         {/each}
       </div>
     </div>

@@ -52,8 +52,11 @@
 
   const FEED_TABS = [
     { id: 'active', label: 'Aktiv', icon: 'fa-solid fa-inbox' },
-    { id: 'later', label: 'Spaeter', icon: 'fa-solid fa-bookmark' },
-    { id: 'archived', label: 'Archiv', icon: 'fa-solid fa-box-archive' },
+    { id: 'later', label: 'Später', icon: 'fa-solid fa-bookmark' },
+    // 'Weggelegt' statt 'Archiv' — weil das globale Sidebar-Archiv eine andere
+    // Datenquelle ist (heruntergeladene Videos). Hier sind RSS-Einträge, die
+    // ohne Download zur Seite gelegt wurden. Zwei Labels "Archiv" verwirrten.
+    { id: 'archived', label: 'Weggelegt', icon: 'fa-solid fa-box-archive' },
     { id: 'dismissed', label: 'Ausgeblendet', icon: 'fa-solid fa-eye-slash' },
   ];
 
@@ -148,7 +151,7 @@
       if (tabCounts[fromTab] > 0) tabCounts[fromTab]--;
       tabCounts[status] = (tabCounts[status] || 0) + 1;
       tabCounts = { ...tabCounts };
-      const labels = { later: 'Spaeter', archived: 'Archiv', dismissed: 'Ausgeblendet', active: 'Aktiv' };
+      const labels = { later: 'Später', archived: 'Weggelegt', dismissed: 'Ausgeblendet', active: 'Aktiv' };
       toast.success(`${labels[status]}: ${(entry.title || '').slice(0, 40)}`);
     } catch (e) { toast.error(e.message); }
   }
@@ -655,8 +658,8 @@
         <p>Markiere Videos mit <i class="fa-solid fa-bookmark"></i> um sie hier zu sammeln.</p>
       {:else if feedTab === 'archived'}
         <i class="fa-solid fa-box-archive empty-icon"></i>
-        <h3>Kein Archiv</h3>
-        <p>Archivierte Videos ohne Download landen hier.</p>
+        <h3>Nichts weggelegt</h3>
+        <p>Feed-Einträge, die du ohne Download weglegst, landen hier.</p>
       {:else if feedTab === 'dismissed'}
         <i class="fa-solid fa-eye-slash empty-icon"></i>
         <h3>Nichts ausgeblendet</h3>

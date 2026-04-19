@@ -257,7 +257,7 @@
             <button class="select-check" onclick={() => toggleSelect(video.id)}>
               {#if selected.has(video.id)}<i class="fa-solid fa-square-check"></i>{:else}<i class="fa-regular fa-square"></i>{/if}
             </button>
-            <VideoCard {video} />
+            <VideoCard {video} onUpdate={() => loadVideos(true)} />
           </div>
         {:else}
           <VideoCard {video} />

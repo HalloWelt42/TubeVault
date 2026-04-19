@@ -174,7 +174,7 @@
               {/if}
             </button>
           {/if}
-          <VideoCard {video} />
+          <VideoCard {video} showArchiveBtn={false} onUpdate={() => loadVideos()} />
           <button class="btn-unarchive" onclick={() => unarchiveVideo(video.id)} title="Dearchivieren">
             <i class="fa-solid fa-box-open"></i>
           </button>

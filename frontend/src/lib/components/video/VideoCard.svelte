@@ -1,6 +1,6 @@
 <script>
   /**
-   * TubeVault – VideoCard v1.6.18
+   * TubeVault – VideoCard v1.6.19
    * Typ-Badges klickbar (video→short→live), Like/Dislike Bar, QPL.
    * © HalloWelt42 – Private Nutzung
    */
@@ -24,6 +24,9 @@
       await api.archiveVideo(video.id);
       hidden = true;
       toast.success('Archiviert');
+      // Parent benachrichtigen, damit seine Liste neu geladen wird
+      // (bisher blieb die Karte beim nächsten Parent-Reload wieder sichtbar).
+      onUpdate?.();
     } catch (err) { toast.error(err.message); }
   }
 

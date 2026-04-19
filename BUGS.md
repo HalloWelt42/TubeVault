@@ -24,6 +24,14 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Prio:** 🟡 niedrig (nice-to-have, nicht datenkritisch)
 
 
+### [open] Sortierung nach YouTube-Upload-Datum (nicht nur Download-Datum)
+- **Bereich:** frontend (Sort-Dropdowns in Library, Feed, ChannelDetail) + backend (API-Sortierung)
+- **Wunsch:** Aktuell sortieren Listen nach `download_date` (wann heruntergeladen). Optionally: nach `upload_date` (YouTube-Originaldatum aus Metadaten). Das Feld existiert in `videos.upload_date`.
+- **Fix-Plan:**
+  1. Backend: `GET /api/videos` akzeptiert `sort_by=upload_date` (prüfen, ob schon da)
+  2. Frontend: Sort-Dropdown um "Upload-Datum" erweitern
+- **Prio:** 🟠 mittel
+
 ### [open] Metadaten schon beim Scanning in Suchindex aufnehmen
 - **Bereich:** backend (scanner, search index)
 - **Beschreibung:** Beschreibung, Tags, Untertitel bereits beim Kanal-Scan laden und in Suchindex packen — bessere Suche ohne echten Download. In Einstellungen de-/aktivierbar.
