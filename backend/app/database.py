@@ -10,7 +10,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -229,6 +229,18 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
+
+-- Text-Export-Registry (DB=Referenz, Dokumente liegen in /app/data/texts/<id>.<kind>.<ext>)
+CREATE TABLE IF NOT EXISTS text_files (
+    video_id    TEXT NOT NULL,
+    kind        TEXT NOT NULL,        -- 'description' | 'chapters' | 'tags' | 'notes' | ...
+    filename    TEXT NOT NULL,        -- '<video_id>.<kind>.<ext>'
+    size_bytes  INTEGER DEFAULT 0,
+    sha256      TEXT,                 -- Content-Hash für Mismatch-Detektion
+    synced_at   TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (video_id, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_text_files_kind ON text_files(kind);
 
 -- Dauerhaft ignorierte Videos (nicht erneut automatisch laden)
 CREATE TABLE IF NOT EXISTS ignored_videos (
