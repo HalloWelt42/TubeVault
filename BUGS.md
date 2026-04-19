@@ -30,17 +30,17 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Zusammenhang:** passt gut zur geplanten "zarte Häppchen"-Scanner-Überarbeitung. Muss aber YouTube-schonend sein (API-Calls pro Video).
 - **Prio:** 🟠 mittel
 
-### [open] Datei-Pfad in Metadaten verlinkbar ("Im Finder anzeigen")
+### [done] Datei-Pfad in Metadaten verlinkbar (v2.1.0)
 - **Bereich:** frontend (Video-Detail)
 - **Beschreibung:** Direkter Link zum Dateipfad auf dem Host — "Im Dateimanager anzeigen".
 - **Prio:** 🟡 niedrig (Komfort)
 
-### [open] Dashboard: gleiches Download-Feld wie bei Jobs (inkl. Qualitätsauswahl)
+### [done] Dashboard-Download-Feld mit Qualitätsauswahl + Audio-Toggle (v2.1.1)
 - **Bereich:** frontend (Dashboard)
 - **Beschreibung:** Dashboard hat ein kleineres Download-Widget. Soll dasselbe Feld wie in "Jobs" bekommen — inkl. Auswahl-Menü für Video-Qualität.
 - **Prio:** 🟠 mittel (Konsistenz)
 
-### [open] Qualitäten 144p/240p im Download-Menü ergänzen
+### [done] Qualitäten 144p/240p im Download-Menü (v2.1.0)
 - **Bereich:** frontend (Quality-Select) + backend (Picker)
 - **Beschreibung:** Niedrige Qualitäten für schmalbandige / mobile Szenarien. Aktuell fehlen sie im Dropdown.
 - **Prio:** 🟡 niedrig (einfach, aber kein Engpass)
@@ -65,27 +65,80 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 
 ## Offene Bugs
 
-### [open] Audio-Only-Download extrem langsam (YouTube-Throttling)
+### [open] YouTube-Suche `/full`: Shorts/Playlists/Channels leer
+- **Bereich:** backend (`ytdlp_adapter.SearchAdapter`)
+- **Symptom:** `/api/search/youtube/full?q=...` gibt `videos` korrekt, aber `shorts=[]`, `playlists=[]`, `channels=[]`, `suggestions=[]`. Frontend-Dropdown zeigt leere Tabs.
+- **Ursache 1:** Router nutzt pytubefix-Singular-Properties `s.playlist`, `s.channel`, `s.completion_suggestions` — Adapter hat Plural `playlists`/`channels`/`suggestions`. AttributeError wird von try/except geschluckt, bleibt leer.
+- **Ursache 2:** Adapter-Properties `playlists`/`channels` returnen hartkodiert `[]`. yt-dlp's `ytsearchN:q` liefert aber gemischte Entry-Typen — man müsste `entry.get('_type')` prüfen und entsprechend aufteilen.
+- **Fix-Plan:** SearchAdapter implementiert `playlist`/`channel` Aliase UND parst yt-dlp-Entries korrekt in die vier Kategorien.
+- **Prio:** 🔴 hoch (User-Zitat: "wir können aktuell nix mehr bei YT suchen")
+
+### [open] YouTube-Suche: echte Paginierung gewünscht
+- **Bereich:** backend (Search-Endpoint) + frontend (Result-Rendering)
+- **Symptom/Wunsch:** Aktuell liefert `/api/search/youtube/full` max_results ≤30 in einem Call. User wünscht sich „wie Google", also Paginierung durch **alle** Treffer.
+- **Fix-Plan:** yt-dlp `ytsearch{N}:q` mit großem N (z.B. 200) + Server-Side-Pagination in der API (offset/limit). Frontend: Infinite-Scroll oder "Weitere Seiten"-Button.
+- **Prio:** 🟠 mittel (Feature, nachdem der leere-Tabs-Bug oben gelöst ist)
+
+### [open] Tag-Liste zeigt „+64499 mehr" – unsinnig
+- **Bereich:** frontend (Tag-Filter) + backend (Tag-Bereinigung)
+- **Symptom:** Tag-Panel zeigt die Top-Tags und dahinter „+64499 mehr" — sinnlos bei 64.514 Gesamt-Tags. Max ~60 sinnvoll darstellbar.
+- **Ursachen:** 
+  1. Datenverschmutzung: 64k Tags sind aggregierte YouTube-Tags aus Millionen Videos, meist unsinnig (Ein-Zeichen-Tags, Pseudo-Tags, Zufalls-Strings).
+  2. Frontend zeigt die Total-Zahl statt eine sinnvolle "Weitere anzeigen"-UX (Suchfeld ist da, aber Button irreführend).
+- **Fix-Plan:**
+  1. **Frontend:** Top ~50 Tags + einfaches Suchfeld, KEINE "+N mehr"-Textanzeige (Zahl weglassen oder als "weitere Tags via Suche filtern").
+  2. **Backend-Aufräumjob:** Tags filtern (min. 2 Zeichen, min. Count ≥ X, keine Pseudo-Whitespace, etc.)
+- **Prio:** 🟠 mittel (UX-Reibung, keine Datenfehler)
+
+### [open] Aufräum-Jobs in den Einstellungen fehlen
+- **Bereich:** backend (Maintenance-Service) + frontend (Settings-Panel)
+- **Wunsch:** In den Einstellungen ein „Aufräumen"-Bereich mit Jobs:
+  - Unsinnige Tags löschen + aus allen Videos entfernen (z.B. Tags mit <3 Zeichen, Ein-Wort-Zufallsstrings, Count ≤ 1)
+  - (Potentiell mehr: Waisen-Metadaten, fehlende Dateien, Doppelte, etc.)
+- **Architektur:** Jeder Aufräum-Job als eigener job_type, über job_service laufen (mit Fortschritt). Frontend: Liste der Aufräum-Jobs mit "Jetzt ausführen"-Button + letzter Lauf + Konfig-Parametern.
+- **Prio:** 🟠 mittel (nützlich, nicht dringend)
+
+### [open] Kanal-Einstellungen: category_id wird bei Download nicht übernommen
+- **Bereich:** backend (`download_service._process`)
+- **Symptom:** Wenn ein Abo einer Kategorie zugewiesen ist (`subscriptions.category_id`), wird das heruntergeladene Video NICHT automatisch dieser Kategorie zugeordnet. INSERT INTO videos enthält kein `category_id`.
+- **Fix:** In `_process` den `sub.category_id` abfragen (via channel_id → subscriptions) und beim INSERT/UPDATE des Videos setzen. Siehe aber: `videos.category_id` existiert NICHT in der Spalte — separate Tabelle `video_categories`? Ggf. über `video_categories`-Zuordnung.
+- **Prio:** 🟠 mittel (wird explizit vom User vermisst)
+
+### [open] Listen/Cards: Darstellung reaktiv fehlerhaft nach Archiv-Aktion
+- **Bereich:** frontend (Library, Archives, Channel-Detail — alle Card-Listen)
+- **Symptom:** Nach "Video ins Archiv verschieben" bleiben Karten angezeigt, die dort nicht mehr hingehören. Erst ein Reload aktualisiert die Darstellung. User-Zitat: "fehlen oft welche wenn man einige in den archiv verschiebt und nur reload erneuert die darstellung. die darstellung ist allg mega verbuggt, falsch und inkonsistent"
+- **Vermutete Ursache:** Listen-State wird nicht nach Mutation invalidiert. Backend-API erfolgreich → aber lokale `videos`-Array nicht synchronisiert. Fehlendes Event/Store-Update.
+- **Fix-Plan:** Nach Mutations-API (archive/unarchive/delete) den betroffenen Eintrag aus der lokalen Liste entfernen + Parent-State zurückschicken (Event oder Store). Optional: Store für Video-Status (archived/ready), der alle Listen-Views automatisch aktualisiert.
+- **Prio:** 🔴 hoch (User sagt "mega verbuggt, falsch und inkonsistent")
+
+### [open] Weitere Kanal-Einstellungen-Bugs (User-Report: "funktionieren nicht wie eingestellt")
+- **Bereich:** backend (subscriptions + rss_service + download_service)
+- **Symptom:** User-Zitat: "viele einstellungen der kanäle [funktionieren] nicht wie eingestellt".
+- **Fix-Plan:** Systematischer Audit jeder Einstellung (auto_download, download_quality, audio_only, drip_*, suggest_exclude, category_id, enabled). Pro Feld klar dokumentieren: wo gesetzt, wo abgefragt, Testcase.
+- **Status:** Audit begonnen (category_id als erster Befund, siehe Eintrag oben). Weitere folgen.
+- **Prio:** 🔴 hoch
+
+### [done] Audio-Only-Download extrem langsam (v2.0.0, yt-dlp intern → 67× schneller)
 - **Bereich:** backend (`ytdlp_adapter.StreamAdapter.download`)
 - **Symptom:** Audio-Only-Download läuft durch, aber ~32 KB/s statt ~9 MB/s (Test-Wert für Video-Stream). User-Zitat: "steht scheinbar still / extrem träge".
 - **Ursache:** Unser Adapter lädt die Stream-URL per `httpx.stream` direkt. YouTube drosselt solche nackten Downloads; `yt-dlp` hat eingebaute Anti-Throttle-Logik (Chunking, Re-Request, Player-Hinting).
 - **Fix:** `StreamAdapter.download()` intern auf `yt_dlp.YoutubeDL().download()` umstellen (nur das konkrete Format via `format_id`).
 - **Prio:** 🔴 hoch (Kernfunktion stark beeinträchtigt, betrifft auch Video-Adaptive-Downloads, nicht nur Audio)
 
-### [open] Frontend-Anzeige bleibt stehen nach Job-Ende (WS-Sync)
+### [done] Frontend-Anzeige bleibt stehen nach Job-Ende (v2.0.0, handleProgressMessage übernimmt Terminal-Status sofort)
 - **Bereich:** frontend (Queue-Komponente) + backend (WS-Broadcast)
 - **Symptom:** Backend meldet Job als `done` mit progress=1.0, Frontend zeigt aber weiter alten "aktiv"-Zustand — "Anzeige tot / verbuggt" laut User.
 - **Vermutete Ursache:** Final-State WS-Message geht verloren oder wird vom Frontend nicht auf die Queue-Box gemappt. Throttle `WS_THROTTLE=0.4s` könnte den finalen Broadcast schlucken.
 - **Prio:** 🔴 hoch (User hat nie die Bestätigung, dass ein Job durch ist)
 
-### [open] Auto-Subtitle-Download schlägt mit HTTP 429 fehl
+### [done] Auto-Subtitle-Download HTTP 429 (v2.0.8, eigene rate_limiter-Kategorie 'caption')
 - **Bereich:** backend (`download_service.download_subtitles`)
 - **Symptom:** Nach dem Audio/Video-Download versucht auto-subtitle alle Config-Sprachen → YouTube antwortet mit 429 Too Many Requests.
 - **Vermutete Ursache:** Caption-API hat ein eigenes Rate-Limit, wird aber nicht über den rate_limiter gesteuert. Mehrere Sprachen parallel / zu schnell nach Download.
 - **Fix:** Caption-Calls sollten eine eigene rate_limiter-Kategorie bekommen (z.B. `caption`, Intervall 3-5s), Retry mit Backoff bei 429.
 - **Prio:** 🟠 mittel
 
-### [open] Subtitle-Log spammt alle 150+ Caption-Sprachen in einer Zeile
+### [done] Subtitle-Log spammt alle 150+ Caption-Sprachen (v2.0.8, schlanker Log)
 - **Bereich:** backend (`download_service.download_subtitles` Log)
 - **Symptom:** `[SUBS] VID: Verfügbare Captions: a.ab (Abkhazian), a.aa (Afar), ...` — ca. 4000 Zeichen Log pro Video. Macht den Live-Log unlesbar.
 - **Fix:** Nur matching/gewünschte Sprachen loggen, oder Anzahl + erste 5 als Debug.
@@ -95,13 +148,13 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Gelöst in v2.0.1:** `ActivityPanel.buildPhases()` wählt die richtige Phasen-Liste aus (PHASES_AUDIO/PROGRESSIVE/ADAPTIVE) basierend auf `job.metadata.download_options`. `DownloadProgress` rendert stur, was reinkommt. Backend ist Wahrheit (sendet `phases` im WS), Frontend hat Fallback-Templates für den Fall, dass Backend-phases fehlen.
 - **Trade-off:** Phasen-Templates existieren redundant in Backend + Frontend. Akzeptiert für Einfachheit.
 
-### [open] Englisches Prio-Label "P100" in Queue-Box
+### [done] Englisches Prio-Label "P100" (v2.0.3 → "Prio X"; v2.1.2 nowrap-Fix)
 - **Bereich:** frontend (Queue-Box Badge)
 - **Symptom:** Priorität 100 wird als "P100" (englische Kurzform) gerendert.
 - **Fix:** "Prio 100" oder "Priorität 100" (deutsch). Siehe auch Sprach-Audit-Ticket.
 - **Prio:** 🟡 niedrig
 
-### [open] Tab-Bereich im Video-Detail mit unerwünschtem Zeilenumbruch
+### [done] Tab-Bereich im Video-Detail Zeilenumbruch (v2.0.7, flex-wrap + row-gap)
 - **Bereich:** frontend (Video-Detail-Tabs)
 - **Symptom:** Tab-Leiste "Info · Kapitel · Werbung · Untertitel · Streams" bricht optisch unschön um bzw. rendert einen Zeilenumbruch da, wo keiner erwartet wird. (Screenshot Sting-Video.)
 - **Vermutete Ursache:** flex/wrap-Layout der Tab-Bar ohne min-width oder ohne Overflow-Handling.
@@ -113,7 +166,7 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Fix-Richtung:** Klare Design-Tokens: Buttons bekommen Hover/Active-States, Shadow, Border-Style; Badges bleiben flache Labels ohne Hover-Interaktion. CSS-Audit der Badge-/Button-Komponenten, Duplikate konsolidieren.
 - **Prio:** 🟠 mittel (UX-Reibung)
 
-### [open] Queue-Box X-Button überdeckt andere Bedienelemente
+### [done] Queue-Box X-Button überdeckt Bedienelemente (v2.0.5 ActivityPanel + v2.1.3 Downloads)
 - **Bereich:** frontend (Queue-Box / Action-Buttons)
 - **Symptom:** Der X-Button (Abbrechen) in der rechten Action-Spalte überlappt mit darunter/dahinter liegenden Elementen (Badge, Medaille, Status-Icon). Sichtbar im Fertig-Panel.
 - **Vermutete Ursache:** absolute Positionierung ohne z-index-Hierarchie, oder fehlendes padding/margin im Button-Container.
@@ -127,7 +180,7 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Fix-Richtung:** Systematische Frontend-Audit — CSS-Layer definieren (Modal > Toast > Dropdown > Panel > Content), responsive Container mit min-widths, ein globales Layout-Grid das Panels koordiniert.
 - **Prio:** 🟠 mittel (User-sichtbar, aber kein Datenverlust)
 
-### [open] Layout bricht zusammen, wenn beide Sidebars (Lyrics + Feed) automatisch erscheinen
+### [done] Layout Lyrics+Feed parallel automatisch (v2.0.6, auto-open nur wenn keine andere Sidebar)
 - **Bereich:** frontend (Layout, Panel-Manager)
 - **Symptom:** Video-Start aus Bibliothek öffnet automatisch Lyrics **und** Feed — Haupt-Viewport wird auf ~110px komprimiert, Titel bricht hart um ("Sting -  Shape of  My Heart  (Live at the Rijksmuseur" jedes Wort eigene Zeile).
 - **Wunsch:** Vorherige Panel-Sichtbarkeit beibehalten, nicht automatisch einblenden. Bei zu wenig Platz: Panels nicht parallel öffnen, sondern nur eines (oder sie müssen sich overlaying verhalten).
@@ -154,25 +207,25 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Vermutete Ursache:** Error-State unterdrückt die normale Progress-Darstellung nicht.
 - **Prio:** 🟠 mittel
 
-### [open] Phasenleiste inkonsistent zwischen progressiven und adaptiven Downloads
+### [done] Phasenleiste inkonsistent progressive/adaptive (v2.0.1, buildPhases() in ActivityPanel)
 - **Bereich:** frontend (DownloadQueue)
 - **Symptom:** Box 1 zeigt 3 Phasen (Auflösen · Video · Abschluss), Box 2 zeigt 5 (+ Audio + Merge). Optisch verwirrend.
 - **Vermutete Ursache:** Phasen werden dynamisch erzeugt, aber die Darstellung signalisiert nicht, warum die eine Box weniger Phasen hat.
 - **Prio:** 🟡 niedrig (technisch korrekt, aber UX-Reibung)
 
-### [open] UI zeigt falsche Phase: "Video" während Audio lädt
+### [done] UI zeigt falsche Phase bei Audio-Only (v2.0.3 Backend + v2.0.1 Frontend)
 - **Bereich:** frontend (DownloadQueue) + backend (`_on_progress`)
 - **Symptom:** Audio-Download läuft bereits, Queue-Box behauptet weiter "Video wird heruntergeladen".
 - **Vermutete Ursache:** Phase-Umschaltung zwischen Video- und Audio-Download wird nicht zuverlässig via WS gebroadcastet — vermutlich Race oder WS_THROTTLE verschluckt die Phasen-Änderung.
 - **Prio:** 🔴 hoch (irreführt beim Überwachen von Downloads)
 
-### [open] Keine ETA / Restzeit-Schätzung
+### [done] ETA / Restzeit-Schätzung im Progress-Label (v2.0.4)
 - **Bereich:** frontend (DownloadQueue)
 - **Symptom:** Es gibt nur `bytes_done/bytes_total` und Prozent — keine Schätzung der verbleibenden Zeit basierend auf bisherigem Durchsatz.
 - **Vermutete Ursache:** ETA wird nicht berechnet/gebroadcastet.
 - **Prio:** 🟠 mittel
 
-### [open] RSS-Feed von YouTube 404 für alle Kanäle
+### [done] RSS-Feed von YouTube 404 (v2.0.0, durch yt-dlp Channel.videos ersetzt; v2.1.5 Shorts/Streams-Fallback)
 - **Bereich:** backend (`rss_service`)
 - **Symptom:** `https://www.youtube.com/feeds/videos.xml?channel_id=...` liefert HTTP 404, selbst für Rick Astley & Google Developers, auch mit Browser-UA.
 - **Vermutete Ursache:** YouTube hat den RSS-Endpunkt blockiert (serverseitig oder IP-gatet).
@@ -185,13 +238,13 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
 - **Lösung:** Zarte Häppchen — z.B. 10-20 Videos/Tick, Pausen, über 24h verteilt. Scheduler-Logik > Scan-Speed.
 - **Prio:** 🔴 hoch
 
-### [open] Unerreichbare Videos gehen in Endlos-Retry
+### [done] Unerreichbare Videos Endlos-Retry (v2.0.0 park-Logik; v2.1.5 last_checked-Fix)
 - **Bereich:** backend (download queue)
 - **Symptom:** Videos mit dauerhaften Fehlern (deleted, private, members-only, region-blocked) retryen weiter bis max_retries.
 - **Lösung:** Fehlerarten klassifizieren, dauerhafte Fehler → Status setzen (`unavailable`, `private`, `members_only`, `region_blocked`). Skip-Logik + Editierbarkeit im Frontend pro Kanal.
 - **Prio:** 🔴 hoch
 
-### [open] Job-Tracking unsauber: Zombie-Jobs, parallele Läufe, vermutete Mehrfach-Implementierung
+### [done] Job-Tracking unsauber (v2.0.0 Refactor: zentraler Status-Writer, Safety-Net, Doppel-start entfernt)
 - **Bereich:** backend (download_service, job_service, WS-Broadcaster, evtl. weitere)
 - **Symptom:** 
   - 183 Zombie-"active"-Jobs nach BotDetection-Nacht (Exception-Path setzt Status nicht zurück).
@@ -208,7 +261,7 @@ Status: `[open]` · `[in-progress]` · `[done]` · `[wont-fix]`
   4. Exception-Handling: immer Status auf error/retry_wait bei Fehler (try/finally).
 - **Prio:** 🔴 hoch (systemisches Problem, Auslöser vieler UI-Folgebugs)
 
-### [open] 156 Alt-Jobs in der Queue aus pytubefix-Ära
+### [done] 156 Alt-Jobs in der Queue aus pytubefix-Ära (User hat retry-all manuell ausgeführt)
 - **Bereich:** queue
 - **Symptom:** Viele gequeuete Downloads aus der Zeit vor dem yt-dlp-Umstieg, teilweise mit BotDetection-Retries.
 - **Lösung:** Nach yt-dlp-Validierung einmal `retry-all` + anschließende Analyse welche *echt* unavailable sind.
