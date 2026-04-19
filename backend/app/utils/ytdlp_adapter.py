@@ -1,5 +1,6 @@
 """
-TubeVault – yt-dlp Adapter v1.2.0
+TubeVault – yt-dlp Adapter v1.3.0
+v1.3.0: exportiert aktuell gewählten Throttle-Wert (für Live-Anzeige im UI)
 Stellt pytubefix-kompatible Objekte bereit, die intern yt-dlp nutzen.
 
 Damit können alle bestehenden Call-Sites (yt.title, yt.streams, yt.chapters,
@@ -22,6 +23,19 @@ from urllib.parse import urlparse, parse_qs
 import yt_dlp
 
 logger = logging.getLogger(__name__)
+
+# Live-Throttle: KB/s des aktuell laufenden Downloads (0 = kein Limit).
+# Wird vom ytdlp-Adapter pro Download gesetzt und vom download_service
+# für den WebSocket-Broadcast (Live-Anzeige im UI) ausgelesen.
+_CURRENT_THROTTLE_KBPS: int = 0
+
+def get_current_throttle_kbps() -> int:
+    return _CURRENT_THROTTLE_KBPS
+
+def _set_current_throttle_kbps(v: int):
+    global _CURRENT_THROTTLE_KBPS
+    _CURRENT_THROTTLE_KBPS = int(v or 0)
+
 
 _YDL_BASE_OPTS = {
     "quiet": True,
@@ -262,17 +276,40 @@ class StreamAdapter:
             # Kein Post-Processing — wir übernehmen Merge im download_service selbst.
             "postprocessors": [],
         }
-        # Throttling aus Settings (KB/s → bytes/s). 0 = unlimitiert.
+        # Throttling aus Settings – 3 Modi:
+        #   realtime  → ratelimit = filesize / duration (passt jedem Video an,
+        #               wirkt für YouTube wie Streaming → weniger Bot-Verdacht)
+        #   fixed     → throttle_kbps fester Wert
+        #   off/0     → keine Limitierung
         try:
             import sqlite3 as _sq
             from app.config import DB_PATH as _DB
             _c = _sq.connect(str(_DB))
-            _r = _c.execute("SELECT value FROM settings WHERE key='download.throttle_kbps'").fetchone()
+            _rt = _c.execute(
+                "SELECT value FROM settings WHERE key='download.throttle_realtime'"
+            ).fetchone()
+            _kb = _c.execute(
+                "SELECT value FROM settings WHERE key='download.throttle_kbps'"
+            ).fetchone()
             _c.close()
-            if _r:
-                _kbps = int(_r[0] or 0)
-                if _kbps > 0:
-                    opts["ratelimit"] = _kbps * 1024
+            realtime = bool(_rt and str(_rt[0]).lower() == 'true')
+            applied_bytes_s = 0
+            if realtime:
+                # filesize / duration → bytes/s; +20% Overhead damit Download etwas
+                # schneller läuft als das Video (Merge-Zeit, Buffer)
+                duration = self._fmt.get("duration") or 0
+                filesize = (self._fmt.get("filesize")
+                            or self._fmt.get("filesize_approx") or 0)
+                if duration > 0 and filesize > 0:
+                    applied_bytes_s = max(32 * 1024, int(filesize / duration * 1.2))
+                    opts["ratelimit"] = applied_bytes_s
+            elif _kb:
+                kbps = int(_kb[0] or 0)
+                if kbps > 0:
+                    applied_bytes_s = kbps * 1024
+                    opts["ratelimit"] = applied_bytes_s
+            # Live-Wert für UI-Anzeige (cooldown-broadcast)
+            _set_current_throttle_kbps(int(applied_bytes_s / 1024) if applied_bytes_s else 0)
         except Exception:
             pass
         with _ydl.YoutubeDL(opts) as ydl:

@@ -122,14 +122,21 @@ async def set_cooldown(seconds: int = 30):
 
 
 @router.put("/throttle")
-async def set_throttle(kbps: int = 0):
-    """Throttling (KB/s, 0 = unlimitiert) live setzen."""
+async def set_throttle(kbps: int = 0, realtime: bool = False):
+    """Throttling live setzen.
+    - realtime=True: rate = filesize/duration pro Video (dynamisch)
+    - realtime=False: fester Wert in KB/s (0 = unlimitiert)
+    """
     kbps = max(0, min(kbps, 100000))
     await db.execute(
         "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.throttle_kbps', ?)",
         (str(kbps),)
     )
-    return {"throttle_kbps": kbps}
+    await db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.throttle_realtime', ?)",
+        ('true' if realtime else 'false',)
+    )
+    return {"throttle_kbps": kbps, "throttle_realtime": realtime}
 
 
 @router.delete("/clear-all")

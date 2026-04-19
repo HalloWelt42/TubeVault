@@ -13,27 +13,35 @@
   const THROTTLE_DEFAULT = 0;
   const COOLDOWN_DEFAULT = 30;
   let throttleKbps = $state(0);
+  let throttleRealtime = $state(false);  // dynamisch: filesize/duration pro Video
   let cooldownSec = $state(30);
   let settingsSaving = $state(false);
 
   async function loadDownloadSettings() {
     try {
-      const [t, c] = await Promise.all([
+      const [t, r, c] = await Promise.all([
         api.getSetting('download.throttle_kbps').catch(() => ({ value: 0 })),
+        api.getSetting('download.throttle_realtime').catch(() => ({ value: 'false' })),
         api.getSetting('download.cooldown_base_s').catch(() => ({ value: 30 })),
       ]);
       throttleKbps = parseInt(t?.value || 0) || 0;
+      throttleRealtime = String(r?.value).toLowerCase() === 'true';
       cooldownSec = parseInt(c?.value || 30) || 30;
     } catch {}
   }
-  async function saveThrottle(v) {
+  async function saveThrottle() {
     settingsSaving = true;
     try {
-      await api.setDownloadThrottle(v);
-      throttleKbps = v;
-      toast.success(v > 0 ? `Throttling: ${v} KB/s` : 'Throttling deaktiviert');
+      await api.setDownloadThrottle(throttleKbps, throttleRealtime);
+      if (throttleRealtime) toast.success('Throttling: dynamisch (Video-Länge)');
+      else if (throttleKbps > 0) toast.success(`Throttling: ${throttleKbps} KB/s`);
+      else toast.success('Throttling deaktiviert');
     } catch (e) { toast.error(e.message); }
     settingsSaving = false;
+  }
+  async function toggleRealtime() {
+    throttleRealtime = !throttleRealtime;
+    await saveThrottle();
   }
   async function saveCooldown(v) {
     settingsSaving = true;
@@ -45,7 +53,9 @@
     settingsSaving = false;
   }
   function resetDefaults() {
-    saveThrottle(THROTTLE_DEFAULT);
+    throttleKbps = THROTTLE_DEFAULT;
+    throttleRealtime = false;
+    saveThrottle();
     saveCooldown(COOLDOWN_DEFAULT);
   }
   let batchInput = $state('');
@@ -116,7 +126,13 @@
     restartingWorker = false;
   }
 
+  let currentThrottleLive = $state(0); // Live-Wert aus dem cooldown-Broadcast
+
   function handleWsMessage(msg) {
+    // Live-Throttle aus cooldown-Broadcast aufnehmen
+    if (msg.type === 'cooldown' && typeof msg.current_throttle_kbps === 'number') {
+      currentThrottleLive = msg.current_throttle_kbps;
+    }
     const id = msg.job_id || msg.queue_id;
     if (id) {
       liveStatus[id] = msg;
@@ -650,15 +666,28 @@
     <div class="dl-setting">
       <label class="dl-setting-label" for="throttle-input">
         <i class="fa-solid fa-gauge-high"></i> Throttling
-        <span class="dl-setting-hint">KB/s (0 = aus, hilft gegen Bot-Erkennung)</span>
+        <span class="dl-setting-hint">
+          {#if throttleRealtime}
+            dynamisch – aus Video-Länge berechnet
+          {:else}
+            KB/s (0 = aus, hilft gegen Bot-Erkennung)
+          {/if}
+        </span>
       </label>
       <div class="dl-setting-input">
         <input id="throttle-input" type="number" min="0" max="100000" step="100"
-               bind:value={throttleKbps} disabled={settingsSaving}
-               onblur={() => saveThrottle(throttleKbps)}
-               onkeydown={(e) => e.key === 'Enter' && saveThrottle(throttleKbps)} />
+               value={throttleRealtime ? currentThrottleLive : throttleKbps}
+               disabled={settingsSaving || throttleRealtime}
+               oninput={(e) => { throttleKbps = parseInt(e.target.value) || 0; }}
+               onblur={() => !throttleRealtime && saveThrottle()}
+               onkeydown={(e) => e.key === 'Enter' && !throttleRealtime && saveThrottle()} />
         <span class="dl-setting-unit">KB/s</span>
       </div>
+      <label class="dl-setting-toggle">
+        <input type="checkbox" checked={throttleRealtime}
+               onchange={toggleRealtime} disabled={settingsSaving} />
+        <span>Dynamisch (Video-Länge)</span>
+      </label>
     </div>
     <div class="dl-setting">
       <label class="dl-setting-label" for="cooldown-input">
@@ -1031,6 +1060,12 @@
     font-size: 0.88rem; outline: none; font-family: monospace; text-align: right;
   }
   .dl-setting-unit { font-size: 0.74rem; color: var(--text-tertiary); }
+  .dl-setting-toggle {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;
+    margin-top: 4px;
+  }
+  .dl-setting-toggle input { margin: 0; }
 
   .worker-warning {
     display: flex; align-items: center; gap: 10px; padding: 10px 14px;

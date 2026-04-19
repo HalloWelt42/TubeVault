@@ -100,7 +100,8 @@ export const api = {
   workerHealth: () => request('/api/downloads/worker/health'),
   restartWorker: () => request('/api/downloads/worker/restart', { method: 'POST' }),
   setDownloadCooldown: (seconds) => request(`/api/downloads/cooldown?seconds=${seconds}`, { method: 'PUT' }),
-  setDownloadThrottle: (kbps) => request(`/api/downloads/throttle?kbps=${kbps}`, { method: 'PUT' }),
+  setDownloadThrottle: (kbps, realtime = false) =>
+    request(`/api/downloads/throttle?kbps=${kbps}&realtime=${realtime}`, { method: 'PUT' }),
 
   // Player
   streamUrl: (videoId) => `${API_BASE}/api/player/${videoId}`,

@@ -722,8 +722,13 @@ class DownloadService:
                 await asyncio.sleep(5)
 
     async def _broadcast_cooldown(self):
-        """Cooldown-Status an Frontend senden."""
+        """Cooldown-Status an Frontend senden (inkl. aktueller Throttle-Wert)."""
         remaining = max(0, self._cooldown_until - _time.time())
+        try:
+            from app.utils.ytdlp_adapter import get_current_throttle_kbps
+            current_throttle = get_current_throttle_kbps()
+        except Exception:
+            current_throttle = 0
         await self._ws_broadcast({
             "type": "cooldown",
             "cooldown": self._cooldown,
@@ -731,6 +736,7 @@ class DownloadService:
             "cooldown_until": self._cooldown_until,
             "cooldown_remaining": round(remaining),
             "cooldown_active": self._cooldown_active,
+            "current_throttle_kbps": current_throttle,
         })
 
     async def reload_cooldown_base(self):
