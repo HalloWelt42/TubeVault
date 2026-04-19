@@ -50,17 +50,22 @@ def test_unavailable_detected(msg):
     assert result.members_only is False
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Bekannter Bug: Keyword 'account terminated' matcht nicht wenn "
-        "'has been' dazwischen steht. YouTube formatiert die Meldung aber "
-        "meist als 'This account has been terminated'. Phase-2-Refactor "
-        "sollte regex oder 'terminated' allein als Keyword nutzen."
-    )
-)
 def test_unavailable_account_terminated_with_has_been():
+    """Regression-Test: YouTube formatiert oft 'This account has been terminated'.
+    Phase 2b: fix via zusätzlichem Keyword 'has been terminated'."""
     result = classify("This account has been terminated")
     assert result.unavailable is True
+
+
+def test_unavailable_youtube_user_terminated_variants():
+    """Diverse YT-Variationen von 'account terminated'."""
+    for msg in [
+        "This account has been terminated for a violation",
+        "The user's account has been terminated",
+        "account terminated",
+    ]:
+        r = classify(msg)
+        assert r.unavailable is True, f"Failed: {msg}"
 
 
 def test_members_only_wins_over_unavailable():

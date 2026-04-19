@@ -110,13 +110,16 @@ async def restart_worker():
 
 
 @router.put("/cooldown")
-async def set_cooldown(seconds: int = 30):
+async def set_cooldown(seconds: int = None):
     """Cooldown-Basis (Sekunden zwischen Downloads) live setzen.
     Mindestwert 5s – komplett 0 ist nicht sinnvoll (YouTube-Bot-Schutz)."""
-    seconds = max(5, min(seconds, 3600))
+    from app.constants import SettingsKeys as K, Defaults as D
+    if seconds is None:
+        seconds = D.COOLDOWN_BASE_S
+    seconds = max(D.COOLDOWN_MIN_S, min(seconds, D.COOLDOWN_MAX_S))
     await db.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.cooldown_base_s', ?)",
-        (str(seconds),)
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (K.DOWNLOAD_COOLDOWN_BASE_S, str(seconds))
     )
     await download_service.reload_cooldown_base()
     return {"cooldown_base_s": seconds}
@@ -128,14 +131,15 @@ async def set_throttle(kbps: int = 0, realtime: bool = False):
     - realtime=True: rate = filesize/duration pro Video (dynamisch)
     - realtime=False: fester Wert in KB/s (0 = unlimitiert)
     """
-    kbps = max(0, min(kbps, 100000))
+    from app.constants import SettingsKeys as K, Defaults as D
+    kbps = max(0, min(kbps, D.THROTTLE_KBPS_MAX))
     await db.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.throttle_kbps', ?)",
-        (str(kbps),)
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (K.DOWNLOAD_THROTTLE_KBPS, str(kbps))
     )
     await db.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.throttle_realtime', ?)",
-        ('true' if realtime else 'false',)
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (K.DOWNLOAD_THROTTLE_REALTIME, 'true' if realtime else 'false')
     )
     return {"throttle_kbps": kbps, "throttle_realtime": realtime}
 

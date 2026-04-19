@@ -631,14 +631,16 @@ class DownloadService:
     async def _queue_loop(self):
         # ─── Globaler Cooldown ────────────────────────
         # Basis: aus Setting (default 30s). Bei Fehler verdoppeln bis max 7200s.
+        from app.constants import SettingsKeys as K, Defaults as D
         try:
             row = await db.fetch_one(
-                "SELECT value FROM settings WHERE key='download.cooldown_base_s'")
-            self._cooldown_base = int(row["value"]) if row and row["value"] else 30
+                "SELECT value FROM settings WHERE key=?",
+                (K.DOWNLOAD_COOLDOWN_BASE_S,))
+            self._cooldown_base = int(row["value"]) if row and row["value"] else D.COOLDOWN_BASE_S
         except Exception:
-            self._cooldown_base = 30
+            self._cooldown_base = D.COOLDOWN_BASE_S
         self._cooldown = self._cooldown_base    # aktuelle Wartezeit in Sekunden
-        self._cooldown_max = 7200               # 2 Stunden
+        self._cooldown_max = D.COOLDOWN_HARD_MAX_S
         self._cooldown_until = 0.0              # Timestamp wann Cooldown endet
         self._cooldown_active = False           # True während countdown läuft
 
@@ -765,10 +767,12 @@ class DownloadService:
         User-Override greift IMMER: auch wenn der exponentielle Backoff den
         aktuellen _cooldown hochgetrieben hat, wird er auf den neuen Base-Wert
         zurückgesetzt. Sonst wuerde die Einstellung 'scheinbar nicht greifen'."""
+        from app.constants import SettingsKeys as K, Defaults as D
         try:
             row = await db.fetch_one(
-                "SELECT value FROM settings WHERE key='download.cooldown_base_s'")
-            new_base = int(row["value"]) if row and row["value"] else 30
+                "SELECT value FROM settings WHERE key=?",
+                (K.DOWNLOAD_COOLDOWN_BASE_S,))
+            new_base = int(row["value"]) if row and row["value"] else D.COOLDOWN_BASE_S
             if new_base != self._cooldown_base:
                 logger.info(f"Cooldown-Base: {self._cooldown_base}s → {new_base}s (aktuell={self._cooldown}s)")
                 self._cooldown_base = max(0, new_base)

@@ -348,13 +348,16 @@ class StreamAdapter:
         try:
             import sqlite3 as _sq
             from app.config import DB_PATH as _DB
+            from app.constants import SettingsKeys as _K
             from app.services.throttle_calc import compute as _throttle_compute
             _c = _sq.connect(str(_DB))
             _rt = _c.execute(
-                "SELECT value FROM settings WHERE key='download.throttle_realtime'"
+                "SELECT value FROM settings WHERE key=?",
+                (_K.DOWNLOAD_THROTTLE_REALTIME,)
             ).fetchone()
             _kb = _c.execute(
-                "SELECT value FROM settings WHERE key='download.throttle_kbps'"
+                "SELECT value FROM settings WHERE key=?",
+                (_K.DOWNLOAD_THROTTLE_KBPS,)
             ).fetchone()
             _c.close()
             realtime = bool(_rt and str(_rt[0]).lower() == 'true')

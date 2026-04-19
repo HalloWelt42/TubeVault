@@ -51,7 +51,8 @@ _UNAVAILABLE_KW = (
     "video unavailable",
     "private video",
     "removed",
-    "account terminated",
+    "account terminated",      # "Account terminated"
+    "has been terminated",     # "This account has been terminated" (YT-Standard)
     "copyright",
     "not available",
     "age-restricted",
