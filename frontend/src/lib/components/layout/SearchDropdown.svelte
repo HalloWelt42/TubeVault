@@ -28,6 +28,12 @@
   let plResults = $state([]);
   let ownResults = $state([]);
 
+  // YouTube-Paginierung
+  let ytPage = $state(1);
+  let ytHasMore = $state(false);
+  let loadingYtMore = $state(false);
+  const YT_PER_PAGE = 15;
+
   // Loading states
   let loadingLocal = $state(false);
   let loadingRss = $state(false);
@@ -187,22 +193,44 @@
     if (!q || !scopes.youtube) return;
     loadingYt = true;
     ytSearched = true;
+    ytPage = 1;
+    ytHasMore = false;
     open = true;
     showHistory = false;
     addToHistory(q);
     try {
-      const res = await api.searchYouTubeFull(q, 10);
+      const res = await api.searchYouTubePaged(q, 1, YT_PER_PAGE);
       const all = res.videos || [];
       const localIds = new Set(localResults.map(v => v.id));
       const rssIds = new Set(rssResults.map(v => v.video_id || v.id));
       ytResults = all
         .filter(v => !localIds.has(v.id))
-        .map(v => ({ ...v, in_rss: rssIds.has(v.id) }))
-        .slice(0, MAX_PER_SECTION + 1);
+        .map(v => ({ ...v, in_rss: rssIds.has(v.id) }));
       ytPlaylists = (res.playlists || []).slice(0, 4);
       ytChannels = (res.channels || []).slice(0, 3);
+      ytHasMore = !!res.has_more;
     } catch (e) { toast.error('YouTube-Suche: ' + e.message); }
     loadingYt = false;
+  }
+
+  async function loadMoreYouTube() {
+    const q = query.trim();
+    if (!q || loadingYtMore || !ytHasMore) return;
+    loadingYtMore = true;
+    try {
+      const nextPage = ytPage + 1;
+      const res = await api.searchYouTubePaged(q, nextPage, YT_PER_PAGE);
+      const known = new Set(ytResults.map(v => v.id));
+      const localIds = new Set(localResults.map(v => v.id));
+      const rssIds = new Set(rssResults.map(v => v.video_id || v.id));
+      const more = (res.videos || [])
+        .filter(v => !known.has(v.id) && !localIds.has(v.id))
+        .map(v => ({ ...v, in_rss: rssIds.has(v.id) }));
+      ytResults = [...ytResults, ...more];
+      ytPage = nextPage;
+      ytHasMore = !!res.has_more;
+    } catch (e) { toast.error('Weitere Treffer: ' + e.message); }
+    loadingYtMore = false;
   }
 
   // URL-Erkennung: YouTube-URLs direkt zur Download-Seite weiterleiten
@@ -598,10 +626,10 @@
             <div class="sd-sec-head">
               <span class="sd-sec-dot" style="background: #cc0000"></span>
               <span class="sd-sec-label">YouTube</span>
-              <span class="sd-sec-count">{ytResults.length > MAX_PER_SECTION ? `${MAX_PER_SECTION}+` : ytResults.length}</span>
+              <span class="sd-sec-count">{ytResults.length}{ytHasMore ? '+' : ''}</span>
               {#if loadingYt}<i class="fa-solid fa-spinner fa-spin sd-spin"></i>{/if}
             </div>
-            {#each ytResults.slice(0, MAX_PER_SECTION) as v (v.id)}
+            {#each ytResults as v (v.id)}
               <div class="sd-row" class:sd-row-rss={v.in_rss}>
                 <div class="sd-thumb">
                   <img src={v.already_downloaded ? api.thumbnailUrl(v.id) : api.rssThumbUrl(v.id)} alt="" loading="lazy" onerror={(e) => e.target.style.display='none'} />
@@ -641,6 +669,15 @@
                 </div>
               </div>
             {/each}
+            {#if ytHasMore}
+              <button class="sd-load-more" onclick={loadMoreYouTube} disabled={loadingYtMore}>
+                {#if loadingYtMore}
+                  <i class="fa-solid fa-spinner fa-spin"></i> Lade weitere…
+                {:else}
+                  <i class="fa-solid fa-chevron-down"></i> Weitere Treffer laden (Seite {ytPage + 1})
+                {/if}
+              </button>
+            {/if}
           </div>
         {/if}
 
@@ -910,4 +947,24 @@
   .sd-status-badge { font-size:0.58rem; font-weight:600; padding:1px 5px; border-radius:3px; background:var(--bg-tertiary); color:var(--text-tertiary); text-transform:uppercase; white-space:nowrap; }
   .sd-status-badge.registered { background:rgba(34,197,94,0.15); color:var(--status-success); }
   .sd-status-badge.discovered { background:rgba(59,130,246,0.15); color:var(--status-info); }
+
+  /* „Weitere Treffer laden"-Button (YouTube-Paginierung) */
+  .sd-load-more {
+    width: 100%;
+    padding: 8px 12px;
+    margin-top: 4px;
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border-primary);
+    border-radius: 6px;
+    color: var(--accent-primary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s;
+  }
+  .sd-load-more:hover { background: var(--accent-muted, rgba(59,130,246,0.1)); border-style: solid; }
+  .sd-load-more:disabled { opacity: 0.6; cursor: wait; }
 </style>

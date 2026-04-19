@@ -120,6 +120,7 @@ export const api = {
   // YouTube Search
   searchYouTube: (q, maxResults = 15) => request(`/api/search/youtube?q=${encodeURIComponent(q)}&max_results=${maxResults}`),
   searchYouTubeFull: (q, maxResults = 10) => request(`/api/search/youtube/full?q=${encodeURIComponent(q)}&max_results=${maxResults}`),
+  searchYouTubePaged: (q, page = 1, perPage = 20) => request(`/api/search/youtube/full?q=${encodeURIComponent(q)}&page=${page}&per_page=${perPage}`),
   resolveUrl: (url) => request('/api/search/resolve-url', { method: 'POST', body: JSON.stringify({ url }) }),
   searchLocal: (q, params = {}) => {
     const p = new URLSearchParams({ q, ...params }).toString();

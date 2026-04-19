@@ -1,5 +1,5 @@
 """
-TubeVault – Search Router v1.5.97
+TubeVault – Search Router v1.6.0
 YouTube-Suche via pytubefix Search + lokale DB-Suche
 Unified: Ein Search()-Call liefert Videos, Shorts, Playlists, Channels
 © HalloWelt42 – Private Nutzung
@@ -177,19 +177,41 @@ async def resolve_url(data: dict):
 
 # ─── Shared YouTube-Suche (DRY) ──────────────────────────────────
 
-def _do_yt_search(q: str, max_videos: int = 15, include_extras: bool = False) -> dict:
-    """Shared pytubefix Search — ein Search()-Call für alles.
+def _do_yt_search(q: str, max_videos: int = 15, include_extras: bool = False,
+                   page: int = 1, per_page: Optional[int] = None) -> dict:
+    """YouTube-Suche via yt-dlp Adapter — mit Paginierung.
 
     Args:
         q: Suchbegriff
-        max_videos: Max Video-Ergebnisse
+        max_videos: Legacy (pre-Paginierung) — wenn per_page=None, werden bis
+                    max_videos Videos geliefert ab Seite 1.
         include_extras: True → auch Shorts, Playlists, Channels, Suggestions
+        page: 1-basierte Seitenzahl
+        per_page: Elemente pro Seite. Wenn gesetzt, hat Vorrang vor max_videos.
+
+    Returns:
+        dict mit videos, optional shorts/playlists/channels/suggestions und
+        pagination-Meta (page, per_page, has_more).
     """
     from app.utils.pytube_client import make_search
-    s = make_search(q)
+
+    if per_page is None:
+        # Legacy: Einzel-Seite mit max_videos
+        per_page = max_videos
+        page = 1
+
+    # yt-dlp holt alles bis zum Ende der gewünschten Seite. +1 um has_more zu erkennen.
+    total_needed = page * per_page + 1
+    s = make_search(q, max_results=total_needed)
+
+    all_videos = list(s.videos)
+    start = (page - 1) * per_page
+    end = page * per_page
+    page_videos = all_videos[start:end]
+    has_more = len(all_videos) > end  # yt-dlp lieferte mehr als angefragt → es gibt mehr
 
     videos = []
-    for v in s.videos[:max_videos]:
+    for v in page_videos:
         try:
             videos.append({
                 "id": v.video_id, "title": v.title,
@@ -200,9 +222,20 @@ def _do_yt_search(q: str, max_videos: int = 15, include_extras: bool = False) ->
         except Exception:
             pass
 
-    result = {"videos": videos}
+    result = {
+        "videos": videos,
+        "page": page,
+        "per_page": per_page,
+        "has_more": has_more,
+        "count_on_page": len(videos),
+    }
 
     if not include_extras:
+        return result
+
+    # Shorts/Playlists/Channels nur auf Seite 1 (Paginierung zielt auf Videos)
+    if page > 1:
+        result.update({"shorts": [], "playlists": [], "channels": [], "suggestions": []})
         return result
 
     # Shorts
@@ -279,14 +312,30 @@ async def _enrich_videos(videos: list[dict]):
 @router.get("/youtube/full")
 async def search_youtube_full(
     q: str = Query(..., min_length=1, max_length=200),
-    max_results: int = Query(15, ge=1, le=30),
+    max_results: int = Query(15, ge=1, le=50),
+    page: int = Query(1, ge=1, le=20),
+    per_page: Optional[int] = Query(None, ge=5, le=50),
 ):
-    """YouTube-Suche: Videos, Shorts, Playlists und Kanäle in einem Call."""
+    """YouTube-Suche mit Paginierung: Videos (+ optional Shorts/Playlists/Channels).
+
+    Parameter:
+      q           Suchbegriff
+      max_results Legacy: Anzahl wenn per_page nicht gesetzt (Einzel-Seite)
+      page        1-basierte Seitenzahl (für echte Paginierung mit per_page)
+      per_page    Items pro Seite (wenn gesetzt, überschreibt max_results)
+
+    Antwort enthält:
+      videos, shorts, playlists, channels, suggestions,
+      page, per_page, has_more, count_on_page, query
+    """
     await rate_limiter.acquire("pytubefix")
 
     try:
         results = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: _do_yt_search(q, max_videos=max_results, include_extras=True)
+            None, lambda: _do_yt_search(
+                q, max_videos=max_results, include_extras=True,
+                page=page, per_page=per_page,
+            )
         )
         rate_limiter.success("pytubefix")
     except Exception as e:
@@ -295,7 +344,7 @@ async def search_youtube_full(
 
     await _enrich_videos(results["videos"])
 
-    # Shorts auch enrichen
+    # Shorts auch enrichen (nur auf Seite 1, da Shorts/Playlists/Channels nicht paginiert)
     for s in results.get("shorts", []):
         existing = await db.fetch_one("SELECT status FROM videos WHERE id = ?", (s["id"],))
         s["already_downloaded"] = existing is not None and existing["status"] == "ready"
