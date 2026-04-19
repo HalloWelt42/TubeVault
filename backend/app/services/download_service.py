@@ -981,15 +981,39 @@ class DownloadService:
                 "http error 5", "server error", "connection reset",
                 "timed out", "timeout",
             ])
-            # Video dauerhaft nicht erreichbar → parken statt retrien
-            is_unavailable = any(kw in err_lower for kw in [
+            # Members-Only / Early-Access: später retrien (Videos werden oft
+            # nach einigen Tagen public). Staffelung: erster Versuch → 1 Tag,
+            # danach 7 Tage zwischen weiteren Versuchen.
+            is_members_only = any(kw in err_lower for kw in [
+                "join this channel", "members-only",
+                "members on level",        # Early Access variant
+                "channel's members",
+            ])
+            # Andere dauerhafte Fehler → parken (kein sinnvolles Retry)
+            is_unavailable = (not is_members_only) and any(kw in err_lower for kw in [
                 "video unavailable", "private video", "removed",
                 "account terminated", "copyright", "not available",
-                "join this channel", "members-only", "age-restricted",
-                "sign in to confirm your age",
+                "age-restricted", "sign in to confirm your age",
             ])
 
-            if is_unavailable:
+            if is_members_only:
+                # retry_count 0 → 1 Tag, sonst 7 Tage
+                delay_days = 1 if retry_count == 0 else 7
+                retry_after = future_sqlite(seconds=delay_days * 86400)
+                await job_service.retry_wait(
+                    job_id,
+                    error=f"Members-Only – Retry in {delay_days} Tag{'en' if delay_days > 1 else ''}",
+                    retry_after=retry_after,
+                    retry_count=retry_count + 1,
+                )
+                await self._ws_broadcast({
+                    "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                    "status": "retry_wait", "progress": 0, "stage": "retry_wait",
+                    "stage_label": f"Members-Only – Retry in {delay_days}d",
+                })
+                logger.info(f"[MEMBERS-ONLY] {vid}: Retry in {delay_days}d (count={retry_count + 1})")
+
+            elif is_unavailable:
                 # Sofort parken – kein Retry sinnvoll
                 await job_service.park(job_id, f"Nicht verfügbar: {err[:200]}")
                 await self._ws_broadcast({
