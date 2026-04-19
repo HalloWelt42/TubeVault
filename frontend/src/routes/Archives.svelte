@@ -19,17 +19,17 @@
   let total = $state(0);
   let page = $state(1);
   let totalPages = $state(1);
-  let sortBy = $state(getFilter('archives', 'sortBy', 'created_at'));
+  let sortBy = $state(getFilter('archives', 'sortBy', 'upload_date'));
   let sortOrder = $state(getFilter('archives', 'sortOrder', 'desc'));
   let loading = $state(false);
   let selectMode = $state(false);
   let selected = $state(new Set());
 
-  let activeTags = $state([]);
+  let activeTags = $state(getFilter('archives', 'activeTags', []));
   let allTags = $state([]);
   let showAllTags = $state(false);
   let tagSearch = $state('');
-  let multiFilter = $state({ types: null, channels: null, categories: null });
+  let multiFilter = $state(getFilter('archives', 'multiFilter', { types: null, channels: null, categories: null }));
 
   async function loadTags() {
     // Tags nur für die im Archiv gefilterten Videos — nicht global.
@@ -103,7 +103,17 @@
   }
 
   $effect(() => { loadTags(); });
-  $effect(() => { $searchQuery; sortBy; sortOrder; page; activeTags; multiFilter.types; multiFilter.channels; multiFilter.categories; saveFilters('archives', { sortBy, sortOrder }); loadVideos(); });
+  $effect(() => {
+    $searchQuery; sortBy; sortOrder; page; activeTags;
+    multiFilter.types; multiFilter.channels; multiFilter.categories;
+    // Alle Filter persistieren (User-Wunsch: Auswahl bleibt erhalten)
+    saveFilters('archives', {
+      sortBy, sortOrder,
+      activeTags: [...activeTags],
+      multiFilter: { ...multiFilter },
+    });
+    loadVideos();
+  });
   // Reagiere auf Video-Mutationen aus anderen Views (z.B. Watch → Dearchive)
   $effect(() => onVideoMutation(() => { loadVideos(); loadTags(); }));
 
@@ -114,7 +124,7 @@
 
 <div class="library">
   <div class="library-header">
-    <h1 class="page-title"><i class="fa-solid fa-box-archive"></i> Weggelegt</h1>
+    <h1 class="page-title"><i class="fa-solid fa-box-archive"></i> Archiv</h1>
     <span class="video-count">{total} Video{total !== 1 ? 's' : ''}</span>
     {#if hasActiveFilter}
       <button class="btn-clear-filter" onclick={clearFilters}><i class="fa-solid fa-xmark"></i> Filter zurücksetzen</button>
@@ -170,7 +180,7 @@
   <div class="toolbar">
     <div class="sort-group">
       <span class="toolbar-label">Sortieren:</span>
-      {#each [['created_at', 'Datum'], ['title', 'Titel'], ['duration', 'Dauer'], ['file_size', 'Größe'], ['rating', 'Bewertung'], ['play_count', 'Abgespielt']] as [field, label]}
+      {#each [['created_at', 'Datum'], ['upload_date', 'Upload'], ['is_favorite', 'Favoriten'], ['title', 'Titel'], ['duration', 'Dauer'], ['file_size', 'Größe'], ['rating', 'Bewertung'], ['play_count', 'Abgespielt']] as [field, label]}
         <button class="sort-btn" class:active={sortBy === field} onclick={() => changeSort(field)}>
           {label}
           {#if sortBy === field}<span class="sort-arrow">{sortOrder === 'desc' ? '↓' : '↑'}</span>{/if}

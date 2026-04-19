@@ -110,13 +110,13 @@ export const routeDefinitions = {
   },
   'archives': {
     path: '/archives',
-    label: 'Weggelegt',
+    label: 'Archiv',
     icon: 'fa-solid fa-box-archive',
     group: 'main',
     hasId: false,
     badge: 'archives',
     queryParams: ['sort', 'order', 'type', 'channel', 'category', 'tag', 'q', 'page'],
-    description: 'Weggelegte Videos',
+    description: 'Archivierte Videos',
   },
   'own-videos': {
     path: '/own-videos',

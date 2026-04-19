@@ -521,11 +521,11 @@
       if (video.is_archived) {
         await api.unarchiveVideo(video.id);
         video.is_archived = 0;
-        toast.success('Zurückgeholt');
+        toast.success('Dearchiviert');
       } else {
         await api.archiveVideo(video.id);
         video.is_archived = 1;
-        toast.success('Weggelegt');
+        toast.success('Archiviert');
       }
       // Listen (Library/Archives/Dashboard etc.) benachrichtigen,
       // damit sie beim Zurück-Navigieren den neuen Zustand zeigen.
@@ -762,7 +762,7 @@
           <button class="action-btn" onclick={() => addToPlaylistVideoId = video.id} title="Zur Playlist hinzufügen">
             <i class="fa-solid fa-list-ul"></i>
           </button>
-          <button class="action-btn" onclick={archiveFromWatch} title={video?.is_archived ? 'Zurückholen' : 'Weglegen'}>
+          <button class="action-btn" onclick={archiveFromWatch} title={video?.is_archived ? 'Dearchivieren' : 'Archivieren'}>
             <i class="fa-solid {video?.is_archived ? 'fa-box-open' : 'fa-box-archive'}"></i>
           </button>
           <button class="action-btn"

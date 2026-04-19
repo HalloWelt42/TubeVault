@@ -111,18 +111,18 @@
     finally { resolving = false; }
   }
 
-  // Playlist: Einzelnes Video laden
+  // Playlist: Einzelnes Video laden (Quality aus Settings, nicht hardcoded)
   async function plDownloadOne(videoId) {
     plDownloading = new Set([...plDownloading, videoId]);
     try {
-      await api.addDownload({ url: `https://www.youtube.com/watch?v=${videoId}`, quality: 'best', priority: selectedPriority });
+      await api.addDownload({ url: `https://www.youtube.com/watch?v=${videoId}`, priority: selectedPriority });
       toast.success('Download gestartet');
       loadQueue();
     } catch (e) { toast.error(e.message); }
     plDownloading = new Set([...plDownloading].filter(id => id !== videoId));
   }
 
-  // Playlist: Alle fehlenden laden
+  // Playlist: Alle fehlenden laden (Quality aus Settings)
   async function plDownloadAll() {
     if (!playlistInfo) return;
     const missing = playlistInfo.videos.filter(v => !v.already_downloaded);
@@ -130,7 +130,7 @@
     let ok = 0;
     for (const v of missing) {
       try {
-        await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, quality: 'best', priority: selectedPriority });
+        await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, priority: selectedPriority });
         ok++;
       } catch {}
     }
@@ -181,8 +181,10 @@
       return resolveVideo();
     }
     try {
-      await api.addDownload({ url: urlInput.trim(), quality: 'best', priority: selectedPriority });
-      toast.success('Download gestartet (beste Qualität)');
+      // Keine quality mitgeben → Backend nimmt die Settings-Default
+      // (vorher hardcoded 'best', ignorierte User-Einstellung)
+      await api.addDownload({ url: urlInput.trim(), priority: selectedPriority });
+      toast.success('Download gestartet');
       urlInput = '';
       videoInfo = null;
       playlistInfo = null;

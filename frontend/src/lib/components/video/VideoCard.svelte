@@ -25,7 +25,7 @@
     try {
       await api.archiveVideo(video.id);
       hidden = true;
-      toast.success('Weggelegt');
+      toast.success('Archiviert');
       // Parent benachrichtigen, damit seine Liste neu geladen wird
       // (bisher blieb die Karte beim nächsten Parent-Reload wieder sichtbar).
       onUpdate?.();
@@ -101,7 +101,7 @@
       </div>
       {#if showArchiveBtn && !video.is_archived}
         <button class="hover-action-btn warn"
-                onclick={archiveVideo} title="Weglegen">
+                onclick={archiveVideo} title="Archivieren">
           <i class="fa-solid fa-box-archive"></i>
         </button>
       {/if}

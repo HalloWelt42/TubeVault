@@ -8,12 +8,14 @@
   import { shortcuts } from '../lib/stores/keyboard.js';
   import { VIDEO_QUALITIES } from '../lib/constants/qualities.js';
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
+  import { getSetting } from '../lib/stores/settings.js';
 
   let stats = $state(null);
   let videos = $state([]);
   let continueWatching = $state([]);
   let downloadUrl = $state('');
-  let downloadQuality = $state('best');
+  // Default-Quality aus Settings (vorher hardcoded 'best' → ignorierte Settings)
+  let downloadQuality = $state(getSetting('download.quality', '720p'));
   let audioOnly = $state(false);
   let downloading = $state(false);
   let showShortcuts = $state(false);
@@ -22,7 +24,7 @@
     try {
       const [s, v, h] = await Promise.all([
         api.getStats(),
-        api.getVideos({ per_page: 8, sort_by: 'created_at', sort_order: 'desc' }),
+        api.getVideos({ per_page: 8, sort_by: 'upload_date', sort_order: 'desc' }),
         api.getHistory({ per_page: 6, in_progress: true }).catch(() => ({ videos: [] })),
       ]);
       stats = s;
@@ -139,7 +141,7 @@
         <span class="stat-value">{(stats.total_videos || 0).toLocaleString('de-DE')}</span>
         <span class="stat-label">Videos</span>
         {#if stats.archives_count > 0}
-          <span class="stat-sub">+ {stats.archives_count.toLocaleString('de-DE')} weggelegt</span>
+          <span class="stat-sub">+ {stats.archives_count.toLocaleString('de-DE')} archiviert</span>
         {/if}
       </div>
       <div class="stat-card"><span class="stat-value">{stats.total_size_human || '0 B'}</span><span class="stat-label">Belegt</span></div>

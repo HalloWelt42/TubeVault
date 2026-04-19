@@ -39,7 +39,7 @@ class MetadataService:
         page: int = 1,
         per_page: int = 24,
         status: str | None = None,
-        sort_by: str = "created_at",
+        sort_by: str = "upload_date",
         sort_order: str = "desc",
         search: str | None = None,
         category_id: int | None = None,
@@ -121,10 +121,24 @@ class MetadataService:
             "created_at", "updated_at", "title", "duration",
             "download_date", "rating", "play_count", "file_size",
             "channel_name", "upload_date",
+            "is_favorite",  # virtuell via EXISTS-Subquery auf favorites-Tabelle
         }
         if sort_by not in allowed_sorts:
             sort_by = "created_at"
         order = "DESC" if sort_order.lower() == "desc" else "ASC"
+
+        # ORDER BY – is_favorite ist virtuell und wird via EXISTS gebaut.
+        # Tiebreaker created_at DESC, damit neue Videos bei gleichem
+        # Sortierwert oben bleiben (wichtig bei NULL-Feldern wie upload_date).
+        if sort_by == "is_favorite":
+            order_by = (
+                f"(EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id)) {order}, "
+                f"v.created_at DESC"
+            )
+        else:
+            # NULLs ans Ende bei DESC, sonst stehen unbekannte Upload-Daten oben
+            null_placement = "NULLS LAST" if order == "DESC" else "NULLS FIRST"
+            order_by = f"v.{sort_by} {order} {null_placement}, v.created_at DESC"
 
         # Total Count
         total = await db.fetch_val(f"SELECT COUNT(*) FROM videos v {where}", params)
@@ -133,7 +147,7 @@ class MetadataService:
         offset = (page - 1) * per_page
         rows = await db.fetch_all(
             f"""SELECT v.* FROM videos v {where}
-                ORDER BY v.{sort_by} {order}
+                ORDER BY {order_by}
                 LIMIT ? OFFSET ?""",
             params + [per_page, offset]
         )

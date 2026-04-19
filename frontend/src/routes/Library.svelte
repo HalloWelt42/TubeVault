@@ -17,7 +17,7 @@
   let hasMore = $state(false);
   let loading = $state(false);
   let loadingMore = $state(false);
-  let sortBy = $state(getFilter('library', 'sortBy', 'created_at'));
+  let sortBy = $state(getFilter('library', 'sortBy', 'upload_date'));
   let sortOrder = $state(getFilter('library', 'sortOrder', 'desc'));
 
   let selectMode = $state(false);
@@ -25,11 +25,11 @@
   let confirmRef;
   let addToPlaylistVideoId = $state(null);
 
-  let activeTags = $state([]);
+  let activeTags = $state(getFilter('library', 'activeTags', []));
   let allTags = $state([]);
   let showAllTags = $state(false);
   let tagSearch = $state('');
-  let multiFilter = $state({ types: null, channels: null, categories: null });
+  let multiFilter = $state(getFilter('library', 'multiFilter', { types: null, channels: null, categories: null }));
   let _loadTimer = null;
 
   let sentinelEl = $state(null);
@@ -103,7 +103,7 @@
 
   function syncToUrl() {
     updateParams({
-      sort: sortBy !== 'created_at' ? sortBy : null,
+      sort: sortBy !== 'upload_date' ? sortBy : null,
       order: sortOrder !== 'desc' ? sortOrder : null,
       tags: activeTags.length > 0 ? activeTags.join(',') : null,
       types: multiFilter.types || null,
@@ -169,10 +169,15 @@
   $effect(() => onVideoMutation(() => { loadVideos(true); loadTags(); }));
 
   // Laden bei Filter-Änderung (debounced um Request-Flut zu verhindern)
+  // Alle Auswahlen persistieren (User-Wunsch: was ich auswähle bleibt beim Wiederkommen)
   $effect(() => {
     $searchQuery; sortBy; sortOrder; activeTags;
     multiFilter.types; multiFilter.channels; multiFilter.categories;
-    saveFilters('library', { sortBy, sortOrder });
+    saveFilters('library', {
+      sortBy, sortOrder,
+      activeTags: [...activeTags],
+      multiFilter: { ...multiFilter },
+    });
     loadVideosDebounced();
   });
 
@@ -215,7 +220,7 @@
       <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('short')}><i class="fa-solid fa-mobile-screen"></i> → Short</button>
       <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('live')}><i class="fa-solid fa-tower-broadcast"></i> → Live</button>
       <span class="bulk-sep">|</span>
-      <button class="bulk-btn" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Weglegen</button>
+      <button class="bulk-btn" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Archivieren</button>
       <button class="bulk-btn bulk-danger" onclick={deleteSelected}><i class="fa-regular fa-trash-can"></i> Löschen</button>
     </div>
   {/if}
@@ -263,7 +268,7 @@
   <div class="toolbar">
     <div class="sort-group">
       <span class="toolbar-label">Sortieren:</span>
-      {#each [['created_at','Datum'],['title','Titel'],['duration','Dauer'],['file_size','Größe'],['rating','Bewertung'],['play_count','Abgespielt']] as [field, label]}
+      {#each [['created_at','Datum'],['upload_date','Upload'],['is_favorite','Favoriten'],['title','Titel'],['duration','Dauer'],['file_size','Größe'],['rating','Bewertung'],['play_count','Abgespielt']] as [field, label]}
         <button class="sort-btn" class:active={sortBy === field} onclick={() => changeSort(field)}>
           {label} {#if sortBy === field}<span class="sort-arrow">{sortOrder === 'desc' ? '↓' : '↑'}</span>{/if}
         </button>

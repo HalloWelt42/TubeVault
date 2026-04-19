@@ -325,7 +325,8 @@
     if (downloading.has(id)) return;
     downloading = new Set([...downloading, id]);
     try {
-      await api.addDownload({ url: `https://www.youtube.com/watch?v=${id}`, quality: 'best' });
+      // Keine quality mitgeben → Backend nimmt Settings-Default (1080p/720p/…)
+      await api.addDownload({ url: `https://www.youtube.com/watch?v=${id}` });
       v.already_in_queue = true;
       ytResults = [...ytResults]; rssResults = [...rssResults];
       toast.success(`Zur Queue hinzugefügt`);
@@ -358,7 +359,8 @@
     const v = streamDialog.video;
     downloading = new Set([...downloading, v.id]);
     try {
-      await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, quality: 'best', audio_only: audioOnly, itag, audio_itag: audioItag, merge_audio: mergeAudio, priority });
+      // Quality weglassen, da itag explizit gesetzt ist → Backend hat Vorrang
+      await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, audio_only: audioOnly, itag, audio_itag: audioItag, merge_audio: mergeAudio, priority });
       toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In Queue gelegt');
       streamDialog = null;
     } catch (e2) { toast.error(e2.message); }

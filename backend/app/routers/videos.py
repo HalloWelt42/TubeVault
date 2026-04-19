@@ -23,7 +23,7 @@ async def list_videos(
     page: int = Query(1, ge=1),
     per_page: int = Query(24, ge=1, le=100),
     status: Optional[str] = None,
-    sort_by: str = "created_at",
+    sort_by: str = "upload_date",
     sort_order: str = "desc",
     search: Optional[str] = None,
     category_id: Optional[int] = None,
