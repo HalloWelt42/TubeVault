@@ -124,9 +124,9 @@
 <div class="qpl-wrap" class:qpl-sm={size === 'sm'} class:qpl-md={size === 'md'}
      bind:this={wrapRef} onmouseenter={checkMembership}>
   {#if size === 'sm'}
-    <!-- Im Overlay: zentrale HoverActionBtn Komponente (keine lokalen Styles) -->
+    <!-- Im Overlay: zentrale HoverActionBtn (variant 'later' = blauer Hover wie Feed) -->
     <HoverActionBtn
-      variant={added ? 'accent' : null}
+      variant={added ? 'accent' : 'later'}
       onclick={quickAdd}
       title={$quickPlaylist ? (added ? `Aus „${$quickPlaylist.name}" entfernen` : `Zu „${$quickPlaylist.name}" hinzufügen`) : 'Quick-Playlist wählen'}>
       {#if adding}
