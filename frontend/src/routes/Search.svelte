@@ -12,6 +12,7 @@
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
   import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
   import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
+  import StreamDialog from '../lib/components/common/StreamDialog.svelte';
 
   let query = $state($route.params.q || '');
   let scope = $state($route.params.scope || 'both'); // 'both' | 'local' | 'youtube'
@@ -26,6 +27,8 @@
   let localVideos = $state([]);
   let subscribedIds = $state(new Set());
   let downloading = $state(new Set());
+  // Stream-Dialog (Qualitäts-Auswahl)
+  let streamDialog = $state(null);
 
   async function loadSubs() {
     try {
@@ -110,6 +113,44 @@
       v.already_in_queue = true;
       ytVideos = [...ytVideos];
       toast.success('Zur Queue hinzugefügt');
+    } catch (err) { toast.error(err.message); }
+    downloading = new Set([...downloading].filter(id => id !== v.id));
+  }
+
+  async function openStreams(v, e) {
+    e.stopPropagation();
+    const id = v.id;
+    streamDialog = { video: { ...v, id }, loading: true, streams: [], videoStreams: [], audioStreams: [], captions: [], selectedVideoItag: null, selectedAudioItag: null, mergeAudio: true };
+    try {
+      const info = await api.getVideoInfo(`https://www.youtube.com/watch?v=${id}`);
+      const videoStreams = (info.streams || []).filter(s => s.type === 'video').sort((a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0));
+      const audioStreams = (info.streams || []).filter(s => s.type === 'audio').sort((a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0));
+      streamDialog = {
+        ...streamDialog, streams: info.streams || [], videoStreams, audioStreams,
+        captions: info.captions || [], loading: false, alreadyDownloaded: info.already_downloaded,
+        selectedVideoItag: videoStreams[0]?.itag || null,
+        selectedAudioItag: videoStreams[0]?.is_progressive ? null : (audioStreams[0]?.itag || null),
+      };
+    } catch (err) {
+      toast.error(`Stream-Info: ${err.message}`);
+      streamDialog = null;
+    }
+  }
+
+  async function startStreamDownload({ itag = null, audioItag = null, mergeAudio = true, audioOnly = false, priority = 0 } = {}) {
+    if (!streamDialog) return;
+    const v = streamDialog.video;
+    downloading = new Set([...downloading, v.id]);
+    try {
+      await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, audio_only: audioOnly, itag, audio_itag: audioItag, merge_audio: mergeAudio, priority });
+      toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In Queue gelegt');
+      // Markiere als queued
+      const idx = ytVideos.findIndex(x => x.id === v.id);
+      if (idx >= 0) {
+        ytVideos[idx].already_in_queue = true;
+        ytVideos = [...ytVideos];
+      }
+      streamDialog = null;
     } catch (err) { toast.error(err.message); }
     downloading = new Set([...downloading].filter(id => id !== v.id));
   }
@@ -226,8 +267,12 @@
                     </HoverActionBtn>
                   {:else}
                     <HoverActionBtn variant="accent" onclick={(e) => quickDl(v, e)}
-                                    disabled={downloading.has(v.id)} title="Herunterladen">
-                      <i class="fa-solid fa-download"></i>
+                                    disabled={downloading.has(v.id)} title="Schnell-Download (Standard-Qualität)">
+                      <i class="fa-solid fa-bolt"></i>
+                    </HoverActionBtn>
+                    <HoverActionBtn variant="accent" onclick={(e) => openStreams(v, e)}
+                                    disabled={downloading.has(v.id)} title="Stream wählen (Qualität/Audio)">
+                      <i class="fa-solid fa-sliders"></i>
                     </HoverActionBtn>
                   {/if}
                   <QuickPlaylistBtn videoId={v.id} title={v.title} channelName={v.channel_name} channelId={v.channel_id} size="sm" />
@@ -262,6 +307,13 @@
     </section>
   {/if}
 </div>
+
+<StreamDialog
+  dialog={streamDialog}
+  showAudioOnly={true}
+  ondownload={(opts) => startStreamDownload(opts)}
+  onclose={() => streamDialog = null}
+/>
 
 <style>
   .search-page { padding: 24px; max-width: 1400px; }
