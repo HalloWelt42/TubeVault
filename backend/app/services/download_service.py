@@ -688,6 +688,10 @@ class DownloadService:
                             sleep_step = min(remaining, 1.0)
                             await asyncio.sleep(sleep_step)
                             remaining -= sleep_step
+                            # LIVE-Reaktion: wenn User _cooldown während Warten senkt,
+                            # Countdown entsprechend kürzen (z.B. von 30s auf 5s).
+                            if remaining > self._cooldown:
+                                remaining = self._cooldown
                             self._cooldown_until = _time.time() + remaining
                             if remaining <= 0 or int(remaining) % 5 == 0:
                                 await self._broadcast_cooldown()
@@ -988,11 +992,29 @@ class DownloadService:
             if is_unavailable:
                 # Sofort parken – kein Retry sinnvoll
                 await job_service.park(job_id, f"Nicht verfügbar: {err[:200]}")
+                # Zusätzlich in Ignore-Liste → nicht erneut auto-requeued werden
+                try:
+                    ch_id = (item.get("channel_id")
+                             if isinstance(item, dict)
+                             else None)
+                    if not ch_id:
+                        _rv = await db.fetch_one(
+                            "SELECT channel_id FROM rss_entries WHERE video_id = ? LIMIT 1",
+                            (vid,)
+                        )
+                        ch_id = _rv["channel_id"] if _rv else None
+                    await db.execute(
+                        """INSERT OR IGNORE INTO ignored_videos (video_id, channel_id, reason)
+                           VALUES (?, ?, ?)""",
+                        (vid, ch_id, f"Auto: {err[:180]}")
+                    )
+                except Exception as _ig_e:
+                    logger.warning(f"[AUTO-IGNORE] failed for {vid}: {_ig_e}")
                 await self._ws_broadcast({
                     "job_id": job_id, "queue_id": job_id, "video_id": vid, "status": "parked",
                     "progress": 0, "stage": "parked", "stage_label": f"Geparkt: {err[:80]}",
                 })
-                logger.warning(f"[PARKED] {vid}: Nicht verfügbar – {err[:120]}")
+                logger.warning(f"[PARKED+IGNORED] {vid}: Nicht verfügbar – {err[:120]}")
 
             elif (is_throttle or is_temporary or is_bot) and retry_count < max_retries:
                 # Bot-Erkennung: mindestens 1 Stunde warten
@@ -1590,12 +1612,32 @@ class DownloadService:
             await job_service.requeue(job_id, reset_retry=True, reset_progress=True)
 
     async def retry_all_failed(self) -> int:
-        """Alle fehlgeschlagenen Download-Jobs zurück in Queue (error/cancelled/retry_wait/parked)."""
-        return await job_service.requeue_many(
-            statuses=["error", "cancelled", "retry_wait", "parked"],
-            job_type="download",
-            reset_retry=True,
+        """Alle fehlgeschlagenen Download-Jobs zurück in Queue (error/cancelled/retry_wait/parked).
+        Ignoriert explizit in ignored_videos eingetragene Videos – sonst crashen
+        members-only/private Videos bei jedem Retry neu."""
+        # Alle Kandidaten holen
+        rows = await db.fetch_all(
+            """SELECT id, metadata FROM jobs
+               WHERE type='download' AND status IN ('error','cancelled','retry_wait','parked')"""
         )
+        ignored = await db.fetch_all("SELECT video_id FROM ignored_videos")
+        ign_ids = {r["video_id"] for r in ignored}
+        requeued = 0
+        skipped = 0
+        for r in rows:
+            try:
+                meta = json.loads(r["metadata"] or "{}") if isinstance(r["metadata"], str) else (r["metadata"] or {})
+                vid = meta.get("video_id")
+                if vid and vid in ign_ids:
+                    skipped += 1
+                    continue
+                await job_service.requeue(r["id"], reset_retry=True, reset_progress=True)
+                requeued += 1
+            except Exception as e:
+                logger.warning(f"retry_all_failed: job #{r['id']} failed: {e}")
+        if skipped:
+            logger.info(f"retry_all: {requeued} requeued, {skipped} uebersprungen (Ignore-Liste)")
+        return requeued
 
     async def retry_with_delay(self, job_id: int, delay_minutes: int = 5):
         """Download mit Verzögerung erneut versuchen (Status: retry_wait mit retry_after)."""
