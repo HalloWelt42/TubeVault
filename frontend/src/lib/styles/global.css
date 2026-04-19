@@ -495,9 +495,10 @@ label:has(input[type="checkbox"]) {
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: 1.1rem;
   transition: transform 0.15s, background 0.15s;
-  /* EXAKT wie Feed .overlay-btn: 15% weiss-transparent, Icon weiss.
-     Hover-Farbe kommt aus dem jeweiligen Variant. */
+  /* Wie Feed: 15% weiss-transparent default, Icon weiss mit Schatten
+     für Lesbarkeit auf jedem Thumbnail-Hintergrund. */
   background: rgba(255, 255, 255, 0.15); color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
   padding: 0;
 }
 .hover-action-btn:hover { transform: scale(1.1); }
