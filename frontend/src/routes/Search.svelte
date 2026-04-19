@@ -5,6 +5,7 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import { untrack } from 'svelte';
   import { api } from '../lib/api/client.js';
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
@@ -159,10 +160,19 @@
   function openChannel(id) { navigate(`/channel/${id}`); }
 
   $effect(() => { loadSubs(); });
+  // Reagiere NUR auf Änderungen von $route.params.q (externe Navigation).
+  // WICHTIG: untrack(...) verhindert, dass das eigene query/ytVideos den
+  // Effect erneut auslöst und die User-Eingabe überschreibt.
   $effect(() => {
-    const q = $route.params.q;
-    if (q && q !== query) { query = q; runSearch(true); }
-    else if (q && ytVideos.length === 0 && !loading) { runSearch(true); }
+    const q = $route.params.q;  // tracked (extern)
+    untrack(() => {
+      if (q && q !== query) {
+        query = q;
+        runSearch(true);
+      } else if (q && ytVideos.length === 0 && !loading) {
+        runSearch(true);
+      }
+    });
   });
 </script>
 
