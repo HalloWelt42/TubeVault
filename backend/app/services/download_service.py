@@ -1,5 +1,5 @@
 """
-TubeVault – Download Service v1.8.46
+TubeVault – Download Service v1.8.47
 Live-Progress, Stufen, FFmpeg-Merge, Rate-Limiting, Resume, Job-Tracking, Adaptive Cooldown
 pytubefix: Chapters, Captions, Audio-Only nativ
 © HalloWelt42 – Private Nutzung
@@ -1328,6 +1328,11 @@ class DownloadService:
         """Untertitel für ein Video herunterladen.
         Findet sowohl manuelle ('de') als auch auto-generierte ('a.de') Untertitel.
         Speichert als echtes WebVTT-Format.
+
+        Rate-Limiting:
+          - Video-Metadaten-Call: rate_limiter 'pytubefix'
+          - Pro Caption-Download (timedtext-API): rate_limiter 'caption' (≥2s)
+          - Bei HTTP 429 auf einer Caption: breche ab statt alle Sprachen zu hämmern
         """
         from app.config import SUBTITLES_DIR
 
@@ -1336,47 +1341,66 @@ class DownloadService:
 
         await rate_limiter.acquire("pytubefix")
 
-        def _dl():
+        # 1) Verfügbare Captions bestimmen (ein Metadaten-Call)
+        loop = asyncio.get_event_loop()
+        def _list_caps():
             yt = make_youtube(f"https://www.youtube.com/watch?v={video_id}")
-            downloaded = []
-
-            # Alle verfügbaren Captions loggen
-            all_codes = [f"{cap.code} ({cap.name})" for cap in yt.captions]
-            logger.info(f"[SUBS] {video_id}: Verfügbare Captions: {', '.join(all_codes) or 'keine'}")
-
-            for cap in yt.captions:
-                code = cap.code
-                # Match: exakt 'de', startswith 'de-', oder auto-generiert 'a.de'
-                matches = (
-                    lang == "all"
-                    or code == lang
-                    or code.startswith(f"{lang}-")
-                    or code == f"a.{lang}"
-                    or code.startswith(f"a.{lang}-")
-                )
-                if not matches:
-                    continue
-
-                vtt_path = sdir / f"{code}.vtt"
-                try:
-                    # SRT generieren und zu VTT konvertieren
-                    srt_text = cap.generate_srt_captions()
-                    vtt_text = _srt_to_vtt(srt_text)
-                    vtt_path.write_text(vtt_text, encoding="utf-8")
-                    label = cap.name or code
-                    downloaded.append({"code": code, "name": label, "path": str(vtt_path)})
-                    logger.info(f"[SUBS] {video_id}: {code} ({cap.name}) heruntergeladen")
-                except Exception as e:
-                    logger.warning(f"Subtitle fail {video_id}/{code}: {e}")
-            return downloaded
-
+            return list(yt.captions)
         try:
-            result = await asyncio.get_event_loop().run_in_executor(None, _dl)
+            caps = await loop.run_in_executor(None, _list_caps)
             rate_limiter.success("pytubefix")
-            return {"video_id": video_id, "subtitles": result, "count": len(result)}
         except Exception as e:
             rate_limiter.error("pytubefix", str(e))
-            raise ValueError(f"Untertitel-Download fehlgeschlagen: {e}")
+            raise ValueError(f"Untertitel-Metadaten fehlgeschlagen: {e}")
+
+        # 2) Passende Captions filtern
+        def _matches(code: str) -> bool:
+            return (
+                lang == "all"
+                or code == lang or code.startswith(f"{lang}-")
+                or code == f"a.{lang}" or code.startswith(f"a.{lang}-")
+            )
+        matching = [c for c in caps if _matches(c.code)]
+        # Schlankes Log: nur Anzahl + matchende, nicht alle 150+ Sprachen
+        logger.info(
+            f"[SUBS] {video_id}: {len(caps)} Captions verfügbar, "
+            f"{len(matching)} treffen lang={lang}"
+        )
+
+        # 3) Pro Caption: Download mit eigenem Rate-Limit; 429 → Abbruch der Session
+        downloaded = []
+        aborted_429 = False
+        for cap in matching:
+            if aborted_429:
+                break
+            code = cap.code
+            vtt_path = sdir / f"{code}.vtt"
+            await rate_limiter.acquire("caption")
+
+            def _dl_one():
+                srt_text = cap.generate_srt_captions()
+                vtt_text = _srt_to_vtt(srt_text)
+                vtt_path.write_text(vtt_text, encoding="utf-8")
+                return {"code": code, "name": cap.name or code, "path": str(vtt_path)}
+
+            try:
+                entry = await loop.run_in_executor(None, _dl_one)
+                downloaded.append(entry)
+                rate_limiter.success("caption")
+                logger.info(f"[SUBS] {video_id}: {code} gespeichert")
+            except Exception as e:
+                err = str(e)
+                rate_limiter.error("caption", err[:200])
+                if "429" in err or "too many requests" in err.lower():
+                    logger.warning(
+                        f"[SUBS] {video_id}: 429 bei {code} – restliche Untertitel "
+                        f"übersprungen (werden beim nächsten Aufruf retryed)"
+                    )
+                    aborted_429 = True
+                else:
+                    logger.warning(f"[SUBS] {video_id}/{code} fehlgeschlagen: {err[:120]}")
+
+        return {"video_id": video_id, "subtitles": downloaded, "count": len(downloaded)}
 
     async def extract_audio(self, video_id: str, format: str = "mp3") -> dict:
         """Audio aus heruntergeladenem Video extrahieren."""

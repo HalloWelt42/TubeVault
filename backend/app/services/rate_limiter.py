@@ -1,5 +1,5 @@
 """
-TubeVault – Rate Limiter v1.7.2
+TubeVault – Rate Limiter v1.7.3
 Globales Rate-Limiting für alle YouTube-Anfragen
 © HalloWelt42 – Private Nutzung
 
@@ -32,6 +32,7 @@ DEFAULT_INTERVALS = {
     "channel_scan": 5.0,
     "thumbnail": 1.0,
     "download": 3.0,
+    "caption": 2.0,   # Caption-Download pro Sprache (YouTube drosselt bei ≥3 parallel)
 }
 
 MAX_BACKOFF = 120.0
