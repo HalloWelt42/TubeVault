@@ -27,6 +27,7 @@
   import Playlists from './routes/Playlists.svelte';
   import Stats from './routes/Stats.svelte';
   import OwnVideos from './routes/OwnVideos.svelte';
+  import Search from './routes/Search.svelte';
 
   /** Route-Key → Svelte-Komponente */
   const pages = {
@@ -47,7 +48,7 @@
     stats: Stats,
     'own-videos': OwnVideos,
     category: Categories,
-    search: Library,
+    search: Search,
   };
 
   import { onConnectionChange } from './lib/api/client.js';
