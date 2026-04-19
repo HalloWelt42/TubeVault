@@ -1,6 +1,6 @@
 <script>
   /**
-   * TubeVault – VideoCard v1.6.19
+   * TubeVault – VideoCard v1.7.0
    * Typ-Badges klickbar (video→short→live), Like/Dislike Bar, QPL.
    * © HalloWelt42 – Private Nutzung
    */
@@ -43,11 +43,30 @@
       onUpdate?.();
     } catch (err) { toast.error(err.message); }
   }
+
+  function openChannel(e) {
+    e.stopPropagation();
+    if (video.channel_id) {
+      navigate(`/channel/${video.channel_id}`);
+    }
+  }
+
+  function onCardKeydown(e) {
+    // Enter/Space auf der Card (außerhalb innerer Buttons) spielt das Video
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+      e.preventDefault();
+      play();
+    }
+  }
 </script>
 
 {#if !hidden}
 <div class="card-wrap">
-  <button class="video-card" onclick={play}>
+  <!-- Card ist role="button" statt <button>, damit innere Buttons (Kanal,
+       Typ-Badge) valide geschachtelt sein dürfen. -->
+  <div class="video-card" role="button" tabindex="0"
+       onclick={play}
+       onkeydown={onCardKeydown}>
   <div class="thumbnail-wrap">
     <img
       class="thumbnail"
@@ -74,7 +93,13 @@
   </div>
   <div class="video-info">
     <h3 class="video-title">{video.title}</h3>
-    <span class="video-channel">{video.channel_name || 'Unbekannt'}</span>
+    {#if video.channel_id}
+      <button class="video-channel video-channel-btn"
+              onclick={openChannel}
+              title="Zum Kanal">{video.channel_name || 'Unbekannt'}</button>
+    {:else}
+      <span class="video-channel">{video.channel_name || 'Unbekannt'}</span>
+    {/if}
     <div class="video-meta">
       <span>{formatViews(video.view_count)} Aufrufe</span>
       <span class="meta-dot">·</span>
@@ -85,7 +110,7 @@
       {/if}
     </div>
   </div>
-</button>
+</div>
   {#if showArchiveBtn && !video.is_archived}
     <button class="btn-archive" onclick={archiveVideo} title="Archivieren">
       <i class="fa-solid fa-box-archive"></i>
@@ -157,6 +182,14 @@
     overflow: hidden; line-height: 1.3;
   }
   .video-channel { font-size: 0.8rem; color: var(--text-secondary); }
+  .video-channel-btn {
+    background: none; border: none; padding: 0;
+    text-align: left; cursor: pointer;
+    align-self: flex-start;
+    transition: color 0.12s;
+  }
+  .video-channel-btn:hover { color: var(--accent-primary); text-decoration: underline; }
+  .video-card[role="button"]:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
   .video-meta { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--text-tertiary); flex-wrap: wrap; }
   .meta-dot { opacity: 0.5; }
 </style>
