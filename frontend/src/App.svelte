@@ -127,41 +127,29 @@
   :global(a) { color: var(--accent-primary); text-decoration: none; }
   :global(a:hover) { text-decoration: underline; }
 
-  /* Material Design Icon-Farben – hohe Sättigung, guter Kontrast */
-  :global(.fa-solid.fa-download, .fa-solid.fa-cloud-arrow-down) { color: #42A5F5; }
-  :global(.fa-solid.fa-play) { color: #66BB6A; }
-  :global(.fa-solid.fa-satellite-dish) { color: #AB47BC; }
-  :global(.fa-solid.fa-tower-broadcast) { color: #EF5350; }
-  :global(.fa-solid.fa-mobile-screen) { color: #AB47BC; }
-  :global(.fa-solid.fa-heart) { color: #EF5350; }
-  :global(.fa-solid.fa-star) { color: #FFA726; }
-  :global(.fa-solid.fa-chart-simple) { color: #26C6DA; }
-  :global(.fa-solid.fa-broom) { color: #8D6E63; }
-  :global(.fa-solid.fa-wand-magic-sparkles) { color: #CE93D8; }
-  :global(.fa-solid.fa-file-import) { color: #78909C; }
-  :global(.fa-solid.fa-box-archive) { color: #A1887F; }
-  :global(.fa-solid.fa-image) { color: #4DB6AC; }
-  :global(.fa-solid.fa-circle-check) { color: #66BB6A; }
-  :global(.fa-solid.fa-triangle-exclamation) { color: #FFA726; }
-  :global(.fa-solid.fa-circle-xmark) { color: #EF5350; }
-  :global(.fa-solid.fa-bolt) { color: #FFCA28; }
-  :global(.fa-regular.fa-keyboard) { color: #90A4AE; }
-
-  /* Buttons überschreiben: Icons in Buttons erben Button-Farbe.
-     Sidebar-Icons behalten ihre individuellen Farben (fa-house etc.),
-     nur Overlay/Action-Buttons erzwingen inherit. */
-  :global(button .fa-solid, button .fa-regular,
-          .btn .fa-solid, .btn .fa-regular,
-          .btn-sm .fa-solid,
-          .type-badge .fa-solid, .badge .fa-solid) {
-    color: inherit;
-  }
-  /* Nur Hover-Overlay-Buttons zwingen Icon auf inherit (gegen fa-box-archive
-     braun etc.) – hier MUSS das Icon weiss werden, sonst unsichtbar. */
-  :global(.hover-action-btn .fa-solid, .hover-action-btn .fa-regular,
-          .overlay-btn .fa-solid, .overlay-btn .fa-regular) {
-    color: inherit !important;
-  }
+  /* Material Design Icon-Farben — gescoped auf .sidebar damit sie nur dort
+     gelten und nicht überall das Design "vergiften" (Buttons, Overlays, etc.).
+     Überall sonst erbt das Icon die Parent-Text-Farbe (color:inherit als
+     FA-Default), was in Buttons/Overlays automatisch korrekt ist. */
+  :global(.sidebar .fa-solid.fa-download),
+  :global(.sidebar .fa-solid.fa-cloud-arrow-down) { color: #42A5F5; }
+  :global(.sidebar .fa-solid.fa-play) { color: #66BB6A; }
+  :global(.sidebar .fa-solid.fa-satellite-dish) { color: #AB47BC; }
+  :global(.sidebar .fa-solid.fa-tower-broadcast) { color: #EF5350; }
+  :global(.sidebar .fa-solid.fa-mobile-screen) { color: #AB47BC; }
+  :global(.sidebar .fa-solid.fa-heart) { color: #EF5350; }
+  :global(.sidebar .fa-solid.fa-star) { color: #FFA726; }
+  :global(.sidebar .fa-solid.fa-chart-simple) { color: #26C6DA; }
+  :global(.sidebar .fa-solid.fa-broom) { color: #8D6E63; }
+  :global(.sidebar .fa-solid.fa-wand-magic-sparkles) { color: #CE93D8; }
+  :global(.sidebar .fa-solid.fa-file-import) { color: #78909C; }
+  :global(.sidebar .fa-solid.fa-box-archive) { color: #A1887F; }
+  :global(.sidebar .fa-solid.fa-image) { color: #4DB6AC; }
+  :global(.sidebar .fa-solid.fa-circle-check) { color: #66BB6A; }
+  :global(.sidebar .fa-solid.fa-triangle-exclamation) { color: #FFA726; }
+  :global(.sidebar .fa-solid.fa-circle-xmark) { color: #EF5350; }
+  :global(.sidebar .fa-solid.fa-bolt) { color: #FFCA28; }
+  :global(.sidebar .fa-regular.fa-keyboard) { color: #90A4AE; }
 
   .app {
     display: flex;
