@@ -367,6 +367,18 @@
     downloading = new Set([...downloading].filter(id => id !== v.id));
   }
 
+  async function blockChannel(v, e) {
+    e.stopPropagation();
+    if (!v.channel_id) return;
+    if (!confirm(`Kanal „${v.channel_name}" aus YT-Suche ausblenden?`)) return;
+    try {
+      await api.blockChannel(v.channel_id, v.channel_name);
+      // Aus aktuellen Ergebnissen filtern
+      ytResults = ytResults.filter(r => r.channel_id !== v.channel_id);
+      toast.success(`„${v.channel_name}" blockiert`);
+    } catch (err) { toast.error(err.message); }
+  }
+
   async function subscribe(v, e) {
     e.stopPropagation();
     const chId = v.channel_id;
@@ -654,6 +666,12 @@
                       </button>
                     {:else if subscribedChannels.has(v.channel_id)}
                       <i class="fa-solid fa-check sd-sub-ok"></i>
+                    {/if}
+                    {#if v.channel_id}
+                      <button class="sd-sub-btn" title="Kanal aus Suche blockieren"
+                              onclick={(e) => blockChannel(v, e)}>
+                        <i class="fa-solid fa-ban"></i>
+                      </button>
                     {/if}
                   </div>
                   {#if v.view_count}<span class="sd-meta">{formatViews(v.view_count)} Aufrufe</span>{/if}

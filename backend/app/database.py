@@ -230,6 +230,15 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
 
+-- Geblockte Channels (nicht in YouTube-Suche anzeigen)
+CREATE TABLE IF NOT EXISTS blocked_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT NOT NULL UNIQUE,
+    channel_name TEXT,
+    reason TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- RSS-Einträge (erkannte Videos aus Feeds)
 CREATE TABLE IF NOT EXISTS rss_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

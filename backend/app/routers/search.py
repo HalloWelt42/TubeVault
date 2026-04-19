@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.database import db
 from app.services.rate_limiter import rate_limiter
+from app.routers.blocked_channels import get_blocked_ids
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["Search"])
@@ -296,6 +297,14 @@ def _do_yt_search(q: str, max_videos: int = 15, include_extras: bool = False,
     return result
 
 
+async def _filter_blocked(videos: list[dict]) -> list[dict]:
+    """Videos von geblockten Channels aus der Liste entfernen."""
+    blocked = await get_blocked_ids()
+    if not blocked:
+        return videos
+    return [v for v in videos if v.get("channel_id") not in blocked]
+
+
 async def _enrich_videos(videos: list[dict]):
     """Enrichment: downloaded/queued Status für Video-Liste."""
     for r in videos:
@@ -342,6 +351,10 @@ async def search_youtube_full(
         rate_limiter.error("pytubefix", str(e)[:200])
         raise HTTPException(status_code=500, detail=f"YouTube-Suche fehlgeschlagen: {e}")
 
+    # Blockliste anwenden (Channels ausblenden)
+    results["videos"] = await _filter_blocked(results["videos"])
+    results["shorts"] = await _filter_blocked(results.get("shorts", []))
+
     await _enrich_videos(results["videos"])
 
     # Shorts auch enrichen (nur auf Seite 1, da Shorts/Playlists/Channels nicht paginiert)
@@ -369,6 +382,8 @@ async def search_youtube(
         rate_limiter.error("pytubefix", str(e)[:200])
         raise HTTPException(status_code=500, detail=f"YouTube-Suche fehlgeschlagen: {e}")
 
+    # Blockliste anwenden + enrichen
+    results["videos"] = await _filter_blocked(results["videos"])
     await _enrich_videos(results["videos"])
 
     return {"query": q, "results": results["videos"], "count": len(results["videos"])}

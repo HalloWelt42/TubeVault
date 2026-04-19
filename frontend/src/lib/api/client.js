@@ -261,6 +261,14 @@ export const api = {
     return request(`/api/jobs${q ? '?' + q : ''}`);
   },
   getActiveJobs: () => request('/api/jobs/active'),
+
+  // Blocked Channels (YT-Suche)
+  getBlockedChannels: () => request('/api/blocked-channels'),
+  blockChannel: (channel_id, channel_name = null, reason = null) =>
+    request('/api/blocked-channels', { method: 'POST',
+      body: JSON.stringify({ channel_id, channel_name, reason }) }),
+  unblockChannel: (channel_id) =>
+    request(`/api/blocked-channels/${channel_id}`, { method: 'DELETE' }),
   getJobStats: () => request('/api/jobs/stats'),
   getJob: (id) => request(`/api/jobs/${id}`),
   cancelJob: (id) => request(`/api/jobs/${id}/cancel`, { method: 'POST' }),

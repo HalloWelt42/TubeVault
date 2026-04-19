@@ -147,12 +147,18 @@
   :global(.fa-regular.fa-keyboard) { color: #90A4AE; }
 
   /* Buttons überschreiben: Icons in Buttons erben Button-Farbe.
-     !important wegen spezifischer Icon-Regeln oben (z.B. .fa-box-archive braun). */
+     Sidebar-Icons behalten ihre individuellen Farben (fa-house etc.),
+     nur Overlay/Action-Buttons erzwingen inherit. */
   :global(button .fa-solid, button .fa-regular,
           .btn .fa-solid, .btn .fa-regular,
-          .btn-sm .fa-solid, .overlay-btn .fa-solid,
-          .hover-action-btn .fa-solid, .hover-action-btn .fa-regular,
+          .btn-sm .fa-solid,
           .type-badge .fa-solid, .badge .fa-solid) {
+    color: inherit;
+  }
+  /* Nur Hover-Overlay-Buttons zwingen Icon auf inherit (gegen fa-box-archive
+     braun etc.) – hier MUSS das Icon weiss werden, sonst unsichtbar. */
+  :global(.hover-action-btn .fa-solid, .hover-action-btn .fa-regular,
+          .overlay-btn .fa-solid, .overlay-btn .fa-regular) {
     color: inherit !important;
   }
 
