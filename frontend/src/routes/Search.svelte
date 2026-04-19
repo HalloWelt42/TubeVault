@@ -40,21 +40,32 @@
     else { loadingMore = true; }
     updateParams({ q: query, scope: scope !== 'both' ? scope : null });
     try {
-      // Lokal
+      // Lokal (dedupliziert)
       if (scope !== 'youtube' && reset) {
         try {
           const r = await api.searchLocal(query, { per_page: 12 });
-          localVideos = r.videos || [];
+          const seen = new Set();
+          localVideos = (r.videos || []).filter(v => {
+            if (!v?.id || seen.has(v.id)) return false;
+            seen.add(v.id); return true;
+          });
         } catch { localVideos = []; }
       }
-      // YouTube mit Paginierung
+      // YouTube mit Paginierung (IDs deduplizieren – Paging kann Duplikate liefern)
       if (scope !== 'local') {
         const r = await api.searchYouTubePaged(query, page, perPage);
         const newVids = r.videos || [];
-        ytVideos = reset ? newVids : [...ytVideos, ...newVids];
+        const merged = reset ? newVids : [...ytVideos, ...newVids];
+        const seen = new Set();
+        ytVideos = merged.filter(v => {
+          if (!v?.id || seen.has(v.id)) return false;
+          seen.add(v.id); return true;
+        });
         if (reset) {
-          ytShorts = r.shorts || [];
-          ytChannels = r.channels || [];
+          const sSeen = new Set();
+          ytShorts = (r.shorts || []).filter(s => s?.id && !sSeen.has(s.id) && sSeen.add(s.id));
+          const cSeen = new Set();
+          ytChannels = (r.channels || []).filter(c => c?.id && !cSeen.has(c.id) && cSeen.add(c.id));
         }
         hasMore = r.has_more || newVids.length >= perPage;
       }
@@ -123,7 +134,7 @@
     <div class="search-input-wrap">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
       <input type="text" class="search-input" placeholder="Bibliothek + YouTube durchsuchen…"
-             bind:value={query} autofocus />
+             bind:value={query} />
       {#if query}<button type="button" class="search-clear" onclick={() => { query = ''; ytVideos = []; localVideos = []; }}><i class="fa-solid fa-xmark"></i></button>{/if}
     </div>
     <div class="search-scope">
