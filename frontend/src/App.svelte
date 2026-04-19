@@ -146,12 +146,14 @@
   :global(.fa-solid.fa-bolt) { color: #FFCA28; }
   :global(.fa-regular.fa-keyboard) { color: #90A4AE; }
 
-  /* Buttons überschreiben: Icons in Buttons erben Button-Farbe */
+  /* Buttons überschreiben: Icons in Buttons erben Button-Farbe.
+     !important wegen spezifischer Icon-Regeln oben (z.B. .fa-box-archive braun). */
   :global(button .fa-solid, button .fa-regular,
           .btn .fa-solid, .btn .fa-regular,
           .btn-sm .fa-solid, .overlay-btn .fa-solid,
+          .hover-action-btn .fa-solid, .hover-action-btn .fa-regular,
           .type-badge .fa-solid, .badge .fa-solid) {
-    color: inherit;
+    color: inherit !important;
   }
 
   .app {
