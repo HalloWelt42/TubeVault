@@ -4,6 +4,7 @@
   import { searchQuery } from '../lib/stores/app.js';
   import { toast } from '../lib/stores/notifications.js';
   import { getSettingNum } from '../lib/stores/settings.js';
+  import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
@@ -162,6 +163,10 @@
 
   // Init: URL-Params lesen, dann laden
   $effect(() => { syncFromUrl(); loadTags(); });
+
+  // Auf globale Video-Mutationen (Archive/Delete aus Watch-View) reagieren —
+  // Liste neu laden, damit beim Zurück-Navigieren der neue Stand zu sehen ist.
+  $effect(() => onVideoMutation(() => { loadVideos(true); loadTags(); }));
 
   // Laden bei Filter-Änderung (debounced um Request-Flut zu verhindern)
   $effect(() => {

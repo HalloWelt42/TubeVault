@@ -3,6 +3,7 @@
   import { toast } from '../lib/stores/notifications.js';
   import { navigate } from '../lib/router/router.js';
   import { formatDuration, formatDateRelative } from '../lib/utils/format.js';
+  import { onVideoMutation } from '../lib/utils/videoMutations.js';
 
   let lists = $state([]);
   let activeList = $state('Standard');
@@ -45,6 +46,7 @@
 
   $effect(() => { loadLists(); });
   $effect(() => { activeList; loadFavorites(); });
+  $effect(() => onVideoMutation(() => { loadLists(); loadFavorites(); }));
 </script>
 
 <div class="page">

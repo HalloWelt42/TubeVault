@@ -5,6 +5,7 @@
   import { getSettingNum } from '../lib/stores/settings.js';
   import { formatDuration, formatDate } from '../lib/utils/format.js';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
+  import { onVideoMutation } from '../lib/utils/videoMutations.js';
 
   let history = $state([]);
   let total = $state(0);
@@ -75,6 +76,9 @@
     if (p.search) histFilter = { ...histFilter, search: p.search };
     loadHistory();
   });
+
+  // Reagiere auf Archive/Delete aus Watch-View
+  $effect(() => onVideoMutation(() => loadHistory(true)));
 
   // IntersectionObserver
   $effect(() => {

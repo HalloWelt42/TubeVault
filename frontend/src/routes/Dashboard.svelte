@@ -7,6 +7,7 @@
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import { shortcuts } from '../lib/stores/keyboard.js';
   import { VIDEO_QUALITIES } from '../lib/constants/qualities.js';
+  import { onVideoMutation } from '../lib/utils/videoMutations.js';
 
   let stats = $state(null);
   let videos = $state([]);
@@ -61,6 +62,7 @@
   function play(id) { navigate(`/watch/${id}`); }
 
   $effect(() => { loadData(); });
+  $effect(() => onVideoMutation(() => loadData()));
 
   $effect(() => {
     function onShowShortcuts() { showShortcuts = !showShortcuts; }

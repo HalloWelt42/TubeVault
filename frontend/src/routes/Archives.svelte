@@ -10,6 +10,7 @@
   import { toast } from '../lib/stores/notifications.js';
   import { getSettingNum } from '../lib/stores/settings.js';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
+  import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import Pagination from '../lib/components/common/Pagination.svelte';
@@ -103,6 +104,8 @@
 
   $effect(() => { loadTags(); });
   $effect(() => { $searchQuery; sortBy; sortOrder; page; activeTags; multiFilter.types; multiFilter.channels; multiFilter.categories; saveFilters('archives', { sortBy, sortOrder }); loadVideos(); });
+  // Reagiere auf Video-Mutationen aus anderen Views (z.B. Watch → Dearchive)
+  $effect(() => onVideoMutation(() => { loadVideos(); loadTags(); }));
 
   let filteredTags = $derived(tagSearch ? allTags.filter(t => t.tag.toLowerCase().includes(tagSearch.toLowerCase())) : allTags);
   let visibleTags = $derived(tagSearch ? filteredTags : (showAllTags ? allTags : allTags.slice(0, 15)));

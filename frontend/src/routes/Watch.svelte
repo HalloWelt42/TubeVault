@@ -527,6 +527,10 @@
         video.is_archived = 1;
         toast.success('Archiviert');
       }
+      // Listen (Library/Archives/Dashboard etc.) benachrichtigen,
+      // damit sie beim Zurück-Navigieren den neuen Zustand zeigen.
+      window.dispatchEvent(new CustomEvent('tubevault:video-mutated',
+        { detail: { id: video.id, action: video.is_archived ? 'archived' : 'unarchived' } }));
     } catch (e) { toast.error(e.message); }
   }
 
@@ -549,6 +553,8 @@
     try {
       await api.deleteVideo(video.id);
       toast.success('Video gelöscht');
+      window.dispatchEvent(new CustomEvent('tubevault:video-mutated',
+        { detail: { id: video.id, action: 'deleted' } }));
       navigate('/library');
     } catch (e) { toast.error(e.message); }
   }
