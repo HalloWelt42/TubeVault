@@ -972,32 +972,15 @@ class DownloadService:
             # Auto-Retry bei Throttle/Rate-Limit/Temporary Fehlern
             retry_count = meta_raw.get("retry_count", 0) or 0
             max_retries = meta_raw.get("max_retries", 3) or 3
-            err_lower = err.lower()
 
-            is_throttle = any(kw in err_lower for kw in [
-                "retries exceeded", "429", "too many requests",
-                "throttl", "rate limit", "forbidden",
-            ])
-            is_bot = "detected as a bot" in err_lower or "do not open an issue" in err_lower
-            is_temporary = any(kw in err_lower for kw in [
-                "503", "service unavailable", "temporarily unavailable",
-                "http error 5", "server error", "connection reset",
-                "timed out", "timeout",
-            ])
-            # Members-Only / Early-Access: später retrien (Videos werden oft
-            # nach einigen Tagen public). Staffelung: erster Versuch → 1 Tag,
-            # danach 7 Tage zwischen weiteren Versuchen.
-            is_members_only = any(kw in err_lower for kw in [
-                "join this channel", "members-only",
-                "members on level",        # Early Access variant
-                "channel's members",
-            ])
-            # Andere dauerhafte Fehler → parken (kein sinnvolles Retry)
-            is_unavailable = (not is_members_only) and any(kw in err_lower for kw in [
-                "video unavailable", "private video", "removed",
-                "account terminated", "copyright", "not available",
-                "age-restricted", "sign in to confirm your age",
-            ])
+            # Fehler klassifizieren (reine Funktion, siehe error_classifier.py)
+            from app.services.error_classifier import classify as _classify
+            _cls = _classify(err)
+            is_throttle = _cls.throttle
+            is_bot = _cls.bot
+            is_temporary = _cls.temporary
+            is_members_only = _cls.members_only
+            is_unavailable = _cls.unavailable
 
             if is_members_only:
                 # retry_count 0 → 1 Tag, sonst 7 Tage

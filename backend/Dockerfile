@@ -31,8 +31,9 @@ RUN ARCH=$(uname -m) && \
 WORKDIR /app
 
 # Python Dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --timeout=120 --retries=5 -r requirements.txt
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir --timeout=120 --retries=5 -r requirements.txt \
+    && pip install --no-cache-dir --timeout=120 --retries=5 -r requirements-dev.txt
 
 # App-Code
 COPY app/ ./app/
