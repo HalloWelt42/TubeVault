@@ -50,6 +50,28 @@ def _cookiefile() -> str | None:
     p = "/app/config/cookies.txt"
     return p if _os.path.isfile(p) and _os.path.getsize(p) > 0 else None
 
+
+# Einmal beim Import loggen: ist POT-Provider erreichbar? sind Cookies da?
+def _log_bot_setup():
+    import urllib.request, urllib.error
+    try:
+        req = urllib.request.Request(f"{_POT_BASE_URL}/ping", method="GET")
+        with urllib.request.urlopen(req, timeout=3) as r:
+            import json as _j
+            data = _j.loads(r.read().decode("utf-8", errors="replace"))
+            logger.info(f"[BOT-SETUP] POT-Provider erreichbar: v{data.get('version')} "
+                        f"(uptime={int(data.get('server_uptime', 0))}s)")
+    except Exception as e:
+        logger.warning(f"[BOT-SETUP] POT-Provider NICHT erreichbar ({_POT_BASE_URL}): {e}")
+    cf = _cookiefile()
+    if cf:
+        sz = _os.path.getsize(cf)
+        logger.info(f"[BOT-SETUP] cookies.txt aktiv: {cf} ({sz} Bytes)")
+    else:
+        logger.info("[BOT-SETUP] cookies.txt nicht vorhanden – Anon-Mode")
+
+_log_bot_setup()
+
 _YDL_BASE_OPTS = {
     "quiet": True,
     "no_warnings": True,
@@ -137,7 +159,7 @@ def _vtt_to_srt(vtt_text: str) -> str:
 class StreamAdapter:
     """pytubefix.Stream-kompatibel."""
 
-    __slots__ = ("_fmt", "_on_progress", "_watch_url")
+    __slots__ = ("_fmt", "_on_progress", "_watch_url", "_video_duration")
 
     def __init__(self, fmt: dict, on_progress_callback=None, watch_url: str = "", video_duration: int = 0):
         self._fmt = fmt
