@@ -360,6 +360,20 @@ CREATE INDEX IF NOT EXISTS idx_archives_mount ON archives(mount_path);
 CREATE INDEX IF NOT EXISTS idx_video_archives_video ON video_archives(video_id);
 CREATE INDEX IF NOT EXISTS idx_video_archives_archive ON video_archives(archive_id);
 CREATE INDEX IF NOT EXISTS idx_channel_playlists_channel ON channel_playlists(channel_id);
+
+-- ─── Composite-Indexe (v2.4.x Performance-Phase) ───────────────────────
+-- Library-Standard-Query: status='ready' AND is_archived=0 ORDER BY upload_date DESC
+-- (bei 13k+ Videos merkbar schneller als einzelne Indexe + Sort)
+CREATE INDEX IF NOT EXISTS idx_videos_status_archived_upload ON videos(status, is_archived, upload_date DESC);
+-- Channel-Detail: is_archived=0 AND channel_id=? ORDER BY upload_date
+CREATE INDEX IF NOT EXISTS idx_videos_channel_archived ON videos(channel_id, is_archived, upload_date DESC);
+-- Queue-Pick: type='download' AND status='queued' ORDER BY priority DESC, created_at ASC
+CREATE INDEX IF NOT EXISTS idx_jobs_queue_pick ON jobs(type, status, priority DESC, created_at ASC);
+-- Jobs per Video-ID (viele EXISTS-Subqueries in rss/feed/search): expression-index
+-- auf json_extract(metadata, '$.video_id') – spart Full-Scan ueber jobs bei Feed-Darstellung
+CREATE INDEX IF NOT EXISTS idx_jobs_metadata_video_id ON jobs(type, json_extract(metadata, '$.video_id'));
+-- RSS-Entries Feed-Darstellung: channel + feed_status sortiert nach published
+CREATE INDEX IF NOT EXISTS idx_rss_entries_channel_feed_status ON rss_entries(channel_id, feed_status, published DESC);
 """
 
 DEFAULT_SETTINGS = [
