@@ -663,48 +663,64 @@
 
   <!-- Live-Einstellungen: Throttling + Cooldown -->
   <div class="dl-settings">
-    <div class="dl-setting">
-      <label class="dl-setting-label" for="throttle-input">
-        <i class="fa-solid fa-gauge-high"></i> Throttling
-        <span class="dl-setting-hint">
+    <!-- Throttling -->
+    <div class="dl-row">
+      <div class="dl-row-label">
+        <i class="fa-solid fa-gauge-high"></i>
+        <span class="dl-row-title">Throttling</span>
+        <span class="dl-row-hint">
           {#if throttleRealtime}
-            dynamisch – aus Video-Länge berechnet
+            {#if currentThrottleLive > 0}
+              aktiv: {currentThrottleLive.toLocaleString('de-DE')} KB/s (aus Video-Länge)
+            {:else}
+              wartet auf Download…
+            {/if}
+          {:else if throttleKbps > 0}
+            {throttleKbps} KB/s
           {:else}
-            KB/s (0 = aus, hilft gegen Bot-Erkennung)
+            aus
           {/if}
         </span>
-      </label>
-      <div class="dl-setting-input">
-        <input id="throttle-input" type="number" min="0" max="100000" step="100"
-               value={throttleRealtime ? currentThrottleLive : throttleKbps}
-               disabled={settingsSaving || throttleRealtime}
-               oninput={(e) => { throttleKbps = parseInt(e.target.value) || 0; }}
-               onblur={() => !throttleRealtime && saveThrottle()}
-               onkeydown={(e) => e.key === 'Enter' && !throttleRealtime && saveThrottle()} />
-        <span class="dl-setting-unit">KB/s</span>
       </div>
-      <label class="dl-setting-toggle">
-        <input type="checkbox" checked={throttleRealtime}
-               onchange={toggleRealtime} disabled={settingsSaving} />
-        <span>Dynamisch (Video-Länge)</span>
-      </label>
-    </div>
-    <div class="dl-setting">
-      <label class="dl-setting-label" for="cooldown-input">
-        <i class="fa-solid fa-hourglass-half"></i> Wartezeit zwischen Downloads
-        <span class="dl-setting-hint">Sekunden (min. 30 empfohlen)</span>
-      </label>
-      <div class="dl-setting-input">
-        <input id="cooldown-input" type="number" min="0" max="3600" step="5"
-               bind:value={cooldownSec} disabled={settingsSaving}
-               onblur={() => saveCooldown(cooldownSec)}
-               onkeydown={(e) => e.key === 'Enter' && saveCooldown(cooldownSec)} />
-        <span class="dl-setting-unit">s</span>
+      <div class="dl-row-control">
+        <label class="dl-chk">
+          <input type="checkbox" checked={throttleRealtime}
+                 onchange={toggleRealtime} disabled={settingsSaving} />
+          <span>Dynamisch</span>
+        </label>
+        <div class="dl-input" class:is-readonly={throttleRealtime}>
+          <input type="number" min="0" max="100000" step="100"
+                 value={throttleRealtime ? (currentThrottleLive || '') : throttleKbps}
+                 placeholder={throttleRealtime ? '—' : '0'}
+                 disabled={settingsSaving || throttleRealtime}
+                 oninput={(e) => { throttleKbps = parseInt(e.target.value) || 0; }}
+                 onblur={() => !throttleRealtime && saveThrottle()}
+                 onkeydown={(e) => e.key === 'Enter' && !throttleRealtime && saveThrottle()} />
+          <span class="dl-unit">KB/s</span>
+        </div>
       </div>
     </div>
-    <button class="link-btn" onclick={resetDefaults} title="Throttling aus, Wartezeit auf 30s">
-      <i class="fa-solid fa-rotate-left"></i> Default
-    </button>
+
+    <!-- Wartezeit -->
+    <div class="dl-row">
+      <div class="dl-row-label">
+        <i class="fa-solid fa-hourglass-half"></i>
+        <span class="dl-row-title">Wartezeit</span>
+        <span class="dl-row-hint">{cooldownSec}s zwischen Downloads (min. 30 empfohlen)</span>
+      </div>
+      <div class="dl-row-control">
+        <div class="dl-input">
+          <input type="number" min="0" max="3600" step="5"
+                 bind:value={cooldownSec} disabled={settingsSaving}
+                 onblur={() => saveCooldown(cooldownSec)}
+                 onkeydown={(e) => e.key === 'Enter' && saveCooldown(cooldownSec)} />
+          <span class="dl-unit">s</span>
+        </div>
+        <button class="dl-default-btn" onclick={resetDefaults} title="Throttling aus, Wartezeit 30s">
+          <i class="fa-solid fa-rotate-left"></i> Default
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Queue -->
@@ -1037,35 +1053,52 @@
 
   /* Live-Einstellungen Panel (über Queue) */
   .dl-settings {
-    display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;
+    display: flex; flex-direction: column; gap: 6px;
     padding: 12px 14px; margin-bottom: 14px;
     background: var(--bg-secondary); border: 1px solid var(--border-primary);
     border-radius: 10px;
   }
-  .dl-setting { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
-  .dl-setting-label {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 0.82rem; color: var(--text-secondary); font-weight: 600;
+  .dl-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 4px 2px;
   }
-  .dl-setting-label i { color: var(--accent-primary); font-size: 0.85rem; }
-  .dl-setting-hint { font-size: 0.68rem; color: var(--text-tertiary); font-weight: 400; margin-left: 4px; }
-  .dl-setting-input {
+  .dl-row + .dl-row { border-top: 1px solid var(--border-primary); padding-top: 10px; }
+  .dl-row-label {
+    display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
+  }
+  .dl-row-label > i { color: var(--accent-primary); font-size: 0.9rem; width: 16px; text-align: center; }
+  .dl-row-title { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+  .dl-row-hint { font-size: 0.74rem; color: var(--text-tertiary); }
+  .dl-row-control { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+  .dl-input {
     display: flex; align-items: center; gap: 6px;
     background: var(--bg-tertiary); border: 1px solid var(--border-primary);
-    border-radius: 6px; padding: 4px 8px;
+    border-radius: 6px; padding: 4px 10px;
   }
-  .dl-setting-input:focus-within { border-color: var(--accent-primary); }
-  .dl-setting-input input {
-    width: 90px; background: none; border: none; color: var(--text-primary);
+  .dl-input:focus-within { border-color: var(--accent-primary); }
+  .dl-input.is-readonly { opacity: 0.75; background: var(--bg-primary); }
+  .dl-input input {
+    width: 80px; background: none; border: none; color: var(--text-primary);
     font-size: 0.88rem; outline: none; font-family: monospace; text-align: right;
   }
-  .dl-setting-unit { font-size: 0.74rem; color: var(--text-tertiary); }
-  .dl-setting-toggle {
+  .dl-input input:disabled { color: var(--text-secondary); cursor: default; }
+  .dl-unit { font-size: 0.74rem; color: var(--text-tertiary); font-weight: 500; }
+
+  .dl-chk {
     display: flex; align-items: center; gap: 6px;
-    font-size: 0.74rem; color: var(--text-secondary); cursor: pointer;
-    margin-top: 4px;
+    font-size: 0.78rem; color: var(--text-secondary); cursor: pointer;
+    user-select: none;
   }
-  .dl-setting-toggle input { margin: 0; }
+  .dl-chk input { margin: 0; }
+
+  .dl-default-btn {
+    display: flex; align-items: center; gap: 4px;
+    background: none; border: 1px solid var(--border-primary); border-radius: 6px;
+    padding: 5px 10px; font-size: 0.76rem; color: var(--text-tertiary); cursor: pointer;
+    transition: all 0.12s;
+  }
+  .dl-default-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 
   .worker-warning {
     display: flex; align-items: center; gap: 10px; padding: 10px 14px;
