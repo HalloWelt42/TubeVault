@@ -317,18 +317,27 @@
   let uncheckedCount = $derived(subs.filter(s => !s.last_checked).length);
   let disabledCount = $derived(subs.filter(s => !s.enabled).length);
 
-  // „Komplett" = Gold-Medaille: voll geladen ODER bei ≥100 Videos max 1 fehlend.
-  // Logik identisch zu channelMedal(), damit Filter und Medal konsistent sind.
-  function isComplete(sub) {
+  /**
+   * Medaillen-Level eines Kanals (identisch zur channelMedal()-Logik oben).
+   * Liefert: 'gold' | 'silver' | 'bronze' | 'none' | 'never-scanned'
+   */
+  function medalLevel(sub) {
+    if (!sub.last_scanned) return 'never-scanned';
     const rss = sub.rss_count || 0;
     const dl = sub.downloaded_count || 0;
-    if (rss < 3 || !sub.last_scanned) return false;
+    if (rss < 3) return 'never-scanned';  // zu wenig Datenbasis ≈ nicht wertbar
     const missing = Math.max(0, rss - dl);
-    if (missing === 0) return true;
-    if (rss >= 100 && missing <= 1) return true;
-    return false;
+    const pct = rss > 0 ? (dl / rss) : 0;
+    if (missing === 0) return 'gold';
+    if (rss >= 100 && missing <= 1) return 'gold';
+    if (pct >= 0.90) return 'silver';
+    if (pct >= 0.70 || sub.drip_completed_at) return 'bronze';
+    return 'none';
   }
-  let completeCount = $derived(subs.filter(isComplete).length);
+  let goldCount    = $derived(subs.filter(s => medalLevel(s) === 'gold').length);
+  let silverCount  = $derived(subs.filter(s => medalLevel(s) === 'silver').length);
+  let bronzeCount  = $derived(subs.filter(s => medalLevel(s) === 'bronze').length);
+  let neverScannedCount = $derived(subs.filter(s => medalLevel(s) === 'never-scanned').length);
 
   let filtered = $derived.by(() => {
     let result = filterMode === 'all' ? subs :
@@ -337,8 +346,10 @@
       filterMode === 'errors' ? subs.filter(s => s.error_count > 0) :
       filterMode === 'unchecked' ? subs.filter(s => !s.last_checked) :
       filterMode === 'disabled' ? subs.filter(s => !s.enabled) :
-      filterMode === 'complete' ? subs.filter(isComplete) :
-      filterMode === 'incomplete' ? subs.filter(s => !isComplete(s) && (s.rss_count || 0) >= 3 && s.last_scanned) :
+      filterMode === 'gold'          ? subs.filter(s => medalLevel(s) === 'gold') :
+      filterMode === 'silver'        ? subs.filter(s => medalLevel(s) === 'silver') :
+      filterMode === 'bronze'        ? subs.filter(s => medalLevel(s) === 'bronze') :
+      filterMode === 'never-scanned' ? subs.filter(s => medalLevel(s) === 'never-scanned') :
       subs;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -380,16 +391,32 @@
         <strong>{count}</strong> {label}
       </button>
     {/each}
-    {#if completeCount > 0}
-      <button class="filter-chip complete-chip" class:active={filterMode==='complete'}
-              onclick={()=>filterMode='complete'}
-              title="Kanäle mit Gold-Medaille: komplett geladen oder ≥100 Videos mit höchstens 1 fehlend">
-        <strong>{completeCount}</strong> 🥇 Komplett
+    {#if goldCount > 0}
+      <button class="filter-chip medal-gold-chip" class:active={filterMode==='gold'}
+              onclick={()=>filterMode='gold'}
+              title="Gold: komplett geladen oder ≥100 Videos mit höchstens 1 fehlend">
+        <strong>{goldCount}</strong> 🥇 Gold
       </button>
-      <button class="filter-chip" class:active={filterMode==='incomplete'}
-              onclick={()=>filterMode='incomplete'}
-              title="Kanäle die noch nicht komplett sind (Medaille unter Gold)">
-        <strong>{total - completeCount - uncheckedCount}</strong> Unvollständig
+    {/if}
+    {#if silverCount > 0}
+      <button class="filter-chip medal-silver-chip" class:active={filterMode==='silver'}
+              onclick={()=>filterMode='silver'}
+              title="Silber: ≥90 % geladen">
+        <strong>{silverCount}</strong> 🥈 Silber
+      </button>
+    {/if}
+    {#if bronzeCount > 0}
+      <button class="filter-chip medal-bronze-chip" class:active={filterMode==='bronze'}
+              onclick={()=>filterMode='bronze'}
+              title="Bronze: ≥70 % geladen oder war mal komplett">
+        <strong>{bronzeCount}</strong> 🥉 Bronze
+      </button>
+    {/if}
+    {#if neverScannedCount > 0}
+      <button class="filter-chip" class:active={filterMode==='never-scanned'}
+              onclick={()=>filterMode='never-scanned'}
+              title="Kanäle ohne vollständigen Scan oder zu wenige Videos">
+        <strong>{neverScannedCount}</strong> 🔍 Nie gescannt
       </button>
     {/if}
     {#if uncheckedCount > 0}
@@ -752,9 +779,16 @@
   .filter-chip.warn { border-color: var(--status-warning); }
   .filter-chip.warn strong { color: var(--status-warning); }
   .filter-chip.warn.active { background: rgba(245,158,11,0.1); color: var(--status-warning); }
-  .filter-chip.complete-chip { border-color: rgba(250,204,21,0.6); }
-  .filter-chip.complete-chip strong { color: #eab308; }
-  .filter-chip.complete-chip.active { background: rgba(234,179,8,0.12); border-color: #eab308; }
+  /* Medal-Filter-Chips: Farbverlauf passend zur Medaille. */
+  .filter-chip.medal-gold-chip { border-color: rgba(250,204,21,0.6); }
+  .filter-chip.medal-gold-chip strong { color: #eab308; }
+  .filter-chip.medal-gold-chip.active { background: rgba(234,179,8,0.14); border-color: #eab308; }
+  .filter-chip.medal-silver-chip { border-color: rgba(200,200,210,0.6); }
+  .filter-chip.medal-silver-chip strong { color: #c0c0c8; }
+  .filter-chip.medal-silver-chip.active { background: rgba(200,200,210,0.14); border-color: #c0c0c8; }
+  .filter-chip.medal-bronze-chip { border-color: rgba(205,127,50,0.6); }
+  .filter-chip.medal-bronze-chip strong { color: #cd7f32; }
+  .filter-chip.medal-bronze-chip.active { background: rgba(205,127,50,0.14); border-color: #cd7f32; }
 
   .status-badge {
     display: inline-flex; align-items: center; gap: 4px;

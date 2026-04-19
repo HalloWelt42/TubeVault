@@ -160,3 +160,18 @@ async def retry_download_delayed(queue_id: int, minutes: int = Query(5)):
     """Download mit Verzoegerung erneut versuchen."""
     await download_service.retry_with_delay(queue_id, minutes)
     return {"message": f"Download startet in {minutes} Minuten", "queue_id": queue_id}
+
+
+@router.patch("/{queue_id}/priority")
+async def set_download_priority(queue_id: int, priority: int = Query(..., ge=0, le=100)):
+    """Priorität eines gequeuten Downloads ändern (0=Normal, 5=Hoch, 10=Sofort).
+    Höhere Priorität wird vom Worker zuerst gezogen (ORDER BY priority DESC)."""
+    await db.execute(
+        "UPDATE jobs SET priority = ? WHERE id = ? AND type = 'download'",
+        (priority, queue_id)
+    )
+    from app.services.job_service import job_service
+    job = await job_service.get(queue_id)
+    if job:
+        await job_service.notify(job)
+    return {"queue_id": queue_id, "priority": priority}
