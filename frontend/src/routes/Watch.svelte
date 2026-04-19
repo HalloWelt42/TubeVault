@@ -1492,7 +1492,7 @@
   .strip-play:hover { color: var(--accent-primary); border-color: var(--accent-primary); }
 
   /* Tabs */
-  .tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-primary); padding-bottom: 0; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 2px; row-gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border-primary); padding-bottom: 0; }
   .tab {
     display: flex; align-items: center; gap: 4px;
     padding: 8px 14px; background: none; border: none; border-bottom: 2px solid transparent;
