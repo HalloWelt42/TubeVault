@@ -262,6 +262,19 @@ class StreamAdapter:
             # Kein Post-Processing — wir übernehmen Merge im download_service selbst.
             "postprocessors": [],
         }
+        # Throttling aus Settings (KB/s → bytes/s). 0 = unlimitiert.
+        try:
+            import sqlite3 as _sq
+            from app.config import DB_PATH as _DB
+            _c = _sq.connect(str(_DB))
+            _r = _c.execute("SELECT value FROM settings WHERE key='download.throttle_kbps'").fetchone()
+            _c.close()
+            if _r:
+                _kbps = int(_r[0] or 0)
+                if _kbps > 0:
+                    opts["ratelimit"] = _kbps * 1024
+        except Exception:
+            pass
         with _ydl.YoutubeDL(opts) as ydl:
             ydl.download([url])
 

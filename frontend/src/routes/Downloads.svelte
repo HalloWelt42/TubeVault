@@ -8,6 +8,46 @@
 
   let queue = $state({ queue: [], active_count: 0, queued_count: 0, completed_count: 0, error_count: 0, cancelled_count: 0, retry_wait_count: 0, failed_count: 0 });
   let urlInput = $state('');
+
+  // Live-Throttling + Cooldown-Einstellungen
+  const THROTTLE_DEFAULT = 0;
+  const COOLDOWN_DEFAULT = 30;
+  let throttleKbps = $state(0);
+  let cooldownSec = $state(30);
+  let settingsSaving = $state(false);
+
+  async function loadDownloadSettings() {
+    try {
+      const [t, c] = await Promise.all([
+        api.getSetting('download.throttle_kbps').catch(() => ({ value: 0 })),
+        api.getSetting('download.cooldown_base_s').catch(() => ({ value: 30 })),
+      ]);
+      throttleKbps = parseInt(t?.value || 0) || 0;
+      cooldownSec = parseInt(c?.value || 30) || 30;
+    } catch {}
+  }
+  async function saveThrottle(v) {
+    settingsSaving = true;
+    try {
+      await api.setDownloadThrottle(v);
+      throttleKbps = v;
+      toast.success(v > 0 ? `Throttling: ${v} KB/s` : 'Throttling deaktiviert');
+    } catch (e) { toast.error(e.message); }
+    settingsSaving = false;
+  }
+  async function saveCooldown(v) {
+    settingsSaving = true;
+    try {
+      await api.setDownloadCooldown(v);
+      cooldownSec = v;
+      toast.success(`Wartezeit: ${v}s zwischen Downloads`);
+    } catch (e) { toast.error(e.message); }
+    settingsSaving = false;
+  }
+  function resetDefaults() {
+    saveThrottle(THROTTLE_DEFAULT);
+    saveCooldown(COOLDOWN_DEFAULT);
+  }
   let batchInput = $state('');
   let showBatch = $state(false);
   let resolving = $state(false);
@@ -221,6 +261,18 @@
       loadQueue();
     } catch (e) { toast.error(e.message); }
   }
+  async function ignoreVideoPermanent(item) {
+    const name = item.title || item.video_id;
+    if (!confirm(`„${name}" dauerhaft ausschließen?\n\nDas Video wird beim Kanal als nicht-ladbar markiert und nicht mehr automatisch heruntergeladen.`)) return;
+    try {
+      await api.ignoreVideo(item.video_id || item.id, item.channel_id || null,
+                            item.error_message || 'Manuell ausgeschlossen');
+      // Aus Queue entfernen
+      await api.cancelDownload(item.id);
+      toast.success(`„${name}" dauerhaft ausgeschlossen`);
+      loadQueue();
+    } catch (e) { toast.error(e.message); }
+  }
   async function retryDelayed(id, minutes) {
     try {
       await api.retryWithDelay(id, minutes);
@@ -373,6 +425,7 @@
   );
 
   $effect(() => {
+    loadDownloadSettings();
     loadQueue();
     loadSystemJobs();
     const iv = setInterval(loadQueue, 5000);
@@ -592,6 +645,39 @@
     </div>
   {/if}
 
+  <!-- Live-Einstellungen: Throttling + Cooldown -->
+  <div class="dl-settings">
+    <div class="dl-setting">
+      <label class="dl-setting-label" for="throttle-input">
+        <i class="fa-solid fa-gauge-high"></i> Throttling
+        <span class="dl-setting-hint">KB/s (0 = aus, hilft gegen Bot-Erkennung)</span>
+      </label>
+      <div class="dl-setting-input">
+        <input id="throttle-input" type="number" min="0" max="100000" step="100"
+               bind:value={throttleKbps} disabled={settingsSaving}
+               onblur={() => saveThrottle(throttleKbps)}
+               onkeydown={(e) => e.key === 'Enter' && saveThrottle(throttleKbps)} />
+        <span class="dl-setting-unit">KB/s</span>
+      </div>
+    </div>
+    <div class="dl-setting">
+      <label class="dl-setting-label" for="cooldown-input">
+        <i class="fa-solid fa-hourglass-half"></i> Wartezeit zwischen Downloads
+        <span class="dl-setting-hint">Sekunden (min. 30 empfohlen)</span>
+      </label>
+      <div class="dl-setting-input">
+        <input id="cooldown-input" type="number" min="0" max="3600" step="5"
+               bind:value={cooldownSec} disabled={settingsSaving}
+               onblur={() => saveCooldown(cooldownSec)}
+               onkeydown={(e) => e.key === 'Enter' && saveCooldown(cooldownSec)} />
+        <span class="dl-setting-unit">s</span>
+      </div>
+    </div>
+    <button class="link-btn" onclick={resetDefaults} title="Throttling aus, Wartezeit auf 30s">
+      <i class="fa-solid fa-rotate-left"></i> Default
+    </button>
+  </div>
+
   <!-- Queue -->
   {#if queue.queue.length > 0 || systemJobs.length > 0}
     <div class="queue-section">
@@ -674,7 +760,10 @@
               <span class="qi-stage-text">{label || stage}</span>
             {/if}
 
-            <!-- error_message wird bereits in DownloadProgress stage_label angezeigt -->
+            <!-- Fehlergrund immer sichtbar bei Fehler/retry_wait -->
+            {#if (item.status === 'error' || item.status === 'retry_wait' || item.status === 'parked') && item.error_message}
+              <div class="qi-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> {item.error_message}</div>
+            {/if}
           </div>
 
           <div class="qi-actions">
@@ -682,13 +771,15 @@
               <button class="qi-btn" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
             {/if}
             {#if item.status === 'retry_wait'}
-              <button class="qi-btn retry" onclick={() => retryItem(item.id)} title="Sofort starten"><i class="fa-solid fa-play"></i></button>
+              <button class="qi-btn retry" onclick={() => retryItem(item.id)} title="Neu in Queue (sofort)"><i class="fa-solid fa-rotate-right"></i></button>
+              <button class="qi-btn ignore" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
               <button class="qi-btn" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
             {/if}
-            {#if item.status === 'error' || item.status === 'cancelled'}
-              <button class="qi-btn retry" onclick={() => retryItem(item.id)} title="Sofort erneut"><i class="fa-solid fa-rotate-right"></i></button>
+            {#if item.status === 'error' || item.status === 'cancelled' || item.status === 'parked'}
+              <button class="qi-btn retry" onclick={() => retryItem(item.id)} title="Neu in Queue"><i class="fa-solid fa-rotate-right"></i></button>
               <button class="qi-btn retry-delay" onclick={() => retryDelayed(item.id, 5)} title="In 5 Min erneut"><i class="fa-solid fa-clock"></i> 5m</button>
               <button class="qi-btn retry-delay" onclick={() => retryDelayed(item.id, 30)} title="In 30 Min erneut"><i class="fa-solid fa-clock"></i> 30m</button>
+              <button class="qi-btn ignore" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
             {/if}
           </div>
         </div>
@@ -906,6 +997,40 @@
   .qi-btn.retry:hover { border-color:var(--status-info); color:var(--status-info); }
   .qi-btn.retry-delay { font-size:0.68rem; gap:2px; }
   .qi-btn.retry-delay:hover { border-color:#8b5cf6; color:#8b5cf6; }
+  .qi-btn.ignore:hover { border-color: var(--status-warning, #f59e0b); color: var(--status-warning, #f59e0b); }
+  .qi-error-msg {
+    margin-top: 4px; padding: 4px 8px; font-size: 0.72rem;
+    background: rgba(239,68,68,0.08); border-left: 2px solid var(--status-error);
+    color: var(--status-error); border-radius: 3px;
+    display: flex; align-items: center; gap: 6px; word-break: break-word;
+  }
+  .qi-error-msg i { font-size: 0.72rem; flex-shrink: 0; }
+
+  /* Live-Einstellungen Panel (über Queue) */
+  .dl-settings {
+    display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;
+    padding: 12px 14px; margin-bottom: 14px;
+    background: var(--bg-secondary); border: 1px solid var(--border-primary);
+    border-radius: 10px;
+  }
+  .dl-setting { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+  .dl-setting-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.82rem; color: var(--text-secondary); font-weight: 600;
+  }
+  .dl-setting-label i { color: var(--accent-primary); font-size: 0.85rem; }
+  .dl-setting-hint { font-size: 0.68rem; color: var(--text-tertiary); font-weight: 400; margin-left: 4px; }
+  .dl-setting-input {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg-tertiary); border: 1px solid var(--border-primary);
+    border-radius: 6px; padding: 4px 8px;
+  }
+  .dl-setting-input:focus-within { border-color: var(--accent-primary); }
+  .dl-setting-input input {
+    width: 90px; background: none; border: none; color: var(--text-primary);
+    font-size: 0.88rem; outline: none; font-family: monospace; text-align: right;
+  }
+  .dl-setting-unit { font-size: 0.74rem; color: var(--text-tertiary); }
 
   .worker-warning {
     display: flex; align-items: center; gap: 10px; padding: 10px 14px;

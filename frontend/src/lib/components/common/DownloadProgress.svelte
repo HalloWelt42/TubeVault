@@ -101,7 +101,7 @@
         class="dp-label"
         class:is-active={phase.status === 'active'}
         class:is-done={phase.status === 'done'}
-        style="width:{w}%; color:{phase.status === 'active' ? phase.color : ''}"
+        style="flex: 0 1 {w}%; min-width: 58px; color:{phase.status === 'active' ? phase.color : ''}"
       >
         {#if phase.status === 'done'}
           <i class="fa-solid fa-check" style="font-size:0.55rem"></i>
@@ -170,11 +170,15 @@
     50% { filter: brightness(1.4); }
   }
 
-  /* ─── Labels ─── */
+  /* ─── Labels ───
+     Minimum-Breite damit schmale Phasen (z.B. Merge 4%) nicht überlappen.
+     gap: 6px zwischen Labels. overflow:visible erlaubt letzten Label
+     nach rechts auszuragen. */
   .dp-labels {
     display: flex;
     margin-top: 3px;
-    gap: 1px;
+    gap: 6px;
+    overflow: visible;
   }
   .dp-label {
     font-size: 0.6rem;

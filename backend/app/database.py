@@ -230,6 +230,15 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
 
+-- Dauerhaft ignorierte Videos (nicht erneut automatisch laden)
+CREATE TABLE IF NOT EXISTS ignored_videos (
+    video_id TEXT PRIMARY KEY,
+    channel_id TEXT,
+    reason TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ignored_videos_channel ON ignored_videos(channel_id);
+
 -- Geblockte Channels (nicht in YouTube-Suche anzeigen)
 CREATE TABLE IF NOT EXISTS blocked_channels (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

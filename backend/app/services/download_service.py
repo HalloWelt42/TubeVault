@@ -627,15 +627,17 @@ class DownloadService:
 
     async def _queue_loop(self):
         # ─── Globaler Cooldown ────────────────────────
-        # Basis: 30s zwischen jedem YouTube-Job
-        # Bei Fehler: verdoppeln (30→60→120→…→7200)
-        # Bei 7200 (2h) → harte Pause (wie User-Pause)
-        # Bei Erfolg: zurück auf 30s
-        self._cooldown = 30           # aktuelle Wartezeit in Sekunden
-        self._cooldown_base = 30      # Basis-Wert
-        self._cooldown_max = 7200     # 2 Stunden
-        self._cooldown_until = 0.0    # Timestamp wann Cooldown endet (für Frontend-Timer)
-        self._cooldown_active = False # True während countdown läuft
+        # Basis: aus Setting (default 30s). Bei Fehler verdoppeln bis max 7200s.
+        try:
+            row = await db.fetch_one(
+                "SELECT value FROM settings WHERE key='download.cooldown_base_s'")
+            self._cooldown_base = int(row["value"]) if row and row["value"] else 30
+        except Exception:
+            self._cooldown_base = 30
+        self._cooldown = self._cooldown_base    # aktuelle Wartezeit in Sekunden
+        self._cooldown_max = 7200               # 2 Stunden
+        self._cooldown_until = 0.0              # Timestamp wann Cooldown endet
+        self._cooldown_active = False           # True während countdown läuft
 
         while True:
             try:
@@ -730,6 +732,22 @@ class DownloadService:
             "cooldown_remaining": round(remaining),
             "cooldown_active": self._cooldown_active,
         })
+
+    async def reload_cooldown_base(self):
+        """Cooldown-Base live aus Settings neu laden (z.B. nach Slider-Änderung)."""
+        try:
+            row = await db.fetch_one(
+                "SELECT value FROM settings WHERE key='download.cooldown_base_s'")
+            new_base = int(row["value"]) if row and row["value"] else 30
+            if new_base != self._cooldown_base:
+                logger.info(f"Cooldown-Base: {self._cooldown_base}s → {new_base}s")
+                self._cooldown_base = max(0, new_base)
+                # Aktuellen Wert anpassen wenn er grösser ist als neuer base
+                if self._cooldown > self._cooldown_base and self._cooldown <= self._cooldown_base * 8:
+                    self._cooldown = self._cooldown_base
+                await self._broadcast_cooldown()
+        except Exception as e:
+            logger.warning(f"reload_cooldown_base failed: {e}")
 
     def get_cooldown_state(self) -> dict:
         """Cooldown-Status für System-Status-Endpoint."""

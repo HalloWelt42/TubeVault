@@ -99,6 +99,8 @@ export const api = {
   clearAllDownloads: () => request('/api/downloads/clear-all', { method: 'DELETE' }),
   workerHealth: () => request('/api/downloads/worker/health'),
   restartWorker: () => request('/api/downloads/worker/restart', { method: 'POST' }),
+  setDownloadCooldown: (seconds) => request(`/api/downloads/cooldown?seconds=${seconds}`, { method: 'PUT' }),
+  setDownloadThrottle: (kbps) => request(`/api/downloads/throttle?kbps=${kbps}`, { method: 'PUT' }),
 
   // Player
   streamUrl: (videoId) => `${API_BASE}/api/player/${videoId}`,
@@ -246,6 +248,7 @@ export const api = {
 
   // Settings
   getSettings: () => request('/api/settings'),
+  getSetting: (key) => request(`/api/settings/${encodeURIComponent(key)}`),
   updateSetting: (key, value) => request(`/api/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   resetSettings: () => request('/api/settings/reset', { method: 'POST' }),
 
@@ -269,6 +272,15 @@ export const api = {
       body: JSON.stringify({ channel_id, channel_name, reason }) }),
   unblockChannel: (channel_id) =>
     request(`/api/blocked-channels/${channel_id}`, { method: 'DELETE' }),
+
+  // Ignored Videos (dauerhaft nicht erneut laden)
+  getIgnoredVideos: (channel_id = null) =>
+    request(`/api/ignored-videos${channel_id ? '?channel_id=' + channel_id : ''}`),
+  ignoreVideo: (video_id, channel_id = null, reason = null) =>
+    request('/api/ignored-videos', { method: 'POST',
+      body: JSON.stringify({ video_id, channel_id, reason }) }),
+  unignoreVideo: (video_id) =>
+    request(`/api/ignored-videos/${video_id}`, { method: 'DELETE' }),
   getJobStats: () => request('/api/jobs/stats'),
   getJob: (id) => request(`/api/jobs/${id}`),
   cancelJob: (id) => request(`/api/jobs/${id}/cancel`, { method: 'POST' }),

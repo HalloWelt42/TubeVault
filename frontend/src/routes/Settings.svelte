@@ -48,6 +48,7 @@
     'download.auto_subtitle': { label: 'Untertitel herunterladen', type: 'toggle', category: 'download' },
     'download.subtitle_lang': { label: 'Untertitel-Sprachen', desc: 'Kommagetrennt, z.B. de,en', type: 'text', category: 'download' },
     'download.auto_chapters': { label: 'Kapitel speichern', type: 'toggle', category: 'download' },
+    'download.throttle_kbps': { label: 'Throttling (Bandbreiten-Limit)', desc: '0 = unlimitiert. Sonst Bandbreite in KB/s um YouTube-Bot-Erkennung zu entgehen (typisch 500-2000)', type: 'number', category: 'download', min: 0, max: 100000, unit: 'KB/s' },
     'player.volume': { label: 'Standard-Lautstärke', type: 'number', category: 'player', min: 0, max: 100, unit: '%' },
     'player.autoplay': { label: 'Autoplay', type: 'toggle', category: 'player' },
     'player.speed': { label: 'Geschwindigkeit', type: 'select', category: 'player', options: ['0.5','0.75','1.0','1.25','1.5','1.75','2.0'] },

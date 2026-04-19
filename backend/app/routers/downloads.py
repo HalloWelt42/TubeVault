@@ -109,6 +109,29 @@ async def restart_worker():
     return result
 
 
+@router.put("/cooldown")
+async def set_cooldown(seconds: int = 30):
+    """Cooldown-Basis (Sekunden zwischen Downloads) live setzen."""
+    seconds = max(0, min(seconds, 3600))
+    await db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.cooldown_base_s', ?)",
+        (str(seconds),)
+    )
+    await download_service.reload_cooldown_base()
+    return {"cooldown_base_s": seconds}
+
+
+@router.put("/throttle")
+async def set_throttle(kbps: int = 0):
+    """Throttling (KB/s, 0 = unlimitiert) live setzen."""
+    kbps = max(0, min(kbps, 100000))
+    await db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('download.throttle_kbps', ?)",
+        (str(kbps),)
+    )
+    return {"throttle_kbps": kbps}
+
+
 @router.delete("/clear-all")
 async def clear_all_finished():
     """Alle fertigen + fehlerhaften + stale Downloads entfernen."""

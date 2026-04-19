@@ -29,7 +29,7 @@ from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
     streams, ad_markers, own_videos, scan, backup, api_endpoints,
-    feed_router, channel_playlists, lyrics, blocked_channels,
+    feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
 )
 
 # Logging
@@ -380,6 +380,7 @@ app.include_router(exports.router)
 app.include_router(streams.router)
 app.include_router(lyrics.router)
 app.include_router(blocked_channels.router)
+app.include_router(ignored_videos.router)
 
 
 # --- Root Endpoint ---
