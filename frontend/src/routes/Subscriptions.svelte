@@ -229,19 +229,38 @@
   }
 
   /**
-   * Kanal-Vollständigkeits-Siegel:
-   * 🥇 Gold:   100% komplett (downloaded >= rss_count, Scan vorhanden)
-   * 🥈 Silber: Fehlen nur 1–5 Videos
-   * 🥉 Bronze: War mal komplett (drip_completed_at gesetzt), aber jetzt fehlen welche
+   * Kanal-Vollständigkeits-Siegel (prozentual, skaliert mit Kanal-Größe):
+   * 🥇 Gold:   100 % komplett ODER bei ≥100 Videos höchstens 1 fehlend
+   * 🥈 Silber: ≥ 90 % geladen
+   * 🥉 Bronze: ≥ 70 % geladen ODER Kanal war mal komplett (drip_completed_at)
+   * keine Medaille: unter 70 % oder zu wenig Datenbasis (< 3 Videos im Feed).
    */
   function channelMedal(sub) {
     const rss = sub.rss_count || 0;
     const dl = sub.downloaded_count || 0;
-    if (rss === 0 || !sub.last_scanned) return null;
-    const missing = rss - dl;
-    if (missing <= 0) return { icon: '🥇', cls: 'medal-gold', label: 'Vollständig' };
-    if (missing <= 5) return { icon: '🥈', cls: 'medal-silver', label: `${missing} fehlen` };
-    if (sub.drip_completed_at) return { icon: '🥉', cls: 'medal-bronze', label: `War komplett · ${missing} fehlen` };
+    if (rss < 3 || !sub.last_scanned) return null;
+    const missing = Math.max(0, rss - dl);
+    const pct = Math.round((dl / rss) * 100);
+
+    // Gold: komplett, oder bei großem Feed (≥100) max 1 fehlend
+    if (missing === 0) return { icon: '🥇', cls: 'medal-gold', label: 'Vollständig' };
+    if (rss >= 100 && missing <= 1) {
+      return { icon: '🥇', cls: 'medal-gold', label: `1 fehlt bei ${rss} gesamt — faktisch komplett` };
+    }
+
+    // Silber: ≥90 % geladen
+    if (pct >= 90) {
+      return { icon: '🥈', cls: 'medal-silver', label: `${pct} % geladen · ${missing} fehlen` };
+    }
+
+    // Bronze: ≥70 % oder war mal komplett
+    if (pct >= 70) {
+      return { icon: '🥉', cls: 'medal-bronze', label: `${pct} % geladen · ${missing} fehlen` };
+    }
+    if (sub.drip_completed_at) {
+      return { icon: '🥉', cls: 'medal-bronze', label: `War komplett · ${missing} fehlen wieder` };
+    }
+
     return null;
   }
 
