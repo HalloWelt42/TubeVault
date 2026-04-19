@@ -126,6 +126,29 @@
     transition: all 0.15s;
   }
   .nav-item i { width: 20px; text-align: center; font-size: 0.95rem; }
+
+  /* Material-Design Icon-Farben – NUR in der Sidebar (scoped).
+     Dank Svelte-scoped-CSS sind diese Regeln automatisch auf dieses
+     Component beschränkt, ohne :global oder !important. */
+  .nav-item :global(.fa-solid.fa-download),
+  .nav-item :global(.fa-solid.fa-cloud-arrow-down) { color: #42A5F5; }
+  .nav-item :global(.fa-solid.fa-play) { color: #66BB6A; }
+  .nav-item :global(.fa-solid.fa-satellite-dish) { color: #AB47BC; }
+  .nav-item :global(.fa-solid.fa-tower-broadcast) { color: #EF5350; }
+  .nav-item :global(.fa-solid.fa-mobile-screen) { color: #AB47BC; }
+  .nav-item :global(.fa-solid.fa-heart) { color: #EF5350; }
+  .nav-item :global(.fa-solid.fa-star) { color: #FFA726; }
+  .nav-item :global(.fa-solid.fa-chart-simple) { color: #26C6DA; }
+  .nav-item :global(.fa-solid.fa-broom) { color: #8D6E63; }
+  .nav-item :global(.fa-solid.fa-wand-magic-sparkles) { color: #CE93D8; }
+  .nav-item :global(.fa-solid.fa-file-import) { color: #78909C; }
+  .nav-item :global(.fa-solid.fa-box-archive) { color: #A1887F; }
+  .nav-item :global(.fa-solid.fa-image) { color: #4DB6AC; }
+  .nav-item :global(.fa-solid.fa-circle-check) { color: #66BB6A; }
+  .nav-item :global(.fa-solid.fa-triangle-exclamation) { color: #FFA726; }
+  .nav-item :global(.fa-solid.fa-circle-xmark) { color: #EF5350; }
+  .nav-item :global(.fa-solid.fa-bolt) { color: #FFCA28; }
+  .nav-item :global(.fa-regular.fa-keyboard) { color: #90A4AE; }
   .nav-item:hover {
     background: var(--bg-hover);
     color: var(--text-primary);

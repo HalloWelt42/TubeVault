@@ -127,29 +127,8 @@
   :global(a) { color: var(--accent-primary); text-decoration: none; }
   :global(a:hover) { text-decoration: underline; }
 
-  /* Material Design Icon-Farben — gescoped auf .sidebar damit sie nur dort
-     gelten und nicht überall das Design "vergiften" (Buttons, Overlays, etc.).
-     Überall sonst erbt das Icon die Parent-Text-Farbe (color:inherit als
-     FA-Default), was in Buttons/Overlays automatisch korrekt ist. */
-  :global(.sidebar .fa-solid.fa-download),
-  :global(.sidebar .fa-solid.fa-cloud-arrow-down) { color: #42A5F5; }
-  :global(.sidebar .fa-solid.fa-play) { color: #66BB6A; }
-  :global(.sidebar .fa-solid.fa-satellite-dish) { color: #AB47BC; }
-  :global(.sidebar .fa-solid.fa-tower-broadcast) { color: #EF5350; }
-  :global(.sidebar .fa-solid.fa-mobile-screen) { color: #AB47BC; }
-  :global(.sidebar .fa-solid.fa-heart) { color: #EF5350; }
-  :global(.sidebar .fa-solid.fa-star) { color: #FFA726; }
-  :global(.sidebar .fa-solid.fa-chart-simple) { color: #26C6DA; }
-  :global(.sidebar .fa-solid.fa-broom) { color: #8D6E63; }
-  :global(.sidebar .fa-solid.fa-wand-magic-sparkles) { color: #CE93D8; }
-  :global(.sidebar .fa-solid.fa-file-import) { color: #78909C; }
-  :global(.sidebar .fa-solid.fa-box-archive) { color: #A1887F; }
-  :global(.sidebar .fa-solid.fa-image) { color: #4DB6AC; }
-  :global(.sidebar .fa-solid.fa-circle-check) { color: #66BB6A; }
-  :global(.sidebar .fa-solid.fa-triangle-exclamation) { color: #FFA726; }
-  :global(.sidebar .fa-solid.fa-circle-xmark) { color: #EF5350; }
-  :global(.sidebar .fa-solid.fa-bolt) { color: #FFCA28; }
-  :global(.sidebar .fa-regular.fa-keyboard) { color: #90A4AE; }
+  /* Icon-Farben wurden in die Sidebar-Komponente verschoben (scoped).
+     App.svelte bleibt frei von globalen Icon-Farb-Regeln. */
 
   .app {
     display: flex;
