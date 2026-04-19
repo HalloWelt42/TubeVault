@@ -761,17 +761,20 @@ class DownloadService:
                 pass
 
     async def reload_cooldown_base(self):
-        """Cooldown-Base live aus Settings neu laden (z.B. nach Slider-Änderung)."""
+        """Cooldown-Base live aus Settings neu laden (z.B. nach Slider-Änderung).
+        User-Override greift IMMER: auch wenn der exponentielle Backoff den
+        aktuellen _cooldown hochgetrieben hat, wird er auf den neuen Base-Wert
+        zurückgesetzt. Sonst wuerde die Einstellung 'scheinbar nicht greifen'."""
         try:
             row = await db.fetch_one(
                 "SELECT value FROM settings WHERE key='download.cooldown_base_s'")
             new_base = int(row["value"]) if row and row["value"] else 30
             if new_base != self._cooldown_base:
-                logger.info(f"Cooldown-Base: {self._cooldown_base}s → {new_base}s")
+                logger.info(f"Cooldown-Base: {self._cooldown_base}s → {new_base}s (aktuell={self._cooldown}s)")
                 self._cooldown_base = max(0, new_base)
-                # Aktuellen Wert anpassen wenn er grösser ist als neuer base
-                if self._cooldown > self._cooldown_base and self._cooldown <= self._cooldown_base * 8:
-                    self._cooldown = self._cooldown_base
+                # IMMER den aktiven _cooldown auf neuen Base setzen – User-Input
+                # hat Vorrang ueber Backoff-Eskalation.
+                self._cooldown = self._cooldown_base
                 await self._broadcast_cooldown()
         except Exception as e:
             logger.warning(f"reload_cooldown_base failed: {e}")
