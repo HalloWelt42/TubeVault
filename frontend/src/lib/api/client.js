@@ -260,6 +260,7 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return request(`/api/jobs${q ? '?' + q : ''}`);
   },
+  getActiveJobs: () => request('/api/jobs/active'),
   getJobStats: () => request('/api/jobs/stats'),
   getJob: (id) => request(`/api/jobs/${id}`),
   cancelJob: (id) => request(`/api/jobs/${id}/cancel`, { method: 'POST' }),

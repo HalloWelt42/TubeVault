@@ -298,19 +298,33 @@
     enrich: 'Anreicherung',
   };
 
-  let filteredJobs = $derived.by(() => {
-    if (jobsTab === 'all') return systemJobs;
-    if (jobsTab === 'active') return systemJobs.filter(j => j.status === 'active' || j.status === 'queued');
-    if (jobsTab === 'done') return systemJobs.filter(j => j.status === 'done' || j.status === 'cancelled');
-    if (jobsTab === 'error') return systemJobs.filter(j => j.status === 'error');
-    return systemJobs;
-  });
+  // Einheitlicher Filter – wirkt auf Downloads UND System-Jobs
+  function matchesTab(item, tab) {
+    if (tab === 'all') return true;
+    if (tab === 'active') return item.status === 'active';
+    if (tab === 'wait') return item.status === 'queued' || item.status === 'retry_wait';
+    if (tab === 'done') return item.status === 'done';
+    if (tab === 'error') return item.status === 'error' || item.status === 'parked';
+    if (tab === 'cancelled') return item.status === 'cancelled';
+    return true;
+  }
 
+  let filteredQueue = $derived(queue.queue.filter(q => matchesTab(q, jobsTab)));
+  let filteredJobs  = $derived(systemJobs.filter(j => matchesTab(j, jobsTab)));
+
+  // Counts über Downloads + System-Jobs gesamt
+  function countAll(tab) {
+    const dl = queue.queue.filter(q => matchesTab(q, tab)).length;
+    const sj = systemJobs.filter(j => matchesTab(j, tab)).length;
+    return dl + sj;
+  }
   let jobCounts = $derived({
-    all: systemJobs.length,
-    active: systemJobs.filter(j => j.status === 'active' || j.status === 'queued').length,
-    done: systemJobs.filter(j => j.status === 'done' || j.status === 'cancelled').length,
-    error: systemJobs.filter(j => j.status === 'error').length,
+    all: countAll('all'),
+    active: countAll('active'),
+    wait: countAll('wait'),
+    done: countAll('done'),
+    error: countAll('error'),
+    cancelled: countAll('cancelled'),
   });
 
   async function cancelSystemJob(id) {
@@ -582,9 +596,9 @@
       <div class="queue-header">
         <h2>Warteschlange</h2>
         <div class="queue-actions">
-          {#if systemJobs.length > 0}
+          {#if (queue.queue.length + systemJobs.length) > 0}
             <div class="jobs-tabs">
-              {#each [['all','Alle'],['active','Aktiv'],['done','Fertig'],['error','Fehler']] as [id, label]}
+              {#each [['all','Alle'],['active','Läuft'],['wait','Wartet'],['done','Fertig'],['error','Fehler'],['cancelled','Abgebrochen']] as [id, label]}
                 <button class="jobs-tab" class:active={jobsTab === id} onclick={() => jobsTab = id}>
                   {label}
                   {#if jobCounts[id] > 0}<span class="jobs-tab-count">{jobCounts[id]}</span>{/if}
@@ -603,7 +617,7 @@
         </div>
       </div>
 
-      {#each queue.queue as item (item.id)}
+      {#each filteredQueue as item (item.id)}
         {@const live = getLive(item.id)}
         {@const stage = live?.stage || item.status}
         {@const progress = live?.progress ?? item.progress ?? 0}

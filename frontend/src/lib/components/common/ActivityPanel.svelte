@@ -1,7 +1,9 @@
 <!--
-  TubeVault – ActivityPanel v1.9.1
+  TubeVault – ActivityPanel v1.9.2
   Unified Bar (ersetzt Footer + altes ActivityPanel)
   Detail-Panel mit Phasen-Fortschritt, Pause/Resume, Cleanup
+  v1.9.2: aktive Jobs IMMER separat laden (getJobs({limit:50}) sortiert nach
+          created_at DESC → aktive Jobs gingen bei vielen queued Jobs verloren)
   © HalloWelt42 – Private Nutzung
 -->
 <script>
@@ -112,12 +114,18 @@
 
   async function loadJobs() {
     try {
-      const [jobList, jobStats] = await Promise.all([
+      // Aktive+Queued IMMER separat holen – /api/jobs?limit=50 sortiert nach created_at DESC
+      // und kann bei vielen jungen Jobs alte aktive Jobs "verlieren" (Bug v2.2.7).
+      const [activeList, jobList, jobStats] = await Promise.all([
+        api.getActiveJobs(),
         api.getJobs({ limit: 50 }),
         api.getJobStats(),
       ]);
-      // Immer neues Array zuweisen (wie queue = await api.getQueue() in Downloads.svelte)
-      jobs = Array.isArray(jobList) ? jobList : [];
+      const active = Array.isArray(activeList) ? activeList : [];
+      const recent = Array.isArray(jobList) ? jobList : [];
+      const activeIds = new Set(active.map(j => j.id));
+      // Merge: aktive zuerst (inkl. queued), dann alle recent die nicht schon drin sind
+      jobs = [...active, ...recent.filter(j => !activeIds.has(j.id))];
       const sKey = s => `${s.active}:${s.queued}:${s.done}:${s.errors}:${s.parked}:${s.paused}`;
       if (sKey(stats) !== sKey(jobStats)) stats = jobStats;
     } catch {}
