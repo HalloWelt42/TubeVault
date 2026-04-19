@@ -3,6 +3,7 @@
   import { toast } from '../lib/stores/notifications.js';
   import { navigate } from '../lib/router/router.js';
   import { formatDateRelative } from '../lib/utils/format.js';
+  import { VIDEO_QUALITIES } from '../lib/constants/qualities.js';
 
   function fmtInterval(seconds) {
     if (!seconds) return '?';
@@ -413,13 +414,9 @@
       <div class="import-actions">
         <label class="check"><input type="checkbox" bind:checked={autoDownload}/> Auto-Download</label>
         <select class="quality-select" bind:value={defaultQuality}>
-          <option value="best">Beste</option>
-          <option value="1080p">1080p</option>
-          <option value="720p">720p</option>
-          <option value="480p">480p</option>
-          <option value="360p">360p</option>
-          <option value="240p">240p</option>
-          <option value="144p">144p</option>
+          {#each VIDEO_QUALITIES as q}
+            <option value={q.value}>{q.label}</option>
+          {/each}
         </select>
         <button class="btn-primary" onclick={addBatch} disabled={importing||!batchInput.trim()}>
           {importing?'Importiere…':`${batchInput.split('\n').filter(l=>l.trim()).length} importieren`}
@@ -532,13 +529,9 @@
           {#if !sub.audio_only}
             <select class="quality-select" value={sub.download_quality || '720p'}
                     onchange={(e) => updateQuality(sub, e.target.value)}>
-              <option value="best">Beste</option>
-              <option value="1080p">1080p</option>
-              <option value="720p">720p</option>
-              <option value="480p">480p</option>
-              <option value="360p">360p</option>
-              <option value="240p">240p</option>
-              <option value="144p">144p</option>
+              {#each VIDEO_QUALITIES as q}
+                <option value={q.value}>{q.label}</option>
+              {/each}
             </select>
           {/if}
           <button class="tag" class:tag-on={sub.audio_only} onclick={() => toggleAudioOnly(sub)}

@@ -6,6 +6,7 @@
   import { formatDuration } from '../lib/utils/format.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import { shortcuts } from '../lib/stores/keyboard.js';
+  import { VIDEO_QUALITIES } from '../lib/constants/qualities.js';
 
   let stats = $state(null);
   let videos = $state([]);
@@ -90,13 +91,9 @@
       {#if !audioOnly}
         <select class="dl-quality" bind:value={downloadQuality} disabled={downloading}
                 title="Video-Qualität">
-          <option value="best">Beste</option>
-          <option value="1080p">1080p</option>
-          <option value="720p">720p</option>
-          <option value="480p">480p</option>
-          <option value="360p">360p</option>
-          <option value="240p">240p</option>
-          <option value="144p">144p</option>
+          {#each VIDEO_QUALITIES as q}
+            <option value={q.value}>{q.label}</option>
+          {/each}
         </select>
       {/if}
       <button class="dl-audio-toggle" class:active={audioOnly}

@@ -133,7 +133,11 @@
           </button>
         {/each}
         {#if !tagSearch && allTags.length > 15}
-          <button class="tag-toggle" onclick={() => showAllTags = !showAllTags}>{showAllTags ? 'weniger' : `+${allTags.length - 15} mehr`}</button>
+          {#if allTags.length <= 60}
+            <button class="tag-toggle" onclick={() => showAllTags = !showAllTags}>{showAllTags ? 'weniger' : `+${allTags.length - 15} weitere`}</button>
+          {:else}
+            <span class="tag-hint">Weitere Tags über Suche finden ({allTags.length} gesamt)</span>
+          {/if}
         {/if}
       </div>
     </div>
@@ -223,6 +227,7 @@
   .tag-chip.active .tag-count { background: rgba(255,255,255,0.25); color: #fff; }
   .tag-count { font-size: 0.65rem; background: var(--bg-tertiary); color: var(--text-tertiary); padding: 0 5px; border-radius: 8px; font-weight: 600; }
   .tag-toggle { padding: 3px 10px; background: none; border: 1px dashed var(--border-primary); border-radius: 14px; color: var(--accent-primary); font-size: 0.76rem; cursor: pointer; }
+  .tag-hint { padding: 3px 10px; font-size: 0.72rem; color: var(--text-tertiary); font-style: italic; }
   .active-filter { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
   .filter-badge { padding: 4px 10px; background: var(--accent-muted); color: var(--accent-primary); border: none; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
   .filter-badge:hover { background: var(--accent-primary); color: #fff; }
