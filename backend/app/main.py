@@ -1,5 +1,5 @@
 """
-TubeVault Backend – Main Application v1.3.2
+TubeVault Backend – Main Application v1.4.0
 © HalloWelt42 – Private Nutzung
 
 Selbstgehostetes Video-Vault & Streaming-System
@@ -91,7 +91,22 @@ async def _drip_cron_loop():
     logger.info("[DRIP-CRON] Drip-Feed-Timer gestartet (alle 15 Min)")
     while True:
         try:
-            # Fällige Kanäle suchen
+            # 1) Auto-Archive: unabhängig vom Drip — läuft für ALLE Kanäle mit
+            # drip_auto_archive=1 (auch ohne aktiven Drip). Vorher war das nur
+            # Teil der Drip-Schleife, User konnte das Feature isoliert nie nutzen.
+            aa_rows = await db.fetch_all(
+                """SELECT channel_id FROM subscriptions
+                   WHERE drip_auto_archive = 1 AND enabled = 1"""
+            )
+            for aa in aa_rows:
+                await db.execute(
+                    """UPDATE videos SET is_archived = 1
+                       WHERE channel_id = ? AND status = 'ready'
+                         AND is_archived = 0 AND source = 'youtube'""",
+                    (aa["channel_id"],)
+                )
+
+            # 2) Fällige Drip-Kanäle suchen (echter Drip-Download)
             due = await db.fetch_all(
                 """SELECT s.id, s.channel_id, s.channel_name, s.drip_count,
                           s.drip_auto_archive, s.download_quality, s.audio_only
@@ -101,15 +116,7 @@ async def _drip_cron_loop():
                      AND s.drip_next_run <= datetime('now')"""
             )
             for sub in due:
-                # Auto-Archive: Kürzlich geladene Videos dieses Kanals archivieren
-                if sub["drip_auto_archive"]:
-                    await db.execute(
-                        """UPDATE videos SET is_archived = 1
-                           WHERE channel_id = ? AND status = 'ready'
-                             AND is_archived = 0 AND source = 'youtube'""",
-                        (sub["channel_id"],)
-                    )
-
+                # (Auto-Archive ist oben in Schritt 1 für alle Kanäle gelaufen.)
                 drip_count = sub["drip_count"] or 3
                 # 2 älteste + 1 neuestes (bei count >= 3)
                 old_count = max(1, drip_count - 1)

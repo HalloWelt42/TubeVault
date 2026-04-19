@@ -1,5 +1,5 @@
 """
-TubeVault – Download Service v1.8.47
+TubeVault – Download Service v1.8.48
 Live-Progress, Stufen, FFmpeg-Merge, Rate-Limiting, Resume, Job-Tracking, Adaptive Cooldown
 pytubefix: Chapters, Captions, Audio-Only nativ
 © HalloWelt42 – Private Nutzung
@@ -840,6 +840,23 @@ class DownloadService:
                  str(final_path), file_size, 1 if not merged else 0)
             )
 
+            # Auto-Category aus dem Abo übernehmen: wenn der Kanal dem Nutzer
+            # eine Kategorie zugewiesen hat (subscriptions.category_id),
+            # landet das Video automatisch in dieser Kategorie (via M2M).
+            try:
+                sub_cat = await db.fetch_val(
+                    "SELECT category_id FROM subscriptions WHERE channel_id = ?",
+                    (meta["channel_id"],)
+                )
+                if sub_cat:
+                    await db.execute(
+                        "INSERT OR IGNORE INTO video_categories (video_id, category_id) VALUES (?, ?)",
+                        (vid, sub_cat)
+                    )
+                    logger.info(f"[CAT] {vid}: Kategorie #{sub_cat} (aus Abo-Einstellung)")
+            except Exception as e:
+                logger.debug(f"Auto-Category {vid}: {e}")
+
             # Kapitel speichern (pytubefix chapters) – NACH video INSERT
             auto_chapters = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.auto_chapters'")
             if auto_chapters != "false" and meta.get("chapters"):
@@ -1291,12 +1308,47 @@ class DownloadService:
         return yt.streams.filter(progressive=True).order_by("resolution").desc().first()
 
     def _pick_adaptive_video(self, yt, quality):
-        if quality in ("best","1080p","1440p","2160p"):
+        """Wählt den adaptiven Video-Stream passend zur gewünschten Qualität.
+
+        Regel: Wenn der Nutzer eine konkrete Auflösung wählt (144p-2160p),
+        bekommt er genau diese Auflösung (falls verfügbar) — NIE mehr!
+        Erst wenn die exakte Auflösung nicht da ist, wird die nächst-kleinere
+        unter dem Ziel gewählt (kein Upscale zu 4K bei Wunsch 1080p).
+        'best' nimmt die höchste verfügbare.
+        """
+        all_video = list(yt.streams.filter(adaptive=True, type="video"))
+        if not all_video:
+            return None
+
+        if quality == "best":
             return yt.streams.filter(adaptive=True, type="video").order_by("resolution").desc().first()
-        res = {"720p":"720p","480p":"480p","360p":"360p"}.get(quality)
-        if res:
-            s = yt.streams.filter(adaptive=True, type="video", resolution=res).first()
-            if s: return s
+
+        # Ziel-Höhe aus Qualität ableiten
+        target_map = {"2160p": 2160, "1440p": 1440, "1080p": 1080, "720p": 720,
+                      "480p": 480, "360p": 360, "240p": 240, "144p": 144}
+        target = target_map.get(quality)
+        if not target:
+            # Unbekannte Quality → Fallback wie best
+            return yt.streams.filter(adaptive=True, type="video").order_by("resolution").desc().first()
+
+        # 1) Exakt passende Auflösung?
+        exact = yt.streams.filter(adaptive=True, type="video", resolution=quality).order_by("resolution").desc().first()
+        if exact:
+            return exact
+
+        # 2) Nächst-kleinere Auflösung unter target (nie höher als gewünscht)
+        def _h(s):
+            r = getattr(s, "resolution", "") or ""
+            if r.endswith("p") and r[:-1].isdigit():
+                return int(r[:-1])
+            return 0
+
+        below = [s for s in all_video if 0 < _h(s) <= target]
+        if below:
+            below.sort(key=_h, reverse=True)  # höchste unter target
+            return below[0]
+
+        # 3) Falls alles über target liegt: höchstes nehmen (Notfall, wird selten passieren)
         return yt.streams.filter(adaptive=True, type="video").order_by("resolution").desc().first()
 
     def _res_num(self, s):
