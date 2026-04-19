@@ -562,6 +562,9 @@ class DownloadService:
         # Watchdog starten
         if not getattr(self, '_watchdog_task', None) or self._watchdog_task.done():
             self._watchdog_task = asyncio.create_task(self._watchdog())
+        # Throttle-Broadcast-Loop (3s-Tick, live auch während Downloads)
+        if not getattr(self, '_throttle_task', None) or self._throttle_task.done():
+            self._throttle_task = asyncio.create_task(self._throttle_broadcast_loop())
         logger.info("Download Worker gestartet")
 
     def _on_worker_done(self, task):
@@ -738,6 +741,20 @@ class DownloadService:
             "cooldown_active": self._cooldown_active,
             "current_throttle_kbps": current_throttle,
         })
+
+    async def _throttle_broadcast_loop(self):
+        """Tickt alle 3s den aktuellen Throttle-Wert raus — auch während
+        aktiver Downloads (wo kein Cooldown läuft). Frontend zeigt den
+        dynamisch berechneten Wert live an."""
+        import asyncio as _a
+        while True:
+            try:
+                await _a.sleep(3)
+                await self._broadcast_cooldown()
+            except _a.CancelledError:
+                break
+            except Exception:
+                pass
 
     async def reload_cooldown_base(self):
         """Cooldown-Base live aus Settings neu laden (z.B. nach Slider-Änderung)."""
