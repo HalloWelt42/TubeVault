@@ -1,0 +1,20 @@
+#!/bin/bash
+# TubeVault commit-msg hook
+# Blockiert Commits, deren Message "claude" oder "anthropic" enthält.
+# Umfasst auch "Co-Authored-By: Claude …" und ähnliche Footer.
+
+MSG_FILE="$1"
+
+RED='\033[0;31m'
+NC='\033[0m'
+
+if grep -iE 'claude|anthropic' "$MSG_FILE" > /dev/null; then
+  echo -e "${RED}❌ FEHLER: Commit-Message enthält 'claude' oder 'anthropic'.${NC}"
+  echo "Gefundene Zeilen:"
+  grep -niE 'claude|anthropic' "$MSG_FILE"
+  echo ""
+  echo "Bitte Commit-Message anpassen. Kein --no-verify."
+  exit 1
+fi
+
+exit 0

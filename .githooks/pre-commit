@@ -1,0 +1,54 @@
+#!/bin/bash
+# TubeVault pre-commit hook
+# Blockiert JEDEN Commit, der "claude" oder "anthropic" enthält —
+# in Datei-Inhalten, Dateinamen, git-config (user.name/email).
+# Begründung: User-Anweisung, diese Begriffe dürfen NIE ins Repo.
+
+set -e
+
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+FOUND_ISSUE=0
+
+# 1. Inhalt der gestageten Änderungen prüfen
+# Wir scannen ausschließlich den staged diff, nicht das ganze Repo.
+# Ausgenommen: .githooks/ selber (enthält die verbotenen Muster als Regex-Pattern).
+CONTENT_HITS=$(git diff --cached --no-color -- ':(exclude).githooks' | grep -niE 'claude|anthropic' || true)
+if [ -n "$CONTENT_HITS" ]; then
+  echo -e "${RED}❌ FEHLER: 'claude' oder 'anthropic' in gestageten Änderungen gefunden.${NC}"
+  echo -e "${YELLOW}Diese Begriffe dürfen NIEMALS ins Repo.${NC}"
+  echo -e "Betroffene Zeilen (erste 10):"
+  echo "$CONTENT_HITS" | head -10
+  echo ""
+  FOUND_ISSUE=1
+fi
+
+# 2. Dateinamen prüfen
+NAME_HITS=$(git diff --cached --name-only | grep -iE 'claude|anthropic' || true)
+if [ -n "$NAME_HITS" ]; then
+  echo -e "${RED}❌ FEHLER: Dateinamen mit 'claude' oder 'anthropic' sind verboten:${NC}"
+  echo "$NAME_HITS"
+  echo ""
+  FOUND_ISSUE=1
+fi
+
+# 3. Git-Config prüfen (Author/Email)
+AUTHOR_NAME=$(git config user.name 2>/dev/null || echo "")
+AUTHOR_EMAIL=$(git config user.email 2>/dev/null || echo "")
+if echo "$AUTHOR_NAME $AUTHOR_EMAIL" | grep -iE 'claude|anthropic' > /dev/null; then
+  echo -e "${RED}❌ FEHLER: git user.name / user.email enthält 'claude' oder 'anthropic':${NC}"
+  echo "  user.name:  $AUTHOR_NAME"
+  echo "  user.email: $AUTHOR_EMAIL"
+  FOUND_ISSUE=1
+fi
+
+if [ $FOUND_ISSUE -eq 1 ]; then
+  echo ""
+  echo -e "${RED}Commit abgelehnt.${NC}"
+  echo "Falls ein Match fälschlich ist: keine Umgehung via --no-verify — Code wirklich säubern."
+  exit 1
+fi
+
+exit 0
