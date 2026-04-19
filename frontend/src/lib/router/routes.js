@@ -110,13 +110,13 @@ export const routeDefinitions = {
   },
   'archives': {
     path: '/archives',
-    label: 'Archiv',
+    label: 'Weggelegt',
     icon: 'fa-solid fa-box-archive',
     group: 'main',
     hasId: false,
     badge: 'archives',
     queryParams: ['sort', 'order', 'type', 'channel', 'category', 'tag', 'q', 'page'],
-    description: 'Archivierte Videos',
+    description: 'Weggelegte Videos',
   },
   'own-videos': {
     path: '/own-videos',
@@ -194,10 +194,10 @@ export const routeDefinitions = {
     path: '/search',
     label: 'Suche',
     icon: 'fa-solid fa-magnifying-glass',
-    group: 'hidden',
+    group: 'main',
     hasId: false,
     queryParams: ['q', 'scope'],
-    description: 'Globale Suche',
+    description: 'Globale Suche (Bibliothek + YouTube)',
   },
 };
 

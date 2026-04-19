@@ -215,7 +215,7 @@
       <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('short')}><i class="fa-solid fa-mobile-screen"></i> → Short</button>
       <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('live')}><i class="fa-solid fa-tower-broadcast"></i> → Live</button>
       <span class="bulk-sep">|</span>
-      <button class="bulk-btn" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Archivieren</button>
+      <button class="bulk-btn" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Weglegen</button>
       <button class="bulk-btn bulk-danger" onclick={deleteSelected}><i class="fa-regular fa-trash-can"></i> Löschen</button>
     </div>
   {/if}

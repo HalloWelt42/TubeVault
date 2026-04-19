@@ -135,7 +135,13 @@
   <!-- Stats -->
   {#if stats}
     <div class="stats-grid">
-      <div class="stat-card accent"><span class="stat-value">{stats.total_videos || 0}</span><span class="stat-label">Videos</span></div>
+      <div class="stat-card accent">
+        <span class="stat-value">{(stats.total_videos || 0).toLocaleString('de-DE')}</span>
+        <span class="stat-label">Videos</span>
+        {#if stats.archives_count > 0}
+          <span class="stat-sub">+ {stats.archives_count.toLocaleString('de-DE')} weggelegt</span>
+        {/if}
+      </div>
       <div class="stat-card"><span class="stat-value">{stats.total_size_human || '0 B'}</span><span class="stat-label">Belegt</span></div>
       {#if stats.storage_split}
         <div class="stat-card storage-split">
@@ -262,6 +268,7 @@
   .stat-card.accent { border-color: var(--accent-primary); }
   .stat-value { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
   .stat-label { font-size: 0.72rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.03em; }
+  .stat-sub { font-size: 0.68rem; color: var(--text-tertiary); margin-top: 2px; }
 
   .stat-card.storage-split { grid-column: span 2; gap: 8px; }
   .storage-row { display: flex; align-items: center; gap: 8px; }

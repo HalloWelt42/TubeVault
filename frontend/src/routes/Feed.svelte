@@ -583,10 +583,10 @@
               {/if}
               <!-- Schnellaktionen je nach Tab -->
               {#if feedTab === 'active'}
-                <button class="overlay-btn later-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'later'); }} title="Spaeter anschauen">
+                <button class="overlay-btn later-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'later'); }} title="Später anschauen">
                   <i class="fa-solid fa-bookmark"></i>
                 </button>
-                <button class="overlay-btn archive-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'archived'); }} title="Archivieren">
+                <button class="overlay-btn archive-btn" onclick={(e) => { e.stopPropagation(); setStatus(entry, 'archived'); }} title="Weglegen">
                   <i class="fa-solid fa-box-archive"></i>
                 </button>
                 <button class="overlay-btn dismiss-btn" onclick={(e) => { e.stopPropagation(); dismissEntry(entry); }} title="Ausblenden">

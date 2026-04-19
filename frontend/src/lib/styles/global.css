@@ -1,11 +1,13 @@
 /**
- * TubeVault – Globale Styles v1.5.52
+ * TubeVault – Globale Styles v1.6.0
  * Zentrale CSS-Klassen für alle Routes
  * © HalloWelt42 – Private Nutzung
  *
  * Importiert in App.svelte als :global()
  * Ersetzt lokale Duplikate in: Archives, Categories, Downloads,
  * Feed, Import, OwnVideos, Search, Subscriptions, Watch
+ *
+ * v1.6.0: .card-hover-actions + .hover-action-btn zentral (Feed-Stil)
  */
 
 /* ═══════════════════════════════════════════════
@@ -464,6 +466,72 @@ label:has(input[type="checkbox"]) {
 .md-content blockquote, .md-preview blockquote { border-left: 3px solid var(--accent-primary); padding-left: 12px; margin: 0 0 8px; color: var(--text-tertiary); }
 .md-content strong, .md-preview strong { color: var(--text-primary); }
 .md-content img, .md-preview img { max-width: 100%; border-radius: 6px; }
+
+/* ═══════════════════════════════════════════════
+   CARD HOVER ACTIONS (zentral – Feed, Playlists, Archiv, etc.)
+   ═══════════════════════════════════════════════
+
+   Verwendung:
+   <div class="thumb-wrap">
+     <img ... />
+     <div class="card-hover-actions">
+       <button class="hover-action-btn" title="…"><i class="fa-…"></i></button>
+       <button class="hover-action-btn danger" title="…"><i class="fa-…"></i></button>
+     </div>
+   </div>
+
+   Der Container (.thumb-wrap / .card-wrap) muss position:relative haben und
+   eine .card-hover-trigger-Klasse (oder den Hover-Parent) — oder einfacher:
+   der Hover-Parent ruft .card-hover-actions auf seinen Hover hin ein.
+*/
+.card-hover-actions {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; opacity: 0; pointer-events: none;
+  transition: opacity 0.15s;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2;
+}
+.card-hover-trigger:hover .card-hover-actions,
+.card-wrap:hover .card-hover-actions,
+.video-card:hover .card-hover-actions,
+.playlist-card:hover .card-hover-actions,
+.thumb-wrap:hover .card-hover-actions {
+  opacity: 1; pointer-events: auto;
+}
+
+.hover-action-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95); color: #111;
+  border: none; cursor: pointer;
+  font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: transform 0.1s, background 0.12s, color 0.12s;
+  padding: 0;
+}
+.hover-action-btn:hover {
+  transform: scale(1.08);
+  background: var(--accent-primary); color: #fff;
+}
+.hover-action-btn.warn { color: #f59e0b; }
+.hover-action-btn.warn:hover { background: #f59e0b; color: #fff; }
+.hover-action-btn.danger { color: var(--status-error); }
+.hover-action-btn.danger:hover { background: var(--status-error); color: #fff; }
+.hover-action-btn.active,
+.hover-action-btn.pinned {
+  background: rgba(245, 158, 11, 0.95); color: #fff;
+}
+.hover-action-btn.pinned:hover { background: #f59e0b; }
+
+/* Kleinere Variante (für kompakte Listen) */
+.hover-action-btn.sm {
+  width: 32px; height: 32px; font-size: 0.82rem;
+}
+/* Größere Variante */
+.hover-action-btn.lg {
+  width: 48px; height: 48px; font-size: 1.2rem;
+}
 
 /* ═══ QuickPlaylistBtn: Fixed-Position Tooltip + Picker ═══ */
 .qpl-tooltip-fixed {

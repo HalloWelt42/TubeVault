@@ -114,7 +114,7 @@
 
 <div class="library">
   <div class="library-header">
-    <h1 class="page-title"><i class="fa-solid fa-box-archive"></i> Archiv</h1>
+    <h1 class="page-title"><i class="fa-solid fa-box-archive"></i> Weggelegt</h1>
     <span class="video-count">{total} Video{total !== 1 ? 's' : ''}</span>
     {#if hasActiveFilter}
       <button class="btn-clear-filter" onclick={clearFilters}><i class="fa-solid fa-xmark"></i> Filter zurücksetzen</button>

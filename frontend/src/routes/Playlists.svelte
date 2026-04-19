@@ -1,6 +1,7 @@
 <!--
-  TubeVault – Playlists v1.5.91
+  TubeVault – Playlists v1.6.0
   Playlist-Verwaltung: Erstellen, Abspielen, Videos hinzufügen, Drag&Drop Sortieren.
+  v1.6.0: Hover-Buttons im Feed-Stil (zentral, gross, weiss) via global.css
   © HalloWelt42 – Private Nutzung
 -->
 <script>
@@ -347,37 +348,40 @@
             </div>
           {:else}
             <div class="playlist-card">
-              <button class="pl-card-body" onclick={() => selectPlaylist(pl)}>
-                <div class="pl-cover">
-                  {#if pl.cover_video_id}
-                    <img src={api.thumbnailUrl(pl.cover_video_id)} alt="" onerror={(e) => e.target.style.display='none'} />
-                  {:else}
-                    <div class="pl-cover-fallback"><i class="fa-solid fa-music"></i></div>
-                  {/if}
-                  <div class="pl-cover-overlay">
+              <div class="pl-cover">
+                {#if pl.cover_video_id}
+                  <img src={api.thumbnailUrl(pl.cover_video_id)} alt="" onerror={(e) => e.target.style.display='none'} />
+                {:else}
+                  <div class="pl-cover-fallback"><i class="fa-solid fa-music"></i></div>
+                {/if}
+                <!-- Hover-Overlay: Feed-Stil (zentrale runde Buttons, weiss auf dunkel) -->
+                <div class="card-hover-actions">
+                  <button class="hover-action-btn" onclick={() => selectPlaylist(pl)} title="Öffnen">
                     <i class="fa-solid fa-play"></i>
-                    <span>{pl.video_count || 0} Videos</span>
-                  </div>
+                  </button>
+                  <button class="hover-action-btn"
+                          class:pinned={$quickPlaylist?.id === pl.id}
+                          onclick={(e) => { e.stopPropagation(); togglePin(pl); }}
+                          title={$quickPlaylist?.id === pl.id ? 'Quick-Playlist lösen' : 'Als Quick-Playlist pinnen'}>
+                    <i class="fa-solid fa-thumbtack"></i>
+                  </button>
+                  <button class="hover-action-btn" onclick={(e) => { e.stopPropagation(); startEditPl(pl); }} title="Bearbeiten">
+                    <i class="fa-solid fa-pen"></i>
+                  </button>
+                  <button class="hover-action-btn danger" onclick={(e) => { e.stopPropagation(); deletePlaylist(pl.id); }} title="Löschen">
+                    <i class="fa-regular fa-trash-can"></i>
+                  </button>
                 </div>
-                <div class="pl-card-info">
-                  <h3 class="pl-name">{pl.name}</h3>
-                  {#if pl.description}<p class="pl-desc">{pl.description}</p>{/if}
-                  <div class="pl-card-meta">
-                    <span>{pl.video_count || 0} Videos</span>
-                    {#if pl.total_duration}<span>· {formatDuration(pl.total_duration)}</span>{/if}
-                    {#if pl.source === 'youtube'}<span class="pl-yt-badge">YouTube</span>{/if}
-                  </div>
+              </div>
+              <button class="pl-card-info" onclick={() => selectPlaylist(pl)}>
+                <h3 class="pl-name">{pl.name}</h3>
+                {#if pl.description}<p class="pl-desc">{pl.description}</p>{/if}
+                <div class="pl-card-meta">
+                  <span>{pl.video_count || 0} Videos</span>
+                  {#if pl.total_duration}<span>· {formatDuration(pl.total_duration)}</span>{/if}
+                  {#if pl.source === 'youtube'}<span class="pl-yt-badge">YouTube</span>{/if}
                 </div>
               </button>
-              <div class="pl-card-actions">
-                <button class="pl-act-btn" class:pl-pinned={$quickPlaylist?.id === pl.id}
-                        onclick={() => togglePin(pl)}
-                        title={$quickPlaylist?.id === pl.id ? 'Quick-Playlist lösen' : 'Als Quick-Playlist pinnen'}>
-                  <i class="fa-solid fa-thumbtack"></i>
-                </button>
-                <button class="pl-act-btn" onclick={() => startEditPl(pl)} title="Bearbeiten"><i class="fa-solid fa-pen"></i></button>
-                <button class="pl-act-btn danger" onclick={() => deletePlaylist(pl.id)} title="Löschen"><i class="fa-regular fa-trash-can"></i></button>
-              </div>
             </div>
           {/if}
         {/each}
@@ -403,29 +407,18 @@
 
   /* Playlist Grid */
   .playlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-  .playlist-card { position: relative; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 12px; overflow: hidden; transition: all 0.15s; }
+  .playlist-card { position: relative; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 12px; overflow: hidden; transition: all 0.15s; display: flex; flex-direction: column; }
   .playlist-card:hover { border-color: var(--accent-primary); }
   .playlist-card.editing { padding: 14px; }
-  .pl-card-body { display: flex; flex-direction: column; background: none; border: none; cursor: pointer; text-align: left; width: 100%; color: inherit; }
   .pl-cover { position: relative; aspect-ratio: 16/9; background: var(--bg-tertiary); overflow: hidden; }
   .pl-cover img { width: 100%; height: 100%; object-fit: cover; }
   .pl-cover-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: var(--text-tertiary); }
-  .pl-cover-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; opacity: 0; transition: opacity 0.15s; color: #fff; font-size: 0.78rem; }
-  .pl-cover-overlay i { font-size: 1.3rem; }
-  .playlist-card:hover .pl-cover-overlay { opacity: 1; }
-  .pl-card-info { padding: 12px 14px; }
+  /* .card-hover-actions / .hover-action-btn – zentral in global.css (Feed-Stil) */
+  .pl-card-info { padding: 12px 14px; background: none; border: none; cursor: pointer; text-align: left; width: 100%; color: inherit; display: flex; flex-direction: column; gap: 3px; }
   .pl-name { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); margin: 0 0 2px; }
   .pl-desc { font-size: 0.76rem; color: var(--text-tertiary); margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pl-card-meta { display: flex; gap: 4px; font-size: 0.72rem; color: var(--text-tertiary); }
   .pl-yt-badge { padding: 0 5px; background: var(--status-error); color: #fff; font-size: 0.6rem; border-radius: 3px; font-weight: 600; }
-  .pl-card-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; z-index: 2; }
-  .playlist-card:hover .pl-card-actions { opacity: 1; }
-  .pl-act-btn { width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,0.7); color: #fff; border: none; cursor: pointer; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; }
-  .pl-act-btn:hover { background: var(--accent-primary); }
-  .pl-act-btn.danger:hover { background: var(--status-error); }
-  .pl-act-btn.pl-pinned { background: rgba(245,158,11,0.9); opacity: 1; }
-  .pl-act-btn.pl-pinned:hover { background: rgba(217,119,6,1); }
-  .playlist-card:has(.pl-pinned) .pl-card-actions { opacity: 1; }
   .pl-edit-form { display: flex; flex-direction: column; gap: 8px; }
   .pl-edit-input { padding: 6px 10px; background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font-size: 0.85rem; }
   .pl-edit-actions { display: flex; gap: 4px; }

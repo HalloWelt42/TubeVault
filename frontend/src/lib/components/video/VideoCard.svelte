@@ -1,7 +1,9 @@
 <script>
   /**
-   * TubeVault – VideoCard v1.8.0
+   * TubeVault – VideoCard v1.9.0
    * Typ-Badges klickbar (video→short→live), Like/Dislike Bar, QPL.
+   * v1.9.0: globale .card-hover-actions / .hover-action-btn (aus global.css)
+   * v1.9.0: User-Label "Weglegen/Weggelegt" (konsistent zum Feed-Tab).
    * © HalloWelt42 – Private Nutzung
    */
   import { api } from '../../api/client.js';
@@ -23,7 +25,7 @@
     try {
       await api.archiveVideo(video.id);
       hidden = true;
-      toast.success('Archiviert');
+      toast.success('Weggelegt');
       // Parent benachrichtigen, damit seine Liste neu geladen wird
       // (bisher blieb die Karte beim nächsten Parent-Reload wieder sichtbar).
       onUpdate?.();
@@ -90,22 +92,19 @@
     {#if video.like_count && video.dislike_count != null}
       <LikeBar likes={video.like_count} dislikes={video.dislike_count} mode="thumbnail" />
     {/if}
-    <!-- Hover-Aktionen: große runde Overlay-Buttons nur im Thumbnail-Bereich
-         (analog Feed-Card). Alle Funktionen erhalten. -->
+    <!-- Zentraler Hover-Overlay (Stil in global.css: .card-hover-actions + .hover-action-btn) -->
     <div class="card-hover-actions">
-      <div class="hover-action-group">
-        <div class="hover-action-btn" title="Zu Playlist hinzufügen">
-          <QuickPlaylistBtn videoId={video.id} title={video.title}
-                            channelName={video.channel_name}
-                            channelId={video.channel_id} size="sm" />
-        </div>
-        {#if showArchiveBtn && !video.is_archived}
-          <button class="hover-action-btn hover-btn-archive"
-                  onclick={archiveVideo} title="Archivieren">
-            <i class="fa-solid fa-box-archive"></i>
-          </button>
-        {/if}
+      <div class="hover-action-btn" title="Zu Playlist hinzufügen">
+        <QuickPlaylistBtn videoId={video.id} title={video.title}
+                          channelName={video.channel_name}
+                          channelId={video.channel_id} size="sm" />
       </div>
+      {#if showArchiveBtn && !video.is_archived}
+        <button class="hover-action-btn warn"
+                onclick={archiveVideo} title="Weglegen">
+          <i class="fa-solid fa-box-archive"></i>
+        </button>
+      {/if}
     </div>
   </div>
   <div class="video-info">
@@ -133,41 +132,7 @@
 
 <style>
   .card-wrap { position: relative; }
-
-  /* Hover-Action-Overlay: große runde Buttons mittig im Thumbnail-Bereich
-     (analog Feed-Card). Liegt INNERHALB .thumbnail-wrap, deckt also
-     nur das Thumbnail ab — Info-Section unten bleibt unberührt. */
-  .card-hover-actions {
-    position: absolute;
-    inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0; pointer-events: none;
-    transition: opacity 0.15s;
-    z-index: 2;
-    background: rgba(0, 0, 0, 0.35);
-  }
-  .card-wrap:hover .card-hover-actions {
-    opacity: 1; pointer-events: auto;
-  }
-
-  .hover-action-group {
-    display: flex; gap: 10px; align-items: center;
-  }
-  .hover-action-btn {
-    width: 40px; height: 40px; border-radius: 50%;
-    background: rgba(255, 255, 255, 0.95); color: #111;
-    border: none; cursor: pointer;
-    font-size: 1rem;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    transition: transform 0.1s, background 0.12s, color 0.12s;
-  }
-  .hover-action-btn:hover {
-    transform: scale(1.08);
-    background: var(--accent-primary); color: #fff;
-  }
-  .hover-btn-archive { color: #f59e0b; }
-  .hover-btn-archive:hover { background: #f59e0b; color: #fff; }
+  /* .card-hover-actions / .hover-action-btn – zentral in global.css */
 
   .video-card {
     display: flex; flex-direction: column; background: var(--bg-secondary);
