@@ -317,13 +317,29 @@
   let uncheckedCount = $derived(subs.filter(s => !s.last_checked).length);
   let disabledCount = $derived(subs.filter(s => !s.enabled).length);
 
+  // „Komplett" = Gold-Medaille: voll geladen ODER bei ≥100 Videos max 1 fehlend.
+  // Logik identisch zu channelMedal(), damit Filter und Medal konsistent sind.
+  function isComplete(sub) {
+    const rss = sub.rss_count || 0;
+    const dl = sub.downloaded_count || 0;
+    if (rss < 3 || !sub.last_scanned) return false;
+    const missing = Math.max(0, rss - dl);
+    if (missing === 0) return true;
+    if (rss >= 100 && missing <= 1) return true;
+    return false;
+  }
+  let completeCount = $derived(subs.filter(isComplete).length);
+
   let filtered = $derived.by(() => {
     let result = filterMode === 'all' ? subs :
       filterMode === 'active' ? subs.filter(s => s.enabled) :
       filterMode === 'auto' ? subs.filter(s => s.auto_download) :
       filterMode === 'errors' ? subs.filter(s => s.error_count > 0) :
       filterMode === 'unchecked' ? subs.filter(s => !s.last_checked) :
-      filterMode === 'disabled' ? subs.filter(s => !s.enabled) : subs;
+      filterMode === 'disabled' ? subs.filter(s => !s.enabled) :
+      filterMode === 'complete' ? subs.filter(isComplete) :
+      filterMode === 'incomplete' ? subs.filter(s => !isComplete(s) && (s.rss_count || 0) >= 3 && s.last_scanned) :
+      subs;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(s =>
@@ -364,6 +380,18 @@
         <strong>{count}</strong> {label}
       </button>
     {/each}
+    {#if completeCount > 0}
+      <button class="filter-chip complete-chip" class:active={filterMode==='complete'}
+              onclick={()=>filterMode='complete'}
+              title="Kanäle mit Gold-Medaille: komplett geladen oder ≥100 Videos mit höchstens 1 fehlend">
+        <strong>{completeCount}</strong> 🥇 Komplett
+      </button>
+      <button class="filter-chip" class:active={filterMode==='incomplete'}
+              onclick={()=>filterMode='incomplete'}
+              title="Kanäle die noch nicht komplett sind (Medaille unter Gold)">
+        <strong>{total - completeCount - uncheckedCount}</strong> Unvollständig
+      </button>
+    {/if}
     {#if uncheckedCount > 0}
       <button class="filter-chip warn" class:active={filterMode==='unchecked'} onclick={()=>filterMode='unchecked'}>
         <strong>{uncheckedCount}</strong> Ungeprüft
@@ -724,6 +752,9 @@
   .filter-chip.warn { border-color: var(--status-warning); }
   .filter-chip.warn strong { color: var(--status-warning); }
   .filter-chip.warn.active { background: rgba(245,158,11,0.1); color: var(--status-warning); }
+  .filter-chip.complete-chip { border-color: rgba(250,204,21,0.6); }
+  .filter-chip.complete-chip strong { color: #eab308; }
+  .filter-chip.complete-chip.active { background: rgba(234,179,8,0.12); border-color: #eab308; }
 
   .status-badge {
     display: inline-flex; align-items: center; gap: 4px;
