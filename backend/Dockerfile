@@ -38,6 +38,7 @@ RUN pip install --no-cache-dir --timeout=120 --retries=5 -r requirements.txt \
 # App-Code
 COPY app/ ./app/
 COPY entrypoint.sh ./entrypoint.sh
+COPY pytest.ini ./pytest.ini
 RUN chmod +x ./entrypoint.sh
 
 # Daten-Verzeichnisse

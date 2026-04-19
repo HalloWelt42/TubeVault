@@ -343,14 +343,12 @@ class StreamAdapter:
         _cf = _cookiefile()
         if _cf:
             opts["cookiefile"] = _cf
-        # Throttling aus Settings – 3 Modi:
-        #   realtime  → ratelimit = filesize / duration (passt jedem Video an,
-        #               wirkt für YouTube wie Streaming → weniger Bot-Verdacht)
-        #   fixed     → throttle_kbps fester Wert
-        #   off/0     → keine Limitierung
+        # Throttle-Berechnung via throttle_calc.compute() (pure Funktion, getestet).
+        # Liest die 2 Settings direkt aus SQLite (sync, pro Download ok).
         try:
             import sqlite3 as _sq
             from app.config import DB_PATH as _DB
+            from app.services.throttle_calc import compute as _throttle_compute
             _c = _sq.connect(str(_DB))
             _rt = _c.execute(
                 "SELECT value FROM settings WHERE key='download.throttle_realtime'"
@@ -360,38 +358,20 @@ class StreamAdapter:
             ).fetchone()
             _c.close()
             realtime = bool(_rt and str(_rt[0]).lower() == 'true')
-            applied_bytes_s = 0
-            if realtime:
-                # Duration ist video-level (in info dict), nicht format-level
-                duration = (self._video_duration
-                            or self._fmt.get("duration")
-                            or 0)
-                filesize = (self._fmt.get("filesize")
-                            or self._fmt.get("filesize_approx")
-                            or 0)
-                # Fallback: tbr (avg bitrate in KB/s) * duration
-                if (not filesize) and duration:
-                    tbr = self._fmt.get("tbr") or 0  # yt-dlp: kbit/s
-                    if tbr:
-                        filesize = int(tbr * 1000 / 8 * duration)
-                logger.info(f"[throttle] realtime: duration={duration}s filesize={filesize}B")
-                if duration and filesize:
-                    applied_bytes_s = max(32 * 1024, int(filesize / duration * 1.2))
-                    opts["ratelimit"] = applied_bytes_s
-                else:
-                    # Fallback wenn Metadaten fehlen: 800 KB/s (normale YT-Streaming-Rate)
-                    applied_bytes_s = 800 * 1024
-                    opts["ratelimit"] = applied_bytes_s
-                    logger.warning("[throttle] realtime ohne Metadaten → Fallback 800 KB/s")
-            elif _kb:
-                kbps = int(_kb[0] or 0)
-                if kbps > 0:
-                    applied_bytes_s = kbps * 1024
-                    opts["ratelimit"] = applied_bytes_s
-            # Live-Wert für UI-Anzeige (cooldown-broadcast)
-            live_kbps = int(applied_bytes_s / 1024) if applied_bytes_s else 0
-            _set_current_throttle_kbps(live_kbps)
-            logger.info(f"[throttle] applied: {live_kbps} KB/s (realtime={realtime})")
+            fixed_kbps = int(_kb[0]) if _kb and str(_kb[0]).isdigit() else 0
+
+            decision = _throttle_compute(
+                realtime=realtime,
+                fixed_kbps=fixed_kbps,
+                duration_s=self._video_duration or self._fmt.get("duration"),
+                filesize_bytes=(self._fmt.get("filesize")
+                                or self._fmt.get("filesize_approx")),
+                tbr_kbps=self._fmt.get("tbr"),
+            )
+            if decision.active:
+                opts["ratelimit"] = decision.bytes_per_sec
+            _set_current_throttle_kbps(decision.kbps)
+            logger.info(f"[throttle] applied: {decision.kbps} KB/s ({decision.reason})")
         except Exception as _e:
             logger.warning(f"[throttle] setup failed: {_e}")
         with _ydl.YoutubeDL(opts) as ydl:
