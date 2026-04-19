@@ -11,6 +11,8 @@
   let videos = $state([]);
   let continueWatching = $state([]);
   let downloadUrl = $state('');
+  let downloadQuality = $state('best');
+  let audioOnly = $state(false);
   let downloading = $state(false);
   let showShortcuts = $state(false);
 
@@ -41,7 +43,11 @@
     }
     downloading = true;
     try {
-      const result = await api.addDownload({ url, quality: 'best' });
+      const result = await api.addDownload({
+        url,
+        quality: audioOnly ? 'audio_only' : downloadQuality,
+        audio_only: audioOnly,
+      });
       toast.success(`Download gestartet: ${result.video_id}`);
       downloadUrl = '';
       setTimeout(loadData, 3000);
@@ -81,6 +87,24 @@
       <input type="text" class="download-input" placeholder="YouTube-URL einfügen…"
              bind:value={downloadUrl} onkeydown={(e) => e.key === 'Enter' && startDownload()}
              disabled={downloading} />
+      {#if !audioOnly}
+        <select class="dl-quality" bind:value={downloadQuality} disabled={downloading}
+                title="Video-Qualität">
+          <option value="best">Beste</option>
+          <option value="1080p">1080p</option>
+          <option value="720p">720p</option>
+          <option value="480p">480p</option>
+          <option value="360p">360p</option>
+          <option value="240p">240p</option>
+          <option value="144p">144p</option>
+        </select>
+      {/if}
+      <button class="dl-audio-toggle" class:active={audioOnly}
+              onclick={() => audioOnly = !audioOnly}
+              disabled={downloading}
+              title={audioOnly ? 'Nur Audio – Klick für Video' : 'Video – Klick für nur Audio'}>
+        <i class="fa-solid fa-music"></i> Audio
+      </button>
       <button class="btn-download" onclick={startDownload} disabled={downloading || !downloadUrl.trim()}>
         {downloading ? 'Lädt…' : 'Download'}
       </button>
@@ -214,6 +238,22 @@
     border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
   }
   .btn-download:disabled { opacity: 0.5; cursor: not-allowed; }
+  .dl-quality {
+    background: var(--bg-tertiary); color: var(--text-secondary);
+    border: 1px solid var(--border-primary); border-radius: 6px;
+    padding: 6px 10px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;
+  }
+  .dl-quality:focus { outline: none; border-color: var(--accent-primary); }
+  .dl-audio-toggle {
+    background: var(--bg-tertiary); color: var(--text-secondary);
+    border: 1px solid var(--border-primary); border-radius: 6px;
+    padding: 6px 10px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 4px; transition: all 0.12s;
+  }
+  .dl-audio-toggle:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+  .dl-audio-toggle.active {
+    background: var(--accent-primary); color: #fff; border-color: var(--accent-primary);
+  }
 
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
   .stat-card {
