@@ -465,13 +465,13 @@
 <div class="page">
   <div class="page-header">
     <h1 class="title"><i class="fa-solid fa-bolt"></i> Jobs</h1>
+    <!-- Stats aus gleicher Quelle wie Tab-Counts (matchesTab) – sonst Diskrepanz -->
     <div class="queue-stats">
-      <span class="qs active">{queue.active_count} aktiv</span>
-      <span class="qs queued">{queue.queued_count} wartend</span>
-      <span class="qs done">{queue.completed_count} fertig</span>
-      {#if queue.error_count > 0}<span class="qs error">{queue.error_count} Fehler</span>{/if}
-      {#if queue.cancelled_count > 0}<span class="qs cancelled">{queue.cancelled_count} abgebrochen</span>{/if}
-      {#if queue.retry_wait_count > 0}<span class="qs retry-wait">{queue.retry_wait_count} warten</span>{/if}
+      <span class="qs active">{jobCounts.active} aktiv</span>
+      <span class="qs queued">{jobCounts.wait} wartend</span>
+      <span class="qs done">{jobCounts.done} fertig</span>
+      {#if jobCounts.error > 0}<span class="qs error">{jobCounts.error} Fehler</span>{/if}
+      {#if jobCounts.cancelled > 0}<span class="qs cancelled">{jobCounts.cancelled} abgebrochen</span>{/if}
     </div>
   </div>
 
@@ -739,9 +739,9 @@
               {/each}
             </div>
           {/if}
-          {#if queue.failed_count > 0}
+          {#if jobCounts.error > 0}
             <button class="link-btn link-retry" onclick={retryAllFailed}>
-              <i class="fa-solid fa-rotate-right"></i> Alle erneut ({queue.failed_count})
+              <i class="fa-solid fa-rotate-right"></i> Alle erneut ({jobCounts.error})
             </button>
           {/if}
           <button class="link-btn" onclick={fixStale} title="Festhängende Downloads zurück in die Warteschlange">Festhänger befreien</button>
@@ -946,7 +946,7 @@
 </div>
 
 <style>
-  .page { padding: 24px; padding-bottom: 60px; max-width: 900px; }
+  .page { padding: 24px; padding-bottom: 60px; max-width: 1400px; }
   .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px; }
   .title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
 

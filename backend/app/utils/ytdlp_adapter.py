@@ -109,8 +109,9 @@ class StreamAdapter:
 
     __slots__ = ("_fmt", "_on_progress", "_watch_url")
 
-    def __init__(self, fmt: dict, on_progress_callback=None, watch_url: str = ""):
+    def __init__(self, fmt: dict, on_progress_callback=None, watch_url: str = "", video_duration: int = 0):
         self._fmt = fmt
+        self._video_duration = video_duration
         self._on_progress = on_progress_callback
         self._watch_url = watch_url
 
@@ -295,23 +296,38 @@ class StreamAdapter:
             realtime = bool(_rt and str(_rt[0]).lower() == 'true')
             applied_bytes_s = 0
             if realtime:
-                # filesize / duration → bytes/s; +20% Overhead damit Download etwas
-                # schneller läuft als das Video (Merge-Zeit, Buffer)
-                duration = self._fmt.get("duration") or 0
+                # Duration ist video-level (in info dict), nicht format-level
+                duration = (self._video_duration
+                            or self._fmt.get("duration")
+                            or 0)
                 filesize = (self._fmt.get("filesize")
-                            or self._fmt.get("filesize_approx") or 0)
-                if duration > 0 and filesize > 0:
+                            or self._fmt.get("filesize_approx")
+                            or 0)
+                # Fallback: tbr (avg bitrate in KB/s) * duration
+                if (not filesize) and duration:
+                    tbr = self._fmt.get("tbr") or 0  # yt-dlp: kbit/s
+                    if tbr:
+                        filesize = int(tbr * 1000 / 8 * duration)
+                logger.info(f"[throttle] realtime: duration={duration}s filesize={filesize}B")
+                if duration and filesize:
                     applied_bytes_s = max(32 * 1024, int(filesize / duration * 1.2))
                     opts["ratelimit"] = applied_bytes_s
+                else:
+                    # Fallback wenn Metadaten fehlen: 800 KB/s (normale YT-Streaming-Rate)
+                    applied_bytes_s = 800 * 1024
+                    opts["ratelimit"] = applied_bytes_s
+                    logger.warning("[throttle] realtime ohne Metadaten → Fallback 800 KB/s")
             elif _kb:
                 kbps = int(_kb[0] or 0)
                 if kbps > 0:
                     applied_bytes_s = kbps * 1024
                     opts["ratelimit"] = applied_bytes_s
             # Live-Wert für UI-Anzeige (cooldown-broadcast)
-            _set_current_throttle_kbps(int(applied_bytes_s / 1024) if applied_bytes_s else 0)
-        except Exception:
-            pass
+            live_kbps = int(applied_bytes_s / 1024) if applied_bytes_s else 0
+            _set_current_throttle_kbps(live_kbps)
+            logger.info(f"[throttle] applied: {live_kbps} KB/s (realtime={realtime})")
+        except Exception as _e:
+            logger.warning(f"[throttle] setup failed: {_e}")
         with _ydl.YoutubeDL(opts) as ydl:
             ydl.download([url])
 
@@ -600,11 +616,13 @@ class YoutubeAdapter:
         fmts = [f for f in fmts if f.get("url")]
         # Storyboards/Bilder raus (sb*)
         fmts = [f for f in fmts if f.get("ext") not in ("mhtml",)]
+        video_duration = int(info.get("duration") or 0)
         return StreamQueryAdapter([
             StreamAdapter(
                 f,
                 on_progress_callback=self.on_progress_callback,
                 watch_url=self.watch_url,
+                video_duration=video_duration,
             )
             for f in fmts
         ])
