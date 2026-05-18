@@ -625,6 +625,12 @@ async def link_youtube(staging_id: int, req: LinkYoutubeRequest):
              "ready", "imported", tags_json, now, now, meta.get("publish_date"), now)
         )
 
+    try:
+        from app.services import text_export
+        await text_export.export_description(yt_id)
+    except Exception:
+        pass
+
     # 10. FTS5 aktualisieren
     try:
         await db.fts_sync_video(yt_id)
@@ -648,6 +654,8 @@ async def link_youtube(staging_id: int, req: LinkYoutubeRequest):
                        VALUES (?, ?, ?, ?, 'youtube')""",
                     (yt_id, ch["title"], ch["start_time"], ch.get("end_time"))
                 )
+            from app.services import text_export as _te
+            await _te.export_chapters(yt_id)
     except Exception as e:
         logger.warning(f"Chapters-Import für {yt_id}: {e}")
 
@@ -792,6 +800,12 @@ async def import_own(staging_id: int, req: ImportOwnRequest):
          row.get("duration"), str(dest), file_size,
          "ready", source, thumb_path, now, now, now)
     )
+
+    try:
+        from app.services import text_export
+        await text_export.export_description(video_id)
+    except Exception:
+        pass
 
     # Kategorie zuweisen
     if req.category_id:

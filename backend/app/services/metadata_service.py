@@ -23,6 +23,9 @@ class MetadataService:
         if not row:
             return None
         result = self._row_to_dict(row)
+        # description kommt immer über den Resolver (File-first, DB-Fallback)
+        from app.services.text_resolver import get_description
+        result["description"] = await get_description(video_id) or ""
         # Kategorie-IDs und -Namen anhängen
         cats = await db.fetch_all(
             """SELECT c.id, c.name, c.color FROM video_categories vc
@@ -226,6 +229,13 @@ class MetadataService:
                 f"UPDATE videos SET {set_clause} WHERE id = ?", values
             )
 
+            if "description" in filtered:
+                try:
+                    from app.services import text_export
+                    await text_export.export_description(video_id)
+                except Exception as e:
+                    logger.warning(f"text_export description {video_id}: {e}")
+
         # video_type auch in rss_entries synchronisieren
         if "video_type" in updates and updates["video_type"] in ("video", "short", "live"):
             await db.execute(
@@ -235,8 +245,13 @@ class MetadataService:
 
         return await self.get_video(video_id)
 
-    async def delete_video(self, video_id: str) -> bool:
-        """Video und zugehörige Dateien + DB-Einträge löschen."""
+    async def delete_video(self, video_id: str, ignore_for_future: bool = True) -> bool:
+        """Video und zugehörige Dateien + DB-Einträge löschen.
+
+        ignore_for_future=True (Default): Video kommt in ignored_videos, damit
+        Auto-Download (RSS/Drip) es nicht beim nächsten Sync wieder lädt.
+        Auf False setzen wenn das Delete nur eine vorübergehende Bereinigung ist
+        (z.B. Tests, Re-Download nach Korruption)."""
         import shutil
         from app.config import VIDEOS_DIR, THUMBNAILS_DIR, SUBTITLES_DIR, AUDIO_DIR
 
@@ -261,6 +276,14 @@ class MetadataService:
         await db.execute("DELETE FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ?", (video_id,))
         # rss_entries NICHT löschen → Katalog bleibt erhalten
 
+        # Auf ignore-Liste, damit Auto-Download nicht wieder zuschlägt
+        if ignore_for_future:
+            await db.execute(
+                """INSERT OR IGNORE INTO ignored_videos (video_id, channel_id, reason)
+                   VALUES (?, ?, ?)""",
+                (video_id, video.get("channel_id"), "manuell gelöscht"),
+            )
+
         # Video selbst löschen
         await db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
 
@@ -271,7 +294,8 @@ class MetadataService:
             )"""
         )
 
-        logger.info(f"Video gelöscht: {video_id} (inkl. Favoriten, Playlists, History)")
+        logger.info(f"Video gelöscht: {video_id} (inkl. Favoriten, Playlists, History"
+                    + (", auf Ignore-Liste" if ignore_for_future else "") + ")")
         return True
 
     async def record_play(self, video_id: str, position: int = 0):

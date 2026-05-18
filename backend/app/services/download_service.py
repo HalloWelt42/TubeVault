@@ -120,6 +120,10 @@ class DownloadService:
         self._worker_task: Optional[asyncio.Task] = None
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        # Aktuell laufender Job → wird vom Adapter-Hook genutzt um Job-Description
+        # bei jedem yt-dlp-Retry zu aktualisieren (Live-UI-Sichtbarkeit der Versuche)
+        self._current_job_id: Optional[int] = None
+        self._current_video_id: Optional[str] = None
         self._phases_cache: dict[int, list] = {}  # job_id → letzte phases
         self._last_db_write: dict[int, float] = {}  # job_id → timestamp des letzten DB-Writes
         self._job_opts: dict[int, dict] = {}  # job_id → download_options (für _stage Phasen-Wahl)
@@ -523,6 +527,14 @@ class DownloadService:
         if self._worker_task and not self._worker_task.done():
             return
         self._loop = asyncio.get_event_loop()
+        # Retry-Hook registrieren: bei jedem yt-dlp-Retry wird der aktuelle
+        # Job-Description live aktualisiert, damit das UI die Versuche
+        # einzeln sieht statt nur das Endergebnis.
+        try:
+            from app.utils.ytdlp_adapter import set_retry_hook
+            set_retry_hook(self._on_yt_retry)
+        except Exception as e:
+            logger.warning(f"set_retry_hook fehlgeschlagen: {e}")
         # Concurrent-Einstellung aus DB lesen
         try:
             concurrent = int(await self._get_setting("download.concurrent", str(MAX_CONCURRENT_DOWNLOADS)))
@@ -599,6 +611,39 @@ class DownloadService:
     def worker_alive(self) -> bool:
         """Prüft ob der Worker-Task läuft."""
         return self._worker_task is not None and not self._worker_task.done()
+
+    def _on_yt_retry(self, label: str, attempt: int, total: int, cat: str, msg: str):
+        """Sync-Callback aus dem ytdlp_adapter bei jedem Retry-Versuch.
+        Wir kennen den aktuell aktiven Job (single-job-worker) – damit
+        können wir die Job-Description live aktualisieren, ohne den
+        synchronen yt-dlp-Run zu blockieren.
+        Wichtig: dieser Callback wird aus dem yt-dlp-Thread aufgerufen,
+        also kein await – wir scheduln einen Task im event loop."""
+        job_id = self._current_job_id
+        loop = self._loop
+        if not job_id or loop is None:
+            return
+        # Best-effort, kein Crash bei Loop-Problemen
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self._update_job_retry_status(job_id, msg), loop
+            )
+        except Exception:
+            pass
+
+    async def _update_job_retry_status(self, job_id: int, msg: str):
+        try:
+            await db.execute(
+                "UPDATE jobs SET description = ? WHERE id = ?", (msg, job_id)
+            )
+            await self._ws_broadcast({
+                "type": "job_update",
+                "job_id": job_id,
+                "queue_id": job_id,
+                "description": msg,
+            })
+        except Exception as e:
+            logger.debug(f"retry-status update {job_id}: {e}")
 
     async def restart_worker(self):
         """Worker-Task neu starten (z.B. nach Crash)."""
@@ -682,10 +727,22 @@ class DownloadService:
                     # Cooldown VOR dem eigentlichen Download abwarten
                     # Job bleibt 'queued' während Cooldown → blockiert nichts!
                     if self._cooldown > 0:
-                        self._cooldown_until = _time.time() + self._cooldown
+                        # Anti-Bot: ±30% Zufalls-Jitter macht den Rhythmus
+                        # weniger maschinell. min 50% des Base-Werts, max +30%.
+                        import random as _rnd
+                        _jitter = _rnd.uniform(-0.3, 0.3)
+                        _eff_cooldown = max(
+                            int(self._cooldown_base * 0.5),
+                            int(self._cooldown * (1.0 + _jitter)),
+                        )
+                        logger.info(
+                            f"[cooldown] base={self._cooldown}s "
+                            f"jitter={_jitter:+.2f} → effective={_eff_cooldown}s"
+                        )
+                        self._cooldown_until = _time.time() + _eff_cooldown
                         self._cooldown_active = True
                         await self._broadcast_cooldown()
-                        remaining = self._cooldown
+                        remaining = _eff_cooldown
                         while remaining > 0:
                             sleep_step = min(remaining, 1.0)
                             await asyncio.sleep(sleep_step)
@@ -807,6 +864,27 @@ class DownloadService:
         # Opts für _stage()-Phasen-Wahl verfügbar machen (wird in finally aufgeräumt)
         self._job_opts[job_id] = opts
 
+        # Pre-Check: ist das Video dauerhaft als ignoriert markiert?
+        # (z.B. Members-Only beim letzten Versuch erkannt).
+        # Dann den Job einfach LÖSCHEN – soll nicht mehr in der Queue stehen.
+        if vid:
+            ignored = await db.fetch_one(
+                "SELECT reason FROM ignored_videos WHERE video_id = ?", (vid,)
+            )
+            if ignored:
+                logger.info(f"[IGNORED-SKIP] {vid}: '{ignored['reason']}' – Job gelöscht ohne YouTube-Call")
+                await db.execute(
+                    "DELETE FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ?",
+                    (vid,),
+                )
+                await self._ws_broadcast({
+                    "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                    "status": "removed", "progress": 0, "stage": "removed",
+                    "stage_label": f"Ignoriert: {ignored['reason'][:60]}",
+                })
+                self._job_opts.pop(job_id, None)
+                return
+
         # Job wurde bereits von _queue_loop via job_service.start(exclusive=False) auf active gesetzt.
         # KEIN zweiter start() hier — das war die Quelle von Doppel-Transitions.
 
@@ -883,6 +961,13 @@ class DownloadService:
                      meta["description"], meta["duration"], meta.get("upload_date"),
                      now, thumb, meta.get("view_count"), tags_json,
                      str(final_path), file_size, source_url, video_type, now, now))
+
+            try:
+                from app.services import text_export
+                await text_export.export_description(vid)
+            except Exception as e:
+                logger.warning(f"text_export description {vid}: {e}")
+
             await db.execute(
                 """INSERT OR REPLACE INTO streams
                    (video_id,stream_type,itag,mime_type,quality,codec,file_path,file_size,is_default,is_combined,downloaded)
@@ -918,21 +1003,30 @@ class DownloadService:
                            VALUES (?, ?, ?, ?, 'youtube')""",
                         (vid, ch["title"], ch["start_time"], ch.get("end_time"), )
                     )
-
-            # Untertitel automatisch herunterladen wenn aktiviert
-            sub_setting = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.auto_subtitle'")
-            if sub_setting == "true":
                 try:
-                    lang_setting = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.subtitle_lang'")
-                    langs = (lang_setting or "de,en").split(",")
-                    for lang in langs:
-                        await self.download_subtitles(vid, lang.strip())
+                    from app.services import text_export
+                    await text_export.export_chapters(vid)
                 except Exception as e:
-                    logger.warning(f"Auto-Subtitle fail {vid}: {e}")
+                    logger.warning(f"text_export chapters {vid}: {e}")
 
-            # DONE
+            # DONE zuerst markieren – Captions blockieren NICHT den Abschluss!
+            # Bei 429-Rate-Limits (120s Backoff) hing der Job vorher minutenlang
+            # auf 100% bevor "fertig" gesetzt wurde.
             await self._stage(job_id, vid, "done", 1.0,
                               f"Fertig: {meta['title'][:50]} ({file_size/1024/1024:.1f} MB)")
+
+            # Untertitel im Hintergrund (fire-and-forget) – darf hängen ohne Effekt
+            sub_setting = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.auto_subtitle'")
+            if sub_setting == "true":
+                lang_setting = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.subtitle_lang'")
+                langs = [l.strip() for l in (lang_setting or "de,en").split(",") if l.strip()]
+                async def _bg_subs(video_id, lang_list):
+                    for lang in lang_list:
+                        try:
+                            await self.download_subtitles(video_id, lang)
+                        except Exception as e:
+                            logger.warning(f"[SUBS-BG] {video_id}/{lang}: {e}")
+                asyncio.create_task(_bg_subs(vid, langs))
 
             # Auto-Link: Video in passende lokale Playlists einfügen
             try:
@@ -987,40 +1081,99 @@ class DownloadService:
             is_unavailable = _cls.unavailable
 
             if is_members_only:
-                # retry_count 0 → 1 Tag, sonst 7 Tage
-                delay_days = 1 if retry_count == 0 else 7
-                retry_after = future_sqlite(seconds=delay_days * 86400)
-                # Originalen YouTube-Fehlertext im error_message mitführen –
-                # sonst geht der Grund (z.B. "Early Access & Science") verloren.
+                # Members-Only ist Bezahl-Inhalt. Permanent ignorieren UND
+                # Job aus jobs löschen – soll nicht mehr in der Queue rumstehen.
+                # Falls User später Member wird: ignored_videos-Eintrag entfernen
+                # und Video neu queuen.
                 err_clean = err.replace("ERROR: [youtube]", "").strip()
-                # video_id im Text weglassen (steht eh am Anfang)
                 for prefix in (f"{vid}:", f" {vid}:"):
                     if err_clean.startswith(prefix):
                         err_clean = err_clean[len(prefix):].strip()
                 err_short = err_clean[:400]
-                delay_label = f"{delay_days} Tag" if delay_days == 1 else f"{delay_days} Tagen"
-                full_msg = f"Members-Only – Retry in {delay_label} · {err_short}"
+                ch_row = await db.fetch_one(
+                    "SELECT channel_id FROM videos WHERE id = ? "
+                    "UNION SELECT channel_id FROM rss_entries WHERE video_id = ? LIMIT 1",
+                    (vid, vid),
+                )
+                channel_id = ch_row["channel_id"] if ch_row else None
+                await db.execute(
+                    """INSERT OR REPLACE INTO ignored_videos (video_id, channel_id, reason)
+                       VALUES (?, ?, ?)""",
+                    (vid, channel_id, f"members-only · {err_short[:200]}"),
+                )
+                # Auch alle anderen queued/active Jobs für dasselbe Video weg
+                await db.execute(
+                    "DELETE FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ?",
+                    (vid,),
+                )
+                await self._ws_broadcast({
+                    "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                    "status": "removed", "progress": 0, "stage": "removed",
+                    "stage_label": "Members-Only · entfernt",
+                })
+                logger.info(f"[MEMBERS-ONLY-REMOVED] {vid} (channel={channel_id}) – Job(s) gelöscht: {err_short[:100]}")
+
+            elif "live event will begin" in err.lower() or "premieres in" in err.lower():
+                # Live-Stream startet noch – Retry in 1h, NICHT parken.
+                from app.utils.file_utils import future_sqlite as _fs
+                retry_after = _fs(seconds=3600)
                 await job_service.retry_wait(
                     job_id,
-                    error=full_msg,
+                    error=f"Live-Stream noch nicht gestartet · Retry in 1h",
                     retry_after=retry_after,
                     retry_count=retry_count + 1,
                 )
                 await self._ws_broadcast({
                     "job_id": job_id, "queue_id": job_id, "video_id": vid,
                     "status": "retry_wait", "progress": 0, "stage": "retry_wait",
-                    "stage_label": f"Members-Only – Retry in {delay_days}d",
+                    "stage_label": "Live noch nicht gestartet (1h)",
                 })
-                logger.info(f"[MEMBERS-ONLY] {vid}: Retry in {delay_days}d (count={retry_count + 1}) – {err_short[:100]}")
+                logger.info(f"[LIVE-COMING] {vid}: Retry in 1h")
 
             elif is_unavailable:
-                # Sofort parken – kein Retry sinnvoll
-                await job_service.park(job_id, f"Nicht verfügbar: {err[:200]}")
+                # Permanent unbrauchbar (private/removed/age-gate/geo-blocked/copyright):
+                # in ignored_videos + Job löschen, statt als parked rumstehen.
+                # Wenn der User später meint das Video sei zugänglich, kann er
+                # den ignored-Eintrag entfernen und neu queuen.
+                err_clean = err.replace("ERROR: [youtube]", "").strip()
+                for prefix in (f"{vid}:", f" {vid}:"):
+                    if err_clean.startswith(prefix):
+                        err_clean = err_clean[len(prefix):].strip()
+                err_short = err_clean[:300]
+                low = err.lower()
+                if "not made this video available in your country" in low or "not available in your country" in low:
+                    reason_tag = "geo-blocked"
+                elif "sign in to confirm your age" in low or "age-restricted" in low:
+                    reason_tag = "age-gate"
+                elif "private video" in low:
+                    reason_tag = "private"
+                elif "removed" in low or "terminated" in low:
+                    reason_tag = "removed"
+                elif "copyright" in low:
+                    reason_tag = "copyright"
+                else:
+                    reason_tag = "unavailable"
+                ch_row = await db.fetch_one(
+                    "SELECT channel_id FROM videos WHERE id = ? "
+                    "UNION SELECT channel_id FROM rss_entries WHERE video_id = ? LIMIT 1",
+                    (vid, vid),
+                )
+                channel_id = ch_row["channel_id"] if ch_row else None
+                await db.execute(
+                    """INSERT OR REPLACE INTO ignored_videos (video_id, channel_id, reason)
+                       VALUES (?, ?, ?)""",
+                    (vid, channel_id, f"{reason_tag} · {err_short[:200]}"),
+                )
+                await db.execute(
+                    "DELETE FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ?",
+                    (vid,),
+                )
                 await self._ws_broadcast({
-                    "job_id": job_id, "queue_id": job_id, "video_id": vid, "status": "parked",
-                    "progress": 0, "stage": "parked", "stage_label": f"Geparkt: {err[:80]}",
+                    "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                    "status": "removed", "progress": 0, "stage": "removed",
+                    "stage_label": f"{reason_tag} · entfernt",
                 })
-                logger.warning(f"[PARKED] {vid}: Nicht verfügbar – {err[:120]}")
+                logger.info(f"[IGNORED-{reason_tag.upper()}] {vid} (channel={channel_id}) – Job(s) gelöscht: {err_short[:100]}")
 
             elif (is_throttle or is_temporary or is_bot) and retry_count < max_retries:
                 # Bot-Erkennung: mindestens 1 Stunde warten
@@ -1141,6 +1294,16 @@ class DownloadService:
         return result
 
     async def _download(self, job_id: int, vid: str, url: str, opts: dict, meta: dict):
+        # Tracking fürs Retry-Hook: welcher Job läuft gerade?
+        self._current_job_id = job_id
+        self._current_video_id = vid
+        try:
+            return await self._download_inner(job_id, vid, url, opts, meta)
+        finally:
+            self._current_job_id = None
+            self._current_video_id = None
+
+    async def _download_inner(self, job_id: int, vid: str, url: str, opts: dict, meta: dict):
         quality = opts.get("quality", DEFAULT_QUALITY)
         fmt = opts.get("format", DEFAULT_FORMAT)
         merge = opts.get("merge_audio", True)

@@ -499,6 +499,14 @@ class RSSService:
             logger.debug(f"Auto-DL Tageslimit ({limit}) erreicht, {video_id} übersprungen")
             return
 
+        # Ignoriert? (manuell gelöscht, Members-Only, etc.) – NIE wieder queuen
+        ignored = await db.fetch_one(
+            "SELECT reason FROM ignored_videos WHERE video_id = ?", (video_id,)
+        )
+        if ignored:
+            logger.debug(f"Auto-DL skipped {video_id}: ignoriert ({ignored['reason']})")
+            return
+
         # Duplikat-Checks
         existing = await db.fetch_one("SELECT id FROM videos WHERE id = ?", (video_id,))
         if existing:

@@ -18,6 +18,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chapters", tags=["Chapters"])
 
 
+async def _sync_chapters_file(video_id: str):
+    """Chapter-JSON-Datei aus der DB aktualisieren (File-als-Wahrheit).
+    Wird nach jedem Chapter-Write aufgerufen. Fehlerrobust."""
+    try:
+        from app.services import text_export
+        result = await text_export.export_chapters(video_id)
+        if result is None:
+            # Keine Chapters mehr → Datei-Export entfernen
+            await text_export.delete_chapters_export(video_id)
+    except Exception as e:
+        logger.warning(f"chapters file sync {video_id}: {e}")
+
+
+async def _video_id_for_chapter(chapter_id: int) -> Optional[str]:
+    row = await db.fetch_one(
+        "SELECT video_id FROM chapters WHERE id = ?", (chapter_id,)
+    )
+    return row["video_id"] if row else None
+
+
 async def fetch_and_save_chapters(video_id: str) -> int:
     """Kapitel von YouTube laden und speichern. Gibt Anzahl zurück."""
     await rate_limiter.acquire("pytubefix")
@@ -50,6 +70,7 @@ async def fetch_and_save_chapters(video_id: str) -> int:
             """INSERT INTO chapters (video_id, title, start_time, end_time, source)
                VALUES (?, ?, ?, ?, 'youtube')""",
             (video_id, ch["title"], ch["start_time"], ch.get("end_time")))
+    await _sync_chapters_file(video_id)
     return len(chapters)
 
 
@@ -87,6 +108,7 @@ async def add_chapter(video_id: str, data: ChapterCreate):
            VALUES (?, ?, ?, ?, 'manual')""",
         (video_id, data.title, data.start_time, data.end_time)
     )
+    await _sync_chapters_file(video_id)
     return {"id": cursor.lastrowid, "created": True}
 
 
@@ -100,13 +122,19 @@ async def update_chapter(chapter_id: int, data: ChapterUpdate):
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [chapter_id]
     await db.execute(f"UPDATE chapters SET {set_clause} WHERE id = ?", values)
+    vid = await _video_id_for_chapter(chapter_id)
+    if vid:
+        await _sync_chapters_file(vid)
     return {"updated": True}
 
 
 @router.delete("/{chapter_id}")
 async def delete_chapter(chapter_id: int):
     """Kapitel löschen."""
+    vid = await _video_id_for_chapter(chapter_id)
     await db.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+    if vid:
+        await _sync_chapters_file(vid)
     return {"deleted": True}
 
 
@@ -114,6 +142,7 @@ async def delete_chapter(chapter_id: int):
 async def delete_all_chapters(video_id: str):
     """Alle Kapitel eines Videos löschen."""
     cursor = await db.execute("DELETE FROM chapters WHERE video_id = ?", (video_id,))
+    await _sync_chapters_file(video_id)
     return {"deleted": cursor.rowcount}
 
 
@@ -162,6 +191,7 @@ async def fetch_youtube_chapters(video_id: str):
                VALUES (?, ?, ?, ?, 'youtube')""",
             (video_id, ch["title"], ch["start_time"], ch.get("end_time"))
         )
+    await _sync_chapters_file(video_id)
 
     return {"video_id": video_id, "chapters": chapters, "count": len(chapters)}
 

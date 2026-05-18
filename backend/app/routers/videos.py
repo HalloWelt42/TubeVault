@@ -579,13 +579,14 @@ async def auto_link_description(video_id: str):
     """YouTube-IDs aus der Beschreibung extrahieren und automatisch verknüpfen
     wenn die Videos schon in der Bibliothek sind."""
     import re
-    video = await db.fetch_one("SELECT description FROM videos WHERE id = ?", (video_id,))
-    if not video or not video["description"]:
+    from app.services.text_resolver import get_description
+    description = await get_description(video_id)
+    if not description:
         return {"linked": 0, "ids_found": 0}
 
     # Alle YouTube-Video-IDs extrahieren
     yt_pattern = r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})'
-    found_ids = set(re.findall(yt_pattern, video["description"]))
+    found_ids = set(re.findall(yt_pattern, description))
     found_ids.discard(video_id)  # Sich selbst nicht verknüpfen
 
     linked = 0
