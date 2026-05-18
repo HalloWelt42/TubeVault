@@ -109,6 +109,8 @@ export const api = {
   // Player
   streamUrl: (videoId) => `${API_BASE}/api/player/${videoId}`,
   thumbnailUrl: (videoId) => `${API_BASE}/api/player/${videoId}/thumbnail`,
+  videoDownloadUrl: (videoId) => `${API_BASE}/api/player/${videoId}/download`,
+  audioDownloadUrl: (videoId, format = 'mp3') => `${API_BASE}/api/player/${videoId}/audio/download?format=${format}`,
   savePosition: (id, pos) => request(`/api/videos/${id}/position?position=${Math.floor(pos)}`, { method: 'POST' }),
   recordPlay: (id, pos = 0) => request(`/api/videos/${id}/play?position=${Math.floor(pos)}`, { method: 'POST' }),
 

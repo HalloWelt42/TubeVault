@@ -728,15 +728,38 @@
           ontimeupdate={onTimeUpdate}
           crossorigin="anonymous"
         ></video>
-        <button
-          class="invert-btn"
-          class:active={invertColors}
-          onclick={toggleInvert}
-          title={invertColors ? 'Farben normal' : 'Farben invertieren (helle Folien abdunkeln)'}
-          aria-label="Farben invertieren"
-        >
-          <i class="fa-solid fa-circle-half-stroke"></i>
-        </button>
+        <div class="player-tools">
+          <a
+            class="ptool-btn"
+            href={api.videoDownloadUrl(video.id)}
+            download
+            title="Video herunterladen"
+            aria-label="Video herunterladen"
+          >
+            <i class="fa-solid fa-film"></i>
+            <i class="fa-solid fa-download ptool-dl"></i>
+          </a>
+          <a
+            class="ptool-btn"
+            href={api.audioDownloadUrl(video.id, 'mp3')}
+            download
+            title="Nur Audio herunterladen (MP3, wird per ffmpeg extrahiert – kann kurz dauern)"
+            aria-label="Audio herunterladen"
+            onclick={() => toast.info('Audio wird extrahiert – Download startet gleich…')}
+          >
+            <i class="fa-solid fa-music"></i>
+            <i class="fa-solid fa-download ptool-dl"></i>
+          </a>
+          <button
+            class="ptool-btn"
+            class:active={invertColors}
+            onclick={toggleInvert}
+            title={invertColors ? 'Farben normal' : 'Farben invertieren (helle Folien abdunkeln)'}
+            aria-label="Farben invertieren"
+          >
+            <i class="fa-solid fa-circle-half-stroke"></i>
+          </button>
+        </div>
       </div>
     {/if}
   </div>
@@ -1389,24 +1412,37 @@
      zurück → weiße Folie wird dunkel, Farben bleiben halbwegs echt. */
   .video-player.inverted { filter: invert(1) hue-rotate(180deg); }
 
-  .invert-btn {
+  /* Werkzeug-Leiste oben rechts: Video-DL, Audio-DL, Invertierer.
+     Nur bei Hover sichtbar – auch wenn invert aktiv ist – damit nichts
+     das laufende Bild dauerhaft überlagert. */
+  .player-tools {
     position: absolute; top: 10px; right: 10px; z-index: 5;
+    display: flex; gap: 6px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .player-wrap:hover .player-tools { opacity: 0.85; }
+  .player-tools:hover { opacity: 1; }
+  .ptool-btn {
+    position: relative;
     width: 36px; height: 36px; border-radius: 8px;
     background: rgba(0,0,0,0.55); color: #fff;
     border: 1px solid rgba(255,255,255,0.18);
     cursor: pointer; display: flex; align-items: center; justify-content: center;
-    font-size: 0.95rem; opacity: 0; transition: opacity 0.15s, background 0.15s;
+    font-size: 0.95rem; text-decoration: none;
+    transition: background 0.15s;
   }
-  /* Nur bei Hover sichtbar – auch im aktiven Zustand, damit der Button
-     das laufende Bild nicht dauerhaft überlagert. */
-  .player-wrap:hover .invert-btn { opacity: 0.85; }
-  .invert-btn:hover { opacity: 1; background: rgba(0,0,0,0.8); }
-  .invert-btn.active {
+  .ptool-btn:hover { background: rgba(0,0,0,0.85); }
+  .ptool-btn.active {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
   }
-  .player-wrap:hover .invert-btn.active { opacity: 0.85; }
-  .invert-btn.active:hover { opacity: 1; }
+  /* kleines Download-Pfeil-Overlay unten rechts am Icon */
+  .ptool-dl {
+    position: absolute; bottom: 2px; right: 2px;
+    font-size: 0.5rem; color: #fff;
+    background: rgba(0,0,0,0.6); border-radius: 50%;
+    padding: 1px; line-height: 1;
+  }
 
   /* Suggestion Overlay */
   /* Preview Mode */

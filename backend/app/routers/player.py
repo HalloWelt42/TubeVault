@@ -261,3 +261,68 @@ async def get_audio(video_id: str):
             return FileResponse(str(audio_path), media_type=mime_map.get(ext, "audio/mpeg"))
 
     raise HTTPException(status_code=404, detail="Audio nicht gefunden")
+
+
+# ─── Direkt-Downloads (Browser, Content-Disposition: attachment) ──────
+
+async def _video_row(video_id: str):
+    row = await db.fetch_one(
+        "SELECT title, file_path FROM videos WHERE id = ? AND status = 'ready'",
+        (video_id,),
+    )
+    if not row or not row["file_path"]:
+        raise HTTPException(status_code=404, detail="Video nicht gefunden")
+    return row
+
+
+@router.get("/{video_id}/download")
+async def download_video(video_id: str):
+    """Video-Datei direkt herunterladen (attachment mit sauberem Namen)."""
+    from app.utils.file_utils import sanitize_filename
+    row = await _video_row(video_id)
+    src = Path(row["file_path"])
+    if not src.exists():
+        raise HTTPException(status_code=404, detail="Datei nicht auf der Platte")
+    ext = src.suffix.lstrip(".") or "mp4"
+    name = sanitize_filename(row["title"] or video_id)[:120]
+    mime, _ = mimetypes.guess_type(str(src))
+    return FileResponse(
+        str(src),
+        media_type=mime or "application/octet-stream",
+        filename=f"{name}.{ext}",
+    )
+
+
+@router.get("/{video_id}/audio/download")
+async def download_audio(video_id: str, format: str = "mp3"):
+    """Audiospur aus dem Video extrahieren (ffmpeg) und als Datei liefern.
+    Idempotent: wenn schon extrahiert, wird direkt ausgeliefert."""
+    from app.config import AUDIO_DIR
+    from app.utils.file_utils import sanitize_filename
+    from app.services.download_service import download_service
+
+    if format not in ("mp3", "m4a", "flac", "ogg"):
+        format = "mp3"
+    row = await _video_row(video_id)
+    adir = AUDIO_DIR / video_id
+    out_path = adir / f"audio.{format}"
+
+    # Nur extrahieren wenn noch nicht vorhanden (ffmpeg ist teuer)
+    if not out_path.exists():
+        try:
+            await download_service.extract_audio(video_id, format)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    if not out_path.exists():
+        raise HTTPException(status_code=500, detail="Audio-Extraktion fehlgeschlagen")
+
+    mime_map = {"mp3": "audio/mpeg", "m4a": "audio/mp4",
+                "flac": "audio/flac", "ogg": "audio/ogg"}
+    name = sanitize_filename(row["title"] or video_id)[:120]
+    return FileResponse(
+        str(out_path),
+        media_type=mime_map.get(format, "audio/mpeg"),
+        filename=f"{name}.{format}",
+    )
