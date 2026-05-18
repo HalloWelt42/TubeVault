@@ -28,7 +28,7 @@ from app.services.task_manager import task_manager
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
-    streams, ad_markers, own_videos, scan, backup, api_endpoints,
+    ad_markers, own_videos, scan, backup, api_endpoints,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
     cookies, admin,
 )
@@ -378,7 +378,6 @@ app.include_router(system.router)
 app.include_router(api_endpoints.router)
 app.include_router(jobs.router)
 app.include_router(exports.router)
-app.include_router(streams.router)
 app.include_router(lyrics.router)
 app.include_router(blocked_channels.router)
 app.include_router(ignored_videos.router)

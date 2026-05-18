@@ -77,7 +77,10 @@ CREATE TABLE IF NOT EXISTS streams (
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
 );
 
--- Stream-Kombinationen
+-- Stream-Kombinationen (DEPRECATED: FFprobe-Stream-Analyse-Feature entfernt.
+-- Tabelle bleibt nur damit alte DBs nicht migrieren müssen – wird nicht
+-- mehr beschrieben/gelesen. Kann bei einem späteren Schema-Cleanup
+-- ersatzlos gedroppt werden.)
 CREATE TABLE IF NOT EXISTS stream_combinations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     video_id TEXT NOT NULL,

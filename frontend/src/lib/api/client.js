@@ -154,13 +154,6 @@ export const api = {
 
   // Import
 
-  // Streams
-  getStreams: (videoId) => request(`/api/streams/${videoId}`),
-  analyzeStreams: (videoId) => request(`/api/streams/${videoId}/analyze`, { method: 'POST' }),
-  getStreamCombos: (videoId) => request(`/api/streams/${videoId}/combinations`),
-  saveStreamCombo: (videoId, data) => request(`/api/streams/${videoId}/combinations`, { method: 'POST', body: JSON.stringify(data) }),
-  deleteStreamCombo: (comboId) => request(`/api/streams/combinations/${comboId}`, { method: 'DELETE' }),
-
   // Lyrics
   getLyrics: (videoId) => request(`/api/lyrics/${videoId}`),
   detectMusic: (videoId) => request(`/api/lyrics/${videoId}/detect`, { method: 'POST' }),

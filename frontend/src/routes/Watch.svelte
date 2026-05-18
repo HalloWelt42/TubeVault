@@ -11,7 +11,6 @@
   import SubtitlePanel from '../lib/components/watch/SubtitlePanel.svelte';
   import SubtitleLiveSidebar from '../lib/components/watch/SubtitleLiveSidebar.svelte';
   import NotesSidebar from '../lib/components/watch/NotesSidebar.svelte';
-  import StreamPanel from '../lib/components/watch/StreamPanel.svelte';
   import EditPanel from '../lib/components/watch/EditPanel.svelte';
   import MetaPanel from '../lib/components/watch/MetaPanel.svelte';
   import LyricsPanel from '../lib/components/watch/LyricsPanel.svelte';
@@ -882,7 +881,7 @@
       {/if}
     {:else}
     <div class="tabs">
-      {#each [['info','<i class="fa-solid fa-circle-info"></i> Info'],['chapters','<i class="fa-solid fa-bookmark"></i> Kapitel'],['ads','<i class="fa-solid fa-forward"></i> Werbung'],['subtitles','<i class="fa-solid fa-closed-captioning"></i> Untertitel'],['streams','<i class="fa-solid fa-sliders"></i> Streams'],['meta','<i class="fa-solid fa-microchip"></i> Meta'],['edit','<i class="fa-solid fa-pen"></i> Bearbeiten']] as [id, label]}
+      {#each [['info','<i class="fa-solid fa-circle-info"></i> Info'],['chapters','<i class="fa-solid fa-bookmark"></i> Kapitel'],['ads','<i class="fa-solid fa-forward"></i> Werbung'],['subtitles','<i class="fa-solid fa-closed-captioning"></i> Untertitel'],['meta','<i class="fa-solid fa-microchip"></i> Meta'],['edit','<i class="fa-solid fa-pen"></i> Bearbeiten']] as [id, label]}
         <button class="tab" class:active={activeTab === id} onclick={() => activeTab = id}>
           {@html label}
           {#if id === 'chapters' && chapters.length > 0}
@@ -962,9 +961,6 @@
     <!-- Tab: Subtitles -->
     {:else if activeTab === 'subtitles'}
       <SubtitlePanel videoId={video.id} bind:subtitles videoEl={videoEl} />
-
-    {:else if activeTab === 'streams'}
-      <StreamPanel videoId={video.id} videoEl={videoEl} />
 
     {:else if activeTab === 'meta'}
       <MetaPanel {video} />

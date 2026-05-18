@@ -37,7 +37,6 @@ _LOGGER_CAT_MAP = {
     "scan_service": "scan",
     "lyrics_service": "lyrics",
     "lyrics": "lyrics",
-    "stream_service": "stream",
     "playlist_service": "playlist",
     "backup": "system",
     "system": "system",

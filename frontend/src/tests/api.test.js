@@ -302,9 +302,6 @@ describe('API Endpoint Vollständigkeit', () => {
     'addToPlaylist', 'removeFromPlaylist',
     // Import
     'importYTPlaylist', 'downloadSelectedPlaylistVideos',
-    // Streams
-    'analyzeStreams', 'getStreams', 'getStreamCombos',
-    'saveStreamCombo', 'deleteStreamCombo',
     // Chapters
     'getChapters', 'fetchYTChapters',
     // Subtitles

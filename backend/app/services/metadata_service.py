@@ -271,7 +271,6 @@ class MetadataService:
         await db.execute("DELETE FROM playlist_videos WHERE video_id = ?", (video_id,))
         await db.execute("DELETE FROM watch_history WHERE video_id = ?", (video_id,))
         await db.execute("DELETE FROM streams WHERE video_id = ?", (video_id,))
-        await db.execute("DELETE FROM stream_combinations WHERE video_id = ?", (video_id,))
         await db.execute("DELETE FROM chapters WHERE video_id = ?", (video_id,))
         await db.execute("DELETE FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ?", (video_id,))
         # rss_entries NICHT löschen → Katalog bleibt erhalten
