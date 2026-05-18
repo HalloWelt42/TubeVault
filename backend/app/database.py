@@ -1124,23 +1124,31 @@ class Database:
     # ─── FTS5 Sync ──────────────────────────────────────────────────
 
     async def fts_sync_video(self, video_id: str):
-        """FTS5 Index für ein Video aktualisieren."""
+        """FTS5 Index für ein Video aktualisieren.
+        description kommt aus text_resolver (File-first, DB-Fallback), damit
+        der Index auch funktioniert nachdem die DB-Spalte geleert ist."""
         try:
             row = await self.fetch_one(
                 "SELECT rowid, id, title, channel_name, description, tags, notes FROM videos WHERE id = ?",
                 (video_id,)
             )
-            if row:
-                # Delete old + insert new
-                await self.conn.execute(
-                    "INSERT INTO videos_fts(videos_fts, rowid, id, title, channel_name, description, tags, notes) VALUES('delete', ?, ?, ?, ?, ?, ?, ?)",
-                    (row["rowid"], row["id"], row["title"] or "", row["channel_name"] or "", row["description"] or "", row["tags"] or "", row["notes"] or "")
-                )
-                await self.conn.execute(
-                    "INSERT INTO videos_fts(rowid, id, title, channel_name, description, tags, notes) VALUES(?, ?, ?, ?, ?, ?, ?)",
-                    (row["rowid"], row["id"], row["title"] or "", row["channel_name"] or "", row["description"] or "", row["tags"] or "", row["notes"] or "")
-                )
-                await self.conn.commit()
+            if not row:
+                return
+            # description: File-first (unabhängig von der DB-Spalte)
+            from app.services.text_resolver import get_description
+            description = await get_description(video_id) or ""
+            # Alte DB-description als Delete-Key verwenden (das ist was der
+            # Index evtl. noch aus der vorherigen Synchronisation kennt)
+            old_description = row["description"] or description
+            await self.conn.execute(
+                "INSERT INTO videos_fts(videos_fts, rowid, id, title, channel_name, description, tags, notes) VALUES('delete', ?, ?, ?, ?, ?, ?, ?)",
+                (row["rowid"], row["id"], row["title"] or "", row["channel_name"] or "", old_description, row["tags"] or "", row["notes"] or "")
+            )
+            await self.conn.execute(
+                "INSERT INTO videos_fts(rowid, id, title, channel_name, description, tags, notes) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (row["rowid"], row["id"], row["title"] or "", row["channel_name"] or "", description, row["tags"] or "", row["notes"] or "")
+            )
+            await self.conn.commit()
         except Exception as e:
             logger.debug(f"FTS sync für {video_id}: {e}")
 
@@ -1159,6 +1167,29 @@ class Database:
                 await self.conn.commit()
         except Exception as e:
             logger.debug(f"FTS delete für {video_id}: {e}")
+
+    async def fts_rebuild_from_resolver(self) -> dict:
+        """FTS5-Index komplett neu aufbauen – description kommt aus dem
+        text_resolver (File-first). So bleibt die Volltextsuche funktionsfähig,
+        auch wenn die DB-Spalte videos.description später geleert wird."""
+        from app.services.text_resolver import get_description
+        # Alles flushen – 'delete-all' löscht alle Einträge
+        await self.conn.execute("INSERT INTO videos_fts(videos_fts) VALUES('delete-all')")
+        rows = await self.fetch_all(
+            "SELECT rowid, id, title, channel_name, tags, notes FROM videos WHERE status='ready'"
+        )
+        written = 0
+        for r in rows:
+            description = await get_description(r["id"]) or ""
+            await self.conn.execute(
+                "INSERT INTO videos_fts(rowid, id, title, channel_name, description, tags, notes) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (r["rowid"], r["id"], r["title"] or "", r["channel_name"] or "",
+                 description, r["tags"] or "", r["notes"] or "")
+            )
+            written += 1
+        await self.conn.commit()
+        count = await self.fetch_val("SELECT COUNT(*) FROM videos_fts")
+        return {"rebuilt": written, "fts_count": count}
 
     async def fts_search(self, query: str, limit: int = 50, offset: int = 0) -> list:
         """FTS5 Volltextsuche über Videos."""

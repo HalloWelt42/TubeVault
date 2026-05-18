@@ -51,6 +51,21 @@ function parseUrl(pathname, search = '') {
     return { page: 'dashboard', id: null, params, path: '/', fullUrl };
   }
 
+  // Composite-Key zuerst versuchen: /admin/texts → 'admin-texts'
+  // (damit Admin-Subseiten eigene Pages bekommen)
+  if (segments.length >= 2) {
+    const composite = `${segments[0]}-${segments[1]}`;
+    if (routeDefinitions[composite]) {
+      return {
+        page: composite,
+        id: segments[2] || null,
+        params,
+        path: pathname,
+        fullUrl,
+      };
+    }
+  }
+
   const pageKey = segments[0];
   const routeDef = routeDefinitions[pageKey];
 

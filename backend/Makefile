@@ -2,8 +2,12 @@
 
 # Synct geänderte app/-Dateien in den laufenden Container (kein Rebuild).
 # Nötig damit Tests frischen Code treffen ohne docker compose build.
+# Wir löschen erst die Zielordner damit docker cp KEIN stale merge macht —
+# sonst überschreibt docker cp nur existierende Dateien, neue werden übersehen
+# wenn die Cache-Layer komisch sind.
 sync:
-	cd .. && docker cp backend/app tubevault-backend:/app/app
+	docker exec tubevault-backend sh -c "find /app/app -name __pycache__ -exec rm -rf {} + 2>/dev/null; true"
+	cd .. && docker cp backend/app/. tubevault-backend:/app/app/
 	cd .. && docker cp backend/pytest.ini tubevault-backend:/app/pytest.ini
 
 # Tests im laufenden Backend-Container (schnell, kein Rebuild).

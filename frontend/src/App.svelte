@@ -7,6 +7,7 @@
   import { get } from 'svelte/store';
   import Header from './lib/components/layout/Header.svelte';
   import Sidebar from './lib/components/layout/Sidebar.svelte';
+  import AdminLayout from './lib/components/layout/AdminLayout.svelte';
   import Toast from './lib/components/common/Toast.svelte';
   import ActivityPanel from './lib/components/common/ActivityPanel.svelte';
   import LogTerminal from './lib/components/common/LogTerminal.svelte';
@@ -28,6 +29,8 @@
   import Stats from './routes/Stats.svelte';
   import OwnVideos from './routes/OwnVideos.svelte';
   import Search from './routes/Search.svelte';
+  import Admin from './routes/Admin.svelte';
+  import AdminTexts from './routes/AdminTexts.svelte';
 
   /** Route-Key → Svelte-Komponente */
   const pages = {
@@ -49,11 +52,18 @@
     'own-videos': OwnVideos,
     category: Categories,
     search: Search,
+    admin: Admin,
+    'admin-texts': AdminTexts,
   };
 
   import { onConnectionChange } from './lib/api/client.js';
 
   let CurrentPage = $derived(pages[$route.page] || Dashboard);
+
+  // Admin-Routes bekommen eigenes Layout (keine Haupt-Sidebar, kein ActivityPanel)
+  let isAdminPage = $derived(
+    routeDefinitions[$route.page]?.group === 'admin'
+  );
 
   // Einstellungen beim Start laden
   loadSettings();
@@ -83,18 +93,29 @@
       <i class="fa-solid fa-plug-circle-xmark"></i> Backend nicht erreichbar — Verbindung zum Pi prüfen
     </div>
   {/if}
-  <Header />
-  <div class="app-body">
-    <Sidebar onToggleLog={() => logVisible = !logVisible} logActive={logVisible} />
-    <div class="content-area">
-      <main class="main-content">
+  {#if isAdminPage}
+    <!-- Admin: komplett eigenes Layout, eigene Menüs, kein ActivityPanel -->
+    <AdminLayout>
+      {#snippet children()}
         {#key $route.page + ($route.id || '')}
           <CurrentPage />
         {/key}
-      </main>
-      <ActivityPanel />
+      {/snippet}
+    </AdminLayout>
+  {:else}
+    <Header />
+    <div class="app-body">
+      <Sidebar onToggleLog={() => logVisible = !logVisible} logActive={logVisible} />
+      <div class="content-area">
+        <main class="main-content">
+          {#key $route.page + ($route.id || '')}
+            <CurrentPage />
+          {/key}
+        </main>
+        <ActivityPanel />
+      </div>
     </div>
-  </div>
+  {/if}
 </div>
 <Toast />
 <LogTerminal bind:visible={logVisible} />

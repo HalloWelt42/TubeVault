@@ -40,7 +40,8 @@ async def test_export_writes_file(test_db, video_row, tmp_path, monkeypatch):
     result = await export_description(video_row)
 
     assert result is not None
-    expected_file = tmp_path / f"{video_row}.description.txt"
+    # Ordner pro Video (konsistent zu lyrics_service)
+    expected_file = tmp_path / video_row / "description.txt"
     assert expected_file.exists()
     assert expected_file.read_text() == "Das ist die Beschreibung.\nZweite Zeile."
 
@@ -56,7 +57,8 @@ async def test_export_registers_in_db(test_db, video_row, tmp_path, monkeypatch)
         (video_row,),
     )
     assert row is not None
-    assert row["filename"] == f"{video_row}.description.txt"
+    # Relativer Pfad: '<video_id>/<kind>.<ext>'
+    assert row["filename"] == f"{video_row}/description.txt"
     assert row["size_bytes"] > 0
     assert len(row["sha256"]) == 64  # hex-length
     assert row["synced_at"] is not None
@@ -110,7 +112,7 @@ async def test_export_rewrites_when_content_changes(test_db, video_row, tmp_path
     ))["sha256"]
     assert hash1 != hash2
 
-    file = tmp_path / f"{video_row}.description.txt"
+    file = tmp_path / video_row / "description.txt"
     assert file.read_text() == "Geänderter Text"
 
 
@@ -125,7 +127,7 @@ async def test_export_skips_empty_description(test_db, tmp_path, monkeypatch):
     )
     r = await export_description("emptyvid")
     assert r is None
-    assert not (tmp_path / "emptyvid.description.txt").exists()
+    assert not (tmp_path / "emptyvid" / "description.txt").exists()
     row = await test_db.fetch_one(
         "SELECT * FROM text_files WHERE video_id='emptyvid'"
     )
@@ -158,11 +160,58 @@ async def test_read_from_file_restores_content(test_db, tmp_path, monkeypatch):
     await test_db.execute(
         "INSERT INTO videos (id, title) VALUES (?, ?)", ("restore1", "x"),
     )
-    file = tmp_path / "restore1.description.txt"
-    file.write_text("Restauriert aus Datei")
+    d = tmp_path / "restore1"
+    d.mkdir(parents=True)
+    (d / "description.txt").write_text("Restauriert aus Datei")
 
     content = await read_description_from_file("restore1")
     assert content == "Restauriert aus Datei"
+
+
+async def test_export_never_modifies_videos_table(test_db, video_row, tmp_path, monkeypatch):
+    """SAFETY-Regression: export_description darf videos.description NIE ändern.
+    Die DB bleibt unangetastet, nur text_files bekommt Einträge."""
+    from app.services import text_export as mod
+    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
+
+    before = await test_db.fetch_one(
+        "SELECT description FROM videos WHERE id=?", (video_row,)
+    )
+    await export_description(video_row)
+    await export_description(video_row)  # idempotent
+    await mod.delete_description_export(video_row)
+    await export_description(video_row)  # re-export
+
+    after = await test_db.fetch_one(
+        "SELECT description FROM videos WHERE id=?", (video_row,)
+    )
+    assert after["description"] == before["description"], (
+        "export/delete darf videos.description NICHT verändern"
+    )
+
+
+async def test_delete_export_never_touches_videos_table(test_db, video_row, tmp_path, monkeypatch):
+    """SAFETY: delete_description_export löscht nur Datei + text_files,
+    NIE irgendwas in videos-Tabelle."""
+    from app.services import text_export as mod
+    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
+
+    # Video mit Export
+    await export_description(video_row)
+    # DB-Video-Count merken
+    cnt_before = await test_db.fetch_val("SELECT COUNT(*) FROM videos")
+    desc_before = (await test_db.fetch_one(
+        "SELECT description FROM videos WHERE id=?", (video_row,)
+    ))["description"]
+
+    await mod.delete_description_export(video_row)
+
+    # Keine Videos gelöscht, description unverändert
+    assert await test_db.fetch_val("SELECT COUNT(*) FROM videos") == cnt_before
+    desc_after = (await test_db.fetch_one(
+        "SELECT description FROM videos WHERE id=?", (video_row,)
+    ))["description"]
+    assert desc_after == desc_before
 
 
 async def test_overview_shows_counts(test_db, tmp_path, monkeypatch):
