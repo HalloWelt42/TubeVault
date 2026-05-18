@@ -11,6 +11,8 @@
   import { toast } from '../../stores/notifications.js';
   import { formatDuration, formatViews } from '../../utils/format.js';
   import StreamDialog from '../common/StreamDialog.svelte';
+  import ConfirmDialog from '../common/ConfirmDialog.svelte';
+  let confirmRef;
   import LikeBar from '../common/LikeBar.svelte';
   import QuickPlaylistBtn from '../common/QuickPlaylistBtn.svelte';
 
@@ -378,7 +380,7 @@
   async function blockChannel(v, e) {
     e.stopPropagation();
     if (!v.channel_id) return;
-    if (!confirm(`Kanal „${v.channel_name}" aus YT-Suche ausblenden?`)) return;
+    if (!await confirmRef.ask(`Kanal „${v.channel_name}" ausblenden?`, 'Aus YouTube-Suche raus.', { confirmLabel: 'Ausblenden' })) return;
     try {
       await api.blockChannel(v.channel_id, v.channel_name);
       // Aus aktuellen Ergebnissen filtern
@@ -782,6 +784,7 @@
   ondownload={({ itag, audioItag, mergeAudio, audioOnly, priority }) => startDownload({ itag, audioItag, mergeAudio, audioOnly, priority })}
   onclose={() => streamDialog = null}
 />
+<ConfirmDialog bind:this={confirmRef} />
 
 <style>
   .sd-wrap { position: relative; flex: 1; max-width: 600px; margin: 0 auto; }

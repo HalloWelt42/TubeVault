@@ -5,6 +5,8 @@
   import { formatDuration, formatSize } from '../lib/utils/format.js';
   import { formatDateRelative } from '../lib/utils/format.js';
   import DownloadProgress from '../lib/components/common/DownloadProgress.svelte';
+  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  let confirmRef;
 
   let queue = $state({ queue: [], active_count: 0, queued_count: 0, completed_count: 0, error_count: 0, cancelled_count: 0, retry_wait_count: 0, failed_count: 0 });
   let urlInput = $state('');
@@ -286,7 +288,7 @@
   }
   async function ignoreVideoPermanent(item) {
     const name = item.title || item.video_id;
-    if (!confirm(`„${name}" dauerhaft ausschließen?\n\nDas Video wird beim Kanal als nicht-ladbar markiert und nicht mehr automatisch heruntergeladen.`)) return;
+    if (!await confirmRef.ask(`„${name.slice(0, 40)}…" ausschließen?`, 'Wird beim Kanal als nicht-ladbar markiert.', { confirmLabel: 'Ausschließen' })) return;
     try {
       await api.ignoreVideo(item.video_id || item.id, item.channel_id || null,
                             item.error_message || 'Manuell ausgeschlossen');
@@ -488,6 +490,15 @@
       <i class="fa-solid fa-triangle-exclamation"></i>
       <span><strong>Download-Worker gestoppt</strong> — Downloads werden nicht verarbeitet.</span>
       <button class="btn-sm accent" onclick={restartWorker} disabled={restartingWorker}>
+        {#if restartingWorker}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-solid fa-rotate"></i>{/if}
+        Worker neu starten
+      </button>
+    </div>
+  {:else}
+    <!-- Manueller Restart-Button auch wenn Worker lebt (z.B. nach Adapter-Code-Änderungen) -->
+    <div class="worker-toolbar">
+      <span class="hint">Worker läuft.</span>
+      <button class="btn-sm" onclick={restartWorker} disabled={restartingWorker} title="Download-Worker neu starten – kein Container-Restart nötig">
         {#if restartingWorker}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-solid fa-rotate"></i>{/if}
         Worker neu starten
       </button>
@@ -951,6 +962,7 @@
     </div>
   {/if}
 </div>
+<ConfirmDialog bind:this={confirmRef} />
 
 <style>
   .page { padding: 24px; padding-bottom: 60px; max-width: 1400px; }
@@ -1114,6 +1126,14 @@
   }
   .worker-warning > i { color: #ef4444; font-size: 1.1rem; flex-shrink: 0; }
   .worker-warning > span { flex: 1; }
+
+  .worker-toolbar {
+    display: flex; align-items: center; gap: 10px; padding: 6px 12px;
+    background: var(--bg-tertiary); border: 1px solid var(--border-primary);
+    border-radius: 8px; margin-bottom: 14px; font-size: 0.78rem;
+    color: var(--text-tertiary);
+  }
+  .worker-toolbar .hint { flex: 1; }
 
   /* Playlist Panel */
   .pl-panel { border-color: var(--accent-secondary, var(--accent-primary)); }

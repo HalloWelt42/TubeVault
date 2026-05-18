@@ -11,6 +11,8 @@
   import { settings as globalSettings } from '../lib/stores/settings.js';
   import { onMount } from 'svelte';
   import ApiEndpoints from '../lib/components/settings/ApiEndpoints.svelte';
+  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  let confirmRef;
 
   let settings = $state({});
   let scheduler = $state(null);
@@ -38,7 +40,7 @@
     e.target.value = '';
   }
   async function deleteCookiesFile() {
-    if (!confirm('Cookies wirklich entfernen?')) return;
+    if (!await confirmRef.ask('Cookies entfernen?', 'Login-Cookies werden gelöscht.', { confirmLabel: 'Entfernen' })) return;
     cookiesBusy = true;
     try {
       await api.deleteCookies();
@@ -213,7 +215,7 @@
 
 
   async function resetAll() {
-    if (!confirm('Alle Einstellungen zurücksetzen?')) return;
+    if (!await confirmRef.ask('Einstellungen zurücksetzen?', 'Alle Werte gehen auf Default.', { confirmLabel: 'Zurücksetzen' })) return;
     try { await api.resetSettings(); toast.success('Zurückgesetzt'); await load(); }
     catch (e) { toast.error(e.message); }
   }
@@ -600,6 +602,8 @@
     </div>
   </div>
 {/snippet}
+
+<ConfirmDialog bind:this={confirmRef} />
 
 <style>
   .settings-page { padding: 24px; max-width: 800px; }

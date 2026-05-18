@@ -14,6 +14,8 @@
   import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
   import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
+  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  let confirmRef;
 
   let query = $state($route.params.q || '');
   let scope = $state($route.params.scope || 'both'); // 'both' | 'local' | 'youtube'
@@ -96,7 +98,7 @@
 
   async function blockCh(v, e) {
     e.stopPropagation();
-    if (!confirm(`Kanal „${v.channel_name}" aus YT-Suche ausblenden?`)) return;
+    if (!await confirmRef.ask(`Kanal „${v.channel_name}" ausblenden?`, 'Aus YouTube-Suche raus.', { confirmLabel: 'Ausblenden' })) return;
     try {
       await api.blockChannel(v.channel_id, v.channel_name);
       ytVideos = ytVideos.filter(r => r.channel_id !== v.channel_id);
@@ -324,6 +326,7 @@
   ondownload={(opts) => startStreamDownload(opts)}
   onclose={() => streamDialog = null}
 />
+<ConfirmDialog bind:this={confirmRef} />
 
 <style>
   .search-page { padding: 24px; max-width: 1400px; }

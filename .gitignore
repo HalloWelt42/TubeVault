@@ -23,6 +23,10 @@ frontend/build/
 *.key
 config/secrets.*
 config/*.secret.*
+# Cookies = Session-/Login-Secrets, NIEMALS ins Repo
+config/cookies.txt
+config/cookies-login.txt
+config/cookies*.txt
 
 # Daten, die im Projektordner landen könnten (eigentlich alle unter /mnt/data und /mnt/tb26)
 data/

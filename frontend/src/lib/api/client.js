@@ -295,6 +295,51 @@ export const api = {
     return request('/api/cookies', { method: 'POST', body: fd, headers: {} });
   },
   deleteCookies: () => request('/api/cookies', { method: 'DELETE' }),
+
+  // Admin: Textexport
+  adminTextOverview: () => request('/api/admin/text-export/overview'),
+  adminTextSyncAll: () => request('/api/admin/text-export/description/sync-all', { method: 'POST' }),
+  adminTextSyncBatch: (limit = 100) =>
+    request(`/api/admin/text-export/description/sync-batch?limit=${limit}`, { method: 'POST' }),
+  adminTextList: ({ status = 'all', page = 1, per_page = 50, search = '', sort = 'created_at', order = 'desc', channel_id = '' } = {}) => {
+    const p = new URLSearchParams({ status, page: String(page), per_page: String(per_page), sort, order });
+    if (search) p.set('search', search);
+    if (channel_id) p.set('channel_id', channel_id);
+    return request(`/api/admin/text-export/description/list?${p.toString()}`);
+  },
+  adminTextSyncMany: (video_ids) =>
+    request('/api/admin/text-export/description/sync-many', { method: 'POST', body: video_ids }),
+  adminTextDeleteBulk: (video_ids) =>
+    request('/api/admin/text-export/description/bulk', { method: 'DELETE', body: video_ids }),
+  adminTextSyncOne: (video_id) =>
+    request(`/api/admin/text-export/description/${encodeURIComponent(video_id)}`, { method: 'POST' }),
+  adminTextGetFile: async (video_id) => {
+    // Response ist text/plain, nicht JSON → direkt fetch
+    const url = `${API_BASE}/api/admin/text-export/description/${encodeURIComponent(video_id)}/file`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({ detail: 'Fehler' }));
+      throw new Error(j.detail || `HTTP ${res.status}`);
+    }
+    return await res.text();
+  },
+  adminTextDelete: (video_id) =>
+    request(`/api/admin/text-export/description/${encodeURIComponent(video_id)}`, { method: 'DELETE' }),
+  adminChaptersSyncAll: () =>
+    request('/api/admin/text-export/chapters/sync-all', { method: 'POST' }),
+  adminChaptersSyncBatch: (limit = 100) =>
+    request(`/api/admin/text-export/chapters/sync-batch?limit=${limit}`, { method: 'POST' }),
+  adminChaptersSyncOne: (video_id) =>
+    request(`/api/admin/text-export/chapters/${encodeURIComponent(video_id)}`, { method: 'POST' }),
+  adminChaptersDelete: (video_id) =>
+    request(`/api/admin/text-export/chapters/${encodeURIComponent(video_id)}`, { method: 'DELETE' }),
+  adminTextBackupDescriptions: () =>
+    request('/api/admin/text-export/backup/descriptions', { method: 'POST' }),
+  adminTextListBackups: () => request('/api/admin/text-export/backup/list'),
+  adminTextAudit: () => request('/api/admin/text-export/audit/description'),
+  adminFtsRebuild: () => request('/api/admin/fts/rebuild', { method: 'POST' }),
+  adminTextPurgeDbDescriptions: () =>
+    request('/api/admin/text-export/purge-db-descriptions?confirm=YES', { method: 'POST' }),
   getJobStats: () => request('/api/jobs/stats'),
   getJob: (id) => request(`/api/jobs/${id}`),
   cancelJob: (id) => request(`/api/jobs/${id}/cancel`, { method: 'POST' }),

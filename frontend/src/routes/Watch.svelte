@@ -32,6 +32,15 @@
   let isFav = $state(false);
   let showFullDesc = $state(false);
   let videoEl = $state(null);
+  // Farb-Invertierung (für helle Vorlesungsfolien). Persistent über
+  // Videos hinweg via localStorage – bei Vorlesungsserien praktisch.
+  let invertColors = $state(
+    (() => { try { return localStorage.getItem('player.invert') === '1'; } catch { return false; } })()
+  );
+  function toggleInvert() {
+    invertColors = !invertColors;
+    try { localStorage.setItem('player.invert', invertColors ? '1' : '0'); } catch {}
+  }
   let plListEl = $state(null);
   let positionRestored = $state(false);
   let saveTimer = $state(null);
@@ -708,6 +717,7 @@
         <video
           bind:this={videoEl}
           class="video-player"
+          class:inverted={invertColors}
           src={api.streamUrl(video.id)}
           poster={`${api.thumbnailUrl(video.id)}?v=${thumbKey}`}
           controls
@@ -719,6 +729,15 @@
           ontimeupdate={onTimeUpdate}
           crossorigin="anonymous"
         ></video>
+        <button
+          class="invert-btn"
+          class:active={invertColors}
+          onclick={toggleInvert}
+          title={invertColors ? 'Farben normal' : 'Farben invertieren (helle Folien abdunkeln)'}
+          aria-label="Farben invertieren"
+        >
+          <i class="fa-solid fa-circle-half-stroke"></i>
+        </button>
       </div>
     {/if}
   </div>
@@ -1370,6 +1389,28 @@
     overflow: hidden; aspect-ratio: 16/9; margin-bottom: 20px;
   }
   .video-player { width: 100%; height: 100%; display: block; }
+  /* invert(1) dreht hell↔dunkel, hue-rotate(180) holt die Farbtöne
+     zurück → weiße Folie wird dunkel, Farben bleiben halbwegs echt. */
+  .video-player.inverted { filter: invert(1) hue-rotate(180deg); }
+
+  .invert-btn {
+    position: absolute; top: 10px; right: 10px; z-index: 5;
+    width: 36px; height: 36px; border-radius: 8px;
+    background: rgba(0,0,0,0.55); color: #fff;
+    border: 1px solid rgba(255,255,255,0.18);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 0.95rem; opacity: 0; transition: opacity 0.15s, background 0.15s;
+  }
+  /* Nur bei Hover sichtbar – auch im aktiven Zustand, damit der Button
+     das laufende Bild nicht dauerhaft überlagert. */
+  .player-wrap:hover .invert-btn { opacity: 0.85; }
+  .invert-btn:hover { opacity: 1; background: rgba(0,0,0,0.8); }
+  .invert-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+  .player-wrap:hover .invert-btn.active { opacity: 0.85; }
+  .invert-btn.active:hover { opacity: 1; }
 
   /* Suggestion Overlay */
   /* Preview Mode */
