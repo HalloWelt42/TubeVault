@@ -111,6 +111,16 @@ export const api = {
   thumbnailUrl: (videoId) => `${API_BASE}/api/player/${videoId}/thumbnail`,
   videoDownloadUrl: (videoId) => `${API_BASE}/api/player/${videoId}/download`,
   audioDownloadUrl: (videoId, format = 'mp3') => `${API_BASE}/api/player/${videoId}/audio/download?format=${format}`,
+
+  // Audio-Fix (falsche Tonspur korrigieren)
+  audioFixTracks: (id) => request(`/api/player/${id}/audiofix/tracks`),
+  audioFixStatus: (id) => request(`/api/player/${id}/audiofix/status`),
+  audioFixFetch: (id) => request(`/api/player/${id}/audiofix/fetch`, { method: 'POST' }),
+  audioFixAudioUrl: (id) => `${API_BASE}/api/player/${id}/audiofix/audio`,
+  audioFixBuild: (id) => request(`/api/player/${id}/audiofix/build`, { method: 'POST' }),
+  audioFixPreviewUrl: (id) => `${API_BASE}/api/player/${id}/audiofix/preview`,
+  audioFixCommit: (id) => request(`/api/player/${id}/audiofix/commit`, { method: 'POST' }),
+  audioFixDiscard: (id) => request(`/api/player/${id}/audiofix/discard`, { method: 'POST' }),
   savePosition: (id, pos) => request(`/api/videos/${id}/position?position=${Math.floor(pos)}`, { method: 'POST' }),
   recordPlay: (id, pos = 0) => request(`/api/videos/${id}/play?position=${Math.floor(pos)}`, { method: 'POST' }),
 

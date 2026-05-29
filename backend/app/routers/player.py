@@ -326,3 +326,121 @@ async def download_audio(video_id: str, format: str = "mp3"):
         media_type=mime_map.get(format, "audio/mpeg"),
         filename=f"{name}.{format}",
     )
+
+
+# ─── Audio-Fix: falsche Tonspur nachträglich korrigieren ──────────
+# Mehrstufiger, sicherer Ablauf mit zwei Prüf-Gates (Probehören + Video
+# prüfen) bevor das Original ersetzt wird. Logik in services/audio_fix.py.
+
+@router.get("/{video_id}/audiofix/tracks")
+async def audiofix_tracks(video_id: str):
+    """Verfügbare Audio-Sprachen + Original-Sprache + aktuelle lokale Spur."""
+    from app.services import audio_fix
+    try:
+        return await audio_fix.probe_tracks(video_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.get("/{video_id}/audiofix/status")
+async def audiofix_status(video_id: str):
+    """Aktueller Staging-Zustand (für UI-Wiederaufnahme)."""
+    from app.services import audio_fix
+    return audio_fix.status(video_id)
+
+
+@router.post("/{video_id}/audiofix/fetch")
+async def audiofix_fetch(video_id: str):
+    """Schritt 1: Original-Audiospur ins Staging laden (überschreibt nichts)."""
+    from app.services import audio_fix
+    try:
+        return await audio_fix.fetch_original_audio(video_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.get("/{video_id}/audiofix/audio")
+async def audiofix_audio(video_id: str):
+    """Schritt 2 (Gate 1): geladene Original-Audiospur zum Probehören."""
+    from app.services import audio_fix
+    files = audio_fix._audio_glob(video_id)
+    if not files:
+        raise HTTPException(status_code=404, detail="Kein Staging-Audio")
+    p = files[0]
+    mime = {".webm": "audio/webm", ".m4a": "audio/mp4", ".opus": "audio/ogg",
+            ".mp3": "audio/mpeg", ".ogg": "audio/ogg"}.get(p.suffix, "audio/mpeg")
+    return FileResponse(str(p), media_type=mime)
+
+
+@router.post("/{video_id}/audiofix/build")
+async def audiofix_build(video_id: str):
+    """Schritt 3: Video mit neuer Tonspur neu zusammenbauen (Staging)."""
+    from app.services import audio_fix
+    try:
+        return await audio_fix.build_fixed_video(video_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.get("/{video_id}/audiofix/preview")
+async def audiofix_preview(video_id: str, request: Request):
+    """Schritt 4 (Gate 2): neu gebautes Video prüfen (mit Range-Support)."""
+    from app.services import audio_fix
+    fixed = audio_fix._staging_dir(video_id) / "fixed.mp4"
+    if not fixed.exists():
+        raise HTTPException(status_code=404, detail="Kein gebautes Video")
+    file_size = fixed.stat().st_size
+    range_header = request.headers.get("range")
+    if range_header and range_header.startswith("bytes="):
+        rng = range_header.replace("bytes=", "").split("-")
+        start = int(rng[0]) if rng[0] else 0
+        end = int(rng[1]) if len(rng) > 1 and rng[1] else file_size - 1
+        end = min(end, file_size - 1)
+        length = end - start + 1
+
+        async def gen():
+            with open(fixed, "rb") as f:
+                f.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = f.read(min(CHUNK_SIZE, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        return StreamingResponse(
+            gen(), status_code=206,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(length),
+                "Content-Type": "video/mp4",
+            },
+        )
+    return FileResponse(str(fixed), media_type="video/mp4")
+
+
+@router.post("/{video_id}/audiofix/commit")
+async def audiofix_commit(video_id: str):
+    """Schritt 5: Original durch das neu gebaute Video ersetzen (validiert)."""
+    from app.services import audio_fix
+    try:
+        return await audio_fix.commit(video_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.post("/{video_id}/audiofix/discard")
+async def audiofix_discard(video_id: str):
+    """Staging verwerfen, keine Änderung am Video."""
+    from app.services import audio_fix
+    return await audio_fix.discard(video_id)

@@ -33,6 +33,80 @@
   let currentAudioStream = $state(null);
   let streamsLoaded = $state(false);
 
+  // ── Audio-Fix (falsche Tonspur korrigieren) ──────────────────────
+  let afTracks = $state(null);      // { original_language, available_tracks, multi_track, local_language }
+  let afBusy = $state(false);
+  let afStage = $state('idle');     // idle | fetched | built
+  let afMeta = $state(null);        // geladene Audio-Spur-Infos
+  let afBuildInfo = $state(null);   // { fixed_size, original_size }
+  let afCommitPrimed = $state(false);
+  let afCommitTimer = null;
+  let afAudioBust = $state(0);      // cache-buster für audio/video-preview
+
+  async function afLoadTracks() {
+    afBusy = true;
+    try {
+      afTracks = await api.audioFixTracks(video.id);
+      // Staging-Wiederaufnahme
+      const st = await api.audioFixStatus(video.id);
+      if (st.has_fixed) { afStage = 'built'; afMeta = st.meta; }
+      else if (st.has_audio) { afStage = 'fetched'; afMeta = st.meta; }
+    } catch (e) { toast.error(e.message); }
+    afBusy = false;
+  }
+
+  async function afFetch() {
+    afBusy = true;
+    try {
+      afMeta = await api.audioFixFetch(video.id);
+      afStage = 'fetched';
+      afAudioBust = afAudioBust + 1;
+      toast.success(`Originalton geladen: ${afMeta.language || '?'} (${afMeta.codec})`);
+    } catch (e) { toast.error(e.message); }
+    afBusy = false;
+  }
+
+  async function afBuild() {
+    afBusy = true;
+    try {
+      afBuildInfo = await api.audioFixBuild(video.id);
+      afStage = 'built';
+      afAudioBust = afAudioBust + 1;
+      toast.success('Video neu zusammengebaut – bitte prüfen');
+    } catch (e) { toast.error(e.message); }
+    afBusy = false;
+  }
+
+  function afPrimeCommit() {
+    afCommitPrimed = true;
+    if (afCommitTimer) clearTimeout(afCommitTimer);
+    afCommitTimer = setTimeout(() => { afCommitPrimed = false; }, 4000);
+  }
+
+  async function afCommit() {
+    if (!afCommitPrimed) { afPrimeCommit(); return; }
+    afCommitPrimed = false;
+    if (afCommitTimer) clearTimeout(afCommitTimer);
+    afBusy = true;
+    try {
+      const r = await api.audioFixCommit(video.id);
+      toast.success(`Tonspur übernommen (${(r.new_size/1024/1024).toFixed(1)} MB)`);
+      afStage = 'idle'; afMeta = null; afBuildInfo = null;
+      onVideoUpdate();
+    } catch (e) { toast.error(e.message); }
+    afBusy = false;
+  }
+
+  async function afDiscard() {
+    afBusy = true;
+    try {
+      await api.audioFixDiscard(video.id);
+      afStage = 'idle'; afMeta = null; afBuildInfo = null; afCommitPrimed = false;
+      toast.info('Verworfen – Video unverändert');
+    } catch (e) { toast.error(e.message); }
+    afBusy = false;
+  }
+
   let currentQualityLabel = $derived(
     currentVideoStream ? `${currentVideoStream.quality || '?'} ${currentVideoStream.codec || ''}`.trim() : 'Unbekannt'
   );
@@ -59,6 +133,9 @@
       editVideoType = video.video_type || 'video';
       loadCategories();
       loadStreams();
+      // Audio-Fix-State bei Video-Wechsel zurücksetzen
+      afTracks = null; afStage = 'idle'; afMeta = null;
+      afBuildInfo = null; afCommitPrimed = false;
     }
   });
 
@@ -327,6 +404,101 @@
           <span class="upgrade-hint">Video wird neu heruntergeladen, DB-Daten bleiben erhalten</span>
         </div>
       {/if}
+
+      <!-- Tonspur korrigieren (falsche/KI-Audiospur) -->
+      {#if video && !video.id?.startsWith('local_') && video.source !== 'local' && video.source !== 'imported'}
+        <div class="audiofix-section">
+          <span class="edit-label"><i class="fa-solid fa-language"></i> Tonspur korrigieren</span>
+          <span class="upgrade-hint">
+            Bei Videos mit falscher Tonspur (z.B. englische KI-Stimme statt
+            Original): Originalton laden → probehören → Video neu bauen →
+            prüfen → übernehmen. Nichts wird ersetzt bis du bestätigst.
+          </span>
+
+          {#if !afTracks}
+            <div class="tool-btns">
+              <button class="btn-tool" onclick={afLoadTracks} disabled={afBusy}>
+                <i class="fa-solid fa-magnifying-glass"></i>
+                {afBusy ? 'Prüfe…' : 'Tonspuren prüfen'}
+              </button>
+            </div>
+          {:else}
+            <!-- Verfügbare Spuren -->
+            <div class="af-tracks">
+              <span class="af-line">Original-Sprache: <strong>{afTracks.original_language || '?'}</strong></span>
+              {#if afTracks.local_language}
+                <span class="af-line">Aktuell in Datei: <strong>{afTracks.local_language}</strong></span>
+              {/if}
+              <span class="af-line">Verfügbar: {afTracks.available_tracks.map(t => t.language || '?').join(', ') || '–'}</span>
+              {#if !afTracks.multi_track}
+                <span class="af-warn"><i class="fa-solid fa-circle-info"></i> Nur eine Tonspur – nichts zu korrigieren.</span>
+              {/if}
+            </div>
+
+            {#if afTracks.multi_track}
+              <!-- Schritt 1: laden -->
+              <div class="tool-btns">
+                <button class="btn-tool" onclick={afFetch} disabled={afBusy}>
+                  <i class="fa-solid fa-download"></i>
+                  {afBusy && afStage === 'idle' ? 'Lädt…' : '1. Originalton laden'}
+                </button>
+              </div>
+
+              <!-- Schritt 2: probehören (Gate 1) -->
+              {#if afStage === 'fetched' || afStage === 'built'}
+                <div class="af-gate">
+                  <span class="af-gate-label">
+                    <i class="fa-solid fa-headphones"></i>
+                    Probehören: {afMeta?.language || '?'} ({afMeta?.codec})
+                  </span>
+                  <!-- svelte-ignore a11y_media_has_caption -->
+                  <audio controls src={api.audioFixAudioUrl(video.id) + '?b=' + afAudioBust} class="af-audio"></audio>
+                </div>
+
+                <!-- Schritt 3: neu bauen -->
+                <div class="tool-btns">
+                  <button class="btn-tool" onclick={afBuild} disabled={afBusy}>
+                    <i class="fa-solid fa-screwdriver-wrench"></i>
+                    {afBusy && afStage === 'fetched' ? 'Baue…' : '2. Video neu zusammenbauen'}
+                  </button>
+                </div>
+              {/if}
+
+              <!-- Schritt 4: rebuilt prüfen (Gate 2) -->
+              {#if afStage === 'built'}
+                <div class="af-gate">
+                  <span class="af-gate-label">
+                    <i class="fa-solid fa-film"></i> Neu gebautes Video prüfen
+                    {#if afBuildInfo}
+                      <span class="af-size">({(afBuildInfo.fixed_size/1024/1024).toFixed(1)} MB)</span>
+                    {/if}
+                  </span>
+                  <!-- svelte-ignore a11y_media_has_caption -->
+                  <video controls preload="metadata" class="af-preview"
+                         src={api.audioFixPreviewUrl(video.id) + '?b=' + afAudioBust}></video>
+                </div>
+
+                <!-- Schritt 5: übernehmen / verwerfen -->
+                <div class="tool-btns">
+                  <button class="btn-tool btn-af-commit" class:primed={afCommitPrimed}
+                          onclick={afCommit} disabled={afBusy}>
+                    <i class="fa-solid {afCommitPrimed ? 'fa-triangle-exclamation' : 'fa-check'}"></i>
+                    {afCommitPrimed ? 'Nochmal = Original ersetzen' : '3. Übernehmen & ersetzen'}
+                  </button>
+                </div>
+              {/if}
+
+              {#if afStage !== 'idle'}
+                <div class="tool-btns">
+                  <button class="btn-tool btn-af-discard" onclick={afDiscard} disabled={afBusy}>
+                    <i class="fa-solid fa-xmark"></i> Verwerfen
+                  </button>
+                </div>
+              {/if}
+            {/if}
+          {/if}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -393,6 +565,19 @@
   .btn-upgrade { background: var(--bg-tertiary); border-color: var(--accent-primary); color: var(--accent-primary); white-space: nowrap; }
   .btn-upgrade:hover:not(:disabled) { background: var(--accent-primary); color: #fff; }
   .upgrade-hint { font-size: 0.7rem; color: var(--text-tertiary); }
+
+  /* Audio-Fix */
+  .audiofix-section { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--border-secondary); }
+  .af-tracks { display: flex; flex-direction: column; gap: 2px; font-size: 0.76rem; color: var(--text-secondary); background: var(--bg-secondary); border-radius: 6px; padding: 8px 10px; }
+  .af-line strong { color: var(--text-primary); }
+  .af-warn { font-size: 0.74rem; color: var(--text-tertiary); display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+  .af-gate { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
+  .af-gate-label { font-size: 0.76rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .af-size { color: var(--text-tertiary); font-size: 0.72rem; }
+  .af-audio { width: 100%; height: 36px; }
+  .af-preview { width: 100%; max-height: 220px; border-radius: 8px; background: #000; }
+  .btn-af-commit.primed { background: var(--status-error, #ef4444); border-color: var(--status-error, #ef4444); color: #fff; }
+  .btn-af-discard:hover:not(:disabled) { border-color: var(--text-tertiary); color: var(--text-secondary); }
 
   /* Video-Typ Pills */
   .type-pills { display: flex; gap: 6px; }
