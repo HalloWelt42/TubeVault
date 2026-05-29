@@ -228,6 +228,12 @@ def _build_ydl_opts(label: str = "", *, for_download: bool = False,
             },
         },
         "remote_components": ["ejs:github"],
+        # Multi-Language-Audio: YouTube liefert bei manchen Videos KI-Dubs
+        # als "(default)"-Audiospur und die echte Stimme als "(original)".
+        # 'lang' sortiert Formate so, dass die Spur mit language==info.language
+        # (= Original) gewinnt – sprach-agnostisch, gilt für jeden Kanal.
+        # Bei Single-Audio-Videos wirkungslos.
+        "format_sort": ["lang"],
         "http_headers": {
             "User-Agent": ua,
             "Accept-Language": "de-DE,de;q=0.9,en;q=0.7",
