@@ -90,3 +90,24 @@ export function truncate(text, maxLen = 100) {
   if (!text || text.length <= maxLen) return text || '';
   return text.slice(0, maxLen) + '…';
 }
+
+/**
+ * Klartext-Label für einen Stream-Unavailable-Grund (vom Backend:
+ * info.unavailable_reason). Wird im Download-Dialog gezeigt wenn keine
+ * Streams abrufbar sind.
+ */
+export function streamUnavailableLabel(reason) {
+  const map = {
+    'MEMBERS-ONLY': 'Nur für Kanal-Mitglieder',
+    'AGE-GATE': 'Altersbeschränkt – Login erforderlich',
+    'GEO-BLOCKED': 'In deiner Region gesperrt',
+    'PRIVATE': 'Privates Video',
+    'REMOVED': 'Video wurde entfernt',
+    'COPYRIGHT': 'Wegen Urheberrecht gesperrt',
+    'LIVE-COMING': 'Livestream noch nicht gestartet',
+    'UNAVAILABLE': 'Video nicht verfügbar',
+    'RATE-429': 'YouTube-Limit erreicht – später erneut',
+    'BOT-DETECTION': 'Von YouTube als Bot blockiert – später erneut',
+  };
+  return map[reason] || 'Keine Streams verfügbar';
+}

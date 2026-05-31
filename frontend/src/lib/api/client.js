@@ -112,6 +112,9 @@ export const api = {
   videoDownloadUrl: (videoId) => `${API_BASE}/api/player/${videoId}/download`,
   audioDownloadUrl: (videoId, format = 'mp3') => `${API_BASE}/api/player/${videoId}/audio/download?format=${format}`,
 
+  // Heruntergeladene Streams eines Videos (DB) – für Qualität-Anzeige im Edit-Tab
+  getStreams: (videoId) => request(`/api/videos/${videoId}/streams`),
+
   // Audio-Fix (falsche Tonspur korrigieren)
   audioFixTracks: (id) => request(`/api/player/${id}/audiofix/tracks`),
   audioFixStatus: (id) => request(`/api/player/${id}/audiofix/status`),

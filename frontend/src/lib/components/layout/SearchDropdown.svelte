@@ -355,6 +355,7 @@
       streamDialog = {
         ...streamDialog, streams: info.streams || [], videoStreams, audioStreams,
         captions: info.captions || [], loading: false, alreadyDownloaded: info.already_downloaded,
+        unavailableReason: info.unavailable_reason || null,
         selectedVideoItag: videoStreams[0]?.itag || null,
         selectedAudioItag: videoStreams[0]?.is_progressive ? null : (audioStreams[0]?.itag || null),
       };

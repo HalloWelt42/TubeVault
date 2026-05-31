@@ -335,6 +335,7 @@ class DownloadService:
 
             # Streams (häufigste Fehlerquelle bei pytubefix-Updates)
             streams = []
+            unavailable_reason = None   # gesetzt wenn Streams nicht abrufbar
             try:
                 for s in yt.streams:
                     try:
@@ -350,7 +351,12 @@ class DownloadService:
                     except Exception as se:
                         logger.debug(f"[VideoInfo] Stream-Eintrag übersprungen: {se}")
             except Exception as e:
-                logger.warning(f"[VideoInfo] Streams laden fehlgeschlagen für {video_id}: {e}")
+                # WARUM keine Streams? (Members-Only / Geo / Age / Private …)
+                # → an die UI durchreichen, statt still leere Liste zu liefern.
+                from app.utils.ytdlp_adapter import _classify_yt_error
+                unavailable_reason = _classify_yt_error(str(e))
+                logger.warning(f"[VideoInfo] Streams laden fehlgeschlagen für {video_id}: "
+                               f"cat={unavailable_reason} – {str(e)[:160]}")
 
             # Captions
             captions = []
@@ -398,6 +404,7 @@ class DownloadService:
                 "thumbnail_url": safe(lambda: yt.thumbnail_url, f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
                 "tags": safe(lambda: sanitize_tags(yt.keywords or []), []),
                 "streams": streams,
+                "unavailable_reason": unavailable_reason,
                 "captions": captions, "chapters": chapters,
                 "video_type": video_type,
                 "already_downloaded": existing is not None,

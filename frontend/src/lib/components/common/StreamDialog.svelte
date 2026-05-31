@@ -5,6 +5,8 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import { streamUnavailableLabel } from '../../utils/format.js';
+
   let {
     dialog = null,
     showAudioOnly = true,
@@ -12,6 +14,12 @@
     onclose = () => {},
     ondownload = () => {},
   } = $props();
+
+  let noStreams = $derived(
+    dialog && !dialog.loading
+      && (dialog.videoStreams?.length || 0) === 0
+      && (dialog.audioStreams?.length || 0) === 0
+  );
 
   function fmtSize(bytes) {
     if (!bytes) return '?';
@@ -56,6 +64,17 @@
 
       {#if dialog.loading}
         <div class="sd-loading"><i class="fa-solid fa-spinner fa-spin"></i> Streams werden geladen…</div>
+      {:else if noStreams}
+        <div class="sd-unavailable">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <div>
+            <strong>{streamUnavailableLabel(dialog.unavailableReason)}</strong>
+            <p>Dieses Video kann nicht heruntergeladen werden.</p>
+          </div>
+        </div>
+        <div class="sd-buttons">
+          <button class="sd-btn-ghost" onclick={onclose}>Schließen</button>
+        </div>
       {:else}
         {#if dialog.alreadyDownloaded}
           <div class="sd-warn"><i class="fa-solid fa-triangle-exclamation"></i> Bereits heruntergeladen.</div>
@@ -235,6 +254,10 @@
   .sd-close:hover { color: var(--text-primary); }
   .sd-subtitle { font-size: 0.82rem; color: var(--text-secondary); margin: 0 0 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .sd-loading { text-align: center; padding: 40px; color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .sd-unavailable { display: flex; align-items: flex-start; gap: 12px; padding: 18px; margin: 8px 0 16px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 10px; }
+  .sd-unavailable > i { font-size: 1.4rem; color: var(--status-error, #ef4444); flex-shrink: 0; margin-top: 1px; }
+  .sd-unavailable strong { color: var(--text-primary); font-size: 0.92rem; }
+  .sd-unavailable p { margin: 4px 0 0; font-size: 0.8rem; color: var(--text-tertiary); }
   .sd-warn { background: rgba(239,168,68,0.1); color: #d97706; padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .sd-audio-only-banner { background: rgba(99,179,237,0.12); color: #63b3ed; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
   .sd-section { margin-bottom: 16px; }

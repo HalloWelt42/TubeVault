@@ -126,6 +126,19 @@ async def get_video_info(url: str):
 
 
 
+@router.get("/{video_id}/streams")
+async def get_video_streams(video_id: str):
+    """Heruntergeladene Streams eines Videos aus der DB (für Qualität-Anzeige
+    im Bearbeiten-Tab). Reine DB-Lesung, keine YouTube-/ffprobe-Abfrage."""
+    rows = await db.fetch_all(
+        """SELECT stream_type, itag, quality, codec, resolution, fps,
+                  file_size, is_default, is_combined, downloaded
+           FROM streams WHERE video_id = ? ORDER BY is_default DESC, id""",
+        (video_id,),
+    )
+    return {"video_id": video_id, "streams": [dict(r) for r in rows]}
+
+
 @router.get("/search/notes")
 async def search_notes(q: str = Query(..., min_length=1)):
     """Globale Suche in Video-Notizen."""

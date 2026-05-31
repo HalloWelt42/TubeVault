@@ -3,7 +3,7 @@
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
   import { getSettingNum, getSettingBool } from '../lib/stores/settings.js';
-  import { formatDuration, formatSize, formatDate, formatViews, formatStreamSize, truncate } from '../lib/utils/format.js';
+  import { formatDuration, formatSize, formatDate, formatViews, formatStreamSize, truncate, streamUnavailableLabel } from '../lib/utils/format.js';
   import { formatDescription, parseDescClick } from '../lib/utils/description.js';
   import { marked } from 'marked';
   import ChapterPanel from '../lib/components/watch/ChapterPanel.svelte';
@@ -197,6 +197,7 @@
         captions: info.captions || [],
         title: info.title,
         loading: false,
+        unavailableReason: info.unavailable_reason || null,
         alreadyDownloaded: info.already_downloaded,
         // Auto-Preselect: bestes Video + bestes Audio
         selectedVideoItag: videoStreams[0]?.itag || null,
@@ -1129,6 +1130,18 @@
 
       {#if streamDialog.loading}
         <div class="dialog-loading"><i class="fa-solid fa-spinner fa-spin"></i> Streams werden geladen…</div>
+      {:else if streamDialog.videoStreams.length === 0 && streamDialog.audioStreams.length === 0}
+        <!-- Keine Streams abrufbar – Grund klar anzeigen statt leerer Listen + toter Buttons -->
+        <div class="dialog-unavailable">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <div>
+            <strong>{streamUnavailableLabel(streamDialog.unavailableReason)}</strong>
+            <p>Dieses Video kann nicht heruntergeladen werden.</p>
+          </div>
+        </div>
+        <div class="dialog-buttons">
+          <button class="btn-cancel" onclick={() => streamDialog = null}>Schließen</button>
+        </div>
       {:else}
         {#if streamDialog.alreadyDownloaded}
           <div class="dialog-warn"><i class="fa-solid fa-triangle-exclamation"></i> Bereits heruntergeladen.</div>
