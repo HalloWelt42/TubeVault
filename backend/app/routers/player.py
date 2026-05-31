@@ -10,7 +10,7 @@ import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, RedirectResponse
 
 from app.database import db
 from app.config import THUMBNAILS_DIR
@@ -178,6 +178,15 @@ async def get_thumbnail(video_id: str):
         thumb_path = THUMBNAILS_DIR / f"{video_id}{ext}"
         if thumb_path.exists():
             return FileResponse(str(thumb_path), media_type=f"image/{'jpeg' if ext == '.jpg' else ext[1:]}", headers=cache_headers)
+
+    # Fallback 3: Kein lokales Thumbnail, aber gültige YouTube-ID → auf den
+    # rss-thumb-Endpoint umleiten (proxyt + cached YouTube-Thumbnail). Damit
+    # zeigen auch nicht-heruntergeladene Videos (Feed/Verlauf/Vorschläge) ein
+    # Bild und es gibt keine 404-Flut mehr in der Konsole.
+    if len(video_id) == 11 and not video_id.startswith("local_"):
+        return RedirectResponse(
+            url=f"/api/subscriptions/rss-thumb/{video_id}", status_code=307
+        )
 
     raise HTTPException(status_code=404, detail="Thumbnail nicht gefunden")
 

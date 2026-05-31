@@ -102,8 +102,12 @@
     if (urlTab) activeTab = urlTab;
 
     try {
-      video = await api.getVideoPreview(id);
-      previewMode = video.preview_mode || false;
+      const v = await api.getVideoPreview(id);
+      // WICHTIG: previewMode VOR video setzen. Sonst rendert das Template
+      // kurz das <video src=streamUrl> für ein nicht-heruntergeladenes
+      // Video → 404 auf /api/player/<id>. Reihenfolge verhindert den Race.
+      previewMode = v.preview_mode || false;
+      video = v;
 
       if (!previewMode) {
         const favCheck = await api.checkFavorite(id);
