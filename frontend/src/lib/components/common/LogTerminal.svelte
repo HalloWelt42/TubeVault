@@ -1,6 +1,8 @@
 <!--
-  TubeVault – LogTerminal v1.9.1
+  TubeVault – LogTerminal v2.0.0
   Live-Log + Job-Monitor. Jobs-Tab zeigt aktive Jobs mit Kill-Button.
+  v2: seq-Dedup nach Reconnect, aufklappbare Tracebacks, Tageswechsel-Marker,
+  Pause-Puffer mit Überlauf-Meldung statt stillem Verwerfen.
   © HalloWelt42 – Private Nutzung
 -->
 <script>
@@ -20,6 +22,36 @@
   let useRegex = $state(false);
   let paused = $state(false);
   let pauseBuffer = [];
+  let pauseSkipped = 0;          // bei vollem Pause-Puffer verworfene Einträge
+  let lastSeq = 0;               // höchste gesehene Backend-seq (Reconnect-Dedup)
+  let localSeq = 0;              // Zähler für lokal erzeugte Einträge
+  let expanded = $state(new Set()); // aufgeklappte Tracebacks (per seq)
+
+  const MAX_LOGS = 2500;
+  const MAX_PAUSE = 2000;
+
+  // Ein Eintrag, der im Browser entsteht (Console, Fehler, Marker).
+  // seq bekommt ein 'L'-Präfix, damit er nie mit Backend-seq kollidiert.
+  function makeLocalEntry(level, name, msg) {
+    return {
+      ts: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      epoch: Date.now() / 1000,
+      seq: 'L' + (++localSeq),
+      level, name, msg, cat: 'frontend',
+    };
+  }
+
+  // Zentraler Anfüge-Pfad für ALLE Einträge (WS, Console, Fehler):
+  // respektiert Pause (mit gezählter Überlauf-Verwerfung) und Auto-Scroll.
+  function pushEntry(entry) {
+    if (paused) {
+      pauseBuffer.push(entry);
+      if (pauseBuffer.length > MAX_PAUSE) { pauseBuffer.shift(); pauseSkipped++; }
+      return;
+    }
+    logs = [...logs.slice(-(MAX_LOGS - 1)), entry];
+    scrollIfNeeded();
+  }
 
   // Window Position & Size
   let winX = $state(60);
@@ -180,13 +212,22 @@
       try {
         const entry = JSON.parse(e.data);
         if (!entry.cat) entry.cat = 'backend';
-        if (paused) {
-          pauseBuffer.push(entry);
-          if (pauseBuffer.length > 500) pauseBuffer.shift();
-          return;
+        if (typeof entry.seq === 'number') {
+          // Backend spielt beim (Re-)Connect die letzten Einträge erneut ein –
+          // ohne Dedup standen sie doppelt im Terminal („zeigt immer dasselbe").
+          if (entry.seq <= lastSeq) return;
+          if (lastSeq > 0 && entry.seq > lastSeq + 1) {
+            const missed = entry.seq - lastSeq - 1;
+            pushEntry(makeLocalEntry('WARNING', 'terminal',
+              `${missed} Einträge verpasst (Verbindung war getrennt)`));
+          }
+          lastSeq = entry.seq;
         }
-        logs = [...logs.slice(-2499), entry];
-        scrollIfNeeded();
+        // Eigene Console-Einträge kommen als WS-Echo zurück (POST /logs/frontend
+        // → Buffer → Broadcast). Lokal sind sie schon angezeigt → Echo skippen,
+        // sonst steht jede Console-Zeile doppelt da.
+        if (entry.cat === 'frontend' && entry.name === 'console') return;
+        pushEntry(entry);
       } catch {}
     };
     ws.onclose = () => {
@@ -213,9 +254,14 @@
 
   function togglePause() {
     paused = !paused;
-    if (!paused && pauseBuffer.length > 0) {
-      logs = [...logs.slice(-(2500 - pauseBuffer.length)), ...pauseBuffer];
+    if (!paused && (pauseBuffer.length > 0 || pauseSkipped > 0)) {
+      // Überlauf sichtbar machen statt still zu verschlucken
+      const marker = pauseSkipped > 0
+        ? [makeLocalEntry('WARNING', 'terminal', `${pauseSkipped} Einträge übersprungen (Pause-Puffer voll)`)]
+        : [];
+      logs = [...logs, ...marker, ...pauseBuffer].slice(-MAX_LOGS);
       pauseBuffer = [];
+      pauseSkipped = 0;
       scrollIfNeeded();
     }
   }
@@ -232,17 +278,8 @@
         ).join(' ');
         if (msg.includes('[LogTerminal]')) return;
         const levelMap = { log: 'INFO', info: 'INFO', warn: 'WARNING', error: 'ERROR' };
-        const entry = {
-          ts: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          level: levelMap[method] || 'INFO',
-          name: 'console',
-          msg: msg.substring(0, 500),
-          cat: 'frontend',
-        };
-        if (!paused) {
-          logs = [...logs.slice(-2499), entry];
-          scrollIfNeeded();
-        }
+        const entry = makeLocalEntry(levelMap[method] || 'INFO', 'console', msg.substring(0, 500));
+        pushEntry(entry);
         frontendBuffer.push({ ts: entry.ts, level: entry.level, source: 'console', msg: entry.msg });
         scheduleFlush();
       };
@@ -262,23 +299,11 @@
   }
 
   function onWindowError(e) {
-    const entry = {
-      ts: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      level: 'ERROR', name: 'window', cat: 'frontend',
-      msg: `${e.message} (${e.filename}:${e.lineno})`,
-    };
-    logs = [...logs.slice(-2499), entry];
-    scrollIfNeeded();
+    pushEntry(makeLocalEntry('ERROR', 'window', `${e.message} (${e.filename}:${e.lineno})`));
   }
 
   function onUnhandledRejection(e) {
-    const entry = {
-      ts: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      level: 'ERROR', name: 'promise', cat: 'frontend',
-      msg: `Unhandled: ${e.reason?.message || e.reason || 'unknown'}`,
-    };
-    logs = [...logs.slice(-2499), entry];
-    scrollIfNeeded();
+    pushEntry(makeLocalEntry('ERROR', 'promise', `Unhandled: ${e.reason?.message || e.reason || 'unknown'}`));
   }
 
   function scheduleFlush() {
@@ -345,12 +370,33 @@
     if (scrollHeight - scrollTop - clientHeight > 50) autoScroll = false;
   }
 
-  function clearLogs() { logs = []; }
+  function clearLogs() { logs = []; expanded = new Set(); }
+
+  // ─── Traceback auf/zu ───
+  function toggleTrace(key) {
+    const s = new Set(expanded);
+    if (s.has(key)) s.delete(key); else s.add(key);
+    expanded = s;
+  }
+
+  // ─── Datum (Anzeige bleibt HH:MM:SS, Datum nur bei Tageswechsel/Tooltip) ───
+  function dayChanged(a, b) {
+    if (!a?.epoch || !b?.epoch) return false;
+    return new Date(a.epoch * 1000).toDateString() !== new Date(b.epoch * 1000).toDateString();
+  }
+  function dayLabel(e) {
+    return new Date(e.epoch * 1000).toLocaleDateString('de-DE',
+      { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+  function fullDate(e) {
+    return e.epoch ? new Date(e.epoch * 1000).toLocaleString('de-DE') : e.ts;
+  }
 
   function exportLogs() {
-    const text = displayLogs.map(l =>
-      `${l.ts} [${l.level}] [${l.cat}] ${l.name}: ${l.msg}`
-    ).join('\n');
+    const text = displayLogs.map(l => {
+      const line = `${l.ts} [${l.level}] [${l.cat}] ${l.name}: ${l.msg}`;
+      return l.trace ? `${line}\n${l.trace}` : line;
+    }).join('\n');
     const blob = new Blob([text], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -555,17 +601,30 @@
     {:else}
     <!-- ═══ LOG CONTENT ═══ -->
     <div class="lt-body" bind:this={logContainer} onscroll={handleScroll}>
-      {#each displayLogs as entry, i (i)}
+      {#each displayLogs as entry, i (entry.seq ?? i)}
+        {#if i > 0 && dayChanged(displayLogs[i - 1], entry)}
+          <div class="lt-day-marker">{dayLabel(entry)}</div>
+        {/if}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="lt-line" class:is-error={entry.level === 'ERROR' || entry.level === 'CRITICAL'}
              class:is-warn={entry.level === 'WARNING'}
-             class:is-debug={entry.level === 'DEBUG'}>
-          <span class="lt-ts">{entry.ts}</span>
+             class:is-debug={entry.level === 'DEBUG'}
+             class:has-trace={!!entry.trace}
+             onclick={entry.trace ? () => toggleTrace(entry.seq ?? i) : undefined}>
+          <span class="lt-ts" title={fullDate(entry)}>{entry.ts}</span>
           <span class="lt-cat" style="color: {catColors[entry.cat] || '#8b949e'}"
                 title="{entry.cat}">{catLabels[entry.cat] || entry.cat?.substring(0,3).toUpperCase()}</span>
           <span class="lt-level" style="color: {levelColors[entry.level] || '#a3d9a5'}">{(entry.level || '').padEnd(5).substring(0, 5)}</span>
           <span class="lt-name">{entry.name}</span>
           <span class="lt-msg">{entry.msg}</span>
+          {#if entry.trace}
+            <i class="fa-solid fa-chevron-{expanded.has(entry.seq ?? i) ? 'up' : 'down'} lt-trace-chev"></i>
+          {/if}
         </div>
+        {#if entry.trace && expanded.has(entry.seq ?? i)}
+          <pre class="lt-trace">{entry.trace}</pre>
+        {/if}
       {/each}
       {#if displayLogs.length === 0}
         <div class="lt-empty">
@@ -714,6 +773,24 @@
     overflow: hidden; text-overflow: ellipsis; margin-right: 6px;
   }
   .lt-msg { color: #b1bac4; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+
+  /* Aufklappbarer Traceback */
+  .lt-line.has-trace { cursor: pointer; }
+  .lt-trace-chev { color: #484f58; font-size: 8px; margin: auto 2px auto 6px; flex-shrink: 0; }
+  .lt-trace {
+    margin: 0 0 3px 66px; padding: 6px 8px;
+    font-size: 10px; line-height: 1.45; font-family: inherit;
+    color: #8b949e; background: rgba(248,113,113,0.05);
+    border-left: 2px solid rgba(248,113,113,0.4); border-radius: 0 4px 4px 0;
+    white-space: pre-wrap; word-break: break-word; overflow-x: hidden;
+  }
+
+  /* Tageswechsel-Marker */
+  .lt-day-marker {
+    text-align: center; color: #58a6ff; font-size: 9px; font-weight: 700;
+    padding: 4px 0 2px; letter-spacing: 0.5px; text-transform: uppercase;
+    border-bottom: 1px dashed #21262d; margin: 3px 0;
+  }
 
   .lt-empty {
     color: #484f58; text-align: center; padding: 30px;

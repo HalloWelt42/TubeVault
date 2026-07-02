@@ -5,6 +5,7 @@ System-Status, Rate-Limiter Stats, Health, Live-Logs
 """
 
 import logging
+import time
 from collections import deque
 from datetime import datetime
 
@@ -49,34 +50,56 @@ _LOGGER_CAT_MAP = {
 class LogBuffer(logging.Handler):
     """Ring-Buffer + gebatchter WebSocket-Stream.
     _push() ist synchron und schnell (nur deque.append).
-    WS-Broadcast alle 250ms gebatcht – blockiert nie den Haupt-Thread."""
+    WS-Broadcast alle 250ms gebatcht – blockiert nie den Haupt-Thread.
+
+    Jeder Eintrag trägt zusätzlich:
+      epoch  – numerischer Zeitstempel (Statistik zählt darüber, nicht über
+               den HH:MM:SS-String → kein Mitternachts-Bug)
+      seq    – monoton steigende Nummer (Terminal dedupliziert damit den
+               History-Replay nach WS-Reconnect und erkennt Lücken)
+      trace  – optional: Traceback/Folgezeilen getrennt von der 1. Zeile
+               (Terminal zeigt sie aufklappbar statt zerhackt)
+    """
 
     def __init__(self, maxlen: int = LOG_BUFFER_SIZE):
         super().__init__()
         self.buffer: deque[dict] = deque(maxlen=maxlen)
         self.connections: list[WebSocket] = []
         self._loop = None
-        self._pending: deque[dict] = deque(maxlen=500)  # WS-Sende-Puffer
+        self._pending: deque[dict] = deque(maxlen=2000)  # WS-Sende-Puffer
         self._flush_task = None
         self._rate_cache: dict[str, float] = {}
+        self._seq = 0
+        self._dropped = 0  # bei Sende-Puffer-Überlauf verworfene Einträge
 
     def emit(self, record: logging.LogRecord):
         short_name = record.name.split(".")[-1]
         cat = _LOGGER_CAT_MAP.get(short_name, "backend")
+        # format() hängt bei exc_info den mehrzeiligen Traceback an die
+        # Meldung. Für das Terminal trennen: 1. Zeile = msg, Rest = trace.
+        text = self.format(record)
+        trace = None
+        if "\n" in text:
+            text, trace = text.split("\n", 1)
         entry = {
             "ts": datetime.fromtimestamp(record.created).strftime("%H:%M:%S"),
+            "epoch": round(record.created, 3),
             "level": record.levelname,
             "name": short_name,
-            "msg": self.format(record),
+            "msg": text,
             "cat": cat,
         }
+        if trace:
+            entry["trace"] = trace
         self._push(entry)
 
     def push_api(self, method: str, path: str, status: int, duration_ms: float,
                  client: str = ""):
         level = "INFO" if status < 400 else ("WARNING" if status < 500 else "ERROR")
+        now = time.time()
         entry = {
-            "ts": datetime.now().strftime("%H:%M:%S"),
+            "ts": datetime.fromtimestamp(now).strftime("%H:%M:%S"),
+            "epoch": round(now, 3),
             "level": level,
             "name": "api",
             "msg": f"{method} {path} → {status} ({duration_ms:.0f}ms)",
@@ -90,8 +113,10 @@ class LogBuffer(logging.Handler):
 
     def push_frontend(self, entries: list[dict]):
         for e in entries:
+            now = time.time()
             entry = {
-                "ts": e.get("ts", datetime.now().strftime("%H:%M:%S")),
+                "ts": e.get("ts", datetime.fromtimestamp(now).strftime("%H:%M:%S")),
+                "epoch": round(now, 3),
                 "level": e.get("level", "INFO").upper(),
                 "name": e.get("source", "ui"),
                 "msg": e.get("msg", ""),
@@ -101,9 +126,8 @@ class LogBuffer(logging.Handler):
 
     def push_event(self, cat: str, level: str, name: str, msg: str,
                    rate_key: str = None, rate_seconds: float = 0):
+        now = time.time()
         if rate_key and rate_seconds > 0:
-            import time
-            now = time.time()
             last = self._rate_cache.get(rate_key, 0)
             if now - last < rate_seconds:
                 return
@@ -112,7 +136,8 @@ class LogBuffer(logging.Handler):
                 cutoff = now - 60
                 self._rate_cache = {k: v for k, v in self._rate_cache.items() if v > cutoff}
         entry = {
-            "ts": datetime.now().strftime("%H:%M:%S"),
+            "ts": datetime.fromtimestamp(now).strftime("%H:%M:%S"),
+            "epoch": round(now, 3),
             "level": level,
             "name": name,
             "msg": msg,
@@ -122,21 +147,45 @@ class LogBuffer(logging.Handler):
 
     def _push(self, entry: dict):
         """Schnell & synchron – nur deque-Append, kein I/O."""
+        self._seq += 1
+        entry["seq"] = self._seq
         self.buffer.append(entry)
         if self.connections:
+            if len(self._pending) == self._pending.maxlen:
+                self._dropped += 1  # deque verwirft links – zählen statt schweigen
             self._pending.append(entry)
+
+    def _drain_batch(self, limit: int = 100) -> list[dict]:
+        """Nächsten Sende-Batch entnehmen. Gab es Überlauf, wird ein
+        Warn-Marker vorangestellt („N Einträge übersprungen") statt die
+        Lücke zu verschweigen."""
+        batch: list[dict] = []
+        if self._dropped:
+            n, self._dropped = self._dropped, 0
+            self._seq += 1
+            marker = {
+                "ts": datetime.now().strftime("%H:%M:%S"),
+                "epoch": round(time.time(), 3),
+                "level": "WARNING",
+                "name": "logbuffer",
+                "msg": f"{n} Log-Einträge übersprungen (Sende-Puffer voll)",
+                "cat": "system",
+                "seq": self._seq,
+            }
+            self.buffer.append(marker)
+            batch.append(marker)
+        while self._pending and len(batch) < limit:
+            batch.append(self._pending.popleft())
+        return batch
 
     async def _flush_loop(self):
         """Alle 250ms ausstehende Einträge gebatcht per WS senden."""
         import asyncio
         while True:
             await asyncio.sleep(0.25)
-            if not self._pending or not self.connections:
+            if not self.connections or (not self._pending and not self._dropped):
                 continue
-            # Batch rausholen
-            batch = []
-            while self._pending and len(batch) < 100:
-                batch.append(self._pending.popleft())
+            batch = self._drain_batch(limit=100)
             if not batch:
                 continue
             dead = []
@@ -216,28 +265,37 @@ async def get_docker_logs(service: str = Query("backend"), n: int = Query(200, g
     return {"logs": logs, "total": len(logs)}
 
 
-@router.get("/logs/stats")
-async def get_log_stats():
-    """Log-Statistiken: echte Zähler pro Kategorie und Level."""
-    all_logs = list(log_buffer.buffer)
+def compute_log_stats(entries: list[dict], now: float = None) -> dict:
+    """Log-Statistiken über eine Eintragsliste (pure Funktion, testbar).
+
+    errors_last_hour zählt numerisch über das epoch-Feld. Der frühere
+    Vergleich von "%H:%M:%S"-Strings zählte nach Mitternacht falsch:
+    frische Einträge (z.B. "00:05:00") lagen lexikografisch UNTER dem
+    Cutoff (z.B. "23:30:00") und fielen raus, während alte von gestern
+    Abend fälschlich zählten.
+    """
+    now = now if now is not None else time.time()
+    cutoff = now - 3600
     stats = {
-        "total": len(all_logs),
+        "total": len(entries),
         "by_category": {},
         "by_level": {},
         "errors_last_hour": 0,
     }
-    from datetime import datetime, timedelta
-    hour_ago = (datetime.now() - timedelta(hours=1)).strftime("%H:%M:%S")
-
-    for entry in all_logs:
+    for entry in entries:
         cat = entry.get("cat", "unknown")
         level = entry.get("level", "INFO")
         stats["by_category"][cat] = stats["by_category"].get(cat, 0) + 1
         stats["by_level"][level] = stats["by_level"].get(level, 0) + 1
-        if level in ("ERROR", "CRITICAL") and entry.get("ts", "") >= hour_ago:
+        if level in ("ERROR", "CRITICAL") and entry.get("epoch", 0) >= cutoff:
             stats["errors_last_hour"] += 1
-
     return stats
+
+
+@router.get("/logs/stats")
+async def get_log_stats():
+    """Log-Statistiken: echte Zähler pro Kategorie und Level."""
+    return compute_log_stats(list(log_buffer.buffer))
 
 
 @router.post("/logs/frontend")
