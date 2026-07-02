@@ -215,6 +215,38 @@ async def _rss_cron_loop():
         await asyncio.sleep(300)  # 5 Minuten
 
 
+async def _ghost_check_bg():
+    """Ghost-Bereinigung im Hintergrund (blockiert den Start NICHT).
+
+    Die Datei-Existenzprüfung über alle 'ready'-Videos ist auf einer grossen
+    USB-Platte zehntausende einzelne stat()-Aufrufe. Frueher lief das synchron
+    im Lifespan-Startup und blockierte den Event-Loop minutenlang (der Server
+    band den Port erst danach). Jetzt: einmal die Zeilen laden, die stat()-Schleife
+    in einem Thread abarbeiten (Event-Loop bleibt frei), nur die tatsaechlichen
+    Ghosts per DB-Update markieren.
+    """
+    try:
+        from pathlib import Path as _P
+        rows = await db.fetch_all(
+            "SELECT id, file_path FROM videos WHERE status = 'ready'")
+
+        def _find_ghosts(rs):
+            out = []
+            for gr in rs:
+                fp = gr["file_path"]
+                if not fp or not _P(fp).exists():
+                    out.append(gr["id"])
+            return out
+
+        ghost_ids = await asyncio.to_thread(_find_ghosts, rows)
+        for gid in ghost_ids:
+            await db.execute("UPDATE videos SET status = 'ghost' WHERE id = ?", (gid,))
+        if ghost_ids:
+            logger.info(f"[STARTUP] {len(ghost_ids)} Ghost-Einträge bereinigt (keine Datei)")
+    except Exception as e:
+        logger.warning(f"[STARTUP] Ghost-Check Fehler: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application Lifecycle: Startup und Shutdown."""
@@ -243,20 +275,9 @@ async def lifespan(app: FastAPI):
             )
     except Exception as e:
         logger.warning(f"[DB-AUDIT] Fehler beim Identitäts-Check: {e}")
-    # Ghost-Einträge automatisch bereinigen (Videos ohne Datei)
-    try:
-        from pathlib import Path as _P
-        ghost_rows = await db.fetch_all(
-            "SELECT id, file_path FROM videos WHERE status = 'ready'")
-        ghost_count = 0
-        for gr in ghost_rows:
-            if not gr["file_path"] or not _P(gr["file_path"]).exists():
-                await db.execute("UPDATE videos SET status = 'ghost' WHERE id = ?", (gr["id"],))
-                ghost_count += 1
-        if ghost_count:
-            logger.info(f"[STARTUP] {ghost_count} Ghost-Einträge bereinigt (keine Datei)")
-    except Exception as e:
-        logger.warning(f"[STARTUP] Ghost-Check Fehler: {e}")
+    # Ghost-Einträge (Videos ohne Datei) asynchron im Hintergrund bereinigen –
+    # blockiert den Serverstart nicht mehr (siehe _ghost_check_bg).
+    asyncio.create_task(_ghost_check_bg())
     job_service.set_loop(asyncio.get_event_loop())
     await job_service.startup()
     await download_service.start_worker()
