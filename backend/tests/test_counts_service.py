@@ -60,6 +60,39 @@ async def test_favorites(test_db):
     assert await counts_service.favorites() == 1
 
 
+async def _seed_jobs(db):
+    async def job(status, jtype="download", today=True):
+        completed = "datetime('now','localtime')" if today else "datetime('now','-3 days')"
+        await db.execute(
+            f"INSERT INTO jobs (type, title, status, completed_at) "
+            f"VALUES (?, ?, ?, {completed})", (jtype, "j", status))
+    await job("active"); await job("queued"); await job("queued")
+    await job("done", today=True); await job("done", today=True)
+    await job("done", today=False)                 # gestern → nicht done_today
+    await job("error"); await job("parked"); await job("cancelled")
+    await job("done", jtype="scan", today=True)     # anderer Typ
+
+
+async def test_queue_counts(test_db):
+    await _seed_jobs(test_db)
+    q = await counts_service.queue_counts()   # nur type='download'
+    assert q["active"] == 1
+    assert q["queued"] == 2
+    assert q["done"] == 3            # alle done (Retention)
+    assert q["done_today"] == 2      # nur die heutigen
+    assert q["error"] == 1
+    assert q["parked"] == 1
+    assert q["cancelled"] == 1
+    assert q["failed"] == 2          # error + parked (NICHT cancelled)
+
+
+async def test_job_counts_all_types(test_db):
+    await _seed_jobs(test_db)
+    c = await counts_service.job_counts()   # ALLE typen
+    assert c["done"] == 4            # 3 download + 1 scan
+    assert c["done_today"] == 3      # 2 download-heute + 1 scan-heute
+
+
 async def test_disk_mounts_shape(test_db):
     m = counts_service.disk_mounts()
     assert set(m.keys()) == {"media", "meta", "same_device"}

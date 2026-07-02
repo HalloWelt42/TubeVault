@@ -111,6 +111,40 @@ class CountsService:
             "SELECT COUNT(DISTINCT video_id) FROM watch_history"
         ) or 0
 
+    # ─── Jobs / Download-Queue ────────────────────────────────────
+    async def job_counts(self, job_type: str | None = None) -> dict:
+        """Status-Zählung über jobs (optional gefiltert auf job_type) in EINEM
+        GROUP-BY. `done` = fertig innerhalb der Retention (job_service.cleanup
+        prunt ältere ~48h); `done_today` = seit Mitternacht (lokal)."""
+        where = "WHERE type = ?" if job_type else ""
+        params = (job_type,) if job_type else ()
+        rows = await db.fetch_all(
+            f"SELECT status, COUNT(*) AS n FROM jobs {where} GROUP BY status", params)
+        counts = {r["status"]: r["n"] for r in rows}
+        done_today = await db.fetch_val(
+            f"SELECT COUNT(*) FROM jobs WHERE status='done' "
+            f"AND completed_at >= date('now','localtime')"
+            + (" AND type = ?" if job_type else ""),
+            params,
+        ) or 0
+        return {
+            "active": counts.get("active", 0),
+            "queued": counts.get("queued", 0),
+            "retry_wait": counts.get("retry_wait", 0),
+            "error": counts.get("error", 0),
+            "parked": counts.get("parked", 0),
+            "cancelled": counts.get("cancelled", 0),
+            "done": counts.get("done", 0),          # innerhalb Retention
+            "done_today": done_today,
+        }
+
+    async def queue_counts(self) -> dict:
+        """Download-Queue-Zähler (jobs type='download'). failed = error+parked
+        (cancelled bleibt separat – Nutzer-Abbruch ist kein Fehler)."""
+        c = await self.job_counts("download")
+        c["failed"] = c["error"] + c["parked"]
+        return c
+
     # ─── Disk ─────────────────────────────────────────────────────
     def disk_mounts(self) -> dict:
         """Immer beide Mounts mit Label + Nutzung; same_device via st_dev

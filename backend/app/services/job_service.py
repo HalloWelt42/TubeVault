@@ -479,19 +479,21 @@ class JobService:
         return [self._row_to_dict(r) for r in rows]
 
     async def get_stats(self) -> dict:
-        """Job-Statistiken inkl. Pause-Status."""
-        active = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE status = 'active'")
-        queued = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE status = 'queued'")
-        done = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE status = 'done'")
-        errors = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE status = 'error'")
-        parked = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE status = 'parked'")
+        """Job-Statistiken inkl. Pause-Status. Zählung zentral aus
+        counts_service (ein GROUP-BY). `done` = innerhalb Retention;
+        `done_today` = seit Mitternacht (additiv, für den Queue-Tab)."""
+        from app.services.counts_service import counts_service as cs
+        c = await cs.job_counts()   # alle jobs, nicht nur download
+        active, queued = c["active"], c["queued"]
+        done, errors, parked = c["done"], c["error"], c["parked"]
         return {
             "active": active,
             "queued": queued,
             "done": done,
+            "done_today": c["done_today"],
             "errors": errors,
-            "parked": parked or 0,
-            "total": active + queued + done + errors + (parked or 0),
+            "parked": parked,
+            "total": active + queued + done + errors + parked,
             "paused": self._paused,
             "pause_reason": self._pause_reason,
             "paused_at": self._paused_at,

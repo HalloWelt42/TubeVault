@@ -1740,11 +1740,8 @@ class DownloadService:
         items = await db.fetch_all(
             "SELECT * FROM jobs WHERE type='download' ORDER BY status='active' DESC, priority DESC, created_at ASC"
         )
-        sts = {"active":0,"queued":0,"done":0,"error":0,"cancelled":0,"retry_wait":0}
         result = []
         for i in items:
-            s = i["status"]
-            if s in sts: sts[s] += 1
             item = dict(i)
             meta = json.loads(item.get("metadata") or "{}")
             vid = meta.get("video_id")
@@ -1761,15 +1758,20 @@ class DownloadService:
                 if row:
                     item["title"] = row["title"]
             result.append(item)
+        # Zähler zentral aus counts_service (eine Quelle der Wahrheit).
+        from app.services.counts_service import counts_service as _cs
+        qc = await _cs.queue_counts()
         return {
             "queue": result,
-            "active_count": sts["active"],
-            "queued_count": sts["queued"],
-            "completed_count": sts["done"],
-            "error_count": sts["error"],
-            "cancelled_count": sts["cancelled"],
-            "retry_wait_count": sts["retry_wait"],
-            "failed_count": sts["error"] + sts["cancelled"],
+            "active_count": qc["active"],
+            "queued_count": qc["queued"],
+            "completed_count": qc["done"],            # innerhalb Retention (Kompat)
+            "completed_today_count": qc["done_today"],  # NEU: seit Mitternacht
+            "error_count": qc["error"],
+            "parked_count": qc["parked"],
+            "cancelled_count": qc["cancelled"],
+            "retry_wait_count": qc["retry_wait"],
+            "failed_count": qc["failed"],             # error+parked (cancelled separat)
         }
 
     async def cancel_download(self, job_id: int):
