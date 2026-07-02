@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import { api } from '../lib/api/client.js';
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
@@ -7,39 +8,24 @@
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { createListLoader } from '../lib/utils/listLoader.svelte.js';
 
-  let history = $state([]);
-  let total = $state(0);
-  let page = $state(1);
-  let hasMore = $state(false);
-  let loading = $state(true);
-  let loadingMore = $state(false);
   const PER_PAGE = getSettingNum('general.videos_per_page', 24);
 
   let histFilter = $state({ types: null, channels: null, search: null });
 
-  async function loadHistory(reset = true) {
-    if (reset) { page = 1; history = []; loading = true; }
-    else { loadingMore = true; }
+  // Zentraler List-Loader: page darin bewusst nicht-reaktiv — das Nachladen
+  // kann keinen Effect mehr triggern (Bug: Liste sprang beim Scrollen zurück).
+  const list = createListLoader(async (page) => {
+    const params = { page, per_page: PER_PAGE };
+    if (histFilter.search) params.search = histFilter.search;
+    if (histFilter.types) params.video_types = histFilter.types;
+    if (histFilter.channels) params.channel_ids = histFilter.channels;
     try {
-      const params = { page, per_page: PER_PAGE };
-      if (histFilter.search) params.search = histFilter.search;
-      if (histFilter.types) params.video_types = histFilter.types;
-      if (histFilter.channels) params.channel_ids = histFilter.channels;
       const res = await api.getHistory(params);
-      const newVids = res.videos || [];
-      if (reset) history = newVids; else history = [...history, ...newVids];
-      total = res.total || 0;
-      hasMore = history.length < total;
-    } catch { toast.error('Verlauf konnte nicht geladen werden'); }
-    finally { loading = false; loadingMore = false; }
-  }
-
-  function loadMore() {
-    if (loadingMore || !hasMore) return;
-    page += 1;
-    loadHistory(false);
-  }
+      return { items: res.videos || [], total: res.total || 0 };
+    } catch { toast.error('Verlauf konnte nicht geladen werden'); return { items: [], total: 0 }; }
+  });
 
   function onHistFilterChange(f) {
     histFilter = f;
@@ -48,11 +34,11 @@
       channels: f.channels || null,
       search: f.search || null,
     });
-    loadHistory();
+    list.load(true);
   }
 
   async function clearAll() {
-    try { await api.clearHistory(); history = []; total = 0; toast.success('Verlauf gelöscht'); }
+    try { await api.clearHistory(); list.items = []; list.total = 0; toast.success('Verlauf gelöscht'); }
     catch (e) { toast.error(e.message); }
   }
 
@@ -68,16 +54,24 @@
   }
 
   $effect(() => {
-    // URL-Params lesen
+    // URL-Params → Filter übernehmen, dann laden. untrack verhindert, dass
+    // der Effect histFilter (das er selbst schreibt) oder Loader-Interna
+    // trackt — sonst Endlos-Loop bzw. Reset beim Nachladen.
     const p = $route?.params || {};
-    if (p.types) histFilter = { ...histFilter, types: p.types };
-    if (p.channels) histFilter = { ...histFilter, channels: p.channels };
-    if (p.search) histFilter = { ...histFilter, search: p.search };
-    loadHistory();
+    untrack(() => {
+      if (p.types || p.channels || p.search) {
+        histFilter = {
+          types: p.types || null,
+          channels: p.channels || null,
+          search: p.search || null,
+        };
+      }
+      list.load(true);
+    });
   });
 
   // Reagiere auf Archive/Delete aus Watch-View
-  $effect(() => onVideoMutation(() => loadHistory(true)));
+  $effect(() => onVideoMutation(() => list.load(true)));
 
 </script>
 
@@ -85,20 +79,20 @@
   <div class="page-header">
     <div class="header-left">
       <h1>Verlauf</h1>
-      <span class="count">{total} Video{total !== 1 ? 's' : ''}</span>
+      <span class="count">{list.total} Video{list.total !== 1 ? 's' : ''}</span>
     </div>
-    {#if history.length > 0}
+    {#if list.items.length > 0}
       <button class="btn-clear" onclick={clearAll}>Verlauf löschen</button>
     {/if}
   </div>
 
   <MultiFilter showSearch={true} showTypes={true} showChannels={true} showCategories={false} onchange={onHistFilterChange} />
 
-  {#if history.filter(isInProgress).length > 0}
+  {#if list.items.filter(isInProgress).length > 0}
     <section class="continue-section">
       <h2 class="section-title">Weiterschauen</h2>
       <div class="continue-grid">
-        {#each history.filter(isInProgress) as v}
+        {#each list.items.filter(isInProgress) as v}
           <button class="continue-card" onclick={() => playVideo(v.id)}>
             <div class="continue-thumb">
               <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" />
@@ -115,16 +109,16 @@
     </section>
   {/if}
 
-  {#if loading}
+  {#if list.loading}
     <div class="loading">Lade Verlauf…</div>
-  {:else if history.length === 0}
+  {:else if list.items.length === 0}
     <div class="empty">
       <div class="empty-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
       <p>Noch keine Videos angesehen</p>
     </div>
   {:else}
     <div class="history-list">
-      {#each history as v}
+      {#each list.items as v}
         <button class="history-item" onclick={() => playVideo(v.id)}>
           <div class="thumb-wrap">
             <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" />
@@ -147,8 +141,8 @@
         </button>
       {/each}
     </div>
-    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
-    {#if loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
+    {#if list.loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
   {/if}
 </div>
 

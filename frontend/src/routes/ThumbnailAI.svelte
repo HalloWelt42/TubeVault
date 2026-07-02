@@ -430,7 +430,7 @@
 </div>
 
 <style>
-  .page { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  .page { max-width: none; padding: 24px 16px; }
   .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
   .page-desc { font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 20px; }
   .loading { padding: 40px; text-align: center; color: var(--text-secondary); }

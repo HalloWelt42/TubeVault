@@ -606,7 +606,7 @@
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .settings-page { padding: 24px; max-width: 800px; }
+  .settings-page { padding: 24px; max-width: none; }
   .page-title { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0 0 20px; display: flex; align-items: center; gap: 10px; }
   .page-title i { color: var(--accent-primary); font-size: 1.2rem; }
   .loading { text-align: center; padding: 48px; color: var(--text-tertiary); }

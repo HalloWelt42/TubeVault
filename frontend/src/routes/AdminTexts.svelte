@@ -599,7 +599,7 @@
 </div>
 
 <style>
-  .admin-page { padding: 32px 40px; width: 100%; max-width: 1400px; }
+  .admin-page { padding: 32px 40px; width: 100%; }
   .admin-header h1 {
     display: flex; align-items: center; gap: 12px;
     margin: 0 0 6px; font-size: 1.5rem; color: var(--text-primary);

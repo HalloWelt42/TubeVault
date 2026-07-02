@@ -180,7 +180,7 @@
 </div>
 
 <style>
-  .stats-page { padding: 24px; max-width: 1000px; }
+  .stats-page { padding: 24px; max-width: none; }
   .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 20px; }
 
   .stats-grid {

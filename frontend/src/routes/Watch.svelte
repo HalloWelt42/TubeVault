@@ -1267,7 +1267,7 @@
 <AddToPlaylistDialog bind:videoId={addToPlaylistVideoId} />
 
 <style>
-  .watch-page { padding: 12px 24px 24px; max-width: 1100px; position: relative; }
+  .watch-page { padding: 12px 24px 24px; max-width: none; position: relative; }
   .watch-page.with-lyrics-sidebar { max-width: none !important; padding-right: 470px; }
   .watch-page.with-playlist-sidebar { max-width: none !important; padding-right: 380px; }
   .watch-page.with-dual-sidebar { max-width: none !important; padding-right: 820px; }

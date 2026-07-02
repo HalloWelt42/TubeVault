@@ -14,15 +14,10 @@
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { createListLoader } from '../lib/utils/listLoader.svelte.js';
 
-  let videos = $state([]);
-  let total = $state(0);
-  let page = $state(1);
-  let hasMore = $state(false);
-  let loadingMore = $state(false);
   let sortBy = $state(getFilter('archives', 'sortBy', 'upload_date'));
   let sortOrder = $state(getFilter('archives', 'sortOrder', 'desc'));
-  let loading = $state(false);
   let selectMode = $state(false);
   let selected = $state(new Set());
 
@@ -45,51 +40,39 @@
     } catch {}
   }
 
-  async function loadVideos(reset = true) {
-    if (reset) { page = 1; videos = []; loading = true; }
-    else { loadingMore = true; }
+  // Zentraler List-Loader: page ist darin bewusst nicht-reaktiv,
+  // dadurch kann der Filter-$effect das Nachladen nicht mehr zurücksetzen.
+  const list = createListLoader(async (page) => {
+    const params = { page, per_page: getSettingNum('general.videos_per_page', 24), sort_by: sortBy, sort_order: sortOrder, is_archived: true };
+    const q = $searchQuery;
+    if (q) params.search = q;
+    if (activeTags.length > 0) params.tags = activeTags.join(',');
+    if (multiFilter.types) params.video_types = multiFilter.types;
+    if (multiFilter.channels) params.channel_ids = multiFilter.channels;
+    if (multiFilter.categories) params.category_ids = multiFilter.categories;
     try {
-      const params = { page, per_page: getSettingNum('general.videos_per_page', 24), sort_by: sortBy, sort_order: sortOrder, is_archived: true };
-      const q = $searchQuery;
-      if (q) params.search = q;
-      if (activeTags.length > 0) params.tags = activeTags.join(',');
-      if (multiFilter.types) params.video_types = multiFilter.types;
-      if (multiFilter.channels) params.channel_ids = multiFilter.channels;
-      if (multiFilter.categories) params.category_ids = multiFilter.categories;
       const result = await api.getVideos(params);
-      const newVids = result.videos || [];
-      videos = reset ? newVids : [...videos, ...newVids];
-      total = result.total || 0;
-      hasMore = videos.length < total;
-    } catch (e) { toast.error('Fehler: ' + e.message); }
-    finally { loading = false; loadingMore = false; }
-  }
+      return { items: result.videos || [], total: result.total || 0 };
+    } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
+  });
 
-  function loadMore() {
-    if (loadingMore || !hasMore) return;
-    page += 1;
-    loadVideos(false);
-  }
-
-  function toggleTag(tag) { activeTags = activeTags.includes(tag) ? activeTags.filter(t => t !== tag) : [...activeTags, tag]; page = 1; }
-  function clearFilters() { activeTags = []; multiFilter = { types: null, channels: null, categories: null }; page = 1; }
+  function toggleTag(tag) { activeTags = activeTags.includes(tag) ? activeTags.filter(t => t !== tag) : [...activeTags, tag]; }
+  function clearFilters() { activeTags = []; multiFilter = { types: null, channels: null, categories: null }; }
   function onFilterChange(f) {
     multiFilter = f;
-    page = 1;
     loadTags();
   }
   function changeSort(field) {
     if (sortBy === field) sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
     else { sortBy = field; sortOrder = 'desc'; }
-    page = 1;
   }
 
   // ─── Dearchivieren ───
   async function unarchiveVideo(id) {
     try {
       await api.unarchiveVideo(id);
-      videos = videos.filter(v => v.id !== id);
-      total--;
+      list.items = list.items.filter(v => v.id !== id);
+      list.total -= 1;
       toast.success('Dearchiviert');
     } catch (e) { toast.error(e.message); }
   }
@@ -101,7 +84,7 @@
       toast.success(`${selected.size} Video(s) dearchiviert`);
       selected = new Set();
       selectMode = false;
-      loadVideos();
+      list.load(true);
     } catch (e) { toast.error(e.message); }
   }
 
@@ -113,7 +96,8 @@
 
   $effect(() => { loadTags(); });
   $effect(() => {
-    // Filter-Änderungen → Liste von vorne laden (NICHT page, das macht loadMore)
+    // Filter-Änderungen → Liste von vorne laden. list.load() liest intern
+    // kein reaktives page mehr — Nachladen kann den Effect nicht triggern.
     $searchQuery; sortBy; sortOrder; activeTags;
     multiFilter.types; multiFilter.channels; multiFilter.categories;
     // Alle Filter persistieren (User-Wunsch: Auswahl bleibt erhalten)
@@ -122,10 +106,10 @@
       activeTags: [...activeTags],
       multiFilter: { ...multiFilter },
     });
-    loadVideos(true);
+    list.load(true);
   });
   // Reagiere auf Video-Mutationen aus anderen Views (z.B. Watch → Dearchive)
-  $effect(() => onVideoMutation(() => { loadVideos(true); loadTags(); }));
+  $effect(() => onVideoMutation(() => { list.load(true); loadTags(); }));
 
   let filteredTags = $derived(tagSearch ? allTags.filter(t => t.tag.toLowerCase().includes(tagSearch.toLowerCase())) : allTags);
   let visibleTags = $derived(tagSearch ? filteredTags : (showAllTags ? allTags : allTags.slice(0, 15)));
@@ -135,7 +119,7 @@
 <div class="library">
   <div class="library-header">
     <h1 class="page-title"><i class="fa-solid fa-box-archive"></i> Archiv</h1>
-    <span class="video-count">{total} Video{total !== 1 ? 's' : ''}</span>
+    <span class="video-count">{list.total} Video{list.total !== 1 ? 's' : ''}</span>
     {#if hasActiveFilter}
       <button class="btn-clear-filter" onclick={clearFilters}><i class="fa-solid fa-xmark"></i> Filter zurücksetzen</button>
     {/if}
@@ -199,11 +183,11 @@
     </div>
   </div>
 
-  {#if loading}
+  {#if list.loading}
     <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Laden…</div>
-  {:else if videos.length > 0}
+  {:else if list.items.length > 0}
     <div class="video-grid">
-      {#each videos as video (video.id)}
+      {#each list.items as video (video.id)}
         <div class="archive-card-wrap" class:selected={selected.has(video.id)}>
           {#if selectMode}
             <button class="select-check" onclick={() => toggleSelect(video.id)}>
@@ -214,15 +198,15 @@
               {/if}
             </button>
           {/if}
-          <VideoCard {video} showArchiveBtn={false} onUpdate={() => loadVideos()} />
+          <VideoCard {video} showArchiveBtn={false} onUpdate={() => list.load(true)} />
           <button class="btn-unarchive" onclick={() => unarchiveVideo(video.id)} title="Dearchivieren">
             <i class="fa-solid fa-box-open"></i>
           </button>
         </div>
       {/each}
     </div>
-    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
-    {#if loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
+    {#if list.loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
   {:else}
     <div class="empty">
       {#if hasActiveFilter}
