@@ -20,6 +20,7 @@
   import { playlistQueue, nextInQueue, prevInQueue, hasNext, hasPrev, stopQueue, playAtIndex, startQueue } from '../lib/stores/playlistQueue.js';
   import { activateMiniPlayer, deactivateMiniPlayer, getMiniPlayerState } from '../lib/stores/miniPlayer.js';
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
+  import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
 
   marked.setOptions({ breaks: true, gfm: true });
   function renderMarkdown(text) {
@@ -50,18 +51,54 @@
   // Stream-Auswahl Dialog (Preview-Modus)
   let streamDialog = $state(null);
 
-  // Tabs: info, chapters, subtitles, streams, edit
+  // Tabs: info, chapters, ads, subtitles, meta, edit
   let activeTab = $state('info');
-  let showLyricsSidebar = $state(false);
+
+  // ─── Tab-Gedächtnis: zuletzt aktiver Tab pro Video (max. 300 Einträge) ───
+  const TAB_MEM_KEY = 'tv-watch-tab-mem';
+  function loadTabMem() {
+    try { const m = JSON.parse(localStorage.getItem(TAB_MEM_KEY) || '[]'); return Array.isArray(m) ? m : []; }
+    catch { return []; }
+  }
+  function rememberTab(videoId, tab) {
+    if (!videoId) return;
+    let mem = loadTabMem().filter(([vid]) => vid !== videoId);
+    mem.push([videoId, tab]);
+    if (mem.length > 300) mem = mem.slice(-300);
+    try { localStorage.setItem(TAB_MEM_KEY, JSON.stringify(mem)); } catch {}
+  }
+  function recallTab(videoId) {
+    return loadTabMem().find(([vid]) => vid === videoId)?.[1] || null;
+  }
+  function selectTab(id) {
+    activeTab = id;
+    rememberTab(video?.id, id);
+  }
+
+  // ─── Seiten-Panel (Lyrics/Untertitel/Notizen): EIN State statt 3 Booleans,
+  //     damit die Exklusivität strukturell gilt. Einklapp-Zustand wird gemerkt.
+  let activeSidePanel = $state(null);          // null | 'lyrics' | 'subtitles' | 'notes'
+  let sidePanelCollapsed = $state(getFilter('watch', 'sidePanelCollapsed', false));
+  let plCollapsed = $state(getFilter('watch', 'plCollapsed', false));
   let lyricsManualClose = $state(false);
   let lyricsLocked = $state(false);
-  let showSubtitleSidebar = $state(false);
-  let showNotesSidebar = $state(false);
-  let videoPlaylists = $state([]);  // Playlists die dieses Video enthalten
 
-  // Resizable Breite
-  let contentWidth = $state(parseInt(localStorage.getItem('tv-content-width') || '1100'));
-  let resizing = $state(false);
+  const SIDE_PANELS = {
+    lyrics: { icon: 'fa-solid fa-music', label: 'Lyrics' },
+    subtitles: { icon: 'fa-solid fa-closed-captioning', label: 'Untertitel' },
+    notes: { icon: 'fa-solid fa-note-sticky', label: 'Notizen' },
+  };
+
+  function setSidePanelCollapsed(v) {
+    sidePanelCollapsed = v;
+    saveFilters('watch', { sidePanelCollapsed: v });
+  }
+  function setPlCollapsed(v) {
+    plCollapsed = v;
+    saveFilters('watch', { plCollapsed: v });
+  }
+
+  let videoPlaylists = $state([]);  // Playlists die dieses Video enthalten
   let plStripIdx = $state(0);  // Welche Playlist im Strip angezeigt wird
   let neighbors = $state({ prev: null, next: null });  // Bibliothek-Nachbarn
 
@@ -93,13 +130,11 @@
     if (mpState.active) deactivateMiniPlayer();
     positionRestored = false;
     playRecorded = false;
-    activeTab = 'info';
     previewMode = false;
 
-    // URL-Params lesen
+    // Tab: URL-Param gewinnt, sonst zuletzt aktiver Tab dieses Videos
     const params = $route.params || {};
-    const urlTab = params.tab;
-    if (urlTab) activeTab = urlTab;
+    activeTab = params.tab || recallTab(id) || 'info';
 
     try {
       const v = await api.getVideoPreview(id);
@@ -135,21 +170,22 @@
           } catch {}
         }
 
-        // Lyrics-Sidebar aus URL oder Auto
+        // Seiten-Panel aus URL oder Lyrics-Auto-Open
         const urlLyrics = params.lyrics;
-        const anotherSidebarActive = showSubtitleSidebar || showNotesSidebar || $playlistQueue.active;
+        const anotherPanelActive = (activeSidePanel && activeSidePanel !== 'lyrics') || $playlistQueue.active;
         if (urlLyrics === '1') {
-          showLyricsSidebar = true;
+          activeSidePanel = 'lyrics';
           lyricsLocked = true;
         } else if (lyricsLocked) {
-          showLyricsSidebar = true;
-        } else if (!lyricsManualClose && !anotherSidebarActive) {
-          // Auto-Open nur wenn keine andere Sidebar (Subtitle/Notes/Playlist-Queue) offen ist.
-          // Grund: zwei Sidebars + Hauptvideo = Titel quetscht auf 100px (User-Feedback).
+          activeSidePanel = 'lyrics';
+        } else if (!lyricsManualClose && !anotherPanelActive) {
+          // Auto-Open nur wenn kein anderes Panel/Playlist offen ist —
+          // der Platz gehört sonst dem, was der User bewusst geöffnet hat.
           try {
             const lyr = await api.getLyrics(id);
-            showLyricsSidebar = lyr.is_music || lyr.has_lyrics || false;
-          } catch { showLyricsSidebar = false; }
+            if (lyr.is_music || lyr.has_lyrics) activeSidePanel = 'lyrics';
+            else if (activeSidePanel === 'lyrics') activeSidePanel = null;
+          } catch { if (activeSidePanel === 'lyrics') activeSidePanel = null; }
         }
       } else {
         watchForDownload();
@@ -369,7 +405,7 @@
       t: videoEl && videoEl.currentTime > 5 ? Math.floor(videoEl.currentTime) : null,
       pl: q.active ? q.playlistId : null,
       idx: q.active ? q.currentIndex : null,
-      lyrics: showLyricsSidebar ? '1' : null,
+      lyrics: activeSidePanel === 'lyrics' ? '1' : null,
     });
   }
 
@@ -432,46 +468,21 @@
   async function startPlaylistFromStrip(pl) {
     startQueue(pl.id, pl.name, pl.videos, pl.currentIdx >= 0 ? pl.currentIdx : 0);
     lyricsLocked = true;
-    showLyricsSidebar = true;
+    activeSidePanel = 'lyrics';
     syncUrlState();
   }
 
-  // ─── Sidebar Toggle (exklusiv: Lyrics / Untertitel / Notizen) ───
+  // ─── Seiten-Panel Toggle (Exklusivität steckt im einen State) ───
   function toggleSidebar(which) {
-    if (which === 'lyrics') {
-      showLyricsSidebar = !showLyricsSidebar;
-      lyricsManualClose = !showLyricsSidebar;
-      if (showLyricsSidebar) { showSubtitleSidebar = false; showNotesSidebar = false; }
-    } else if (which === 'subtitles') {
-      showSubtitleSidebar = !showSubtitleSidebar;
-      if (showSubtitleSidebar) { showLyricsSidebar = false; lyricsManualClose = true; showNotesSidebar = false; }
-    } else if (which === 'notes') {
-      showNotesSidebar = !showNotesSidebar;
-      if (showNotesSidebar) { showLyricsSidebar = false; lyricsManualClose = true; showSubtitleSidebar = false; }
+    if (activeSidePanel === which) {
+      activeSidePanel = null;
+      if (which === 'lyrics') { lyricsManualClose = true; lyricsLocked = false; }
+    } else {
+      activeSidePanel = which;
+      if (which !== 'lyrics') lyricsManualClose = true;
+      sidePanelCollapsed = false;  // bewusstes Öffnen klappt immer aus
     }
     syncUrlState();
-  }
-
-  // ─── Resize Hauptbereich ───
-  let watchPageEl = $state(null);
-
-  function startResize(e) {
-    e.preventDefault();
-    resizing = true;
-    const rect = watchPageEl?.getBoundingClientRect();
-    const left = rect?.left || 0;
-    const onMove = (ev) => {
-      const newW = Math.max(600, Math.min(ev.clientX - left + 8, window.innerWidth - left - 20));
-      contentWidth = newW;
-    };
-    const onUp = () => {
-      resizing = false;
-      localStorage.setItem('tv-content-width', String(contentWidth));
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
   }
 
   function skipNext() {
@@ -684,7 +695,7 @@
 </script>
 
 {#if video}
-<div class="watch-page" class:with-lyrics-sidebar={(showLyricsSidebar || showSubtitleSidebar || showNotesSidebar) && !$playlistQueue.active} class:with-playlist-sidebar={$playlistQueue.active && !showLyricsSidebar && !showSubtitleSidebar && !showNotesSidebar} class:with-dual-sidebar={$playlistQueue.active && (showLyricsSidebar || showSubtitleSidebar || showNotesSidebar)} class:resizing={resizing} style:max-width="{contentWidth}px" bind:this={watchPageEl}>
+<div class="watch-page">
   <div class="watch-main">
 
   <!-- Player-Bereich: Thumbnail (Preview) oder Video (Normal) -->
@@ -818,14 +829,14 @@
             title={video?.suggest_override === 'exclude' ? 'Aus Vorschlägen ausgeschlossen' : video?.suggest_override === 'include' ? 'Explizit eingeschlossen' : 'Standard (Kanal-Einstellung)'}>
             <i class="fa-solid fa-dice"></i>
           </button>
-          <button class="action-btn" class:active={showLyricsSidebar} onclick={() => toggleSidebar('lyrics')} title="Lyrics">
+          <button class="action-btn" class:active={activeSidePanel === 'lyrics'} onclick={() => toggleSidebar('lyrics')} title="Lyrics">
             <i class="fa-solid fa-music"></i>
           </button>
-          <button class="action-btn" class:active={showSubtitleSidebar} onclick={() => toggleSidebar('subtitles')} title="Untertitel">
+          <button class="action-btn" class:active={activeSidePanel === 'subtitles'} onclick={() => toggleSidebar('subtitles')} title="Untertitel">
             <i class="fa-solid fa-closed-captioning"></i>
             {#if subtitles.length > 0}<span class="btn-badge">{subtitles.length}</span>{/if}
           </button>
-          <button class="action-btn" class:active={showNotesSidebar} onclick={() => toggleSidebar('notes')} title="Notizen">
+          <button class="action-btn" class:active={activeSidePanel === 'notes'} onclick={() => toggleSidebar('notes')} title="Notizen">
             <i class="fa-solid fa-note-sticky"></i>
             {#if video?.notes}<span class="btn-badge"><i class="fa-solid fa-pen" style="font-size:0.4rem"></i></span>{/if}
           </button>
@@ -910,7 +921,7 @@
     {:else}
     <div class="tabs">
       {#each [['info','<i class="fa-solid fa-circle-info"></i> Info'],['chapters','<i class="fa-solid fa-bookmark"></i> Kapitel'],['ads','<i class="fa-solid fa-forward"></i> Werbung'],['subtitles','<i class="fa-solid fa-closed-captioning"></i> Untertitel'],['meta','<i class="fa-solid fa-microchip"></i> Meta'],['edit','<i class="fa-solid fa-pen"></i> Bearbeiten']] as [id, label]}
-        <button class="tab" class:active={activeTab === id} onclick={() => activeTab = id}>
+        <button class="tab" class:active={activeTab === id} onclick={() => selectTab(id)}>
           {@html label}
           {#if id === 'chapters' && chapters.length > 0}
             <span class="tab-badge">{chapters.length}</span>
@@ -1000,75 +1011,81 @@
   </div>
   </div><!-- /watch-main -->
 
-  <!-- Resize Handle -->
-  {#if !showLyricsSidebar && !showSubtitleSidebar && !showNotesSidebar && !$playlistQueue.active}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="resize-handle" onmousedown={startResize} title="Breite anpassen">
-      <div class="resize-dots"></div>
-    </div>
-  {/if}
-
-  <!-- Lyrics Sidebar (links von Playlist) -->
-  {#if showLyricsSidebar && !previewMode}
-  <aside class="lyrics-sidebar" style:right={$playlistQueue.active ? '350px' : '0'}>
-    <div class="lyrics-sidebar-header">
-      <span><i class="fa-solid fa-music"></i> Lyrics</span>
-      <div class="lyrics-header-actions">
-        <button class="sidebar-btn" class:active={lyricsLocked} onclick={() => { lyricsLocked = !lyricsLocked; syncUrlState(); }} title={lyricsLocked ? 'Lyrics lösen (schließt bei Nicht-Musik)' : 'Lyrics fixieren (bleibt offen bei Videowechsel)'}>
-          <i class="fa-solid {lyricsLocked ? 'fa-lock' : 'fa-lock-open'}"></i>
+  <!-- Seiten-Panel: Lyrics / Untertitel / Notizen (EIN Rahmen, einklappbar) -->
+  {#if activeSidePanel && !previewMode}
+    {#if sidePanelCollapsed}
+      <!-- Eingeklappt: schmale Leiste mit Panel-Symbolen -->
+      <aside class="side-rail">
+        <button class="rail-btn" onclick={() => setSidePanelCollapsed(false)} title="Panel ausklappen">
+          <i class="fa-solid fa-angles-left"></i>
         </button>
-        <button class="sidebar-btn" onclick={() => { showLyricsSidebar = false; lyricsManualClose = true; lyricsLocked = false; syncUrlState(); }}><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    </div>
-    <div class="lyrics-sidebar-content">
-      <LyricsPanel
-        videoId={video.id}
-        videoTitle={video.title}
-        getCurrentTime={getCurrentPlayerTime}
-        {videoEl}
-        autoSearch={lyricsLocked}
-      />
-    </div>
-  </aside>
+        {#each Object.entries(SIDE_PANELS) as [key, def]}
+          <button class="rail-btn" class:active={activeSidePanel === key}
+                  onclick={() => { activeSidePanel = key; setSidePanelCollapsed(false); }}
+                  title={def.label}>
+            <i class={def.icon}></i>
+          </button>
+        {/each}
+      </aside>
+    {:else}
+      <aside class="side-panel">
+        <div class="side-panel-header">
+          <span><i class={SIDE_PANELS[activeSidePanel].icon}></i> {SIDE_PANELS[activeSidePanel].label}</span>
+          <div class="side-panel-actions">
+            {#if activeSidePanel === 'lyrics'}
+              <button class="sidebar-btn" class:active={lyricsLocked} onclick={() => { lyricsLocked = !lyricsLocked; syncUrlState(); }} title={lyricsLocked ? 'Lyrics lösen (schließt bei Nicht-Musik)' : 'Lyrics fixieren (bleibt offen bei Videowechsel)'}>
+                <i class="fa-solid {lyricsLocked ? 'fa-lock' : 'fa-lock-open'}"></i>
+              </button>
+            {/if}
+            <button class="sidebar-btn" onclick={() => setSidePanelCollapsed(true)} title="Einklappen">
+              <i class="fa-solid fa-angles-right"></i>
+            </button>
+            <button class="sidebar-btn" onclick={() => toggleSidebar(activeSidePanel)} title="Schließen"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        <div class="side-panel-content">
+          {#if activeSidePanel === 'lyrics'}
+            <LyricsPanel
+              videoId={video.id}
+              videoTitle={video.title}
+              getCurrentTime={getCurrentPlayerTime}
+              {videoEl}
+              autoSearch={lyricsLocked}
+            />
+          {:else if activeSidePanel === 'subtitles'}
+            <SubtitleLiveSidebar videoId={video.id} {videoEl} bind:subtitles />
+          {:else if activeSidePanel === 'notes'}
+            <NotesSidebar videoId={video.id} initialNotes={video.notes || ''} onNotesChange={(n) => { video.notes = n; }} />
+          {/if}
+        </div>
+      </aside>
+    {/if}
   {/if}
 
-  <!-- Subtitle Sidebar (mitlaufend wie Lyrics) -->
-  {#if showSubtitleSidebar && !previewMode}
-  <aside class="lyrics-sidebar" style:right={$playlistQueue.active ? '350px' : '0'}>
-    <div class="lyrics-sidebar-header">
-      <span><i class="fa-solid fa-closed-captioning"></i> Untertitel</span>
-      <div class="lyrics-header-actions">
-        <button class="sidebar-btn" onclick={() => toggleSidebar('subtitles')}><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    </div>
-    <div class="lyrics-sidebar-content">
-      <SubtitleLiveSidebar videoId={video.id} {videoEl} bind:subtitles />
-    </div>
-  </aside>
+  <!-- Playlist Sidebar (ganz rechts, einklappbar) -->
+  {#if $playlistQueue.active && plCollapsed}
+    <aside class="side-rail">
+      <button class="rail-btn active" onclick={() => setPlCollapsed(false)} title="Playlist ausklappen ({$playlistQueue.currentIndex + 1}/{$playlistQueue.videos.length})">
+        <i class="fa-solid fa-list-ul"></i>
+      </button>
+      <span class="rail-pos">{$playlistQueue.currentIndex + 1}/{$playlistQueue.videos.length}</span>
+      <button class="rail-btn" onclick={playPrevInQueue} disabled={!hasPrev()} title="Vorheriges">
+        <i class="fa-solid fa-backward-step"></i>
+      </button>
+      <button class="rail-btn" onclick={playNextInQueue} disabled={!hasNext()} title="Nächstes">
+        <i class="fa-solid fa-forward-step"></i>
+      </button>
+    </aside>
   {/if}
-
-  <!-- Notes Sidebar (Live-Preview MD Editor) -->
-  {#if showNotesSidebar && !previewMode}
-  <aside class="lyrics-sidebar" style:right={$playlistQueue.active ? '350px' : '0'}>
-    <div class="lyrics-sidebar-header">
-      <span><i class="fa-solid fa-note-sticky"></i> Notizen</span>
-      <div class="lyrics-header-actions">
-        <button class="sidebar-btn" onclick={() => toggleSidebar('notes')}><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    </div>
-    <div class="lyrics-sidebar-content">
-      <NotesSidebar videoId={video.id} initialNotes={video.notes || ''} onNotesChange={(n) => { video.notes = n; }} />
-    </div>
-  </aside>
-  {/if}
-
-  <!-- Playlist Sidebar (ganz rechts) -->
-  {#if $playlistQueue.active}
+  {#if $playlistQueue.active && !plCollapsed}
   <aside class="playlist-sidebar">
     <div class="pl-header">
       <div class="pl-header-top">
         <span class="pl-name"><i class="fa-solid fa-list-ul"></i> {$playlistQueue.playlistName}</span>
-        <button class="pl-close" onclick={() => { stopQueue(); syncUrlState(); }} title="Queue beenden"><i class="fa-solid fa-xmark"></i></button>
+        <div class="pl-header-btns">
+          <button class="pl-close" onclick={() => setPlCollapsed(true)} title="Einklappen"><i class="fa-solid fa-angles-right"></i></button>
+          <button class="pl-close" onclick={() => { stopQueue(); syncUrlState(); }} title="Queue beenden"><i class="fa-solid fa-xmark"></i></button>
+        </div>
       </div>
       <div class="pl-info">
         <span class="pl-pos">{$playlistQueue.currentIndex + 1} / {$playlistQueue.videos.length}</span>
@@ -1267,62 +1284,52 @@
 <AddToPlaylistDialog bind:videoId={addToPlaylistVideoId} />
 
 <style>
-  .watch-page { padding: 12px 24px 24px; max-width: none; position: relative; }
-  .watch-page.with-lyrics-sidebar { max-width: none !important; padding-right: 470px; }
-  .watch-page.with-playlist-sidebar { max-width: none !important; padding-right: 380px; }
-  .watch-page.with-dual-sidebar { max-width: none !important; padding-right: 820px; }
-  .watch-page.resizing { user-select: none; }
+  /* ─── Layout: flexibler Flow statt fixer Sidebars + Padding-Ausgleich ───
+     Sidebars sind normale Flex-Kinder: nichts überlappt, jede Breite passt
+     sich an, kein hartcodiertes padding-right mehr. */
+  .watch-page { padding: 12px 24px 24px; display: flex; gap: 18px; align-items: flex-start; }
   .watch-main { flex: 1; min-width: 0; }
 
-  /* ─── Resize Handle ─── */
-  .resize-handle {
-    position: absolute; top: 0; right: 0; width: 8px;
-    height: 100%; cursor: col-resize; z-index: 15;
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0.3; transition: opacity 0.2s;
-  }
-  .resize-handle:hover, .watch-page.resizing .resize-handle { opacity: 1; }
-  .resize-dots {
-    width: 4px; height: 40px; border-radius: 2px;
-    background: var(--border-primary);
-  }
-  .resize-handle:hover .resize-dots { background: var(--accent-primary); }
-
-  /* ─── Sidebar shared ─── */
-  .lyrics-sidebar, .playlist-sidebar {
-    position: fixed; top: 56px;
-    bottom: var(--activity-panel-height, 34px);
+  /* ─── Seiten-Panel + Playlist (in-flow, sticky, einklappbar) ─── */
+  .side-panel, .playlist-sidebar, .side-rail {
+    position: sticky; top: 12px;
+    height: calc(100vh - 56px - var(--activity-panel-height, 34px) - 24px);
     background: var(--bg-secondary);
-    border-left: 1px solid var(--border-primary);
+    border: 1px solid var(--border-primary); border-radius: 12px;
     display: flex; flex-direction: column;
-    overflow: hidden;
-    z-index: 20;
+    overflow: hidden; flex-shrink: 0;
   }
-  .lyrics-sidebar { width: 440px; }
-  .playlist-sidebar { width: 350px; }
+  .side-panel { width: clamp(300px, 26vw, 440px); }
+  .playlist-sidebar { width: clamp(260px, 22vw, 350px); }
 
-  /* Playlist: immer ganz rechts */
-  .playlist-sidebar { right: 0; }
+  /* Eingeklappte Leiste */
+  .side-rail { width: 44px; align-items: center; padding: 8px 0; gap: 6px; }
+  .rail-btn {
+    width: 32px; height: 32px; border-radius: 8px; border: none;
+    background: none; color: var(--text-tertiary); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+  }
+  .rail-btn:hover:not(:disabled) { background: var(--bg-tertiary); color: var(--text-primary); }
+  .rail-btn.active { color: var(--accent-primary); background: var(--accent-muted, var(--bg-tertiary)); }
+  .rail-btn:disabled { opacity: 0.3; cursor: default; }
+  .rail-pos { font-size: 0.62rem; color: var(--text-tertiary); font-weight: 600; }
 
-  /* Lyrics: rechts neben Playlist wenn beide da, sonst ganz rechts */
-  .lyrics-sidebar { right: 0; }
-
-  /* Lyrics Sidebar internals */
-  .lyrics-sidebar-header {
+  /* Seiten-Panel internals */
+  .side-panel-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 10px 14px; border-bottom: 1px solid var(--border-primary);
     font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
     flex-shrink: 0;
   }
-  .lyrics-sidebar-header i { margin-right: 6px; }
-  .lyrics-header-actions { display: flex; gap: 4px; }
+  .side-panel-header i { margin-right: 6px; }
+  .side-panel-actions { display: flex; gap: 4px; }
   .sidebar-btn {
     background: none; border: none; color: var(--text-tertiary); cursor: pointer;
     font-size: 0.82rem; padding: 4px 6px; border-radius: 4px;
   }
   .sidebar-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
   .sidebar-btn.active { color: var(--accent-primary); }
-  .lyrics-sidebar-content { flex: 1; overflow: hidden; padding: 8px; display: flex; flex-direction: column; }
+  .side-panel-content { flex: 1; overflow: hidden; padding: 8px; display: flex; flex-direction: column; }
 
   .pl-header {
     padding: 12px 14px 10px;
@@ -1330,6 +1337,7 @@
     flex-shrink: 0;
   }
   .pl-header-top { display: flex; align-items: center; justify-content: space-between; }
+  .pl-header-btns { display: flex; gap: 2px; }
   .pl-name { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
   .pl-close {
     width: 28px; height: 28px; border-radius: 6px; border: none;
@@ -1410,19 +1418,20 @@
   }
 
   @media (max-width: 960px) {
-    .watch-page { max-width: none !important; }
-    .watch-page.with-lyrics-sidebar, .watch-page.with-playlist-sidebar, .watch-page.with-dual-sidebar { padding-right: 24px; }
-    .lyrics-sidebar, .playlist-sidebar {
-      width: 100%; position: static;
-      max-height: 300px; border-left: none;
-      border-top: 1px solid var(--border-primary);
+    /* Schmal: Panels rutschen unter den Hauptbereich statt daneben */
+    .watch-page { flex-wrap: wrap; }
+    .side-panel, .playlist-sidebar {
+      width: 100%; position: static; height: auto; max-height: 340px;
     }
-    .resize-handle { display: none; }
+    .side-rail { flex-direction: row; width: 100%; height: 44px; padding: 0 8px; position: static; }
   }
 
   .player-wrap {
     position: relative; background: #000; border-radius: 12px;
-    overflow: hidden; aspect-ratio: 16/9; margin-bottom: 20px;
+    overflow: hidden; aspect-ratio: 16/9; margin: 0 auto 20px;
+    /* Flexibel: so breit wie möglich, aber nie höher als der Viewport
+       (sonst ragt das Video auf breiten Monitoren unter den Rand). */
+    width: min(100%, calc((100vh - 240px) * 16 / 9));
   }
   .video-player { width: 100%; height: 100%; display: block; }
   /* invert(1) dreht hell↔dunkel, hue-rotate(180) holt die Farbtöne
