@@ -13,19 +13,14 @@
   import { getSettingNum } from '../lib/stores/settings.js';
   import { startQueue } from '../lib/stores/playlistQueue.js';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   import { onMount, onDestroy } from 'svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
   import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
   import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
 
-  // Feed State
-  let entries = $state([]);
-  let loading = $state(false);
-  let loadingMore = $state(false);
-  let page = $state(1);
-  let hasMore = $state(false);
-  let total = $state(0);
+  // Feed State (Liste zentral über createListLoader)
   let typeCounts = $state({ video: 0, short: 0, live: 0 });
   let tabCounts = $state({ active: 0, later: 0, dismissed: 0, archived: 0 });
   let downloading = $state(new Set());
@@ -81,9 +76,9 @@
 
   // Gruppierte Entries (nur im aktiven Tab sinnvoll)
   let groupedEntries = $derived.by(() => {
-    if (feedTab !== 'active' || entries.length === 0) return null;
+    if (feedTab !== 'active' || list.items.length === 0) return null;
     const groups = { today: [], yesterday: [], older: [] };
-    for (const e of entries) {
+    for (const e of list.items) {
       groups[getDateGroup(e.published)].push(e);
     }
     // Nur Gruppen mit Einträgen zurückgeben
@@ -92,60 +87,40 @@
       .map(([key, items]) => ({ key, ...DATE_GROUP_LABELS[key], items }));
   });
 
-  async function loadFeed(reset = true) {
-    if (reset) {
-      page = 1;
-      entries = [];
-      loading = true;
-    } else {
-      loadingMore = true;
-    }
+  const list = createListLoader(async (page) => {
+    const params = { feedTab, page, perPage: PER_PAGE };
+    if (feedFilter.types) params.videoTypes = feedFilter.types;
+    if (feedFilter.channels) params.channelIds = feedFilter.channels;
+    if (feedFilter.keywords) params.keywords = feedFilter.keywords;
+    if (feedFilter.durationMin != null) params.durationMin = feedFilter.durationMin;
+    if (feedFilter.durationMax != null) params.durationMax = feedFilter.durationMax;
     try {
-      const params = { feedTab, page, perPage: PER_PAGE };
-      if (feedFilter.types) params.videoTypes = feedFilter.types;
-      if (feedFilter.channels) params.channelIds = feedFilter.channels;
-      if (feedFilter.keywords) params.keywords = feedFilter.keywords;
-      if (feedFilter.durationMin != null) params.durationMin = feedFilter.durationMin;
-      if (feedFilter.durationMax != null) params.durationMax = feedFilter.durationMax;
       const data = await api.getFeedVideos(params);
-      if (reset) {
-        entries = data.entries || [];
-      } else {
-        entries = [...entries, ...(data.entries || [])];
-      }
-      total = data.total || 0;
-      hasMore = data.has_more || false;
       typeCounts = data.type_counts || { video: 0, short: 0, live: 0 };
       tabCounts = data.tab_counts || tabCounts;
-    } catch (e) { toast.error(e.message); }
-    finally { loading = false; loadingMore = false; }
-  }
-
-  async function loadMore() {
-    if (loadingMore || !hasMore) return;
-    page += 1;
-    await loadFeed(false);
-  }
+      return { items: data.entries || [], total: data.total || 0, hasMore: data.has_more || false };
+    } catch (e) { toast.error(e.message); return { items: [], total: 0, hasMore: false }; }
+  });
 
   function switchTab(tab) {
     feedTab = tab;
     saveFilters('feed', { feedTab: tab });
     updateParams({ tab: tab !== 'active' ? tab : null });
-    loadFeed(true);
+    list.load(true);
   }
 
   function onFeedFilterChange(f) {
     feedFilter = f;
     updateParams({ types: f.types || null, channels: f.channels || null });
-    loadFeed(true);
+    list.load(true);
   }
 
   // ─── Schnellaktionen ─────────────────────────────────
   async function setStatus(entry, status) {
     try {
       await api.setFeedEntryStatus(entry.id, status);
-      entries = entries.filter(e => e.id !== entry.id);
-      total = Math.max(0, total - 1);
+      list.items = list.items.filter(e => e.id !== entry.id);
+      list.total = Math.max(0, list.total - 1);
       // Tab-Counts lokal updaten
       const fromTab = feedTab;
       if (tabCounts[fromTab] > 0) tabCounts[fromTab]--;
@@ -169,7 +144,7 @@
       await api.setFeedEntryType(entry.id, next);
       entry.video_type = next;
       entry.video_type_safe = next;
-      entries = [...entries]; // Reaktivitaet triggern
+      list.items = [...list.items]; // Reaktivitaet triggern
       const labels = { video: 'Video', short: 'Short', live: 'Live' };
       toast.success(`Typ: ${labels[next]}`);
     } catch (e) { toast.error(e.message); }
@@ -213,13 +188,13 @@
     if (p.tab && ['active','later','archived','dismissed'].includes(p.tab)) feedTab = p.tab;
     if (p.types) feedFilter = { ...feedFilter, types: p.types };
     if (p.channels) feedFilter = { ...feedFilter, channels: p.channels };
-    loadFeed(true);
+    list.load(true);
     loadScheduler();
     schedulerInterval = setInterval(loadScheduler, 5000);
 
     // Auto-Reload wenn Backend neue Videos meldet (via WebSocket → feedVersion Store)
     unsubFeed = feedVersion.subscribe(v => {
-      if (v > 0) loadFeed(true);
+      if (v > 0) list.load(true);
     });
   });
 
@@ -305,7 +280,7 @@
 
   function openVideo(entry) {
     // Queue aus sichtbaren Feed-Einträgen bauen → Skip/Autoplay im MiniPlayer
-    const queueVideos = entries.map(e => ({
+    const queueVideos = list.items.map(e => ({
       id: e.video_id,
       title: e.title || e.video_id,
       channel_name: e.channel_name || '',
@@ -328,8 +303,8 @@
 
   async function dismissAll() {
     await api.dismissAllFeed();
-    entries = [];
-    total = 0;
+    list.items = [];
+    list.total = 0;
     tabCounts.active = 0;
     tabCounts = { ...tabCounts };
     toast.info('Alle als gelesen markiert');
@@ -337,8 +312,8 @@
 
   async function restoreAll() {
     await api.moveAllFeedStatus(feedTab, 'active');
-    entries = [];
-    total = 0;
+    list.items = [];
+    list.total = 0;
     const count = tabCounts[feedTab] || 0;
     tabCounts[feedTab] = 0;
     tabCounts.active = (tabCounts.active || 0) + count;
@@ -354,7 +329,7 @@
   }
 
   function selectAll() {
-    entries.forEach(e => selectedIds.add(e.id));
+    list.items.forEach(e => selectedIds.add(e.id));
     selectedIds = new Set(selectedIds);
   }
 
@@ -375,13 +350,13 @@
     try {
       await api.setFeedBulkType(ids, newType);
       // Lokal updaten
-      for (const entry of entries) {
+      for (const entry of list.items) {
         if (selectedIds.has(entry.id)) {
           entry.video_type = newType;
           entry.video_type_safe = newType;
         }
       }
-      entries = [...entries];
+      list.items = [...list.items];
       const labels = { video: 'Video', short: 'Short', live: 'Live' };
       toast.success(`${ids.length}× als ${labels[newType]} markiert`);
       selectedIds = new Set();
@@ -430,7 +405,7 @@
   <div class="page-header">
     <div>
       <h1 class="title">Feed</h1>
-      <span class="subtitle">{total} {feedTab === 'active' ? 'neue' : feedTab === 'later' ? 'gemerkte' : feedTab === 'dismissed' ? 'ausgeblendete' : feedTab === 'archived' ? 'archivierte' : ''} Videos</span>
+      <span class="subtitle">{list.total} {feedTab === 'active' ? 'neue' : feedTab === 'later' ? 'gemerkte' : feedTab === 'dismissed' ? 'ausgeblendete' : feedTab === 'archived' ? 'archivierte' : ''} Videos</span>
     </div>
     <div class="actions">
       <button class="btn-ghost" onclick={() => navigate('/subscriptions')}><i class="fa-solid fa-tv"></i> Kanäle</button>
@@ -438,8 +413,8 @@
         <i class="fa-solid fa-check-double"></i> {selectMode ? 'Auswahl beenden' : 'Auswählen'}
       </button>
       {#if feedTab === 'active'}
-        <button class="btn-ghost" onclick={dismissAll} disabled={!entries.length}><i class="fa-solid fa-check-double"></i> Alle gelesen</button>
-      {:else if feedTab !== 'active' && entries.length > 0}
+        <button class="btn-ghost" onclick={dismissAll} disabled={!list.items.length}><i class="fa-solid fa-check-double"></i> Alle gelesen</button>
+      {:else if feedTab !== 'active' && list.items.length > 0}
         <button class="btn-ghost" onclick={restoreAll}><i class="fa-solid fa-rotate-left"></i> Alle wiederherstellen</button>
       {/if}
     </div>
@@ -473,7 +448,7 @@
   {#if selectMode}
     <div class="batch-bar">
       <div class="batch-left">
-        <button class="btn-sm" onclick={selectAll}><i class="fa-solid fa-check-double"></i> Alle ({entries.length})</button>
+        <button class="btn-sm" onclick={selectAll}><i class="fa-solid fa-check-double"></i> Alle ({list.items.length})</button>
         {#if selectedCount > 0}
           <button class="btn-sm" onclick={deselectAll}><i class="fa-solid fa-xmark"></i> Keine</button>
         {/if}
@@ -496,22 +471,22 @@
     </div>
   {/if}
 
-  {#if loading}
+  {#if list.loading}
     <div class="loading-state">Feed wird geladen…</div>
-  {:else if entries.length > 0}
+  {:else if list.items.length > 0}
     <div class="feed-grid">
-      {#each entries as entry, idx (entry.id)}
+      {#each list.items as entry, idx (entry.id)}
         <!-- Datum-Gruppenheader (nur im aktiven Tab) -->
         {#if feedTab === 'active'}
           {@const grp = getDateGroup(entry.published)}
-          {@const prevGrp = idx > 0 ? getDateGroup(entries[idx - 1].published) : null}
+          {@const prevGrp = idx > 0 ? getDateGroup(list.items[idx - 1].published) : null}
           {#if idx === 0 || grp !== prevGrp}
             {@const gInfo = DATE_GROUP_LABELS[grp]}
             <div class="feed-date-header {gInfo.cls}">
               <i class={gInfo.icon}></i>
               <span class="fdh-label">{gInfo.label}</span>
               <span class="fdh-count">
-                {entries.filter(e => getDateGroup(e.published) === grp).length} Videos
+                {list.items.filter(e => getDateGroup(e.published) === grp).length} Videos
               </span>
               <span class="fdh-line"></span>
             </div>
@@ -621,22 +596,22 @@
     </div>
 
     <!-- Sentinel für Infinite Scroll (zentrale Action) -->
-    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loadingMore && !loading, rootMargin: '200px' }}></div>
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad, rootMargin: '200px' }}></div>
 
-    {#if loadingMore}
+    {#if list.loadingMore}
       <div class="loading-more">Lade weitere Videos…</div>
     {/if}
 
-    {#if hasMore && !loadingMore}
+    {#if list.hasMore && !list.loadingMore}
       <div class="load-more-wrap">
-        <button class="btn-load-more" onclick={loadMore}>
-          Weitere Videos laden ({entries.length} von {total})
+        <button class="btn-load-more" onclick={list.loadMore}>
+          Weitere Videos laden ({list.items.length} von {list.total})
         </button>
       </div>
     {/if}
 
-    {#if !hasMore && entries.length > 0}
-      <div class="end-marker">Alle {total} Videos geladen</div>
+    {#if !list.hasMore && list.items.length > 0}
+      <div class="end-marker">Alle {list.total} Videos geladen</div>
     {/if}
 
   {:else}

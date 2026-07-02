@@ -7,17 +7,15 @@
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   import AddToPlaylistDialog from '../lib/components/common/AddToPlaylistDialog.svelte';
+  import PageHeader from '../lib/components/common/PageHeader.svelte';
+  import TagFilterBar from '../lib/components/common/TagFilterBar.svelte';
+  import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
 
-  let videos = $state([]);
-  let total = $state(0);
-  let page = $state(1);
-  let hasMore = $state(false);
-  let loading = $state(false);
-  let loadingMore = $state(false);
   let sortBy = $state(getFilter('library', 'sortBy', 'upload_date'));
   let sortOrder = $state(getFilter('library', 'sortOrder', 'desc'));
 
@@ -28,8 +26,6 @@
 
   let activeTags = $state(getFilter('library', 'activeTags', []));
   let allTags = $state([]);
-  let showAllTags = $state(false);
-  let tagSearch = $state('');
   let multiFilter = $state(getFilter('library', 'multiFilter', { types: null, channels: null, categories: null }));
   let _loadTimer = null;
 
@@ -49,55 +45,40 @@
     } catch {}
   }
 
-  async function loadVideos(reset = true) {
-    if (reset) { page = 1; videos = []; loading = true; }
-    else { loadingMore = true; }
+  // Zentraler List-Loader (page darin nicht-reaktiv, Stale-Guard inklusive)
+  const list = createListLoader(async (page) => {
+    const params = { page, per_page: PER_PAGE, sort_by: sortBy, sort_order: sortOrder, is_archived: false };
+    const q = $searchQuery;
+    if (q) params.search = q;
+    if (activeTags.length > 0) params.tags = activeTags.join(',');
+    if (multiFilter.types) params.video_types = multiFilter.types;
+    if (multiFilter.channels) params.channel_ids = multiFilter.channels;
+    if (multiFilter.categories) params.category_ids = multiFilter.categories;
+    if (multiFilter.is_music) params.is_music = true;
     try {
-      const params = { page, per_page: PER_PAGE, sort_by: sortBy, sort_order: sortOrder, is_archived: false };
-      const q = $searchQuery;
-      if (q) params.search = q;
-      if (activeTags.length > 0) params.tags = activeTags.join(',');
-      if (multiFilter.types) params.video_types = multiFilter.types;
-      if (multiFilter.channels) params.channel_ids = multiFilter.channels;
-      if (multiFilter.categories) params.category_ids = multiFilter.categories;
-      if (multiFilter.is_music) params.is_music = true;
       const result = await api.getVideos(params);
-      const newVids = result.videos || [];
-      if (reset) { videos = newVids; } else { videos = [...videos, ...newVids]; }
-      total = result.total || 0;
-      hasMore = videos.length < total;
-    } catch (e) { toast.error('Fehler: ' + e.message); }
-    finally { loading = false; loadingMore = false; }
-  }
+      return { items: result.videos || [], total: result.total || 0 };
+    } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
+  });
 
-  // Debounced loadVideos – verhindert Request-Flut bei schnellen Filter-Änderungen
-  function loadVideosDebounced() {
+  // Debounced Reset-Load – verhindert Request-Flut bei schnellen Filter-Änderungen
+  function loadDebounced() {
     clearTimeout(_loadTimer);
-    _loadTimer = setTimeout(() => loadVideos(), 80);
-  }
-
-  function loadMore() {
-    if (loadingMore || !hasMore) return;
-    page += 1;
-    loadVideos(false);
+    _loadTimer = setTimeout(() => list.load(true), 80);
   }
 
   // ── URL-Sync: Lese Filter aus URL-Params ──
-  let _syncing = false;
   function syncFromUrl() {
-    _syncing = true;
     const p = $route.params;
     if (p.sort && p.sort !== sortBy) sortBy = p.sort;
     if (p.order && p.order !== sortOrder) sortOrder = p.order;
     const urlTags = p.tags ? p.tags.split(',') : [];
     if (JSON.stringify(urlTags) !== JSON.stringify(activeTags)) activeTags = urlTags;
-    // multiFilter: nur setzen wenn sich tatsächlich was geändert hat
     const newTypes = p.types || null;
     const newChannels = p.channels || null;
     if (newTypes !== multiFilter.types || newChannels !== multiFilter.channels) {
       multiFilter = { ...multiFilter, types: newTypes, channels: newChannels };
     }
-    _syncing = false;
   }
 
   function syncToUrl() {
@@ -135,22 +116,22 @@
 
   // ─── Bulk-Aktionen ───
   function toggleSelect(id) { const s = new Set(selected); if (s.has(id)) s.delete(id); else s.add(id); selected = s; }
-  function selectAll() { selected = new Set(videos.map(v => v.id)); }
+  function selectAll() { selected = new Set(list.items.map(v => v.id)); }
   async function archiveSelected() {
     if (selected.size === 0) return;
-    try { await api.archiveBatch([...selected], false); toast.success(`${selected.size} Video(s) archiviert`); selected = new Set(); selectMode = false; loadVideos(); } catch (e) { toast.error(e.message); }
+    try { await api.archiveBatch([...selected], false); toast.success(`${selected.size} Video(s) archiviert`); selected = new Set(); selectMode = false; list.load(true); } catch (e) { toast.error(e.message); }
   }
   async function deleteSelected() {
     if (selected.size === 0) return;
     const ok = await confirmRef.ask(`${selected.size} Videos löschen?`, 'Alle ausgewählten Videos werden unwiderruflich gelöscht.');
     if (!ok) return;
     let deleted = 0; for (const id of selected) { try { await api.deleteVideo(id); deleted++; } catch {} }
-    toast.success(`${deleted} Video(s) gelöscht`); selected = new Set(); selectMode = false; loadVideos();
+    toast.success(`${deleted} Video(s) gelöscht`); selected = new Set(); selectMode = false; list.load(true);
   }
   async function setTypeBulk(videoType) {
     if (selected.size === 0) return;
     const labels = { video: 'Video', short: 'Short', live: 'Live' };
-    try { const res = await api.setTypeBatch([...selected], videoType); toast.success(`${res.updated} Video(s) → ${labels[videoType]}`); selected = new Set(); selectMode = false; loadVideos(); } catch (e) { toast.error(e.message); }
+    try { const res = await api.setTypeBatch([...selected], videoType); toast.success(`${res.updated} Video(s) → ${labels[videoType]}`); selected = new Set(); selectMode = false; list.load(true); } catch (e) { toast.error(e.message); }
   }
 
   // Tag-Filter Event von Watch
@@ -165,7 +146,7 @@
 
   // Auf globale Video-Mutationen (Archive/Delete aus Watch-View) reagieren —
   // Liste neu laden, damit beim Zurück-Navigieren der neue Stand zu sehen ist.
-  $effect(() => onVideoMutation(() => { loadVideos(true); loadTags(); }));
+  $effect(() => onVideoMutation(() => { list.load(true); loadTags(); }));
 
   // Laden bei Filter-Änderung (debounced um Request-Flut zu verhindern)
   // Alle Auswahlen persistieren (User-Wunsch: was ich auswähle bleibt beim Wiederkommen)
@@ -177,82 +158,34 @@
       activeTags: [...activeTags],
       multiFilter: { ...multiFilter },
     });
-    loadVideosDebounced();
+    loadDebounced();
   });
 
-  let filteredTags = $derived(tagSearch ? allTags.filter(t => t.tag.toLowerCase().includes(tagSearch.toLowerCase())) : allTags);
-  let visibleTags = $derived(tagSearch ? filteredTags : (showAllTags ? allTags : allTags.slice(0, 15)));
   let hasActiveFilter = $derived(activeTags.length > 0 || multiFilter.types || multiFilter.channels || multiFilter.categories || multiFilter.is_music);
 </script>
 
 <div class="library">
-  <div class="library-header">
-    <h1 class="page-title">Bibliothek</h1>
-    <span class="video-count">{total} Video{total !== 1 ? 's' : ''}</span>
-    {#if hasActiveFilter}
-      <button class="btn-clear-filter" onclick={clearFilters}><i class="fa-solid fa-xmark"></i> Filter zurücksetzen</button>
-    {/if}
-    <div class="header-actions">
-      <button class="btn-select" class:active={selectMode} onclick={() => { selectMode = !selectMode; selected = new Set(); }}>
-        <i class="fa-solid {selectMode ? 'fa-xmark' : 'fa-check-double'}"></i>
-        {selectMode ? 'Abbrechen' : 'Auswählen'}
-      </button>
-    </div>
-  </div>
+  <PageHeader title="Bibliothek" count={list.total} hasFilter={!!hasActiveFilter} onClearFilter={clearFilters}>
+    <button class="btn-select" class:active={selectMode} onclick={() => { selectMode = !selectMode; selected = new Set(); }}>
+      <i class="fa-solid {selectMode ? 'fa-xmark' : 'fa-check-double'}"></i>
+      {selectMode ? 'Abbrechen' : 'Auswählen'}
+    </button>
+  </PageHeader>
 
-  {#if selectMode && selected.size > 0}
-    <div class="bulk-bar">
-      <span class="bulk-count">{selected.size} ausgewählt</span>
-      <button class="bulk-btn" onclick={selectAll}><i class="fa-solid fa-check-double"></i> Alle ({videos.length})</button>
-      <span class="bulk-sep">|</span>
+  {#if selectMode}
+    <BatchToolbar selectedCount={selected.size} totalCount={list.items.length} onSelectAll={selectAll}>
       <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('video')}><i class="fa-solid fa-play"></i> → Video</button>
       <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('short')}><i class="fa-solid fa-mobile-screen"></i> → Short</button>
       <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('live')}><i class="fa-solid fa-tower-broadcast"></i> → Live</button>
       <span class="bulk-sep">|</span>
       <button class="bulk-btn" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Archivieren</button>
       <button class="bulk-btn bulk-danger" onclick={deleteSelected}><i class="fa-regular fa-trash-can"></i> Löschen</button>
-    </div>
+    </BatchToolbar>
   {/if}
 
   <MultiFilter showTypes={true} showChannels={true} showCategories={true} showMusic={true} onchange={onFilterChange} />
 
-  {#if allTags.length > 0}
-    <div class="tag-bar">
-      <span class="tag-label">Tags:</span>
-      <div class="tag-search-wrap">
-        <i class="fa-solid fa-magnifying-glass tag-search-icon"></i>
-        <input type="text" class="tag-search" placeholder="Tag suchen… ({allTags.length})" bind:value={tagSearch} />
-        {#if tagSearch}<button class="tag-search-clear" onclick={() => tagSearch = ''}><i class="fa-solid fa-xmark"></i></button>{/if}
-      </div>
-      <div class="tag-list">
-        {#each visibleTags as t}
-          <button class="tag-chip" class:active={activeTags.includes(t.tag)} onclick={() => toggleTag(t.tag)}>
-            {t.tag} <span class="tag-count">{t.count}</span>
-          </button>
-        {/each}
-        {#if !tagSearch && allTags.length > 15}
-          {#if allTags.length <= 60}
-            <button class="tag-toggle" onclick={() => showAllTags = !showAllTags}>
-              {showAllTags ? 'weniger' : `+${allTags.length - 15} weitere`}
-            </button>
-          {:else}
-            <span class="tag-hint">Weitere Tags über Suche finden ({allTags.length} gesamt)</span>
-          {/if}
-        {/if}
-        {#if tagSearch && visibleTags.length === 0}<span class="tag-empty">Kein Tag gefunden</span>{/if}
-      </div>
-    </div>
-  {/if}
-
-  {#if activeTags.length > 0}
-    <div class="active-filter">
-      {#each activeTags as tag}
-        <button class="filter-badge" onclick={() => toggleTag(tag)}>
-          <i class="fa-solid fa-tag"></i> {tag} <i class="fa-solid fa-xmark"></i>
-        </button>
-      {/each}
-    </div>
-  {/if}
+  <TagFilterBar {allTags} {activeTags} onToggle={toggleTag} />
 
   <div class="toolbar">
     <div class="sort-group">
@@ -265,25 +198,25 @@
     </div>
   </div>
 
-  {#if loading}
+  {#if list.loading}
     <div class="loading">Laden…</div>
-  {:else if videos.length > 0}
+  {:else if list.items.length > 0}
     <div class="video-grid">
-      {#each videos as video (video.id)}
+      {#each list.items as video (video.id)}
         {#if selectMode}
           <div class="select-card-wrap" class:selected={selected.has(video.id)}>
             <button class="select-check" onclick={() => toggleSelect(video.id)}>
               {#if selected.has(video.id)}<i class="fa-solid fa-square-check"></i>{:else}<i class="fa-regular fa-square"></i>{/if}
             </button>
-            <VideoCard {video} onUpdate={() => loadVideos(true)} />
+            <VideoCard {video} onUpdate={() => list.load(true)} />
           </div>
         {:else}
           <VideoCard {video} />
         {/if}
       {/each}
     </div>
-    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
-    {#if loadingMore}
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
+    {#if list.loadingMore}
       <div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>
     {/if}
   {:else}
@@ -303,32 +236,6 @@
 
 <style>
   .library { padding: 24px; max-width: none; }
-  .library-header { display:flex; align-items:baseline; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
-  .page-title { font-size:1.6rem; font-weight:700; color:var(--text-primary); margin:0; }
-  .video-count { font-size:0.9rem; color:var(--text-tertiary); }
-  .btn-clear-filter { margin-left:auto; padding:5px 12px; background:none; border:1px solid var(--border-primary); border-radius:6px; color:var(--text-secondary); font-size:0.78rem; cursor:pointer; }
-  .btn-clear-filter:hover { border-color:var(--status-error); color:var(--status-error); }
-
-  .tag-bar { display:flex; align-items:flex-start; gap:8px; margin-bottom:14px; padding:10px 14px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:10px; }
-  .tag-label { font-size:0.76rem; color:var(--text-tertiary); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; padding-top:4px; white-space:nowrap; }
-  .tag-search-wrap { display:flex; align-items:center; gap:5px; background:var(--bg-primary); border:1px solid var(--border-primary); border-radius:8px; padding:2px 8px; min-width:140px; flex-shrink:0; }
-  .tag-search-wrap:focus-within { border-color:var(--accent-primary); }
-  .tag-search-icon { font-size:0.68rem; color:var(--text-tertiary); }
-  .tag-search { border:none; background:none; color:var(--text-primary); font-size:0.78rem; padding:3px 0; outline:none; width:100%; }
-  .tag-search-clear { background:none; border:none; color:var(--text-tertiary); cursor:pointer; font-size:0.68rem; padding:2px; }
-  .tag-empty { font-size:0.76rem; color:var(--text-tertiary); padding:2px 6px; }
-  .tag-list { display:flex; flex-wrap:wrap; gap:5px; }
-  .tag-chip { display:flex; align-items:center; gap:4px; padding:3px 10px; background:var(--bg-primary); border:1px solid var(--border-primary); border-radius:14px; color:var(--text-secondary); font-size:0.76rem; cursor:pointer; transition:all 0.12s; }
-  .tag-chip:hover { border-color:var(--accent-primary); color:var(--text-primary); }
-  .tag-chip.active { background:var(--accent-primary); color:#fff; border-color:var(--accent-primary); font-weight:600; }
-  .tag-chip.active .tag-count { background:rgba(255,255,255,0.25); color:#fff; }
-  .tag-count { font-size:0.65rem; background:var(--bg-tertiary); color:var(--text-tertiary); padding:0 5px; border-radius:8px; font-weight:600; }
-  .tag-toggle { padding:3px 10px; background:none; border:1px dashed var(--border-primary); border-radius:14px; color:var(--accent-primary); font-size:0.76rem; cursor:pointer; }
-  .tag-hint { padding:3px 10px; font-size:0.72rem; color:var(--text-tertiary); font-style:italic; }
-
-  .active-filter { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
-  .filter-badge { padding:4px 10px; background:var(--accent-muted); color:var(--accent-primary); border:none; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer; }
-  .filter-badge:hover { background:var(--accent-primary); color:#fff; }
 
   .toolbar { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
   .toolbar-label { font-size:0.8rem; color:var(--text-tertiary); }
@@ -344,17 +251,8 @@
   .loading, .empty { padding:60px 20px; text-align:center; color:var(--text-tertiary); }
   .btn-reset { margin-top:12px; padding:7px 18px; background:var(--accent-primary); color:#fff; border:none; border-radius:8px; font-size:0.82rem; cursor:pointer; }
 
-  .header-actions { margin-left:auto; display:flex; gap:6px; }
   .btn-select { padding:5px 12px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:6px; color:var(--text-secondary); font-size:0.78rem; cursor:pointer; display:flex; align-items:center; gap:5px; }
   .btn-select.active { border-color:var(--accent-primary); color:var(--accent-primary); }
-
-  .bulk-bar { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--bg-secondary); border:1px solid var(--accent-primary); border-radius:10px; margin-bottom:14px; flex-wrap:wrap; }
-  .bulk-count { font-size:0.82rem; font-weight:600; color:var(--accent-primary); margin-right:4px; }
-  .bulk-btn { padding:5px 12px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:6px; color:var(--text-secondary); font-size:0.78rem; cursor:pointer; display:flex; align-items:center; gap:5px; }
-  .bulk-btn:hover { border-color:var(--accent-primary); color:var(--text-primary); }
-  .bulk-danger:hover { border-color:var(--status-error); color:var(--status-error); }
-  .bulk-sep { color:var(--border-primary); font-size:0.9rem; }
-  .bulk-type:hover { border-color:#ab47bc; color:#ab47bc; }
 
   .select-card-wrap { position:relative; }
   .select-card-wrap.selected { outline:2px solid var(--accent-primary); border-radius:12px; }

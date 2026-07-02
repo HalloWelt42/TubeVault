@@ -14,17 +14,15 @@
   import { formatDateRelative, formatDuration, formatDurationLong, formatSize, formatViews } from '../lib/utils/format.js';
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   import { marked } from 'marked';
   marked.setOptions({ breaks: true, gfm: true });
 
   let channel = $state(null);
-  let videos = $state([]);
   let channelPlaylists = $state([]);
   let localPlaylists = $state([]);
   let loadingPlaylists = $state(false);
   let fetchingPlaylistVideos = $state(null);
-  let totalVideos = $state(0);
-  let page = $state(1);
   let source = $state('all');
   let videoType = $state('all');
   let sortBy = $state(getFilter('channelDetail', 'sortBy', 'newest'));
@@ -58,7 +56,7 @@
       if (newVal === 0) {
         // Beim Re-Includen alle Video-Overrides löschen
         await api.resetSuggestOverrides(channel.id);
-        videos = videos.map(v => ({ ...v, suggest_override: null }));
+        list.items = list.items.map(v => ({ ...v, suggest_override: null }));
       }
       toast.success(newVal ? 'Kanal aus Zufallsvorschlägen entfernt' : 'Kanal in Zufallsvorschlägen');
     } catch (e) { toast.error('Fehler: ' + e.message); }
@@ -85,7 +83,7 @@
     loading = true;
     try {
       channel = await api.getChannelDetail(cid);
-      await loadVideos();
+      await list.load(true);
       loadPlaylists();
       loadMissingCount();
     } catch (e) {
@@ -96,29 +94,16 @@
     }
   }
 
-  let loadingMoreVideos = $state(false);
-  let hasMoreVideos = $derived(videos.length < totalVideos);
-
-  async function loadVideos(reset = true) {
+  // Zentraler List-Loader für die Kanal-Videos (page darin nicht-reaktiv)
+  const list = createListLoader(async (page) => {
     const cid = $route.id;
-    if (!cid) return;
-    if (reset) { page = 1; }
-    else { loadingMoreVideos = true; }
+    if (!cid) return { items: [], total: 0 };
     try {
       const result = await api.getChannelVideos(cid, source, page, videoType, sortBy);
-      const newVids = result.videos || [];
-      videos = reset ? newVids : [...videos, ...newVids];
-      totalVideos = result.total || 0;
       if (result.source_counts) sourceCounts = result.source_counts;
-    } catch (e) { toast.error(e.message); }
-    finally { loadingMoreVideos = false; }
-  }
-
-  function loadMoreVideos() {
-    if (loadingMoreVideos || !hasMoreVideos) return;
-    page += 1;
-    loadVideos(false);
-  }
+      return { items: result.videos || [], total: result.total || 0 };
+    } catch (e) { toast.error(e.message); return { items: [], total: 0 }; }
+  });
 
   async function scanChannel() {
     const cid = $route.id;
@@ -144,8 +129,7 @@
           clearInterval(iv);
           scanning = false;
           channel = detail;
-          page = 1;
-          await loadVideos();
+          await list.load(true);
           const tc = detail.type_counts || {};
           const parts = [];
           if (tc.video) parts.push(`${tc.video} Videos`);
@@ -218,7 +202,7 @@
     try {
       await api.setVideoType(video.video_id, next);
       video.video_type = next;
-      videos = [...videos]; // Reaktivität triggern
+      list.items = [...list.items]; // Reaktivität triggern
       const labels = { video: 'Video', short: 'Short', live: 'Live' };
       toast.success(`Typ → ${labels[next]}`);
     } catch (e) { toast.error(e.message); }
@@ -245,7 +229,7 @@
     subscribingNow = false;
   }
 
-  function changeSource(s) { source = s; page = 1; loadVideos(); }
+  function changeSource(s) { source = s; list.load(true); }
   function changeType(t) {
     videoType = t;
     if (t === 'playlists') {
@@ -253,7 +237,7 @@
     } else if (t === 'meta') {
       loadFilesystem();
     } else {
-      page = 1; loadVideos(); loadMissingCount();
+      list.load(true); loadMissingCount();
     }
   }
 
@@ -367,7 +351,7 @@
     }
     batchQueueing = false;
   }
-  function changeSort(s) { sortBy = s; page = 1; saveFilters('channelDetail', { sortBy: s }); loadVideos(); }
+  function changeSort(s) { sortBy = s; saveFilters('channelDetail', { sortBy: s }); list.load(true); }
 
   async function batchDownload(count) {
     const cid = $route.id;
@@ -387,7 +371,7 @@
       missingCount = Math.max(0, res.total_missing - queued);
       const typeLabel = videoType === 'short' ? 'Shorts' : videoType === 'live' ? 'Live' : 'Videos';
       toast.success(`${queued} ${typeLabel} in Warteschlange · ${missingCount} weitere verfügbar`);
-      await loadVideos();
+      await list.load(true);
     } catch (e) { toast.error(e.message); }
     batchLoading = false;
   }
@@ -427,8 +411,8 @@
 
   let filteredVideos = $derived(
     searchQuery.trim()
-      ? videos.filter(v => (v.title || '').toLowerCase().includes(searchQuery.toLowerCase()))
-      : videos
+      ? list.items.filter(v => (v.title || '').toLowerCase().includes(searchQuery.toLowerCase()))
+      : list.items
   );
 
   $effect(() => { loadChannel(); });
@@ -1150,8 +1134,8 @@
         {/each}
       </div>
 
-      <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMoreVideos, canLoad: () => hasMoreVideos && !loadingMoreVideos }}></div>
-      {#if loadingMoreVideos}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
+      <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
+      {#if list.loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
     {:else if !scanning}
       <div class="empty">
         {#if channel.needs_scan}

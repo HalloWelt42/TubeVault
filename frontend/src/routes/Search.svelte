@@ -16,16 +16,13 @@
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   let confirmRef;
 
   let query = $state($route.params.q || '');
   let scope = $state($route.params.scope || 'both'); // 'both' | 'local' | 'youtube'
   let loading = $state(false);
-  let loadingMore = $state(false);
-  let page = $state(1);
-  let perPage = 20;
-  let hasMore = $state(false);
-  let ytVideos = $state([]);
+  const perPage = 20;
   let ytShorts = $state([]);
   let ytChannels = $state([]);
   let localVideos = $state([]);
@@ -41,10 +38,26 @@
     } catch {}
   }
 
+  // YouTube-Treffer über den zentralen Loader; Dedup gegen schon Geladene
+  // passiert im fetchPage (Paging kann dieselbe ID mehrfach liefern).
+  const yt = createListLoader(async (page) => {
+    if (scope === 'local' || !query.trim()) return { items: [], hasMore: false };
+    const r = await api.searchYouTubePaged(query, page, perPage);
+    const newVids = r.videos || [];
+    if (page === 1) {
+      const sSeen = new Set();
+      ytShorts = (r.shorts || []).filter(s => s?.id && !sSeen.has(s.id) && sSeen.add(s.id));
+      const cSeen = new Set();
+      ytChannels = (r.channels || []).filter(c => c?.id && !cSeen.has(c.id) && cSeen.add(c.id));
+    }
+    const seen = new Set(page === 1 ? [] : yt.items.map(v => v.id));
+    const items = newVids.filter(v => v?.id && !seen.has(v.id) && seen.add(v.id));
+    return { items, hasMore: r.has_more || newVids.length >= perPage };
+  });
+
   async function runSearch(reset = true) {
     if (!query.trim()) return;
-    if (reset) { page = 1; ytVideos = []; ytShorts = []; ytChannels = []; localVideos = []; loading = true; }
-    else { loadingMore = true; }
+    if (reset) { ytShorts = []; ytChannels = []; localVideos = []; loading = true; }
     updateParams({ q: query, scope: scope !== 'both' ? scope : null });
     try {
       // Lokal (dedupliziert)
@@ -58,32 +71,9 @@
           });
         } catch { localVideos = []; }
       }
-      // YouTube mit Paginierung (IDs deduplizieren – Paging kann Duplikate liefern)
-      if (scope !== 'local') {
-        const r = await api.searchYouTubePaged(query, page, perPage);
-        const newVids = r.videos || [];
-        const merged = reset ? newVids : [...ytVideos, ...newVids];
-        const seen = new Set();
-        ytVideos = merged.filter(v => {
-          if (!v?.id || seen.has(v.id)) return false;
-          seen.add(v.id); return true;
-        });
-        if (reset) {
-          const sSeen = new Set();
-          ytShorts = (r.shorts || []).filter(s => s?.id && !sSeen.has(s.id) && sSeen.add(s.id));
-          const cSeen = new Set();
-          ytChannels = (r.channels || []).filter(c => c?.id && !cSeen.has(c.id) && cSeen.add(c.id));
-        }
-        hasMore = r.has_more || newVids.length >= perPage;
-      }
+      if (scope !== 'local' && reset) await yt.load(true);
     } catch (e) { toast.error(e.message); }
-    finally { loading = false; loadingMore = false; }
-  }
-
-  function loadMore() {
-    if (loadingMore || !hasMore) return;
-    page += 1;
-    runSearch(false);
+    finally { loading = false; }
   }
 
   function onSubmit(e) { e.preventDefault(); runSearch(true); }
@@ -102,7 +92,7 @@
     if (!await confirmRef.ask(`Kanal „${v.channel_name}" ausblenden?`, 'Aus YouTube-Suche raus.', { confirmLabel: 'Ausblenden' })) return;
     try {
       await api.blockChannel(v.channel_id, v.channel_name);
-      ytVideos = ytVideos.filter(r => r.channel_id !== v.channel_id);
+      yt.items = yt.items.filter(r => r.channel_id !== v.channel_id);
       ytShorts = ytShorts.filter(r => r.channel_id !== v.channel_id);
       toast.success(`„${v.channel_name}" blockiert`);
     } catch (err) { toast.error(err.message); }
@@ -115,7 +105,7 @@
     try {
       await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}` });
       v.already_in_queue = true;
-      ytVideos = [...ytVideos];
+      yt.items = [...yt.items];
       toast.success('Zur Queue hinzugefügt');
     } catch (err) { toast.error(err.message); }
     downloading = new Set([...downloading].filter(id => id !== v.id));
@@ -150,10 +140,10 @@
       await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, audio_only: audioOnly, itag, audio_itag: audioItag, merge_audio: mergeAudio, priority });
       toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In Queue gelegt');
       // Markiere als queued
-      const idx = ytVideos.findIndex(x => x.id === v.id);
+      const idx = yt.items.findIndex(x => x.id === v.id);
       if (idx >= 0) {
-        ytVideos[idx].already_in_queue = true;
-        ytVideos = [...ytVideos];
+        yt.items[idx].already_in_queue = true;
+        yt.items = [...yt.items];
       }
       streamDialog = null;
     } catch (err) { toast.error(err.message); }
@@ -173,7 +163,7 @@
       if (q && q !== query) {
         query = q;
         runSearch(true);
-      } else if (q && ytVideos.length === 0 && !loading) {
+      } else if (q && yt.items.length === 0 && !loading) {
         runSearch(true);
       }
     });
@@ -190,7 +180,7 @@
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
       <input type="text" class="search-input" placeholder="Bibliothek + YouTube durchsuchen…"
              bind:value={query} />
-      {#if query}<button type="button" class="search-clear" onclick={() => { query = ''; ytVideos = []; localVideos = []; }}><i class="fa-solid fa-xmark"></i></button>{/if}
+      {#if query}<button type="button" class="search-clear" onclick={() => { query = ''; yt.items = []; localVideos = []; }}><i class="fa-solid fa-xmark"></i></button>{/if}
     </div>
     <div class="search-scope">
       {#each [['both','Beides'],['local','Bibliothek'],['youtube','YouTube']] as [id, label]}
@@ -203,9 +193,9 @@
     </button>
   </form>
 
-  {#if loading && ytVideos.length === 0 && localVideos.length === 0}
+  {#if loading && yt.items.length === 0 && localVideos.length === 0}
     <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Suche läuft…</div>
-  {:else if query && ytVideos.length === 0 && localVideos.length === 0 && !loading}
+  {:else if query && yt.items.length === 0 && localVideos.length === 0 && !loading}
     <div class="empty"><i class="fa-solid fa-magnifying-glass"></i><h3>Keine Treffer für „{query}"</h3></div>
   {/if}
 
@@ -256,11 +246,11 @@
   {/if}
 
   <!-- YouTube-Videos -->
-  {#if scope !== 'local' && ytVideos.length > 0}
+  {#if scope !== 'local' && yt.items.length > 0}
     <section class="section">
-      <h2 class="section-title"><i class="fa-brands fa-youtube"></i> YouTube ({ytVideos.length}{hasMore ? '+' : ''})</h2>
+      <h2 class="section-title"><i class="fa-brands fa-youtube"></i> YouTube ({yt.items.length}{yt.hasMore ? '+' : ''})</h2>
       <div class="grid">
-        {#each ytVideos as v (v.id)}
+        {#each yt.items as v (v.id)}
           <div class="card-wrap" class:already={v.already_downloaded} class:queued={v.already_in_queue}>
             <div class="video-card" role="button" tabindex="0"
                  onclick={() => openVideo(v.id)}
@@ -313,10 +303,10 @@
           </div>
         {/each}
       </div>
-      <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
-      {#if hasMore}
-        <button class="load-more" onclick={loadMore} disabled={loadingMore}>
-          {#if loadingMore}<i class="fa-solid fa-spinner fa-spin"></i> Lade…{:else}Weitere Treffer (Seite {page + 1}){/if}
+      <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: yt.loadMore, canLoad: () => yt.canLoad() && !loading }}></div>
+      {#if yt.hasMore}
+        <button class="load-more" onclick={yt.loadMore} disabled={yt.loadingMore}>
+          {#if yt.loadingMore}<i class="fa-solid fa-spinner fa-spin"></i> Lade…{:else}Weitere Treffer laden{/if}
         </button>
       {/if}
     </section>

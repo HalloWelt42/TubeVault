@@ -9,6 +9,7 @@
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
+  import PageHeader from '../lib/components/common/PageHeader.svelte';
 
   const PER_PAGE = getSettingNum('general.videos_per_page', 24);
 
@@ -76,15 +77,11 @@
 </script>
 
 <div class="history-page">
-  <div class="page-header">
-    <div class="header-left">
-      <h1>Verlauf</h1>
-      <span class="count">{list.total} Video{list.total !== 1 ? 's' : ''}</span>
-    </div>
+  <PageHeader title="Verlauf" icon="fa-solid fa-clock-rotate-left" count={list.total}>
     {#if list.items.length > 0}
       <button class="btn-clear" onclick={clearAll}>Verlauf löschen</button>
     {/if}
-  </div>
+  </PageHeader>
 
   <MultiFilter showSearch={true} showTypes={true} showChannels={true} showCategories={false} onchange={onHistFilterChange} />
 
@@ -148,10 +145,6 @@
 
 <style>
   .history-page { padding:0 24px 24px; max-width:none; }
-  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
-  .header-left { display:flex; align-items:baseline; gap:10px; }
-  .page-header h1 { font-size:1.4rem; font-weight:700; color:var(--text-primary); margin:0; }
-  .count { font-size:0.85rem; color:var(--text-tertiary); }
   .btn-clear { padding:7px 16px; background:none; border:1px solid var(--border-primary); border-radius:8px; color:var(--text-secondary); font-size:0.82rem; cursor:pointer; }
   .btn-clear:hover { border-color:var(--status-error); color:var(--status-error); }
 
