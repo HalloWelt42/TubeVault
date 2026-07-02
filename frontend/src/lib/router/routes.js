@@ -221,6 +221,16 @@ export const routeDefinitions = {
     description: 'Texte aus DB in Dateien exportieren',
     fullsize: true,
   },
+  'admin-rebuild': {
+    path: '/admin/rebuild',
+    label: 'Wiederaufbau',
+    icon: 'fa-solid fa-life-ring',
+    group: 'admin',
+    hasId: false,
+    queryParams: [],
+    description: 'Meta-Redundanz: Sidecars, Nutzerdaten-Export, Offline-Wiederaufbau',
+    fullsize: true,
+  },
 };
 
 /**

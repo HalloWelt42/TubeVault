@@ -215,6 +215,20 @@ async def _rss_cron_loop():
         await asyncio.sleep(300)  # 5 Minuten
 
 
+async def _userdata_export_loop():
+    """Täglicher Nutzerdaten-Export (JSONL + Rotation) – Teil der
+    Meta-Redundanz: zusammen mit den info.json-Sidecars neben den Videos
+    lässt sich die DB komplett offline wiederherstellen."""
+    await asyncio.sleep(180)  # Systemstart abwarten
+    while True:
+        try:
+            from app.services import userdata_export
+            await userdata_export.export_userdata()
+        except Exception as e:
+            logger.error(f"[USERDATA-EXPORT] Fehler: {e}")
+        await asyncio.sleep(86400)  # 24 h
+
+
 async def _ghost_check_bg():
     """Ghost-Bereinigung im Hintergrund (blockiert den Start NICHT).
 
@@ -295,6 +309,8 @@ async def lifespan(app: FastAPI):
                           rss_service.backfill_missing_thumbnails, auto_restart=False, essential=False)
     task_manager.register("banner_backfill", "Banner-Backfill",
                           _backfill_banners, auto_restart=False, essential=False)
+    task_manager.register("userdata_export", "Nutzerdaten-Export (täglich)",
+                          _userdata_export_loop, auto_restart=True, essential=False)
     await task_manager.start_all()
     logger.info(f"[OK] {APP_NAME} v{VERSION} bereit")
     logger.info(f"   API: http://{HOST}:{PORT}")

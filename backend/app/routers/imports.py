@@ -255,6 +255,10 @@ async def register_local_video(data: LocalVideoRegister):
     )
 
     logger.info(f"Lokales Video registriert: {video_id} ({title})")
+
+    # Meta-Redundanz: info.json neben das Video (wirft nie)
+    from app.services import meta_sidecar
+    await meta_sidecar.write_sidecar(video_id)
     return {
         "id": video_id,
         "title": title,

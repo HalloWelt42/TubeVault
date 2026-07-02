@@ -353,6 +353,10 @@ class ScanService:
             (now, duration, resolution, row["id"]))
 
         logger.info(f"[SCAN] Registriert: {yt_id} ({title})")
+
+        # Meta-Redundanz: info.json neben das Video (wirft nie)
+        from app.services import meta_sidecar
+        await meta_sidecar.write_sidecar(yt_id)
         return {"status": "ok", "id": yt_id, "title": title}
 
     # ═══════════════════════════════════════════════════════════

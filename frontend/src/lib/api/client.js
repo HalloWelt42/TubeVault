@@ -304,6 +304,15 @@ export const api = {
   },
   deleteCookies: () => request('/api/cookies', { method: 'DELETE' }),
 
+  // Admin: Meta-Redundanz / Wiederaufbau
+  adminRedundancyStatus: () => request('/api/admin/redundancy/status'),
+  adminSidecarBackfill: () => request('/api/admin/redundancy/sidecars/backfill', { method: 'POST' }),
+  adminUserdataExport: () => request('/api/admin/redundancy/userdata/export', { method: 'POST' }),
+  adminUserdataRestore: (folder = null) =>
+    request(`/api/admin/redundancy/userdata/restore${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`, { method: 'POST' }),
+  adminRebuildStart: (dryRun = false) =>
+    request(`/api/admin/redundancy/rebuild?dry_run=${dryRun}`, { method: 'POST' }),
+
   // Admin: Textexport
   adminTextOverview: () => request('/api/admin/text-export/overview'),
   adminTextSyncAll: () => request('/api/admin/text-export/description/sync-all', { method: 'POST' }),

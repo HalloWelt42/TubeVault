@@ -125,6 +125,67 @@ async def delete_description_export(video_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════
+# Meta-Redundanz: Sidecars, Nutzerdaten-Export, Offline-Wiederaufbau
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/redundancy/status")
+async def redundancy_status():
+    """Gesamt-Status für die Wiederaufbau-Seite: Sidecar-Abdeckung,
+    vorhandene Userdata-Exporte, laufende Backfill-/Rebuild-Jobs."""
+    from app.services import meta_sidecar, userdata_export
+    from app.services.rebuild_service import rebuild_state
+    sidecars = await meta_sidecar.sidecar_status()
+    return {
+        "sidecars": sidecars,
+        "userdata_exports": userdata_export.list_exports()[:10],
+        "rebuild": dict(rebuild_state),
+        "videos_root": str(storage.videos_root),
+        "userdata_root": str(userdata_export.userdata_root()),
+    }
+
+
+@router.post("/redundancy/sidecars/backfill")
+async def start_sidecar_backfill():
+    """Backfill starten: info.json für alle ready-Videos (gedrosselt, idempotent)."""
+    import asyncio
+    from app.services import meta_sidecar
+    if meta_sidecar.backfill_state["running"]:
+        raise HTTPException(status_code=409, detail="Backfill läuft bereits")
+    asyncio.create_task(meta_sidecar.backfill_sidecars())
+    return {"started": True}
+
+
+@router.post("/redundancy/userdata/export")
+async def run_userdata_export():
+    """Nutzerdaten sofort als JSONL exportieren (zusätzlich zum Tages-Export)."""
+    from app.services import userdata_export
+    return await userdata_export.export_userdata()
+
+
+@router.post("/redundancy/userdata/restore")
+async def run_userdata_restore(folder: str = None):
+    """Userdata-Export zurückspielen (Default: neuester). Überschreibt nichts
+    Frischeres – vorhandene Zeilen/Werte gewinnen."""
+    from app.services import rebuild_service
+    res = await rebuild_service.restore_userdata(folder)
+    if "error" in res:
+        raise HTTPException(status_code=404, detail=res["error"])
+    return res
+
+
+@router.post("/redundancy/rebuild")
+async def start_rebuild(dry_run: bool = False):
+    """Offline-Rebuild starten: fehlende DB-Einträge aus Sidecars anlegen.
+    dry_run=True zählt nur, schreibt nichts."""
+    import asyncio
+    from app.services import rebuild_service
+    if rebuild_service.rebuild_state["running"]:
+        raise HTTPException(status_code=409, detail="Rebuild läuft bereits")
+    asyncio.create_task(rebuild_service.rebuild_from_sidecars(dry_run=dry_run))
+    return {"started": True, "dry_run": dry_run}
+
+
+# ═══════════════════════════════════════════════════════════════
 # Safety: Backup + Audit
 # ═══════════════════════════════════════════════════════════════
 

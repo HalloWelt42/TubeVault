@@ -631,6 +631,10 @@ async def link_youtube(staging_id: int, req: LinkYoutubeRequest):
     except Exception:
         pass
 
+    # Meta-Redundanz: info.json neben das Video (wirft nie)
+    from app.services import meta_sidecar
+    await meta_sidecar.write_sidecar(yt_id)
+
     # 10. FTS5 aktualisieren
     try:
         await db.fts_sync_video(yt_id)

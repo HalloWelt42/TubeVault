@@ -31,6 +31,7 @@
   import Search from './routes/Search.svelte';
   import Admin from './routes/Admin.svelte';
   import AdminTexts from './routes/AdminTexts.svelte';
+  import AdminRebuild from './routes/AdminRebuild.svelte';
 
   /** Route-Key → Svelte-Komponente */
   const pages = {
@@ -54,6 +55,7 @@
     search: Search,
     admin: Admin,
     'admin-texts': AdminTexts,
+    'admin-rebuild': AdminRebuild,
   };
 
   import { onConnectionChange } from './lib/api/client.js';

@@ -975,6 +975,10 @@ class DownloadService:
             except Exception as e:
                 logger.warning(f"text_export description {vid}: {e}")
 
+            # Meta-Redundanz: info.json neben das Video (wirft nie)
+            from app.services import meta_sidecar
+            await meta_sidecar.write_sidecar(vid)
+
             await db.execute(
                 """INSERT OR REPLACE INTO streams
                    (video_id,stream_type,itag,mime_type,quality,codec,file_path,file_size,is_default,is_combined,downloaded)

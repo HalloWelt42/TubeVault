@@ -377,6 +377,8 @@ async def archive_video(video_id: str):
         "UPDATE videos SET is_archived = 1, updated_at = datetime('now') WHERE id = ?",
         (video_id,)
     )
+    from app.services import meta_sidecar
+    await meta_sidecar.write_sidecar(video_id)
     return {"video_id": video_id, "is_archived": True}
 
 
@@ -390,12 +392,15 @@ async def unarchive_video(video_id: str):
         "UPDATE videos SET is_archived = 0, updated_at = datetime('now') WHERE id = ?",
         (video_id,)
     )
+    from app.services import meta_sidecar
+    await meta_sidecar.write_sidecar(video_id)
     return {"video_id": video_id, "is_archived": False}
 
 
 @router.post("/archive/batch")
 async def archive_batch(video_ids: list[str], unarchive: bool = False):
     """Batch: Mehrere Videos (de)archivieren."""
+    from app.services import meta_sidecar
     val = 0 if unarchive else 1
     count = 0
     for vid in video_ids[:100]:
@@ -404,6 +409,7 @@ async def archive_batch(video_ids: list[str], unarchive: bool = False):
             (val, vid)
         )
         count += cursor.rowcount
+        await meta_sidecar.write_sidecar(vid)
     return {"updated": count, "is_archived": not unarchive}
 
 

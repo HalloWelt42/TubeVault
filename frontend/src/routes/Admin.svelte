@@ -15,6 +15,13 @@
       ready: true,
     },
     {
+      title: 'Wiederaufbau',
+      desc: 'Meta-Redundanz neben den Videos: info.json-Sidecars, täglicher Nutzerdaten-Export, kompletter Offline-Wiederaufbau der Datenbank aus Dateien.',
+      icon: 'fa-solid fa-life-ring',
+      path: '/admin/rebuild',
+      ready: true,
+    },
+    {
       title: 'DB-Inspektor',
       desc: 'Rohe DB-Abfragen, Schema-Version, Tabellengrößen. (geplant)',
       icon: 'fa-solid fa-database',
