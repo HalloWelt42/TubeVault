@@ -15,6 +15,7 @@
   import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   let confirmRef;
 
   let query = $state($route.params.q || '');
@@ -312,6 +313,7 @@
           </div>
         {/each}
       </div>
+      <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
       {#if hasMore}
         <button class="load-more" onclick={loadMore} disabled={loadingMore}>
           {#if loadingMore}<i class="fa-solid fa-spinner fa-spin"></i> Lade…{:else}Weitere Treffer (Seite {page + 1}){/if}

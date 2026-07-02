@@ -13,12 +13,13 @@
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
-  import Pagination from '../lib/components/common/Pagination.svelte';
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
 
   let videos = $state([]);
   let total = $state(0);
   let page = $state(1);
-  let totalPages = $state(1);
+  let hasMore = $state(false);
+  let loadingMore = $state(false);
   let sortBy = $state(getFilter('archives', 'sortBy', 'upload_date'));
   let sortOrder = $state(getFilter('archives', 'sortOrder', 'desc'));
   let loading = $state(false);
@@ -44,8 +45,9 @@
     } catch {}
   }
 
-  async function loadVideos() {
-    loading = true;
+  async function loadVideos(reset = true) {
+    if (reset) { page = 1; videos = []; loading = true; }
+    else { loadingMore = true; }
     try {
       const params = { page, per_page: getSettingNum('general.videos_per_page', 24), sort_by: sortBy, sort_order: sortOrder, is_archived: true };
       const q = $searchQuery;
@@ -55,11 +57,18 @@
       if (multiFilter.channels) params.channel_ids = multiFilter.channels;
       if (multiFilter.categories) params.category_ids = multiFilter.categories;
       const result = await api.getVideos(params);
-      videos = result.videos;
-      total = result.total;
-      totalPages = result.total_pages;
+      const newVids = result.videos || [];
+      videos = reset ? newVids : [...videos, ...newVids];
+      total = result.total || 0;
+      hasMore = videos.length < total;
     } catch (e) { toast.error('Fehler: ' + e.message); }
-    loading = false;
+    finally { loading = false; loadingMore = false; }
+  }
+
+  function loadMore() {
+    if (loadingMore || !hasMore) return;
+    page += 1;
+    loadVideos(false);
   }
 
   function toggleTag(tag) { activeTags = activeTags.includes(tag) ? activeTags.filter(t => t !== tag) : [...activeTags, tag]; page = 1; }
@@ -104,7 +113,8 @@
 
   $effect(() => { loadTags(); });
   $effect(() => {
-    $searchQuery; sortBy; sortOrder; page; activeTags;
+    // Filter-Änderungen → Liste von vorne laden (NICHT page, das macht loadMore)
+    $searchQuery; sortBy; sortOrder; activeTags;
     multiFilter.types; multiFilter.channels; multiFilter.categories;
     // Alle Filter persistieren (User-Wunsch: Auswahl bleibt erhalten)
     saveFilters('archives', {
@@ -112,10 +122,10 @@
       activeTags: [...activeTags],
       multiFilter: { ...multiFilter },
     });
-    loadVideos();
+    loadVideos(true);
   });
   // Reagiere auf Video-Mutationen aus anderen Views (z.B. Watch → Dearchive)
-  $effect(() => onVideoMutation(() => { loadVideos(); loadTags(); }));
+  $effect(() => onVideoMutation(() => { loadVideos(true); loadTags(); }));
 
   let filteredTags = $derived(tagSearch ? allTags.filter(t => t.tag.toLowerCase().includes(tagSearch.toLowerCase())) : allTags);
   let visibleTags = $derived(tagSearch ? filteredTags : (showAllTags ? allTags : allTags.slice(0, 15)));
@@ -211,7 +221,8 @@
         </div>
       {/each}
     </div>
-    <Pagination {page} {totalPages} onchange={(p) => page = p} />
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
+    {#if loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
   {:else}
     <div class="empty">
       {#if hasActiveFilter}

@@ -575,3 +575,8 @@ label:has(input[type="checkbox"]) {
 .qpl-picker-fixed .qpl-picker-empty {
   padding: 20px; text-align: center; color: var(--text-tertiary); font-size: 0.8rem;
 }
+
+/* Infinite-Scroll-Sentinel (zentrale Action use:infiniteScroll) – global,
+   da von mehreren Routen genutzt (Library/Feed/History/Search/…). */
+.scroll-sentinel { height: 1px; width: 100%; }
+.loading-more { text-align: center; padding: 16px; color: var(--text-tertiary); font-size: 0.85rem; }
