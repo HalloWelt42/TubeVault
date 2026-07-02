@@ -5,6 +5,7 @@ TubeVault Backend – Datenbank v1.5.1
 
 import aiosqlite
 import logging
+import os
 from pathlib import Path
 from app.config import DB_PATH
 
@@ -435,6 +436,29 @@ class Database:
         await self._connection.execute("PRAGMA foreign_keys=ON")
         await self._init_schema()
         logger.info(f"Datenbank verbunden: {self.db_path}")
+
+    async def audit_identity(self) -> dict:
+        """Identitäts-Snapshot der verbundenen DB für das Startup-Audit-Log.
+        Schutz gegen versehentlich falsch gemountete oder leere DB (früherer
+        Bug: falsche DB neu gekoppelt). Reine Lesung, keine Seiteneffekte."""
+        try:
+            realpath = os.path.realpath(str(self.db_path))
+        except Exception:
+            realpath = str(self.db_path)
+        try:
+            size = os.path.getsize(self.db_path)
+        except OSError:
+            size = 0
+        videos = await self.fetch_val("SELECT COUNT(*) FROM videos") or 0
+        subs = await self.fetch_val("SELECT COUNT(*) FROM subscriptions") or 0
+        schema = await self.fetch_val("SELECT MAX(version) FROM schema_version") or 0
+        return {
+            "db_path": realpath,
+            "size_bytes": size,
+            "videos": videos,
+            "subscriptions": subs,
+            "schema_version": schema,
+        }
 
     async def disconnect(self):
         if self._connection:

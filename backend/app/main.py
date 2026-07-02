@@ -223,6 +223,26 @@ async def lifespan(app: FastAPI):
     ensure_directories()
     await db.connect()
     await scan_db.connect()
+    # DB-Identitäts-Audit: macht im Log sofort sichtbar, WELCHE DB geladen wurde
+    # (Schutz gegen früheren Bug: versehentlich falsche/leere DB gekoppelt).
+    try:
+        _audit = await db.audit_identity()
+        logger.info(
+            f"[DB-AUDIT] {_audit['db_path']} | {_audit['size_bytes'] // 1048576} MB | "
+            f"videos={_audit['videos']} subs={_audit['subscriptions']} "
+            f"schema=v{_audit['schema_version']}"
+        )
+        _min_raw = await db.fetch_val(
+            "SELECT value FROM settings WHERE key='system.expected_min_videos'")
+        _min = int(_min_raw) if _min_raw and str(_min_raw).isdigit() else 1000
+        if _audit["videos"] < _min:
+            logger.warning(
+                f"[DB-AUDIT] WARNUNG: nur {_audit['videos']} Videos (< erwartetem "
+                f"Minimum {_min}) – falsche oder leere DB gemountet? "
+                f"Pfad: {_audit['db_path']}"
+            )
+    except Exception as e:
+        logger.warning(f"[DB-AUDIT] Fehler beim Identitäts-Check: {e}")
     # Ghost-Einträge automatisch bereinigen (Videos ohne Datei)
     try:
         from pathlib import Path as _P
