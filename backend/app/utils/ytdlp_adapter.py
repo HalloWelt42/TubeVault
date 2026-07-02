@@ -1547,10 +1547,29 @@ class SearchAdapter:
 
     def _ensure(self) -> dict:
         if self._info is None:
-            self._info = _ydl_extract(
-                f"ytsearch{self._max}:{self.query}",
-                extra_opts={"extract_flat": True},
-            )
+            # yt-dlp 'ytsearch' liefert gelegentlich HTTP 200 mit LEERER
+            # entries-Liste (client-abhaengige Anti-Bot-Reaktion) – ganz OHNE
+            # Exception. Die Retry-Logik in _ydl_extract greift nur bei echten
+            # Fehlern, nicht bei "leer-aber-erfolgreich". Darum hier bis zu 3x
+            # neu versuchen, solange die Trefferliste leer bleibt: jeder Aufruf
+            # rotiert intern den player_client, ein Folgeversuch trifft also mit
+            # hoher Wahrscheinlichkeit einen funktionierenden Client. Das war die
+            # Ursache der "Suche mal leer, mal voll"-Flakiness.
+            import time as _t
+            info: dict = {}
+            for attempt in range(3):
+                info = _ydl_extract(
+                    f"ytsearch{self._max}:{self.query}",
+                    extra_opts={"extract_flat": True},
+                ) or {}
+                if info.get("entries"):
+                    break
+                if attempt < 2:
+                    logger.info(
+                        f"[SEARCH-RETRY] leere Trefferliste für '{self.query}' – "
+                        f"Versuch {attempt + 2}/3")
+                    _t.sleep(0.6)
+            self._info = info
         return self._info
 
     # ── Video-Kategorien (aus ytsearch) ─────────────────────────────
