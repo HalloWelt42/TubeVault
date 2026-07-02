@@ -101,6 +101,45 @@ function parseUrl(pathname, search = '') {
  *   navigate('/library', { type: 'short', sort: 'title' })
  *   navigate('/feed', { tab: 'later' }, true)  // replace
  */
+// ─── Scroll-Restore ──────────────────────────────────────
+// Merkt die Scroll-Position je URL, damit „Zurück aus einem Detail"
+// (z.B. Watch → Bibliothek) nicht nach oben springt. Begrenzte Map.
+const _scrollPositions = new Map();
+const _MAX_SCROLL_ENTRIES = 30;
+
+function _scroller() {
+  return document.querySelector('.main-content');
+}
+
+function _saveScroll(fullUrl) {
+  const el = _scroller();
+  if (!el || !fullUrl) return;
+  _scrollPositions.set(fullUrl, el.scrollTop);
+  // Map begrenzen (älteste Einträge raus)
+  if (_scrollPositions.size > _MAX_SCROLL_ENTRIES) {
+    const oldest = _scrollPositions.keys().next().value;
+    _scrollPositions.delete(oldest);
+  }
+}
+
+function _restoreScroll(fullUrl) {
+  const saved = _scrollPositions.get(fullUrl);
+  const el = _scroller();
+  if (!el) return;
+  const target = saved || 0;
+  // Listen rendern async nach → mehrere Frames versuchen bis genug Höhe da ist
+  let tries = 0;
+  const tick = () => {
+    el.scrollTop = target;
+    tries++;
+    // weiter versuchen solange Ziel noch nicht erreichbar (Content wächst) und < ~1s
+    if (tries < 40 && el.scrollTop < target - 2 && el.scrollHeight > el.clientHeight) {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
 export function navigate(path, params = {}, replace = false) {
   // Query-String aus path extrahieren falls eingebettet
   let cleanPath = path;
@@ -118,6 +157,11 @@ export function navigate(path, params = {}, replace = false) {
 
   // History-Tracking
   const prev = get(route);
+  // Scroll-Position der aktuellen Seite merken, BEVOR wir weg navigieren
+  // (nur bei echtem Seitenwechsel per Push, nicht bei Filter-replace).
+  if (!replace && prev.page !== parsed.page) {
+    _saveScroll(prev.fullUrl);
+  }
   _pushHistory(prev.fullUrl, url, replace);
 
   // URL im Browser setzen
@@ -210,8 +254,12 @@ export function buildRouteUrl(routeKey, id = null, params = {}) {
 window.addEventListener('popstate', () => {
   const parsed = parseCurrentUrl();
   const prev = get(route);
+  // Scroll der Seite, die wir verlassen, sichern (falls man wieder vorblättert)
+  if (prev.page !== parsed.page) _saveScroll(prev.fullUrl);
   _pushHistory(prev.fullUrl, parsed.fullUrl, false, 'popstate');
   route.set(parsed);
+  // Position der Zielseite wiederherstellen (statt Sprung nach oben)
+  _restoreScroll(parsed.fullUrl);
 });
 
 // ─── Logging ─────────────────────────────────────────────
