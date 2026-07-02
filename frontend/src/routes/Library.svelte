@@ -6,6 +6,7 @@
   import { getSettingNum } from '../lib/stores/settings.js';
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
@@ -32,8 +33,6 @@
   let multiFilter = $state(getFilter('library', 'multiFilter', { types: null, channels: null, categories: null }));
   let _loadTimer = null;
 
-  let sentinelEl = $state(null);
-  let observer = null;
   const PER_PAGE = getSettingNum('general.videos_per_page', 24);
 
   async function loadTags() {
@@ -181,16 +180,6 @@
     loadVideosDebounced();
   });
 
-  // IntersectionObserver für Lazy Loading
-  $effect(() => {
-    if (sentinelEl) {
-      observer?.disconnect();
-      observer = new IntersectionObserver((es) => { if (es[0]?.isIntersecting) loadMore(); }, { rootMargin: '400px' });
-      observer.observe(sentinelEl);
-    }
-    return () => observer?.disconnect();
-  });
-
   let filteredTags = $derived(tagSearch ? allTags.filter(t => t.tag.toLowerCase().includes(tagSearch.toLowerCase())) : allTags);
   let visibleTags = $derived(tagSearch ? filteredTags : (showAllTags ? allTags : allTags.slice(0, 15)));
   let hasActiveFilter = $derived(activeTags.length > 0 || multiFilter.types || multiFilter.channels || multiFilter.categories || multiFilter.is_music);
@@ -293,7 +282,7 @@
         {/if}
       {/each}
     </div>
-    <div bind:this={sentinelEl} class="scroll-sentinel"></div>
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
     {#if loadingMore}
       <div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>
     {/if}

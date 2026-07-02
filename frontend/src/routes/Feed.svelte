@@ -12,6 +12,7 @@
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
   import { getSettingNum } from '../lib/stores/settings.js';
   import { startQueue } from '../lib/stores/playlistQueue.js';
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { onMount, onDestroy } from 'svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
@@ -48,9 +49,6 @@
 
   const PER_PAGE = getSettingNum('general.videos_per_page', 24);
 
-  // Sentinel-Element fuer IntersectionObserver
-  let sentinelEl = $state(null);
-  let observer = null;
 
   const FEED_TABS = [
     { id: 'active', label: 'Aktiv', icon: 'fa-solid fa-inbox' },
@@ -177,21 +175,6 @@
     } catch (e) { toast.error(e.message); }
   }
 
-  $effect(() => {
-    if (sentinelEl) {
-      observer?.disconnect();
-      const currentHasMore = hasMore;
-      const currentLoadingMore = loadingMore;
-      const currentLoading = loading;
-      observer = new IntersectionObserver((es) => {
-        if (es[0].isIntersecting && hasMore && !loadingMore && !loading) {
-          loadMore();
-        }
-      }, { rootMargin: '200px' });
-      observer.observe(sentinelEl);
-    }
-  });
-
   // Scheduler-Status alle 5s aktualisieren
   async function loadScheduler() {
     try { scheduler = await api.getSchedulerStatus(); } catch {}
@@ -243,7 +226,6 @@
   onDestroy(() => {
     if (schedulerInterval) clearInterval(schedulerInterval);
     if (unsubFeed) unsubFeed();
-    observer?.disconnect();
   });
 
   // ─── Stream-Dialog ──────────────────────────────────
@@ -638,8 +620,8 @@
       {/each}
     </div>
 
-    <!-- Sentinel für IntersectionObserver -->
-    <div bind:this={sentinelEl} class="scroll-sentinel"></div>
+    <!-- Sentinel für Infinite Scroll (zentrale Action) -->
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loadingMore && !loading, rootMargin: '200px' }}></div>
 
     {#if loadingMore}
       <div class="loading-more">Lade weitere Videos…</div>

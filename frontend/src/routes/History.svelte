@@ -6,6 +6,7 @@
   import { formatDuration, formatDate } from '../lib/utils/format.js';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
 
   let history = $state([]);
   let total = $state(0);
@@ -16,8 +17,6 @@
   const PER_PAGE = getSettingNum('general.videos_per_page', 24);
 
   let histFilter = $state({ types: null, channels: null, search: null });
-  let sentinelEl = $state(null);
-  let observer = null;
 
   async function loadHistory(reset = true) {
     if (reset) { page = 1; history = []; loading = true; }
@@ -80,15 +79,6 @@
   // Reagiere auf Archive/Delete aus Watch-View
   $effect(() => onVideoMutation(() => loadHistory(true)));
 
-  // IntersectionObserver
-  $effect(() => {
-    if (sentinelEl) {
-      observer?.disconnect();
-      observer = new IntersectionObserver(es => { if (es[0]?.isIntersecting) loadMore(); }, { rootMargin: '400px' });
-      observer.observe(sentinelEl);
-    }
-    return () => observer?.disconnect();
-  });
 </script>
 
 <div class="history-page">
@@ -157,7 +147,7 @@
         </button>
       {/each}
     </div>
-    <div bind:this={sentinelEl} class="scroll-sentinel"></div>
+    <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMore, canLoad: () => hasMore && !loading && !loadingMore }}></div>
     {#if loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
   {/if}
 </div>
