@@ -13,7 +13,7 @@
   import { startQueue } from '../lib/stores/playlistQueue.js';
   import { formatDateRelative, formatDuration, formatDurationLong, formatSize, formatViews } from '../lib/utils/format.js';
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
-  import Pagination from '../lib/components/common/Pagination.svelte';
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { marked } from 'marked';
   marked.setOptions({ breaks: true, gfm: true });
 
@@ -96,15 +96,28 @@
     }
   }
 
-  async function loadVideos() {
+  let loadingMoreVideos = $state(false);
+  let hasMoreVideos = $derived(videos.length < totalVideos);
+
+  async function loadVideos(reset = true) {
     const cid = $route.id;
     if (!cid) return;
+    if (reset) { page = 1; }
+    else { loadingMoreVideos = true; }
     try {
       const result = await api.getChannelVideos(cid, source, page, videoType, sortBy);
-      videos = result.videos || [];
+      const newVids = result.videos || [];
+      videos = reset ? newVids : [...videos, ...newVids];
       totalVideos = result.total || 0;
       if (result.source_counts) sourceCounts = result.source_counts;
     } catch (e) { toast.error(e.message); }
+    finally { loadingMoreVideos = false; }
+  }
+
+  function loadMoreVideos() {
+    if (loadingMoreVideos || !hasMoreVideos) return;
+    page += 1;
+    loadVideos(false);
   }
 
   async function scanChannel() {
@@ -355,7 +368,6 @@
     batchQueueing = false;
   }
   function changeSort(s) { sortBy = s; page = 1; saveFilters('channelDetail', { sortBy: s }); loadVideos(); }
-  function changePage(p) { page = p; loadVideos(); }
 
   async function batchDownload(count) {
     const cid = $route.id;
@@ -1138,7 +1150,8 @@
         {/each}
       </div>
 
-      <Pagination {page} totalPages={Math.ceil(totalVideos / 50)} onchange={changePage} />
+      <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: loadMoreVideos, canLoad: () => hasMoreVideos && !loadingMoreVideos }}></div>
+      {#if loadingMoreVideos}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
     {:else if !scanning}
       <div class="empty">
         {#if channel.needs_scan}
