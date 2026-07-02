@@ -965,7 +965,7 @@
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .page { padding: 24px; padding-bottom: 60px; max-width: 1400px; }
+  .page { padding: 24px; padding-bottom: 60px; max-width: none; }
   .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px; }
   .title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
 

@@ -153,7 +153,7 @@
 </div>
 
 <style>
-  .history-page { padding:0 24px 24px; max-width:1100px; }
+  .history-page { padding:0 24px 24px; max-width:none; }
   .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
   .header-left { display:flex; align-items:baseline; gap:10px; }
   .page-header h1 { font-size:1.4rem; font-weight:700; color:var(--text-primary); margin:0; }

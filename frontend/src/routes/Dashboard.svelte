@@ -227,7 +227,7 @@
 </div>
 
 <style>
-  .dashboard { padding: 24px; max-width: 1200px; }
+  .dashboard { padding: 24px; max-width: none; }
   .page-title { font-size: 1.6rem; font-weight: 700; color: var(--text-primary); margin: 0; }
   .page-subtitle { color: var(--text-secondary); margin: 4px 0 0; font-size: 0.9rem; }
 

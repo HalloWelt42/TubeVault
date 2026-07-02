@@ -1170,7 +1170,7 @@
 </div>
 
 <style>
-  .page { padding: 24px; max-width: 960px; }
+  .page { padding: 24px; max-width: none; }
   .loading { text-align: center; padding: 60px; color: var(--text-tertiary); }
 
   .channel-banner {

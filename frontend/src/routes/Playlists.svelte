@@ -391,7 +391,7 @@
 </div>
 
 <style>
-  .playlists-page { padding: 24px; max-width: 1000px; }
+  .playlists-page { padding: 24px; max-width: none; }
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 10px; }
   .page-title i { color: var(--accent-primary); }

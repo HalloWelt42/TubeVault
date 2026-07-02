@@ -238,7 +238,7 @@
 </div>
 
 <style>
-  .library { padding: 24px; max-width: 1200px; }
+  .library { padding: 24px; max-width: none; }
   .library-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
   .page-title { font-size: 1.6rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 10px; }
   .page-title i { color: var(--accent-primary); }

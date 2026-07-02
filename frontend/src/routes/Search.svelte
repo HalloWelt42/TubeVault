@@ -332,7 +332,7 @@
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .search-page { padding: 24px; max-width: 1400px; }
+  .search-page { padding: 24px; max-width: none; }
   .search-form { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
   .search-input-wrap { flex: 1; min-width: 280px; position: relative; display: flex; align-items: center; }
   .search-icon { position: absolute; left: 14px; color: var(--text-tertiary); font-size: 0.9rem; pointer-events: none; }

@@ -116,7 +116,7 @@
 </div>
 
 <style>
-  .page { padding: 24px; max-width: 1200px; }
+  .page { padding: 24px; max-width: none; }
   .page-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
   .title { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0; }
   .subtitle { font-size: 0.82rem; color: var(--text-tertiary); }

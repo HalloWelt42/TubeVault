@@ -451,7 +451,7 @@
 </div>
 
 <style>
-  .categories-page { padding: 24px; max-width: 1000px; }
+  .categories-page { padding: 24px; max-width: none; }
   .page-title {
     font-size: 1.4rem; font-weight: 700; color: var(--text-primary);
     margin: 0 0 20px; display: flex; align-items: center; gap: 10px;

@@ -675,7 +675,7 @@
 />
 
 <style>
-  .page { padding: 24px; max-width: 1200px; }
+  .page { padding: 24px; max-width: none; }
 
   /* Scheduler Bar */
   .scheduler-bar {
