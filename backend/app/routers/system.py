@@ -277,28 +277,30 @@ async def health_check():
 
 @router.get("/badges")
 async def get_badges():
-    """Leichtgewichtige Zähler für Sidebar-Badges."""
-    videos = await db.fetch_val("SELECT COUNT(*) FROM videos WHERE status = 'ready' AND COALESCE(is_archived, 0) = 0") or 0
-    subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions WHERE enabled = 1") or 0
-    new_feed = await db.fetch_val("SELECT COUNT(*) FROM rss_entries WHERE status = 'new' AND COALESCE(feed_status, 'active') = 'active'") or 0
-    active_dl = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE type='download' AND status IN ('queued','active')") or 0
-    favorites = await db.fetch_val("SELECT COUNT(*) FROM favorites") or 0
-    playlists = await db.fetch_val("SELECT COUNT(*) FROM playlists WHERE COALESCE(visibility, 'global') = 'global'") or 0
-    categories = await db.fetch_val("SELECT COUNT(*) FROM categories") or 0
-    history = await db.fetch_val("SELECT COUNT(*) FROM videos WHERE play_count > 0") or 0
-    archives = await db.fetch_val("SELECT COUNT(*) FROM videos WHERE status = 'ready' AND COALESCE(is_archived, 0) = 1") or 0
-    own_videos = await db.fetch_val("SELECT COUNT(*) FROM videos WHERE source IN ('local', 'imported') AND status = 'ready' AND file_path IS NOT NULL") or 0
+    """Leichtgewichtige Zähler für Sidebar-Badges.
+    Alle Definitionen zentral aus counts_service (eine Quelle der Wahrheit).
+    Jedes Badge zählt exakt das, was seine Zielseite anzeigt."""
+    from app.services.counts_service import counts_service as cs
+    active_dl = await db.fetch_val(
+        "SELECT COUNT(*) FROM jobs WHERE type='download' AND status IN ('queued','active')") or 0
     # Batch-Queue: Sicher abfragen (Tabelle existiert evtl. noch nicht)
     try:
-        batch_waiting = await db.fetch_val("SELECT COUNT(*) FROM batch_queue WHERE status IN ('waiting','downloading')") or 0
+        batch_waiting = await db.fetch_val(
+            "SELECT COUNT(*) FROM batch_queue WHERE status IN ('waiting','downloading')") or 0
     except Exception:
         batch_waiting = 0
     return {
-        "videos": videos, "subscriptions": subs, "new_feed": new_feed,
-        "active_downloads": active_dl, "favorites": favorites,
-        "playlists": playlists, "categories": categories,
-        "history": history, "archives": archives,
-        "own_videos": own_videos, "batch_queue": batch_waiting,
+        "videos": await cs.library_videos(),
+        "subscriptions": await cs.subscriptions_enabled(),
+        "new_feed": await cs.feed_new(),
+        "active_downloads": active_dl,
+        "favorites": await cs.favorites(),
+        "playlists": await cs.playlists_global(),
+        "categories": await cs.categories(),
+        "history": await cs.history_played(),
+        "archives": await cs.archived_videos(),
+        "own_videos": await cs.own_videos(),   # jetzt = OwnVideos-Seite (file_size>0)
+        "batch_queue": batch_waiting,
     }
 
 
@@ -356,19 +358,20 @@ async def get_mountpoints():
 @router.get("/stats")
 async def get_system_stats():
     """Umfassende System-Statistiken für Dashboard."""
+    from app.services.counts_service import counts_service as cs
     video_stats = await metadata_service.get_stats()
-    # Zwei Platten: Medien (Videos) + Metadaten (DB)
-    disk_media = get_disk_usage(str(VIDEOS_DIR))
-    disk_meta = get_disk_usage(str(DB_DIR))
-    # Prüfen ob verschiedene Platten (verschiedene total-Größe)
-    is_split = abs(disk_media.get("total", 0) - disk_meta.get("total", 0)) > 1_000_000_000
+    # Disk: zentral aus counts_service – IMMER beide Mounts, Split via st_dev
+    # (löst die alte >1GB-Heuristik ab, die gleich große Platten verbarg).
+    mounts = cs.disk_mounts()
+    disk_media = mounts["media"]
+    disk_meta = mounts["meta"]
     db_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
 
     active_dl = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE type='download' AND status = 'active'") or 0
     pending_dl = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE type='download' AND status = 'queued'") or 0
     active_jobs = await db.fetch_val("SELECT COUNT(*) FROM jobs WHERE status = 'active'") or 0
-    total_subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions") or 0
-    error_subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions WHERE error_count > 0") or 0
+    total_subs = await cs.subscriptions_total()
+    error_subs = await cs.subscriptions_error()
 
     result = {
         "version": VERSION,
@@ -382,17 +385,12 @@ async def get_system_stats():
         "active_jobs": active_jobs,
         "total_subscriptions": total_subs,
         "error_subscriptions": error_subs,
+        # Beide Platten IMMER liefern (mit Label); Frontend zeigt bei
+        # same_device nur eine Karte.
+        "disk_media": disk_media,
+        "disk_meta": disk_meta,
+        "storage_split": not mounts["same_device"],
     }
-    # Split-Info: beide Platten separat
-    if is_split:
-        result["disk_media"] = disk_media
-        result["disk_media"]["label"] = "Medien"
-        result["disk_meta"] = disk_meta
-        result["disk_meta"]["label"] = "System"
-        result["storage_split"] = True
-    else:
-        result["storage_split"] = False
-
     return result
 
 

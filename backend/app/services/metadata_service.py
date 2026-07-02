@@ -474,16 +474,18 @@ class MetadataService:
         )
 
     async def get_stats(self) -> dict:
-        """Statistiken abrufen."""
-        video_count = await db.fetch_val("SELECT COUNT(*) FROM videos WHERE status = 'ready' AND COALESCE(is_archived, 0) = 0")
-        total_size = await db.fetch_val("SELECT COALESCE(SUM(file_size), 0) FROM videos WHERE status = 'ready' AND COALESCE(is_archived, 0) = 0")
-        total_duration = await db.fetch_val("SELECT COALESCE(SUM(duration), 0) FROM videos WHERE status = 'ready' AND COALESCE(is_archived, 0) = 0")
-        streams_count = await db.fetch_val("SELECT COUNT(*) FROM streams")
-        categories_count = await db.fetch_val("SELECT COUNT(*) FROM categories")
-        favorites_count = await db.fetch_val("SELECT COUNT(*) FROM favorites")
-        archives_count = await db.fetch_val("SELECT COUNT(*) FROM videos WHERE status = 'ready' AND COALESCE(is_archived, 0) = 1")
-        playlists_count = await db.fetch_val("SELECT COUNT(*) FROM playlists")
-        history_count = await db.fetch_val("SELECT COUNT(DISTINCT video_id) FROM watch_history")
+        """Statistiken abrufen. Zählungen zentral aus counts_service
+        (eine Quelle der Wahrheit), Response-Shape unverändert."""
+        from app.services.counts_service import counts_service as cs
+        video_count = await cs.library_videos()
+        total_size = await cs.library_size_bytes()
+        total_duration = await cs.library_duration_seconds()
+        streams_count = await cs.streams()
+        categories_count = await cs.categories()
+        favorites_count = await cs.favorites()
+        archives_count = await cs.archived_videos()
+        playlists_count = await cs.playlists_total()
+        history_count = await cs.history_entries()
 
         return {
             "video_count": video_count,
