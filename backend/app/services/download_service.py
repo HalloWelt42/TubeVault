@@ -1533,8 +1533,34 @@ class DownloadService:
             await self._stage(job_id, vid, "merging", 0.90, "FFmpeg: Merge wird vorbereitet…")
             final = await self._ffmpeg_merge(vdir, vpath, apath, duration, job_id, vid)
 
+        # Integritäts-Check: bei Nicht-Audio-only MUSS eine Audiospur vorhanden sein.
+        # Verhindert, dass ein durch Format-Fallback/SABR video-only geladenes File
+        # still als fertig gespeichert wird (Bug: itag-96-Fehlschlag → av1 video-only,
+        # merge=False → kein Ton). Fehlt Audio → als Fehler behandeln → Retry lädt
+        # über den Quality-Pfad (Video+Audio+Merge) korrekt neu.
+        if not is_audio_only:
+            has_audio = await asyncio.get_event_loop().run_in_executor(
+                None, self._has_audio_stream, final)
+            if not has_audio:
+                raise RuntimeError(
+                    "Audiospur fehlt nach Download (video-only) – wird erneut versucht")
+
         fsize = Path(final).stat().st_size
         return final, fsize, si, adaptive
+
+    @staticmethod
+    def _has_audio_stream(path: str) -> bool:
+        """True, wenn die Datei mindestens eine Audiospur enthält (ffprobe)."""
+        try:
+            r = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "a",
+                 "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(path)],
+                capture_output=True, text=True, timeout=30,
+            )
+            return "audio" in (r.stdout or "")
+        except Exception:
+            # Im Zweifel NICHT fälschlich als kaputt markieren (ffprobe-Problem ≠ fehlender Ton)
+            return True
 
     async def _ffmpeg_merge(self, vdir: Path, vpath: str, apath: str,
                             duration: float = 0, job_id: int = 0, vid: str = "") -> str:
