@@ -1125,21 +1125,38 @@ class DownloadService:
                 logger.info(f"[MEMBERS-ONLY-REMOVED] {vid} (channel={channel_id}) – Job(s) gelöscht: {err_short[:100]}")
 
             elif "live event will begin" in err.lower() or "premieres in" in err.lower():
-                # Live-Stream startet noch – Retry in 1h, NICHT parken.
-                from app.utils.file_utils import future_sqlite as _fs
-                retry_after = _fs(seconds=3600)
-                await job_service.retry_wait(
-                    job_id,
-                    error=f"Live-Stream noch nicht gestartet · Retry in 1h",
-                    retry_after=retry_after,
-                    retry_count=retry_count + 1,
-                )
-                await self._ws_broadcast({
-                    "job_id": job_id, "queue_id": job_id, "video_id": vid,
-                    "status": "retry_wait", "progress": 0, "stage": "retry_wait",
-                    "stage_label": "Live noch nicht gestartet (1h)",
-                })
-                logger.info(f"[LIVE-COMING] {vid}: Retry in 1h")
+                # Live-Stream/Premiere startet noch – stündlich erneut versuchen,
+                # aber NICHT endlos (früher: unbegrenzt → floutete die Logs mit
+                # "live event will begin"). Nach LIVE_COMING_MAX Stunden parken:
+                # nichts geht verloren (parkte Jobs sind per "Erneut versuchen"
+                # wieder aufnehmbar), aber die stündliche Endlos-Schleife endet.
+                LIVE_COMING_MAX = 72  # ~3 Tage stündlich – großzügig für jede Premiere
+                if retry_count >= LIVE_COMING_MAX:
+                    await job_service.park(
+                        job_id,
+                        f"Premiere/Live nach {LIVE_COMING_MAX}h nicht gestartet – geparkt",
+                    )
+                    await self._ws_broadcast({
+                        "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                        "status": "parked", "progress": 0, "stage": "parked",
+                        "stage_label": "Premiere nicht gestartet · geparkt",
+                    })
+                    logger.info(f"[LIVE-COMING] {vid}: nach {LIVE_COMING_MAX}h geparkt (kein Start)")
+                else:
+                    from app.utils.file_utils import future_sqlite as _fs
+                    retry_after = _fs(seconds=3600)
+                    await job_service.retry_wait(
+                        job_id,
+                        error=f"Live-Stream noch nicht gestartet · Retry in 1h ({retry_count + 1}/{LIVE_COMING_MAX})",
+                        retry_after=retry_after,
+                        retry_count=retry_count + 1,
+                    )
+                    await self._ws_broadcast({
+                        "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                        "status": "retry_wait", "progress": 0, "stage": "retry_wait",
+                        "stage_label": "Live noch nicht gestartet (1h)",
+                    })
+                    logger.info(f"[LIVE-COMING] {vid}: Retry in 1h ({retry_count + 1}/{LIVE_COMING_MAX})")
 
             elif is_unavailable:
                 # Permanent unbrauchbar (private/removed/age-gate/geo-blocked/copyright):

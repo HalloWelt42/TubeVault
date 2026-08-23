@@ -84,7 +84,7 @@ services:
   # https://github.com/Brainicism/bgutil-ytdlp-pot-provider
   # ==========================================
   tubevault-pot:
-    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    image: brainicism/bgutil-ytdlp-pot-provider:1.3.2
     container_name: tubevault-pot
     restart: unless-stopped
     # Kein externer Port – nur intern erreichbar über tubevault-net

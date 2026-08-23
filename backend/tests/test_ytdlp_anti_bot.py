@@ -192,8 +192,33 @@ def test_pick_falls_back_when_pool_exhausted():
 
 
 def test_max_retries_sane():
-    """Genug Versuche für 8er Pool, aber nicht endlos."""
+    """Genug Versuche für den Pool, aber nicht endlos."""
     assert 1 <= _MAX_RETRIES <= 5
+
+
+# ─── Client-Strategie 2026: web/default+POT statt tv-Familie ──────────
+
+def test_pool_has_no_broken_tv_family():
+    """Aug 2026 (yt-dlp #17389): tv/tv_simply/tv_downgraded/mediaconnect liefern
+    UNPLAYABLE ('The page needs to be reloaded'). Diese dürfen NICHT im
+    Default-Pool stehen, sonst floutet jeder Call die Logs."""
+    broken = {"tv", "tv_simply", "tv_downgraded", "mediaconnect"}
+    for stack in _PLAYER_CLIENT_POOL:
+        assert not (set(stack) & broken), f"Kaputter tv-Client im Pool: {stack}"
+
+
+def test_pool_every_stack_has_default():
+    """'default' (= web) + POT ist der reproduziert zuverlässige Kern und muss
+    in jedem Stack vorkommen (Fallback-Sicherheit)."""
+    for stack in _PLAYER_CLIENT_POOL:
+        assert "default" in stack, f"Stack ohne 'default': {stack}"
+
+
+def test_live_coming_not_retried_in_call():
+    """LIVE-COMING (Premiere/Stream noch nicht gestartet): kein In-Call-Retry –
+    Client-Wechsel macht keinen ungestarteten Stream verfügbar. Der Job wird
+    auf Job-Ebene (retry_wait) später erneut geplant."""
+    assert _should_retry("LIVE-COMING") is False
 
 
 # ─── Login-Cookie-Eskalation ──────────────────────────────────────

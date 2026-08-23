@@ -47,19 +47,25 @@ _POT_BASE_URL = _os.getenv("POT_PROVIDER_URL", "http://tubevault-pot:4416")
 # ──────────────────────────────────────────────────────────────────
 # Anti-Bot: Player-Client- und User-Agent-Rotation
 # ──────────────────────────────────────────────────────────────────
-# Player-Clients aus yt-dlp 2026.x – Pool für Zufalls-Rotation.
-# Sortiert grob nach "least-detected": tv-Family braucht keinen PO-Token,
-# mediaconnect ist intern, ios/android sind weniger aggressiv geprüft.
-# 'default' (= web) ist als Fallback dabei, aber nicht primär.
+# Player-Clients aus yt-dlp 2026.08+ – Pool für Zufalls-Rotation.
+#
+# WICHTIG (Stand Aug 2026, siehe yt-dlp Issue #17389): Die tv-Familie
+# (tv / tv_downgraded / tv_simply / mediaconnect) liefert derzeit reihenweise
+# UNPLAYABLE → "The page needs to be reloaded" – Maintainer wörtlich:
+# "cannot be used". web_safari wird durch YouTubes SABR-Umstellung gefiltert
+# (#12482). Zuverlässig ist 'default' (= web) MIT PO-Token – und unser
+# bgutil-POT-Provider läuft, also ist genau dieser Pfad der beste (reproduziert:
+# player_client=default+POT → Erfolg, =tv → Reload-Fehler).
+#
+# Maintainer-empfohlener Fallback ist 'default,web_embedded' (web_embedded
+# existiert ab yt-dlp 2026.08.19). yt-dlp fragt JEDEN Client im Stack ab und
+# merged die Formate → bewusst KEINE tv-Einträge mehr, damit nicht jeder Call
+# eine tv-UNPLAYABLE-Zeile als Beifang produziert. 'default' ist in jedem Stack.
 _PLAYER_CLIENT_POOL = [
-    ["tv", "default"],
-    ["tv_simply", "tv"],
-    ["mediaconnect", "tv"],
-    ["ios", "tv"],
-    ["android_music", "tv"],
-    ["mweb", "tv"],
-    ["web_safari", "tv"],
-    ["default", "tv"],
+    ["default"],
+    ["default", "web_embedded"],
+    ["web_embedded", "default"],
+    ["default", "web_safari"],
 ]
 
 # Echte User-Agents (Stand 2026, breit gestreut). yt-dlp setzt sonst
@@ -82,8 +88,9 @@ _USER_AGENT_POOL = [
 
 
 def _pick_player_clients(exclude: list[list[str]] | None = None) -> list[str]:
-    """Zufälliger Player-Client-Stack für einen Call. Erste Wahl wechselt,
-    'tv' bleibt als robuster Fallback meist dabei.
+    """Zufälliger Player-Client-Stack für einen Call (web-Familie + POT).
+    'default' (= web) ist in jedem Stack der zuverlässige Kern; die tv-Familie
+    ist bewusst draußen (siehe Kommentar an _PLAYER_CLIENT_POOL).
 
     exclude: bereits versuchte Stacks (Liste von Listen) – beim Retry
     übergeben damit nicht der gleiche Client zweimal hintereinander kommt.
@@ -290,16 +297,25 @@ _PERMANENT_CATEGORIES = {"PRIVATE", "REMOVED", "COPYRIGHT", "GEO-BLOCKED"}
 # Brauchen Login-Cookies um lösbar zu sein. Ohne cookies-login.txt
 # sind sie effektiv permanent. Mit Login + Mitgliedschaft kommen sie durch.
 _NEEDS_LOGIN = {"AGE-GATE", "MEMBERS-ONLY"}
+# Transiente Nicht-Fehler: das Video ist (noch) nicht abspielbar, aber KEIN
+# Client-Wechsel und keine andere Implementation macht einen noch nicht
+# gestarteten Stream verfügbar. Genau EIN Versuch, dann sofort hoch – der Job
+# wird auf Job-Ebene später erneut geplant (retry_wait). Verhindert die ~5×
+# Amplifikation (4× Client-Rotation + pytubefix) pro Premieren-/Upcoming-Video.
+_NO_INCALL_RETRY = {"LIVE-COMING"}
 _MAX_RETRIES = 3               # → 4 Versuche total
 
 
 def _should_retry(cat: str) -> bool:
     """Wahr wenn eine andere Strategie eine Chance hätte.
     - PRIVATE/REMOVED/COPYRIGHT → permanent, False
+    - LIVE-COMING → (noch) nicht da, In-Call-Retry sinnlos, False (Job-Retry später)
     - AGE-GATE/MEMBERS-ONLY → nur mit cookies-login.txt sinnvoll
     - alles andere (BOT-DETECTION, RATE-429, HTTP-x, TIMEOUT, FORMAT-MISMATCH, OTHER) → True
     """
     if cat in _PERMANENT_CATEGORIES:
+        return False
+    if cat in _NO_INCALL_RETRY:
         return False
     if cat in _NEEDS_LOGIN:
         return _login_cookiefile() is not None
@@ -509,7 +525,8 @@ def _ydl_extract(url: str, extra_opts: Optional[dict] = None,
     # bringt's nichts).
     if last_exc:
         last_cat = _classify_yt_error(str(last_exc))
-        if last_cat not in _PERMANENT_CATEGORIES and last_cat != "AGE-GATE":
+        if (last_cat not in _PERMANENT_CATEGORIES and last_cat != "AGE-GATE"
+                and last_cat not in _NO_INCALL_RETRY):
             logger.info(f"[YTBOT-FALLBACK-START] {label} alle yt-dlp gescheitert (cat={last_cat}) → pytubefix")
             fallback = _pytubefix_extract_fallback(url, label)
             if fallback is not None:
