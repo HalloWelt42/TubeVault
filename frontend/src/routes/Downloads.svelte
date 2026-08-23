@@ -472,80 +472,54 @@
 </script>
 
 <div class="page">
-  <div class="page-header">
-    <h1 class="title"><i class="fa-solid fa-bolt"></i> Jobs</h1>
-    <!-- Stats aus gleicher Quelle wie Tab-Counts (matchesTab) – sonst Diskrepanz -->
-    <div class="queue-stats">
-      <span class="qs active">{jobCounts.active} aktiv</span>
-      <span class="qs queued">{jobCounts.wait} wartend</span>
-      <span class="qs done">{jobCounts.done} fertig</span>
-      {#if jobCounts.error > 0}<span class="qs error">{jobCounts.error} Fehler</span>{/if}
-      {#if jobCounts.cancelled > 0}<span class="qs cancelled">{jobCounts.cancelled} abgebrochen</span>{/if}
+  <!-- ── Command-Bar ── -->
+  <header class="dtop">
+    <div class="dbrand">
+      <div class="dbrand-mark"><i class="fa-solid fa-bolt"></i></div>
+      <div>
+        <h1 class="dtitle">Downloads</h1>
+        <p class="dtsub">Warteschlange &amp; Jobs</p>
+      </div>
     </div>
-  </div>
-
-  <!-- Worker Warning -->
-  {#if workerDead}
-    <div class="worker-warning">
-      <i class="fa-solid fa-triangle-exclamation"></i>
-      <span><strong>Download-Worker gestoppt</strong> — Downloads werden nicht verarbeitet.</span>
-      <button class="btn-sm accent" onclick={restartWorker} disabled={restartingWorker}>
+    <div class="dtop-right">
+      {#if workerDead}
+        <span class="wchip dead"><span class="wdot"></span> Worker gestoppt</span>
+      {:else}
+        <span class="wchip ok"><span class="wdot"></span> Worker läuft</span>
+      {/if}
+      <button class="diconbtn" onclick={restartWorker} disabled={restartingWorker} title="Download-Worker neu starten">
         {#if restartingWorker}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-solid fa-rotate"></i>{/if}
-        Worker neu starten
       </button>
     </div>
-  {:else}
-    <!-- Manueller Restart-Button auch wenn Worker lebt (z.B. nach Adapter-Code-Änderungen) -->
-    <div class="worker-toolbar">
-      <span class="hint">Worker läuft.</span>
-      <button class="btn-sm" onclick={restartWorker} disabled={restartingWorker} title="Download-Worker neu starten – kein Container-Restart nötig">
+  </header>
+
+  {#if workerDead}
+    <div class="dbanner">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span><strong>Download-Worker gestoppt</strong> — Downloads werden nicht verarbeitet.</span>
+      <button class="dbtn primary sm" onclick={restartWorker} disabled={restartingWorker}>
         {#if restartingWorker}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-solid fa-rotate"></i>{/if}
         Worker neu starten
       </button>
     </div>
   {/if}
 
-  <!-- Download Input -->
-  <div class="input-section">
-    <div class="url-row">
-      <input type="text" class="input" placeholder="YouTube-URL einfügen…"
-        bind:value={urlInput}
-        onkeydown={(e) => e.key === 'Enter' && resolveVideo()} />
-      <button class="btn-secondary" onclick={resolveVideo} disabled={resolving || !urlInput.trim()}>
-        {#if resolving}<i class="fa-solid fa-spinner fa-spin"></i> Wird aufgelöst…{:else}<i class="fa-solid fa-magnifying-glass"></i> Auflösen{/if}
-      </button>
-      <button class="btn-primary" onclick={quickDownload} disabled={!urlInput.trim()}>
-        <i class="fa-solid fa-download"></i> Schnell-DL
-      </button>
-    </div>
-    <div class="input-sub">
-      <div class="priority-row">
-        <span class="priority-label">Priorität:</span>
-        {#each [[0, 'Normal'], [5, 'Hoch'], [10, 'Sofort']] as [val, label]}
-          <button class="priority-btn" class:active={selectedPriority === val}
-                  onclick={() => selectedPriority = val}>{label}</button>
-        {/each}
-      </div>
-      <button class="link-btn" onclick={() => showBatch = !showBatch}>
-        {showBatch ? 'Schließen' : 'Batch Download (mehrere URLs)'}
-      </button>
-    </div>
-
-    {#if showBatch}
-      <div class="batch-area">
-        <textarea class="textarea" bind:value={batchInput} rows="4"
-          placeholder="Eine URL pro Zeile…"></textarea>
-        <button class="btn-primary" onclick={addBatch}
-          disabled={!batchInput.trim()}>
-          {batchInput.split('\n').filter(l=>l.trim()).length} Downloads starten
-        </button>
-      </div>
+  <!-- ── Stat-Kacheln ── -->
+  <div class="dstats">
+    <div class="dstat act"><span class="bar"></span><span><span class="k num">{jobCounts.active}</span><span class="l">aktiv</span></span></div>
+    <div class="dstat wait"><span class="bar"></span><span><span class="k num">{jobCounts.wait}</span><span class="l">wartend</span></span></div>
+    <div class="dstat done"><span class="bar"></span><span><span class="k num">{jobCounts.done}</span><span class="l">fertig</span></span></div>
+    {#if jobCounts.error > 0}
+      <div class="dstat err"><span class="bar"></span><span><span class="k num">{jobCounts.error}</span><span class="l">Fehler</span></span></div>
+    {/if}
+    {#if jobCounts.cancelled > 0}
+      <div class="dstat canc"><span class="bar"></span><span><span class="k num">{jobCounts.cancelled}</span><span class="l">abgebrochen</span></span></div>
     {/if}
   </div>
 
-  <!-- Resolved Video Info -->
+  <!-- ── Aufgelöste Panels (volle Breite, wenn vorhanden) ── -->
   {#if videoInfo}
-    <div class="resolved-panel">
+    <div class="panel resolved-panel">
       <div class="resolved-header">
         {#if videoInfo.id}
           <img class="resolved-thumb" src={api.rssThumbUrl(videoInfo.id)} alt="" />
@@ -554,59 +528,48 @@
           <h3>{videoInfo.title}</h3>
           <span class="resolved-meta">
             {videoInfo.channel_name} · {formatDuration(videoInfo.duration)}
-            {#if videoInfo.already_downloaded}
-              <span class="already-badge">Bereits heruntergeladen</span>
-            {/if}
+            {#if videoInfo.already_downloaded}<span class="already-badge">Bereits heruntergeladen</span>{/if}
           </span>
         </div>
       </div>
-
       <div class="stream-section">
         <h4>Verfügbare Streams</h4>
-
         {#if progressiveStreams.length > 0}
           <div class="stream-group">
             <span class="stream-label">Progressive (Video+Audio)</span>
-            {#each progressiveStreams as s}
-              <label class="stream-option" class:selected={selectedQuality === s.quality}>
-                <input type="radio" name="quality" value={s.quality}
-                  bind:group={selectedQuality} />
-                <span class="sq">{s.quality}</span>
-                <span class="sf">{formatSize(s.file_size)}</span>
-                <span class="sc">{s.codec}</span>
-              </label>
-            {/each}
+            <div class="opts">
+              {#each progressiveStreams as s}
+                <label class="opt" class:sel={selectedQuality === s.quality}>
+                  <input type="radio" name="quality" value={s.quality} bind:group={selectedQuality} hidden />
+                  <span class="rd"></span><span class="q">{s.quality}</span><span class="sz">{formatSize(s.file_size)}</span><span class="cd">{s.codec}</span>
+                </label>
+              {/each}
+            </div>
           </div>
         {/if}
-
         {#if adaptiveVideo.length > 0}
           <div class="stream-group">
             <span class="stream-label">Adaptive (Video only, wird mit Audio gemerged)</span>
-            {#each adaptiveVideo.slice(0, 5) as s}
-              <label class="stream-option" class:selected={selectedQuality === `adaptive_${s.quality}`}>
-                <input type="radio" name="quality" value={`adaptive_${s.quality}`}
-                  onclick={() => selectedQuality = s.quality} />
-                <span class="sq">{s.quality}{s.fps ? ` ${s.fps}fps` : ''}</span>
-                <span class="sf">{formatSize(s.file_size)} + Audio</span>
-                <span class="sc">{s.codec}</span>
-              </label>
-            {/each}
+            <div class="opts">
+              {#each adaptiveVideo.slice(0, 5) as s}
+                <label class="opt" class:sel={selectedQuality === `adaptive_${s.quality}`}>
+                  <input type="radio" name="quality" value={`adaptive_${s.quality}`} onclick={() => selectedQuality = s.quality} hidden />
+                  <span class="rd"></span><span class="q">{s.quality}{s.fps ? ` ${s.fps}fps` : ''}</span><span class="sz">{formatSize(s.file_size)} + Audio</span><span class="cd">{s.codec}</span>
+                </label>
+              {/each}
+            </div>
           </div>
         {/if}
       </div>
-
       <div class="resolved-actions">
-        <button class="btn-primary btn-lg" onclick={startDownload}>
-          <i class="fa-solid fa-download"></i> Download starten ({selectedQuality})
-        </button>
-        <button class="btn-ghost" onclick={() => videoInfo = null}>Abbrechen</button>
+        <button class="dbtn primary lg" onclick={startDownload}><i class="fa-solid fa-download"></i> Download starten ({selectedQuality})</button>
+        <button class="dbtn ghost" onclick={() => videoInfo = null}>Abbrechen</button>
       </div>
     </div>
   {/if}
 
-  <!-- Resolved: Playlist -->
   {#if playlistInfo}
-    <div class="resolved-panel pl-panel">
+    <div class="panel resolved-panel">
       <div class="pl-panel-header">
         <div class="pl-panel-info">
           <span class="pl-type-badge"><i class="fa-solid fa-list-ul"></i> Playlist</span>
@@ -619,12 +582,10 @@
           </span>
         </div>
         <div class="pl-panel-actions">
-          <button class="btn-primary" onclick={plDownloadAll}
-            disabled={playlistInfo.videos.every(v => v.already_downloaded)}>
-            <i class="fa-solid fa-download"></i>
-            {playlistInfo.videos.filter(v => !v.already_downloaded).length} fehlende laden
+          <button class="dbtn primary" onclick={plDownloadAll} disabled={playlistInfo.videos.every(v => v.already_downloaded)}>
+            <i class="fa-solid fa-download"></i> {playlistInfo.videos.filter(v => !v.already_downloaded).length} fehlende laden
           </button>
-          <button class="btn-ghost" onclick={() => playlistInfo = null}>Schließen</button>
+          <button class="dbtn ghost" onclick={() => playlistInfo = null}>Schließen</button>
         </div>
       </div>
       <div class="pl-video-list">
@@ -638,10 +599,7 @@
             {/if}
             <div class="pl-video-info">
               <span class="pl-video-title">{v.title}</span>
-              <span class="pl-video-meta">
-                {v.channel_name || ''}
-                {#if v.duration} · {formatDuration(v.duration)}{/if}
-              </span>
+              <span class="pl-video-meta">{v.channel_name || ''}{#if v.duration} · {formatDuration(v.duration)}{/if}</span>
             </div>
             <div class="pl-video-status">
               {#if v.already_downloaded}
@@ -649,9 +607,7 @@
               {:else if plDownloading.has(v.id)}
                 <i class="fa-solid fa-spinner fa-spin"></i>
               {:else}
-                <button class="btn-icon-sm" onclick={() => plDownloadOne(v.id)} title="Herunterladen">
-                  <i class="fa-solid fa-download"></i>
-                </button>
+                <button class="btn-icon-sm" onclick={() => plDownloadOne(v.id)} title="Herunterladen"><i class="fa-solid fa-download"></i></button>
               {/if}
             </div>
           </div>
@@ -660,9 +616,8 @@
     </div>
   {/if}
 
-  <!-- Resolved: Channel -->
   {#if channelInfo}
-    <div class="resolved-panel ch-panel">
+    <div class="panel resolved-panel">
       <div class="ch-panel-header">
         <span class="pl-type-badge"><i class="fa-solid fa-user"></i> Kanal</span>
         <h3>{channelInfo.channel_name}</h3>
@@ -670,234 +625,155 @@
       </div>
       <div class="resolved-actions">
         {#if channelInfo.already_subscribed}
-          <button class="btn-secondary" disabled><i class="fa-solid fa-check"></i> Bereits abonniert</button>
+          <button class="dbtn" disabled><i class="fa-solid fa-check"></i> Bereits abonniert</button>
         {:else}
-          <button class="btn-primary" onclick={subscribeChannel}><i class="fa-solid fa-rss"></i> Kanal abonnieren</button>
+          <button class="dbtn primary" onclick={subscribeChannel}><i class="fa-solid fa-rss"></i> Kanal abonnieren</button>
         {/if}
-        <button class="btn-ghost" onclick={() => channelInfo = null}>Schließen</button>
+        <button class="dbtn ghost" onclick={() => channelInfo = null}>Schließen</button>
       </div>
     </div>
   {/if}
 
-  <!-- Live-Einstellungen: Throttling + Cooldown -->
-  <div class="dl-settings">
-    <!-- Throttling -->
-    <div class="dl-row">
-      <div class="dl-row-label">
-        <i class="fa-solid fa-gauge-high"></i>
-        <span class="dl-row-title">Throttling</span>
-        <span class="dl-row-hint">
-          {#if throttleRealtime}
-            {#if currentThrottleLive > 0}
-              aktiv: {currentThrottleLive.toLocaleString('de-DE')} KB/s (aus Video-Länge)
-            {:else}
-              wartet auf Download…
-            {/if}
-          {:else if throttleKbps > 0}
-            {throttleKbps} KB/s
-          {:else}
-            aus
-          {/if}
-        </span>
-      </div>
-      <div class="dl-row-control">
-        <label class="dl-chk">
-          <input type="checkbox" checked={throttleRealtime}
-                 onchange={toggleRealtime} disabled={settingsSaving} />
-          <span>Dynamisch</span>
-        </label>
-        <div class="dl-input" class:is-readonly={throttleRealtime}>
-          <input type="number" min="0" max="100000" step="100"
-                 value={throttleRealtime ? (currentThrottleLive || '') : throttleKbps}
-                 placeholder={throttleRealtime ? '—' : '0'}
-                 disabled={settingsSaving || throttleRealtime}
-                 oninput={(e) => { throttleKbps = parseInt(e.target.value) || 0; }}
-                 onblur={() => !throttleRealtime && saveThrottle()}
-                 onkeydown={(e) => e.key === 'Enter' && !throttleRealtime && saveThrottle()} />
-          <span class="dl-unit">KB/s</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Wartezeit -->
-    <div class="dl-row">
-      <div class="dl-row-label">
-        <i class="fa-solid fa-hourglass-half"></i>
-        <span class="dl-row-title">Wartezeit</span>
-        <span class="dl-row-hint">{cooldownSec}s zwischen Downloads (min. 30 empfohlen)</span>
-      </div>
-      <div class="dl-row-control">
-        <div class="dl-input">
-          <input type="number" min="0" max="3600" step="5"
-                 bind:value={cooldownSec} disabled={settingsSaving}
-                 onblur={() => saveCooldown(cooldownSec)}
-                 onkeydown={(e) => e.key === 'Enter' && saveCooldown(cooldownSec)} />
-          <span class="dl-unit">s</span>
-        </div>
-        <button class="dl-default-btn" onclick={resetDefaults} title="Throttling aus, Wartezeit 30s">
-          <i class="fa-solid fa-rotate-left"></i> Default
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Queue -->
-  {#if queue.queue.length > 0 || systemJobs.length > 0}
-    <div class="queue-section">
-      <div class="queue-header">
+  <!-- ── Zwei-Spalten: Queue (Haupt) + Add/Einstellungen (Seite) ── -->
+  <div class="dgrid">
+    <!-- Haupt: Warteschlange -->
+    <main class="panel dmain">
+      <div class="panel-h">
         <h2>Warteschlange</h2>
-        <div class="queue-actions">
-          {#if (queue.queue.length + systemJobs.length) > 0}
-            <div class="jobs-tabs">
-              {#each [['all','Alle'],['active','Läuft'],['wait','Wartet'],['done','Fertig'],['error','Fehler'],['cancelled','Abgebrochen']] as [id, label]}
-                <button class="jobs-tab" class:active={jobsTab === id} onclick={() => jobsTab = id}>
-                  {label}
-                  {#if jobCounts[id] > 0}<span class="jobs-tab-count">{jobCounts[id]}</span>{/if}
-                </button>
-              {/each}
-            </div>
-          {/if}
+        <span class="panel-sub">· {filteredQueue.length + filteredJobs.length} sichtbar</span>
+        <div class="panel-spacer"></div>
+        <div class="q-actions">
           {#if jobCounts.error > 0}
-            <button class="link-btn link-retry" onclick={retryAllFailed}>
-              <i class="fa-solid fa-rotate-right"></i> Alle erneut ({jobCounts.error})
-            </button>
+            <button class="link link-retry" onclick={retryAllFailed}><i class="fa-solid fa-rotate-right"></i> Alle erneut ({jobCounts.error})</button>
           {/if}
-          <button class="link-btn" onclick={fixStale} title="Festhängende Downloads zurück in die Warteschlange">Festhänger befreien</button>
-          <button class="link-btn" onclick={clearDone}>Fertige entfernen</button>
-          <button class="link-btn link-danger" onclick={clearAll}>Alle bereinigen</button>
+          <button class="link muted" onclick={fixStale} title="Festhängende Downloads zurück in die Warteschlange">Festhänger befreien</button>
+          <button class="link muted" onclick={clearDone}>Fertige entfernen</button>
+          <button class="link danger" onclick={clearAll}>Alle bereinigen</button>
         </div>
       </div>
 
-      {#each filteredQueue as item (item.id)}
-        {@const live = getLive(item.id)}
-        {@const stage = live?.stage || item.status}
-        {@const progress = live?.progress ?? item.progress ?? 0}
-        {@const label = live?.stage_label || ''}
+      <div class="tabs">
+        {#each [['all','Alle'],['active','Läuft'],['wait','Wartet'],['done','Fertig'],['error','Fehler'],['cancelled','Abgebrochen']] as [id, label]}
+          <button class="tab" class:on={jobsTab === id} onclick={() => jobsTab = id}>
+            {label}{#if jobCounts[id] > 0}<span class="c num">{jobCounts[id]}</span>{/if}
+          </button>
+        {/each}
+      </div>
 
-        <div class="queue-item" class:item-active={item.status === 'active'}
-             class:item-done={item.status === 'done'}
-             class:item-error={item.status === 'error'}
-             class:item-cancelled={item.status === 'cancelled'}
-             class:item-retry-wait={item.status === 'retry_wait'}>
+      <div class="jobs">
+        {#each filteredQueue as item (item.id)}
+          {@const live = getLive(item.id)}
+          {@const stage = live?.stage || item.status}
+          {@const progress = live?.progress ?? item.progress ?? 0}
+          {@const label = live?.stage_label || ''}
+          <article class="job"
+                   class:s-active={item.status === 'active'}
+                   class:s-queued={item.status === 'queued'}
+                   class:s-wait={item.status === 'retry_wait'}
+                   class:s-error={item.status === 'error' || item.status === 'parked'}
+                   class:s-cancelled={item.status === 'cancelled'}
+                   class:s-done={item.status === 'done'}>
+            <span class="stripe"></span>
+            <div class="job-thumb">
+              {#if item.video_id}
+                <img src={api.rssThumbUrl(item.video_id)} alt="" loading="lazy" onerror={(e) => e.target.style.visibility='hidden'} />
+              {/if}
+              <i class="fa-solid fa-play thumb-ph"></i>
+            </div>
+            <div class="job-body">
+              <div class="job-top">
+                <span class="job-title">{item.title || item.video_id}</span>
+                {#if item.status === 'active'}<span class="chip active"><i class="fa-solid fa-download"></i> Lädt</span>
+                {:else if item.status === 'queued'}<span class="chip queued"><i class="fa-solid fa-clock"></i> Wartet</span>
+                {:else if item.status === 'retry_wait'}<span class="chip wait"><i class="fa-solid fa-hourglass-half"></i> Retry</span>
+                {:else if item.status === 'error'}<span class="chip error"><i class="fa-solid fa-triangle-exclamation"></i> Fehler</span>
+                {:else if item.status === 'parked'}<span class="chip offline"><i class="fa-solid fa-box-archive"></i> Geparkt</span>
+                {:else if item.status === 'cancelled'}<span class="chip canc"><i class="fa-solid fa-ban"></i> Abgebrochen</span>
+                {:else if item.status === 'done'}<span class="chip done"><i class="fa-solid fa-check"></i> Fertig</span>{/if}
+                {#if item.status === 'queued' || item.status === 'retry_wait'}
+                  <button class="prio" class:high={item.priority >= 5} class:now={item.priority >= 10}
+                          onclick={(e) => cyclePriority(item.id, item.priority || 0, e)}
+                          title="Klick: Priorität wechseln (Normal → Hoch → Sofort → Normal)">
+                    {PRIORITY_LABELS[item.priority] || `Prio ${item.priority}`}
+                  </button>
+                {:else if item.priority > 0}
+                  <span class="prio" class:high={item.priority >= 5} title="Priorität">Prio {item.priority}</span>
+                {/if}
+              </div>
 
-          <div class="qi-icon">{@html stageIcon(stage)}</div>
+              {#if item.status === 'active' && progress > 0}
+                <DownloadProgress data={{ progress, stage, stage_label: label, phases: live?.phases || null }} />
+              {:else if item.status === 'done'}
+                <DownloadProgress data={{ progress: 1.0, stage: 'done', stage_label: 'Abgeschlossen', phases: (live?.phases || []).map(p => ({ ...p, status: 'done' })) }} />
+              {:else if item.status === 'error'}
+                <DownloadProgress data={{ progress: progress || 0, stage: 'error', stage_label: item.error_message || 'Fehler', phases: live?.phases || null }} />
+              {:else if item.status === 'active'}
+                <span class="stage-txt">{label || stage}</span>
+              {/if}
 
-          <div class="qi-body">
-            <div class="qi-top">
-              <span class="qi-vid">{item.title || item.video_id}</span>
-              {#if item.status === 'queued' || item.status === 'retry_wait'}
-                <button class="qi-priority qi-priority-btn"
-                        class:high={item.priority >= 5}
-                        class:sofort={item.priority >= 10}
-                        onclick={(e) => cyclePriority(item.id, item.priority || 0, e)}
-                        title="Klick: Priorität wechseln (Normal → Hoch → Sofort → Normal)">
-                  {PRIORITY_LABELS[item.priority] || `Prio ${item.priority}`}
-                </button>
-              {:else if item.priority > 0}
-                <span class="qi-priority" class:high={item.priority >= 5} title="Priorität">Prio {item.priority}</span>
+              {#if (item.status === 'error' || item.status === 'retry_wait' || item.status === 'parked') && item.error_message}
+                <div class="err-msg"><i class="fa-solid fa-triangle-exclamation"></i> <span>{item.error_message}</span></div>
               {/if}
             </div>
 
-            {#if item.status === 'active' && progress > 0}
-              <DownloadProgress data={{
-                progress,
-                stage,
-                stage_label: label,
-                phases: live?.phases || null,
-              }} />
-            {:else if item.status === 'done'}
-              <DownloadProgress data={{
-                progress: 1.0,
-                stage: 'done',
-                stage_label: 'Abgeschlossen',
-                phases: (live?.phases || []).map(p => ({ ...p, status: 'done' })),
-              }} />
-            {:else if item.status === 'error'}
-              <DownloadProgress data={{
-                progress: progress || 0,
-                stage: 'error',
-                stage_label: item.error_message || 'Fehler',
-                phases: live?.phases || null,
-              }} />
-            {:else if item.status === 'active'}
-              <span class="qi-stage-text">{label || stage}</span>
-            {/if}
-
-            <!-- Fehlergrund immer sichtbar bei Fehler/retry_wait -->
-            {#if (item.status === 'error' || item.status === 'retry_wait' || item.status === 'parked') && item.error_message}
-              <div class="qi-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> {item.error_message}</div>
-            {/if}
-          </div>
-
-          <div class="qi-actions">
-            {#if item.status === 'queued' || item.status === 'active'}
-              <button class="qi-btn" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
-            {/if}
-            {#if item.status === 'retry_wait'}
-              <button class="qi-btn retry" onclick={() => retryItem(item.id)} title="Neu in Queue (sofort)"><i class="fa-solid fa-rotate-right"></i></button>
-              <button class="qi-btn ignore" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
-              <button class="qi-btn" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
-            {/if}
-            {#if item.status === 'error' || item.status === 'cancelled' || item.status === 'parked'}
-              <button class="qi-btn retry" onclick={() => retryItem(item.id)} title="Neu in Queue"><i class="fa-solid fa-rotate-right"></i></button>
-              <button class="qi-btn retry-delay" onclick={() => retryDelayed(item.id, 5)} title="In 5 Min erneut"><i class="fa-solid fa-clock"></i> 5m</button>
-              <button class="qi-btn retry-delay" onclick={() => retryDelayed(item.id, 30)} title="In 30 Min erneut"><i class="fa-solid fa-clock"></i> 30m</button>
-              <button class="qi-btn ignore" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
-            {/if}
-          </div>
-        </div>
-      {/each}
-
-      <!-- System-Jobs (Scans, RSS, etc.) inline in Queue -->
-      {#each filteredJobs as job (job.id)}
-        {@const meta = job.metadata || {}}
-        <div class="queue-item"
-             class:item-active={job.status === 'active'}
-             class:item-done={job.status === 'done'}
-             class:item-error={job.status === 'error'}
-             class:item-cancelled={job.status === 'cancelled'}
-             class:item-retry-wait={job.status === 'queued'}>
-
-          <div class="qi-icon">
-            <i class="fa-solid {JOB_TYPE_ICONS[job.type] || 'fa-circle'}"></i>
-          </div>
-
-          <div class="qi-body">
-            <div class="qi-top">
-              <span class="qi-type-tag">{JOB_TYPE_LABELS[job.type] || job.type}</span>
-              <span class="qi-vid">{job.title || ''}</span>
-              {#if job.priority > 0}
-                <span class="qi-priority" class:high={job.priority >= 5} title="Priorität">Prio {job.priority}</span>
+            <div class="job-act">
+              {#if item.status === 'queued' || item.status === 'active'}
+                <button class="qb danger" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
+              {/if}
+              {#if item.status === 'retry_wait'}
+                <button class="qb pri" onclick={() => retryItem(item.id)} title="Neu in Queue (sofort)"><i class="fa-solid fa-rotate-right"></i></button>
+                <button class="qb" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
+                <button class="qb danger" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
+              {/if}
+              {#if item.status === 'error' || item.status === 'cancelled' || item.status === 'parked'}
+                <button class="qb pri" onclick={() => retryItem(item.id)} title="Neu in Queue"><i class="fa-solid fa-rotate-right"></i></button>
+                <button class="qb" onclick={() => retryDelayed(item.id, 5)} title="In 5 Min erneut"><i class="fa-solid fa-clock"></i> 5m</button>
+                <button class="qb" onclick={() => retryDelayed(item.id, 30)} title="In 30 Min erneut"><i class="fa-solid fa-clock"></i> 30m</button>
+                <button class="qb" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
               {/if}
             </div>
+          </article>
+        {/each}
 
-            <!-- Kanalscan: spezielle Anzeige -->
-            {#if job.type === 'channel_scan' && job.status === 'active'}
-              {@const videoCount = meta.video_count || 0}
-              {@const shortCount = meta.short_count || 0}
-              {@const liveCount = meta.live_count || 0}
-              {@const foundTotal = videoCount + shortCount + liveCount}
-              {@const estTotal = meta.estimated_total || 0}
-              {@const precountRunning = meta.precount_running || 0}
-              {@const precountExceeded = meta.precount_exceeded || false}
-              {@const precountExtra = meta.precount_extra || 0}
-              {@const batchSaved = meta.batch_saved || 0}
-              {@const saveCurrent = meta.save_current || 0}
-              {@const saveTotal = meta.save_total || 0}
-              {@const phase = meta.phase || ''}
-              {@const showEst = estTotal > 0 && estTotal >= foundTotal && !precountExceeded}
-              {@const pct = phase === 'saving' && saveTotal > 0
-                ? (saveCurrent / saveTotal) * 100
-                : phase === 'precount'
-                  ? Math.min((precountRunning / Math.max(precountRunning + 100, 500)) * 100, 90)
-                  : showEst
-                    ? Math.min((foundTotal / estTotal) * 100, 99)
-                    : (job.progress * 100)}
-              <div class="job-scan-progress">
-                <div class="job-prog-bar">
-                  <div class="job-prog-fill" style="width:{pct.toFixed(1)}%"></div>
-                </div>
-                <div class="job-scan-detail">
+        {#each filteredJobs as job (job.id)}
+          {@const meta = job.metadata || {}}
+          <article class="job s-scan"
+                   class:s-active={job.status === 'active'}
+                   class:s-done={job.status === 'done'}
+                   class:s-error={job.status === 'error'}
+                   class:s-cancelled={job.status === 'cancelled'}>
+            <span class="stripe"></span>
+            <div class="job-thumb job-thumb-sys"><i class="fa-solid {JOB_TYPE_ICONS[job.type] || 'fa-circle'}"></i></div>
+            <div class="job-body">
+              <div class="job-top">
+                <span class="job-type">{JOB_TYPE_LABELS[job.type] || job.type}</span>
+                <span class="job-title">{job.title || ''}</span>
+                {#if job.priority > 0}<span class="prio" class:high={job.priority >= 5} title="Priorität">Prio {job.priority}</span>{/if}
+              </div>
+
+              {#if job.type === 'channel_scan' && job.status === 'active'}
+                {@const videoCount = meta.video_count || 0}
+                {@const shortCount = meta.short_count || 0}
+                {@const liveCount = meta.live_count || 0}
+                {@const foundTotal = videoCount + shortCount + liveCount}
+                {@const estTotal = meta.estimated_total || 0}
+                {@const precountRunning = meta.precount_running || 0}
+                {@const precountExceeded = meta.precount_exceeded || false}
+                {@const precountExtra = meta.precount_extra || 0}
+                {@const batchSaved = meta.batch_saved || 0}
+                {@const saveCurrent = meta.save_current || 0}
+                {@const saveTotal = meta.save_total || 0}
+                {@const phase = meta.phase || ''}
+                {@const showEst = estTotal > 0 && estTotal >= foundTotal && !precountExceeded}
+                {@const pct = phase === 'saving' && saveTotal > 0
+                  ? (saveCurrent / saveTotal) * 100
+                  : phase === 'precount'
+                    ? Math.min((precountRunning / Math.max(precountRunning + 100, 500)) * 100, 90)
+                    : showEst
+                      ? Math.min((foundTotal / estTotal) * 100, 99)
+                      : (job.progress * 100)}
+                <div class="bar scan"><i style="width:{pct.toFixed(1)}%"></i></div>
+                <div class="prog-meta">
                   <span>
                     {#if phase === 'saving' && saveTotal > 0}
                       Speichere {saveCurrent} / {saveTotal}
@@ -909,14 +785,9 @@
                       {#if videoCount > 0}{videoCount} Videos{/if}
                       {#if shortCount > 0}{videoCount > 0 ? ', ' : ''}{shortCount} Shorts{/if}
                       {#if liveCount > 0}{(videoCount + shortCount) > 0 ? ', ' : ''}{liveCount} Live{/if}
-                      {#if precountExceeded}
-                        <span class="scan-exceeded"> – +{precountExtra} weitere gefunden</span>
-                      {:else if showEst}
-                        / ~{estTotal} erwartet
-                      {/if}
-                      {#if batchSaved > 0}
-                        <span class="scan-saved"> · {batchSaved} gesichert</span>
-                      {/if}
+                      {#if precountExceeded}<span class="scan-exceeded"> – +{precountExtra} weitere gefunden</span>
+                      {:else if showEst} / ~{estTotal} erwartet{/if}
+                      {#if batchSaved > 0}<span class="scan-saved"> · {batchSaved} gesichert</span>{/if}
                     {/if}
                   </span>
                   <span class="job-phase">
@@ -930,280 +801,325 @@
                     {#if (phase === 'videos' || phase === 'shorts' || phase === 'live')}{@const eta = getScanEta(job.id, foundTotal, estTotal)}{#if eta}<span class="scan-eta"> · {eta}</span>{/if}{/if}
                   </span>
                 </div>
-              </div>
-            {:else if job.status === 'active' && job.progress > 0}
-              <div class="job-scan-progress">
-                <div class="job-prog-bar">
-                  <div class="job-prog-fill" style="width:{(job.progress * 100).toFixed(1)}%"></div>
-                </div>
-                <div class="job-scan-detail">
-                  <span>{job.description || ''}</span>
-                  <span>{(job.progress * 100).toFixed(0)}%</span>
-                </div>
-              </div>
-            {:else if job.description && job.status !== 'queued'}
-              <div class="qi-stage-text">{job.description}</div>
-            {/if}
+              {:else if job.status === 'active' && job.progress > 0}
+                <div class="bar scan"><i style="width:{(job.progress * 100).toFixed(1)}%"></i></div>
+                <div class="prog-meta"><span>{job.description || ''}</span><span class="num">{(job.progress * 100).toFixed(0)}%</span></div>
+              {:else if job.description && job.status !== 'queued'}
+                <div class="stage-txt">{job.description}</div>
+              {/if}
 
-            {#if job.completed_at}
-              <div class="qi-time">{formatDateRelative(job.completed_at)}</div>
-            {/if}
+              {#if job.completed_at}<div class="job-meta">{formatDateRelative(job.completed_at)}</div>{/if}
+            </div>
+
+            <div class="job-act">
+              {#if job.status === 'active' || job.status === 'queued'}
+                <button class="qb danger" onclick={() => cancelSystemJob(job.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
+              {/if}
+            </div>
+          </article>
+        {/each}
+
+        {#if filteredQueue.length === 0 && filteredJobs.length === 0}
+          <div class="jobs-empty"><i class="fa-solid fa-inbox"></i> Keine Einträge in diesem Filter.</div>
+        {/if}
+      </div>
+    </main>
+
+    <!-- Seite: Neuer Download + Einstellungen -->
+    <aside class="daside">
+      <section class="panel">
+        <div class="panel-h"><h2>Neuer Download</h2></div>
+        <div class="add">
+          <div class="add-field">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" placeholder="YouTube-URL einfügen…" bind:value={urlInput}
+                   onkeydown={(e) => e.key === 'Enter' && resolveVideo()} />
+          </div>
+          <div class="add-row">
+            <button class="dbtn" onclick={resolveVideo} disabled={resolving || !urlInput.trim()}>
+              {#if resolving}<i class="fa-solid fa-spinner fa-spin"></i> Wird aufgelöst…{:else}<i class="fa-solid fa-magnifying-glass"></i> Auflösen{/if}
+            </button>
+            <button class="dbtn primary add-quick" onclick={quickDownload} disabled={!urlInput.trim()}>
+              <i class="fa-solid fa-bolt"></i> Schnell-DL
+            </button>
+          </div>
+          <div class="seg">
+            <span class="seg-lbl">Priorität</span>
+            {#each [[0, 'Normal'], [5, 'Hoch'], [10, 'Sofort']] as [val, plabel]}
+              <button class:on={selectedPriority === val} onclick={() => selectedPriority = val}>{plabel}</button>
+            {/each}
+          </div>
+          <button class="link" onclick={() => showBatch = !showBatch}>
+            <i class="fa-solid fa-list"></i> {showBatch ? 'Batch schließen' : 'Batch-Download (mehrere URLs)'}
+          </button>
+          {#if showBatch}
+            <div class="batch-area">
+              <textarea class="textarea" bind:value={batchInput} rows="4" placeholder="Eine URL pro Zeile…"></textarea>
+              <button class="dbtn primary" onclick={addBatch} disabled={!batchInput.trim()}>
+                {batchInput.split('\n').filter(l=>l.trim()).length} Downloads starten
+              </button>
+            </div>
+          {/if}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-h"><h2>Einstellungen</h2><span class="panel-sub">live</span></div>
+        <div class="ctrls">
+          <div class="ctrl">
+            <div class="ctrl-top"><i class="fa-solid fa-gauge-high"></i><span class="ctrl-title">Throttling</span></div>
+            <div class="ctrl-hint">
+              {#if throttleRealtime}
+                {#if currentThrottleLive > 0}aktiv: {currentThrottleLive.toLocaleString('de-DE')} KB/s (aus Video-Länge){:else}wartet auf Download…{/if}
+              {:else if throttleKbps > 0}{throttleKbps} KB/s{:else}aus{/if}
+            </div>
+            <div class="ctrl-row">
+              <label class="chk">
+                <input type="checkbox" checked={throttleRealtime} onchange={toggleRealtime} disabled={settingsSaving} />
+                <span class="sw"></span>Dynamisch
+              </label>
+              <div class="num-field" class:ro={throttleRealtime}>
+                <input type="number" min="0" max="100000" step="100"
+                       value={throttleRealtime ? (currentThrottleLive || '') : throttleKbps}
+                       placeholder={throttleRealtime ? '—' : '0'}
+                       disabled={settingsSaving || throttleRealtime}
+                       oninput={(e) => { throttleKbps = parseInt(e.target.value) || 0; }}
+                       onblur={() => !throttleRealtime && saveThrottle()}
+                       onkeydown={(e) => e.key === 'Enter' && !throttleRealtime && saveThrottle()} />
+                <span class="u">KB/s</span>
+              </div>
+            </div>
           </div>
 
-          <div class="qi-actions">
-            {#if job.status === 'active' || job.status === 'queued'}
-              <button class="qi-btn" onclick={() => cancelSystemJob(job.id)} title="Abbrechen">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-            {/if}
+          <div class="ctrl">
+            <div class="ctrl-top"><i class="fa-solid fa-hourglass-half"></i><span class="ctrl-title">Wartezeit</span></div>
+            <div class="ctrl-hint">{cooldownSec}s zwischen Downloads (min. 30 empfohlen)</div>
+            <div class="ctrl-row">
+              <div class="num-field">
+                <input type="number" min="0" max="3600" step="5" bind:value={cooldownSec} disabled={settingsSaving}
+                       onblur={() => saveCooldown(cooldownSec)} onkeydown={(e) => e.key === 'Enter' && saveCooldown(cooldownSec)} />
+                <span class="u">s</span>
+              </div>
+              <button class="dbtn sm ghost" onclick={resetDefaults} title="Throttling aus, Wartezeit 30s"><i class="fa-solid fa-rotate-left"></i> Default</button>
+            </div>
           </div>
         </div>
-      {/each}
-    </div>
-  {/if}
+      </section>
+    </aside>
+  </div>
 </div>
+
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .page { padding: 24px; padding-bottom: 60px; max-width: none; }
-  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px; }
-  .title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
+  .page { padding: 20px 24px 72px; max-width: none; }
 
-  .queue-stats { display:flex; gap:10px; }
-  .qs { font-size:0.78rem; font-weight:600; padding:3px 10px; border-radius:12px; }
-  .qs.active { background:var(--status-info-bg); color:var(--status-info); }
-  .qs.queued { background:var(--status-pending-bg, var(--bg-tertiary)); color:var(--status-pending); }
-  .qs.done { background:var(--status-success-bg); color:var(--status-success); }
-  .qs.error { background:var(--status-error-bg); color:var(--status-error); }
-  .qs.cancelled { background:rgba(245,158,11,0.15); color:var(--status-warning, #f59e0b); }
-  .qs.retry-wait { background:rgba(139,92,246,0.15); color:#8b5cf6; }
+  /* Command-Bar */
+  .dtop { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding-bottom:16px; margin-bottom:18px; border-bottom:1px solid var(--border-primary); }
+  .dbrand { display:flex; align-items:center; gap:12px; }
+  .dbrand-mark { width:38px; height:38px; border-radius:11px; display:grid; place-items:center; background:linear-gradient(140deg, var(--accent-primary), #8b5cf6); color:#fff; font-size:17px; }
+  .dtitle { margin:0; font-size:20px; font-weight:700; letter-spacing:-0.01em; color:var(--text-primary); }
+  .dtsub { margin:1px 0 0; font-size:12px; color:var(--text-tertiary); }
+  .dtop-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .wchip { display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:999px; font-size:12px; font-weight:600; }
+  .wchip.ok { background:var(--status-success-bg); color:var(--status-success); }
+  .wchip.dead { background:var(--status-error-bg); color:var(--status-error); }
+  .wdot { width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); }
+  .diconbtn { width:34px; height:34px; border-radius:9px; border:1px solid var(--border-primary); background:var(--bg-secondary); color:var(--text-secondary); cursor:pointer; display:grid; place-items:center; font-size:14px; transition:.15s; }
+  .diconbtn:hover { color:var(--text-primary); border-color:var(--border-secondary); }
+  .diconbtn:disabled { opacity:.5; }
 
-  .input-section { background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:12px; padding:16px; margin-bottom:20px; }
-  .url-row { display:flex; gap:8px; flex-wrap:wrap; }
-  .input { flex:1; min-width:200px; padding:9px 14px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; color:var(--text-primary); font-size:0.88rem; outline:none; box-sizing:border-box; }
-  .input:focus { border-color:var(--accent-primary); }
-  .textarea { width:100%; padding:9px 14px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; color:var(--text-primary); font-family:monospace; font-size:0.82rem; outline:none; resize:vertical; box-sizing:border-box; }
-  .input-sub { margin-top:8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
-  .priority-row { display:flex; align-items:center; gap:6px; }
-  .priority-label { font-size:0.78rem; color:var(--text-tertiary); }
-  .priority-btn { padding:3px 10px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:6px; font-size:0.76rem; cursor:pointer; color:var(--text-secondary); transition:all 0.12s; }
-  .priority-btn.active { background:var(--accent-primary); color:#fff; border-color:var(--accent-primary); }
-  .priority-btn:hover:not(.active) { border-color:var(--accent-primary); }
-  .link-btn { background:none; border:none; color:var(--accent-primary); font-size:0.82rem; cursor:pointer; padding:0; }
-  .link-btn:hover { text-decoration:underline; }
-  .batch-area { margin-top:10px; display:flex; flex-direction:column; gap:8px; }
-  .btn-secondary:disabled { opacity:0.5; }
+  .dbanner { display:flex; align-items:center; gap:10px; padding:11px 14px; margin-bottom:16px; border-radius:10px; background:var(--status-error-bg); border:1px solid color-mix(in srgb, var(--status-error) 30%, transparent); font-size:0.86rem; color:var(--text-primary); }
+  .dbanner > i { color:var(--status-error); font-size:1.1rem; }
+  .dbanner > span { flex:1; }
 
-  /* Resolved Panel */
-  .resolved-panel { background:var(--bg-secondary); border:1px solid var(--accent-primary); border-radius:12px; padding:20px; margin-bottom:20px; }
-  .resolved-header { display:flex; gap:16px; align-items:flex-start; margin-bottom:16px; }
-  .resolved-thumb { width:200px; border-radius:8px; aspect-ratio:16/9; object-fit:cover; }
-  .resolved-info { flex:1; }
-  .resolved-info h3 { margin:0 0 6px; font-size:1rem; color:var(--text-primary); line-height:1.3; }
+  /* Stat-Kacheln */
+  .dstats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .dstat { display:flex; align-items:center; gap:10px; padding:10px 14px; min-width:112px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:12px; }
+  .dstat .bar { width:3px; align-self:stretch; border-radius:3px; background:var(--border-secondary); }
+  .dstat .k { font-size:22px; font-weight:700; letter-spacing:-0.02em; line-height:1; display:block; }
+  .dstat .l { font-size:11px; color:var(--text-tertiary); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .dstat.act .k { color:var(--accent-primary); } .dstat.act .bar { background:var(--accent-primary); }
+  .dstat.done .k { color:var(--status-success); } .dstat.done .bar { background:var(--status-success); }
+  .dstat.err .k { color:var(--status-error); } .dstat.err .bar { background:var(--status-error); }
+  .dstat.wait .k { color:var(--text-secondary); }
+  .dstat.canc .k { color:var(--text-tertiary); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Panels */
+  .panel { background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:14px; }
+  .panel-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--border-primary); }
+  .panel-h h2 { margin:0; font-size:14px; font-weight:700; color:var(--text-primary); }
+  .panel-sub { font-size:12px; color:var(--text-tertiary); }
+  .panel-spacer { margin-left:auto; }
+
+  /* Buttons */
+  .dbtn { display:inline-flex; align-items:center; gap:7px; padding:9px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--border-primary); background:var(--bg-tertiary); color:var(--text-primary); white-space:nowrap; transition:.15s; }
+  .dbtn:hover:not(:disabled) { border-color:var(--border-secondary); background:var(--bg-hover); }
+  .dbtn:disabled { opacity:.5; cursor:default; }
+  .dbtn.primary { background:var(--accent-primary); border-color:var(--accent-primary); color:#fff; }
+  .dbtn.primary:hover:not(:disabled) { background:var(--accent-hover); }
+  .dbtn.ghost { background:none; }
+  .dbtn.sm { padding:6px 10px; font-size:12px; border-radius:8px; }
+  .dbtn.lg { padding:11px 18px; font-size:14px; }
+  .link { background:none; border:none; color:var(--accent-primary); font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 2px; display:inline-flex; align-items:center; gap:6px; }
+  .link:hover { text-decoration:underline; }
+  .link.muted { color:var(--text-tertiary); } .link.danger { color:var(--status-error); }
+  .link-retry { color:var(--status-info); }
+
+  /* Grid */
+  .dgrid { display:grid; grid-template-columns: 1fr 340px; gap:18px; align-items:start; margin-top:2px; }
+  @media (max-width: 940px) { .dgrid { grid-template-columns:1fr; } .daside { order:-1; } }
+  .daside { display:flex; flex-direction:column; gap:18px; }
+
+  /* Add */
+  .add { padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .add-field { display:flex; align-items:center; gap:9px; padding:0 12px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:10px; transition:.15s; }
+  .add-field:focus-within { border-color:var(--accent-primary); box-shadow:0 0 0 3px var(--accent-muted); }
+  .add-field i { color:var(--text-tertiary); font-size:13px; }
+  .add-field input { flex:1; background:none; border:none; outline:none; padding:11px 0; font-size:13.5px; color:var(--text-primary); }
+  .add-row { display:flex; gap:8px; }
+  .add-quick { flex:1; justify-content:center; }
+  .seg { display:inline-flex; align-items:center; background:var(--bg-primary); border:1px solid var(--border-primary); border-radius:9px; padding:3px; gap:2px; align-self:flex-start; flex-wrap:wrap; }
+  .seg-lbl { font-size:11px; color:var(--text-tertiary); font-weight:600; padding:0 8px; text-transform:uppercase; letter-spacing:.03em; }
+  .seg button { border:none; background:none; color:var(--text-secondary); font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:7px; cursor:pointer; transition:.12s; }
+  .seg button.on { background:var(--accent-primary); color:#fff; }
+  .batch-area { display:flex; flex-direction:column; gap:8px; }
+  .textarea { width:100%; padding:9px 12px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; color:var(--text-primary); font-family:ui-monospace, monospace; font-size:0.82rem; outline:none; resize:vertical; box-sizing:border-box; }
+  .textarea:focus { border-color:var(--accent-primary); }
+
+  /* Einstellungen */
+  .ctrls { display:flex; flex-direction:column; gap:12px; padding:16px; }
+  .ctrl { background:var(--bg-primary); border:1px solid var(--border-primary); border-radius:12px; padding:13px 14px; }
+  .ctrl-top { display:flex; align-items:center; gap:9px; margin-bottom:4px; }
+  .ctrl-top i { color:var(--accent-primary); font-size:14px; }
+  .ctrl-title { font-size:13px; font-weight:700; color:var(--text-primary); }
+  .ctrl-hint { font-size:11.5px; color:var(--text-tertiary); margin-bottom:11px; min-height:15px; }
+  .ctrl-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .chk { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-secondary); cursor:pointer; user-select:none; }
+  .chk input { display:none; }
+  .sw { width:34px; height:19px; border-radius:999px; background:var(--border-secondary); position:relative; transition:.18s; flex:none; }
+  .sw::after { content:""; position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%; background:#fff; transition:.18s; }
+  .chk input:checked + .sw { background:var(--accent-primary); }
+  .chk input:checked + .sw::after { transform:translateX(15px); }
+  .num-field { display:inline-flex; align-items:center; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:9px; overflow:hidden; }
+  .num-field input { width:72px; border:none; background:none; outline:none; padding:8px 10px; font-size:13px; text-align:right; color:var(--text-primary); font-variant-numeric:tabular-nums; }
+  .num-field .u { padding:0 10px 0 2px; font-size:11.5px; color:var(--text-tertiary); }
+  .num-field.ro { opacity:.55; }
+
+  /* Resolved */
+  .resolved-panel { padding:18px; margin-bottom:18px; border-color:color-mix(in srgb, var(--accent-primary) 40%, var(--border-primary)); }
+  .resolved-header { display:flex; gap:14px; align-items:flex-start; }
+  .resolved-thumb { width:180px; border-radius:10px; aspect-ratio:16/9; object-fit:cover; background:var(--bg-tertiary); flex:none; }
+  .resolved-info { flex:1; min-width:0; }
+  .resolved-info h3 { margin:0 0 5px; font-size:1rem; color:var(--text-primary); line-height:1.3; }
   .resolved-meta { font-size:0.82rem; color:var(--text-secondary); }
-  .already-badge { background:var(--status-warning-bg); color:var(--status-warning); padding:2px 8px; border-radius:6px; font-size:0.72rem; font-weight:700; margin-left:8px; }
-  .stream-group { margin-bottom:12px; }
-  .stream-label { font-size:0.75rem; color:var(--text-tertiary); display:block; margin-bottom:6px; }
-  .sq { font-weight:600; color:var(--text-primary); min-width:60px; }
-  .sf { color:var(--text-secondary); min-width:80px; }
-  .sc { color:var(--text-tertiary); font-size:0.75rem; }
+  .already-badge { background:var(--status-warning-bg); color:var(--status-warning); padding:2px 8px; border-radius:999px; font-size:0.7rem; font-weight:700; margin-left:8px; }
+  .stream-section { margin-top:14px; }
+  .stream-section h4 { margin:0 0 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-tertiary); }
+  .stream-group { margin-top:10px; }
+  .stream-label { font-size:11.5px; color:var(--text-tertiary); display:block; margin-bottom:6px; }
+  .opts { display:flex; flex-wrap:wrap; gap:7px; }
+  .opt { display:flex; align-items:center; gap:8px; padding:8px 11px; border-radius:9px; border:1px solid var(--border-primary); background:var(--bg-tertiary); cursor:pointer; font-size:12.5px; transition:.12s; }
+  .opt:hover { border-color:var(--border-secondary); }
+  .opt.sel { border-color:var(--accent-primary); background:var(--accent-muted); }
+  .opt .rd { width:14px; height:14px; border-radius:50%; border:2px solid var(--border-secondary); position:relative; flex:none; }
+  .opt.sel .rd { border-color:var(--accent-primary); } .opt.sel .rd::after { content:""; position:absolute; inset:2px; border-radius:50%; background:var(--accent-primary); }
+  .opt .q { font-weight:700; color:var(--text-primary); } .opt .sz { color:var(--text-secondary); } .opt .cd { color:var(--text-tertiary); font-size:11px; }
+  .resolved-actions { display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap; }
 
-  .resolved-actions { display:flex; gap:8px; align-items:center; }
+  .pl-panel-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
+  .pl-panel-info { flex:1; min-width:0; }
+  .pl-panel-info h3 { margin:4px 0; font-size:1rem; color:var(--text-primary); }
+  .pl-panel-actions { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+  .pl-type-badge { display:inline-flex; align-items:center; gap:5px; font-size:0.7rem; font-weight:700; text-transform:uppercase; color:var(--accent-primary); letter-spacing:.04em; }
+  .pl-video-list { max-height:420px; overflow-y:auto; border:1px solid var(--border-primary); border-radius:10px; scrollbar-width:thin; }
+  .pl-video-row { display:flex; align-items:center; gap:10px; padding:7px 10px; border-bottom:1px solid var(--border-primary); }
+  .pl-video-row:last-child { border-bottom:none; }
+  .pl-video-row.downloaded { opacity:.55; }
+  .pl-video-idx { width:22px; text-align:center; font-size:0.72rem; color:var(--text-tertiary); flex:none; font-variant-numeric:tabular-nums; }
+  .pl-video-thumb { width:84px; height:47px; border-radius:6px; object-fit:cover; flex:none; background:var(--bg-tertiary); }
+  .pl-video-thumb.placeholder { display:flex; align-items:center; justify-content:center; color:var(--text-tertiary); }
+  .pl-video-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+  .pl-video-title { font-size:0.82rem; font-weight:500; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl-video-meta { font-size:0.7rem; color:var(--text-tertiary); }
+  .pl-video-status { flex:none; width:34px; display:flex; align-items:center; justify-content:center; }
+  .status-ok { color:var(--status-success); }
+  .btn-icon-sm { width:30px; height:30px; border-radius:8px; border:1px solid var(--border-primary); background:var(--bg-tertiary); color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.75rem; }
+  .btn-icon-sm:hover { border-color:var(--accent-primary); color:var(--accent-primary); }
+  .ch-panel-header { margin-bottom:12px; }
+  .ch-panel-header h3 { margin:4px 0 2px; font-size:1.1rem; color:var(--text-primary); }
 
-  /* Queue */
-  .queue-section { margin-top:8px; }
-  .queue-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .queue-header h2 { font-size:1.1rem; color:var(--text-primary); margin:0; }
-  .queue-actions { display:flex; gap:12px; }
-  .link-danger { color:var(--status-error); }
-  .link-danger:hover { color:var(--status-error); }
-  .link-retry { color:var(--status-info, #3b82f6); font-weight:600; }
-  .link-retry:hover { color:var(--accent-primary); }
+  /* Queue-Tabs */
+  .tabs { display:flex; gap:3px; padding:10px 12px; border-bottom:1px solid var(--border-primary); flex-wrap:wrap; }
+  .tab { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:999px; border:1px solid transparent; background:none; color:var(--text-secondary); font-size:12.5px; font-weight:600; cursor:pointer; transition:.12s; }
+  .tab:hover { background:var(--bg-hover); color:var(--text-primary); }
+  .tab.on { background:var(--accent-muted); color:var(--accent-primary); border-color:color-mix(in srgb, var(--accent-primary) 35%, transparent); }
+  .tab .c { font-size:11px; padding:0 6px; border-radius:999px; background:var(--bg-primary); color:var(--text-secondary); font-weight:700; min-width:18px; text-align:center; }
+  .tab.on .c { background:var(--accent-primary); color:#fff; }
+  .q-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 
-  .queue-item { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:10px; margin-bottom:6px; background:var(--bg-secondary); border:1px solid var(--border-primary); transition:border-color 0.15s; }
-  .item-active { border-left:3px solid var(--status-info); background:var(--status-info-bg); }
-  .item-done { opacity:0.75; }
-  .item-done :global(.dp-wrap) { opacity: 0.85; }
-  .item-error { border-left:3px solid var(--status-error); }
-  .item-cancelled { border-left:3px solid var(--status-warning, #f59e0b); opacity:0.75; }
-  .item-retry-wait { border-left:3px solid #8b5cf6; background:rgba(139,92,246,0.05); }
+  /* Job-Karten */
+  .jobs { display:flex; flex-direction:column; }
+  .job { display:grid; grid-template-columns:4px 96px 1fr auto; gap:0 14px; align-items:stretch; border-bottom:1px solid var(--border-primary); position:relative; }
+  .job:last-child { border-bottom:none; }
+  .job:hover { background:color-mix(in srgb, var(--accent-primary) 3%, transparent); }
+  .stripe { border-radius:4px 0 0 4px; background:var(--border-secondary); }
+  .job.s-active .stripe { background:var(--accent-primary); }
+  .job.s-queued .stripe { background:var(--border-secondary); }
+  .job.s-wait .stripe { background:var(--status-warning); }
+  .job.s-error .stripe { background:var(--status-error); }
+  .job.s-cancelled .stripe { background:var(--status-warning); }
+  .job.s-done .stripe { background:var(--status-success); }
+  .job.s-scan .stripe { background:#14b8a6; }
+  .job.s-done { opacity:.8; }
+  .job.s-cancelled { opacity:.7; }
 
-  .qi-icon { font-size:1.1rem; margin-top:2px; }
-  .qi-body { flex:1; min-width:0; }
-  .qi-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .qi-vid { font-size:0.82rem; font-weight:600; color:var(--text-primary); font-family:monospace; }
-  .qi-stage-text { font-size:0.72rem; color:var(--text-secondary); margin-top:4px; display:block; }
-  
-  .qi-priority {
-    font-size:0.65rem; padding:1px 5px; border-radius:4px;
-    background:var(--bg-tertiary); color:var(--text-tertiary); font-weight:700;
-    white-space: nowrap; flex-shrink: 0;
-  }
-  .qi-priority.high { background:var(--status-warning-bg, #fef3c7); color:var(--status-warning); }
-  /* Button-Variante: klickbar, Klick cycled durch Prio-Stufen */
-  .qi-priority-btn {
-    border: 1px solid var(--border-primary);
-    cursor: pointer; transition: all 0.12s;
-  }
-  .qi-priority-btn:hover { border-color: var(--accent-primary); }
-  .qi-priority-btn.sofort {
-    background: rgba(239,68,68,0.15); color: var(--status-error);
-    border-color: var(--status-error);
-  }
+  .job-thumb { align-self:center; margin:12px 0; position:relative; width:96px; aspect-ratio:16/9; border-radius:8px; overflow:hidden; background:linear-gradient(135deg,#2a2440,#1c2740); display:grid; place-items:center; }
+  .job-thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .job-thumb .thumb-ph { color:#ffffff55; font-size:16px; }
+  .job-thumb-sys { background:#14b8a61e; color:#2dd4bf; font-size:18px; }
+  .job-thumb-sys i { position:relative; }
 
-  /* Alter Progress-Balken entfernt – siehe DownloadProgress.svelte */
+  .job-body { padding:13px 0; min-width:0; display:flex; flex-direction:column; gap:8px; }
+  .job-top { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .job-title { font-size:13.5px; font-weight:650; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+  .job-type { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#2dd4bf; background:#14b8a61e; padding:2px 8px; border-radius:6px; }
+  .job-meta { font-size:11.5px; color:var(--text-tertiary); }
 
-  .qi-error { font-size:0.75rem; color:var(--status-error); margin-top:4px; word-break:break-word; }
+  .chip { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+  .chip i { font-size:10px; }
+  .chip.active { background:var(--accent-muted); color:var(--accent-primary); }
+  .chip.queued { background:var(--bg-primary); color:var(--text-secondary); }
+  .chip.wait { background:var(--status-warning-bg); color:var(--status-warning); }
+  .chip.error { background:var(--status-error-bg); color:var(--status-error); }
+  .chip.offline { background:var(--status-info-bg); color:var(--status-info); }
+  .chip.done { background:var(--status-success-bg); color:var(--status-success); }
+  .chip.canc { background:var(--bg-primary); color:var(--text-tertiary); }
 
-  .qi-actions { display:flex; gap:4px; flex-shrink: 0; align-items:flex-start; }
-  .qi-btn { width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:6px; cursor:pointer; font-size:0.82rem; }
-  .qi-btn:hover { border-color:var(--status-error); color:var(--status-error); }
-  .qi-btn.retry:hover { border-color:var(--status-info); color:var(--status-info); }
-  .qi-btn.retry-delay { font-size:0.68rem; gap:2px; }
-  .qi-btn.retry-delay:hover { border-color:#8b5cf6; color:#8b5cf6; }
-  .qi-btn.ignore:hover { border-color: var(--status-warning, #f59e0b); color: var(--status-warning, #f59e0b); }
-  .qi-error-msg {
-    margin-top: 4px; padding: 4px 8px; font-size: 0.72rem;
-    background: rgba(239,68,68,0.08); border-left: 2px solid var(--status-error);
-    color: var(--status-error); border-radius: 3px;
-    display: flex; align-items: center; gap: 6px; word-break: break-word;
-  }
-  .qi-error-msg i { font-size: 0.72rem; flex-shrink: 0; }
+  .prio { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px; background:var(--bg-primary); color:var(--text-tertiary); cursor:pointer; border:1px solid var(--border-primary); white-space:nowrap; }
+  .prio.high { color:var(--status-warning); border-color:color-mix(in srgb, var(--status-warning) 30%, transparent); }
+  .prio.now { color:#fff; background:var(--accent-primary); border-color:var(--accent-primary); }
 
-  /* Live-Einstellungen Panel (über Queue) */
-  .dl-settings {
-    display: flex; flex-direction: column; gap: 6px;
-    padding: 12px 14px; margin-bottom: 14px;
-    background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-radius: 10px;
-  }
-  .dl-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 16px; padding: 4px 2px;
-  }
-  .dl-row + .dl-row { border-top: 1px solid var(--border-primary); padding-top: 10px; }
-  .dl-row-label {
-    display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
-  }
-  .dl-row-label > i { color: var(--accent-primary); font-size: 0.9rem; width: 16px; text-align: center; }
-  .dl-row-title { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
-  .dl-row-hint { font-size: 0.74rem; color: var(--text-tertiary); }
-  .dl-row-control { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .stage-txt { font-size:12px; color:var(--text-secondary); }
+  .err-msg { font-size:12px; color:var(--status-error); background:var(--status-error-bg); border-radius:8px; padding:7px 10px; display:flex; align-items:flex-start; gap:8px; line-height:1.4; word-break:break-word; }
+  .err-msg i { margin-top:2px; flex:none; }
 
-  .dl-input {
-    display: flex; align-items: center; gap: 6px;
-    background: var(--bg-tertiary); border: 1px solid var(--border-primary);
-    border-radius: 6px; padding: 4px 10px;
-  }
-  .dl-input:focus-within { border-color: var(--accent-primary); }
-  .dl-input.is-readonly { opacity: 0.75; background: var(--bg-primary); }
-  .dl-input input {
-    width: 80px; background: none; border: none; color: var(--text-primary);
-    font-size: 0.88rem; outline: none; font-family: monospace; text-align: right;
-  }
-  .dl-input input:disabled { color: var(--text-secondary); cursor: default; }
-  .dl-unit { font-size: 0.74rem; color: var(--text-tertiary); font-weight: 500; }
+  .bar { height:6px; border-radius:4px; background:var(--bg-primary); overflow:hidden; }
+  .bar i { display:block; height:100%; border-radius:4px; background:var(--accent-primary); transition:width .5s ease; }
+  .bar.scan i { background:linear-gradient(90deg,#14b8a6,#2dd4bf); }
+  .prog-meta { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--text-secondary); }
+  .job-phase { font-size:10.5px; font-weight:700; text-transform:uppercase; color:#2dd4bf; letter-spacing:.03em; }
+  .scan-exceeded { color:var(--text-tertiary); font-style:italic; }
+  .scan-saved { color:var(--status-success); opacity:.75; }
+  .scan-eta { color:var(--text-tertiary); font-weight:400; text-transform:none; }
 
-  .dl-chk {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 0.78rem; color: var(--text-secondary); cursor: pointer;
-    user-select: none;
-  }
-  .dl-chk input { margin: 0; }
+  .job-act { display:flex; align-items:center; gap:6px; padding:13px 14px 13px 0; align-self:center; }
+  .qb { height:32px; min-width:32px; padding:0 9px; border-radius:8px; border:1px solid var(--border-primary); background:var(--bg-secondary); color:var(--text-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; transition:.12s; }
+  .qb:hover { color:var(--text-primary); border-color:var(--border-secondary); background:var(--bg-hover); }
+  .qb.pri:hover { border-color:var(--accent-primary); color:var(--accent-primary); }
+  .qb.danger:hover { border-color:var(--status-error); color:var(--status-error); }
 
-  .dl-default-btn {
-    display: flex; align-items: center; gap: 4px;
-    background: none; border: 1px solid var(--border-primary); border-radius: 6px;
-    padding: 5px 10px; font-size: 0.76rem; color: var(--text-tertiary); cursor: pointer;
-    transition: all 0.12s;
-  }
-  .dl-default-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
-
-  .worker-warning {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-    background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 8px; margin-bottom: 14px; font-size: 0.85rem; color: var(--text-primary);
-  }
-  .worker-warning > i { color: #ef4444; font-size: 1.1rem; flex-shrink: 0; }
-  .worker-warning > span { flex: 1; }
-
-  .worker-toolbar {
-    display: flex; align-items: center; gap: 10px; padding: 6px 12px;
-    background: var(--bg-tertiary); border: 1px solid var(--border-primary);
-    border-radius: 8px; margin-bottom: 14px; font-size: 0.78rem;
-    color: var(--text-tertiary);
-  }
-  .worker-toolbar .hint { flex: 1; }
-
-  /* Playlist Panel */
-  .pl-panel { border-color: var(--accent-secondary, var(--accent-primary)); }
-  .pl-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
-  .pl-panel-info { flex: 1; min-width: 0; }
-  .pl-panel-info h3 { margin: 4px 0 4px; font-size: 1rem; color: var(--text-primary); }
-  .pl-panel-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
-  .pl-type-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-    color: var(--accent-primary); letter-spacing: 0.04em;
-  }
-  .pl-video-list {
-    max-height: 420px; overflow-y: auto; border: 1px solid var(--border-primary);
-    border-radius: 8px; scrollbar-width: thin; scrollbar-color: var(--border-primary) transparent;
-  }
-  .pl-video-row {
-    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-    border-bottom: 1px solid var(--border-primary);
-  }
-  .pl-video-row:last-child { border-bottom: none; }
-  .pl-video-row.downloaded { opacity: 0.55; }
-  .pl-video-idx { width: 24px; text-align: center; font-size: 0.72rem; color: var(--text-tertiary); flex-shrink: 0; }
-  .pl-video-thumb { width: 80px; height: 45px; border-radius: 4px; object-fit: cover; flex-shrink: 0; background: var(--bg-tertiary); }
-  .pl-video-thumb.placeholder { display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 0.9rem; }
-  .pl-video-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  .pl-video-title { font-size: 0.8rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pl-video-meta { font-size: 0.68rem; color: var(--text-tertiary); }
-  .pl-video-status { flex-shrink: 0; width: 32px; display: flex; align-items: center; justify-content: center; }
-  .status-ok { color: var(--status-success); font-size: 0.8rem; }
-  .btn-icon-sm { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border-primary); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; }
-  .btn-icon-sm:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
-
-  /* Channel Panel */
-  .ch-panel-header { margin-bottom: 12px; }
-  .ch-panel-header h3 { margin: 4px 0 2px; font-size: 1.1rem; color: var(--text-primary); }
-
-  /* ═══ Job Filter Tabs ═══ */
-  .jobs-tabs { display: flex; gap: 2px; }
-  .jobs-tab {
-    padding: 4px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-primary);
-    border-radius: 6px; font-size: 0.75rem; cursor: pointer; color: var(--text-secondary);
-    display: flex; align-items: center; gap: 4px; transition: all 0.12s;
-  }
-  .jobs-tab:hover { border-color: var(--accent-primary); }
-  .jobs-tab.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
-  .jobs-tab-count {
-    font-size: 0.65rem; font-weight: 700; background: rgba(255,255,255,0.2);
-    padding: 0 4px; border-radius: 4px;
-  }
-  .jobs-tab.active .jobs-tab-count { background: rgba(255,255,255,0.25); }
-
-  .qi-type-tag {
-    font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
-    color: var(--accent-primary); letter-spacing: 0.03em;
-    padding: 1px 6px; border-radius: 3px;
-    background: rgba(99,102,241,0.1); flex-shrink: 0;
-  }
-  .qi-time { font-size: 0.65rem; color: var(--text-tertiary); margin-top: 3px; }
-
-  /* Scan-Progress (Kanalscan etc.) */
-  .job-scan-progress { margin-top: 6px; }
-  .job-prog-bar { height: 5px; background: var(--bg-primary); border-radius: 3px; overflow: hidden; }
-  .job-prog-fill { height: 100%; background: #00BCD4; border-radius: 3px; transition: width 0.5s ease; }
-  .job-scan-detail {
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: 0.68rem; color: var(--text-secondary); margin-top: 2px;
-  }
-  .job-phase { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; color: #00BCD4; }
-  .scan-exceeded { color: var(--text-tertiary); font-size: 0.72rem; font-style: italic; }
-  .scan-saved { color: var(--status-success); font-size: 0.68rem; opacity: 0.7; }
-  .scan-eta { color: var(--text-tertiary); font-weight: 400; text-transform: none; }
+  .jobs-empty { text-align:center; color:var(--text-tertiary); font-size:0.85rem; padding:40px 16px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .jobs-empty i { font-size:1.6rem; opacity:.5; }
 </style>
