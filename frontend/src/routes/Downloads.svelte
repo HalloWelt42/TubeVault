@@ -506,14 +506,14 @@
 
   <!-- ── Stat-Kacheln ── -->
   <div class="dstats">
-    <div class="dstat act"><span class="bar"></span><span><span class="k num">{jobCounts.active}</span><span class="l">aktiv</span></span></div>
-    <div class="dstat wait"><span class="bar"></span><span><span class="k num">{jobCounts.wait}</span><span class="l">wartend</span></span></div>
-    <div class="dstat done"><span class="bar"></span><span><span class="k num">{jobCounts.done}</span><span class="l">fertig</span></span></div>
+    <div class="dstat act"><span><span class="k num">{jobCounts.active}</span><span class="l">aktiv</span></span></div>
+    <div class="dstat wait"><span><span class="k num">{jobCounts.wait}</span><span class="l">wartend</span></span></div>
+    <div class="dstat done"><span><span class="k num">{jobCounts.done}</span><span class="l">fertig</span></span></div>
     {#if jobCounts.error > 0}
-      <div class="dstat err"><span class="bar"></span><span><span class="k num">{jobCounts.error}</span><span class="l">Fehler</span></span></div>
+      <div class="dstat err"><span><span class="k num">{jobCounts.error}</span><span class="l">Fehler</span></span></div>
     {/if}
     {#if jobCounts.cancelled > 0}
-      <div class="dstat canc"><span class="bar"></span><span><span class="k num">{jobCounts.cancelled}</span><span class="l">abgebrochen</span></span></div>
+      <div class="dstat canc"><span><span class="k num">{jobCounts.cancelled}</span><span class="l">abgebrochen</span></span></div>
     {/if}
   </div>
 
@@ -673,7 +673,6 @@
                    class:s-error={item.status === 'error' || item.status === 'parked'}
                    class:s-cancelled={item.status === 'cancelled'}
                    class:s-done={item.status === 'done'}>
-            <span class="stripe"></span>
             <div class="job-thumb">
               {#if item.video_id}
                 <img src={api.rssThumbUrl(item.video_id)} alt="" loading="lazy" onerror={(e) => e.target.style.visibility='hidden'} />
@@ -683,22 +682,28 @@
             <div class="job-body">
               <div class="job-top">
                 <span class="job-title">{item.title || item.video_id}</span>
-                {#if item.status === 'active'}<span class="chip active"><i class="fa-solid fa-download"></i> Lädt</span>
-                {:else if item.status === 'queued'}<span class="chip queued"><i class="fa-solid fa-clock"></i> Wartet</span>
-                {:else if item.status === 'retry_wait'}<span class="chip wait"><i class="fa-solid fa-hourglass-half"></i> Retry</span>
-                {:else if item.status === 'error'}<span class="chip error"><i class="fa-solid fa-triangle-exclamation"></i> Fehler</span>
-                {:else if item.status === 'parked'}<span class="chip offline"><i class="fa-solid fa-box-archive"></i> Geparkt</span>
-                {:else if item.status === 'cancelled'}<span class="chip canc"><i class="fa-solid fa-ban"></i> Abgebrochen</span>
-                {:else if item.status === 'done'}<span class="chip done"><i class="fa-solid fa-check"></i> Fertig</span>{/if}
-                {#if item.status === 'queued' || item.status === 'retry_wait'}
-                  <button class="prio" class:high={item.priority >= 5} class:now={item.priority >= 10}
-                          onclick={(e) => cyclePriority(item.id, item.priority || 0, e)}
-                          title="Klick: Priorität wechseln (Normal → Hoch → Sofort → Normal)">
-                    {PRIORITY_LABELS[item.priority] || `Prio ${item.priority}`}
-                  </button>
-                {:else if item.priority > 0}
-                  <span class="prio" class:high={item.priority >= 5} title="Priorität">Prio {item.priority}</span>
-                {/if}
+                <span class="job-status">
+                  <span class="job-prio-slot">
+                    {#if item.status === 'queued' || item.status === 'retry_wait'}
+                      <button class="prio" class:high={item.priority >= 5} class:now={item.priority >= 10}
+                              onclick={(e) => cyclePriority(item.id, item.priority || 0, e)}
+                              title="Klick: Priorität wechseln (Normal → Hoch → Sofort → Normal)">
+                        {PRIORITY_LABELS[item.priority] || `Prio ${item.priority}`}
+                      </button>
+                    {:else if item.priority > 0}
+                      <span class="prio" class:high={item.priority >= 5} title="Priorität">Prio {item.priority}</span>
+                    {/if}
+                  </span>
+                  <span class="job-chip-slot">
+                    {#if item.status === 'active'}<span class="chip active"><i class="fa-solid fa-download"></i> Lädt</span>
+                    {:else if item.status === 'queued'}<span class="chip queued"><i class="fa-solid fa-clock"></i> Wartet</span>
+                    {:else if item.status === 'retry_wait'}<span class="chip wait"><i class="fa-solid fa-hourglass-half"></i> Retry</span>
+                    {:else if item.status === 'error'}<span class="chip error"><i class="fa-solid fa-triangle-exclamation"></i> Fehler</span>
+                    {:else if item.status === 'parked'}<span class="chip offline"><i class="fa-solid fa-box-archive"></i> Geparkt</span>
+                    {:else if item.status === 'cancelled'}<span class="chip canc"><i class="fa-solid fa-ban"></i> Abgebrochen</span>
+                    {:else if item.status === 'done'}<span class="chip done"><i class="fa-solid fa-check"></i> Fertig</span>{/if}
+                  </span>
+                </span>
               </div>
 
               {#if item.status === 'active' && progress > 0}
@@ -742,13 +747,22 @@
                    class:s-done={job.status === 'done'}
                    class:s-error={job.status === 'error'}
                    class:s-cancelled={job.status === 'cancelled'}>
-            <span class="stripe"></span>
             <div class="job-thumb job-thumb-sys"><i class="fa-solid {JOB_TYPE_ICONS[job.type] || 'fa-circle'}"></i></div>
             <div class="job-body">
               <div class="job-top">
                 <span class="job-type">{JOB_TYPE_LABELS[job.type] || job.type}</span>
                 <span class="job-title">{job.title || ''}</span>
-                {#if job.priority > 0}<span class="prio" class:high={job.priority >= 5} title="Priorität">Prio {job.priority}</span>{/if}
+                <span class="job-status">
+                  <span class="job-prio-slot">
+                    {#if job.priority > 0}<span class="prio" class:high={job.priority >= 5} title="Priorität">Prio {job.priority}</span>{/if}
+                  </span>
+                  <span class="job-chip-slot">
+                    {#if job.status === 'active'}<span class="chip scan"><i class="fa-solid fa-gear fa-spin"></i> Läuft</span>
+                    {:else if job.status === 'done'}<span class="chip done"><i class="fa-solid fa-check"></i> Fertig</span>
+                    {:else if job.status === 'error'}<span class="chip error"><i class="fa-solid fa-triangle-exclamation"></i> Fehler</span>
+                    {:else if job.status === 'queued'}<span class="chip queued"><i class="fa-solid fa-clock"></i> Wartet</span>{/if}
+                  </span>
+                </span>
               </div>
 
               {#if job.type === 'channel_scan' && job.status === 'active'}
@@ -936,12 +950,11 @@
   /* Stat-Kacheln */
   .dstats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
   .dstat { display:flex; align-items:center; gap:10px; padding:10px 14px; min-width:112px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:12px; }
-  .dstat .bar { width:3px; align-self:stretch; border-radius:3px; background:var(--border-secondary); }
   .dstat .k { font-size:22px; font-weight:700; letter-spacing:-0.02em; line-height:1; display:block; }
   .dstat .l { font-size:11px; color:var(--text-tertiary); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
-  .dstat.act .k { color:var(--accent-primary); } .dstat.act .bar { background:var(--accent-primary); }
-  .dstat.done .k { color:var(--status-success); } .dstat.done .bar { background:var(--status-success); }
-  .dstat.err .k { color:var(--status-error); } .dstat.err .bar { background:var(--status-error); }
+  .dstat.act .k { color:var(--accent-primary); }
+  .dstat.done .k { color:var(--status-success); }
+  .dstat.err .k { color:var(--status-error); }
   .dstat.wait .k { color:var(--text-secondary); }
   .dstat.canc .k { color:var(--text-tertiary); }
   .num { font-variant-numeric: tabular-nums; }
@@ -968,8 +981,20 @@
   .link-retry { color:var(--status-info); }
 
   /* Grid */
-  .dgrid { display:grid; grid-template-columns: minmax(0,1fr) 300px; gap:22px; align-items:start; margin-top:2px; }
-  @media (max-width: 900px) { .dgrid { grid-template-columns:1fr; } .daside { order:-1; } }
+  /* Goldener Schnitt: Warteschlange (Haupt) : Seitenpanel ≈ 1.618 : 1.
+     Seitenpanel min 280px (Innenelemente brechen sonst); wird's insgesamt zu
+     eng, klappt das Seitenpanel über die Warteschlange (order:-1). */
+  .dgrid { display:grid; grid-template-columns: minmax(0,1.618fr) minmax(280px,1fr); gap:24px; align-items:start; margin-top:2px; }
+  @media (max-width: 1024px) { .dgrid { grid-template-columns:1fr; } .daside { order:-1; } }
+  /* Sehr schmal: Job-Aktionen klappen unter den Inhalt statt zu überlaufen */
+  @media (max-width: 560px) {
+    .job { grid-template-columns:72px minmax(0,1fr); padding-left:14px; }
+    .job-act { grid-column:1 / -1; justify-content:flex-end; padding:0 12px 12px; }
+    .job-thumb { width:72px; }
+    /* eng: Slots auf Inhalt schrumpfen, damit nichts überläuft */
+    .job-prio-slot, .job-chip-slot { width:auto; }
+    .job-status { gap:6px; }
+  }
   .daside { display:flex; flex-direction:column; gap:18px; }
 
   /* Add */
@@ -1065,17 +1090,9 @@
 
   /* Job-Karten */
   .jobs { display:flex; flex-direction:column; }
-  .job { display:grid; grid-template-columns:4px 88px minmax(0,1fr) auto; gap:0 16px; align-items:stretch; border-bottom:1px solid var(--border-primary); position:relative; }
+  .job { display:grid; grid-template-columns:88px minmax(0,1fr) auto; gap:0 16px; align-items:stretch; padding-left:18px; border-bottom:1px solid var(--border-primary); position:relative; }
   .job:last-child { border-bottom:none; }
   .job:hover { background:color-mix(in srgb, var(--accent-primary) 3%, transparent); }
-  .stripe { border-radius:4px 0 0 4px; background:var(--border-secondary); }
-  .job.s-active .stripe { background:var(--accent-primary); }
-  .job.s-queued .stripe { background:var(--border-secondary); }
-  .job.s-wait .stripe { background:var(--status-warning); }
-  .job.s-error .stripe { background:var(--status-error); }
-  .job.s-cancelled .stripe { background:var(--status-warning); }
-  .job.s-done .stripe { background:var(--status-success); }
-  .job.s-scan .stripe { background:#14b8a6; }
   .job.s-done { opacity:.8; }
   .job.s-cancelled { opacity:.7; }
 
@@ -1086,9 +1103,13 @@
   .job-thumb-sys i { position:relative; }
 
   .job-body { padding:15px 4px 15px 0; min-width:0; display:flex; flex-direction:column; gap:10px; }
-  .job-top { row-gap:6px; }
-  .job-top { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
-  .job-title { font-size:13.5px; font-weight:650; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+  .job-top { display:flex; align-items:center; gap:12px; flex-wrap:nowrap; }
+  .job-title { flex:1; min-width:0; font-size:13.5px; font-weight:650; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Status/Labels an fester Position rechts (feste Slot-Breiten) → tabellarisch,
+     unabhaengig von der Titellaenge. */
+  .job-status { flex:none; display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-left:auto; }
+  .job-prio-slot { width:58px; display:flex; justify-content:flex-end; flex:none; }
+  .job-chip-slot { width:116px; display:flex; justify-content:flex-start; flex:none; }
   .job-type { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#2dd4bf; background:#14b8a61e; padding:2px 8px; border-radius:6px; }
   .job-meta { font-size:11.5px; color:var(--text-tertiary); }
 
@@ -1101,6 +1122,7 @@
   .chip.offline { background:var(--status-info-bg); color:var(--status-info); }
   .chip.done { background:var(--status-success-bg); color:var(--status-success); }
   .chip.canc { background:var(--bg-primary); color:var(--text-tertiary); }
+  .chip.scan { background:#14b8a61e; color:#2dd4bf; }
 
   .prio { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px; background:var(--bg-primary); color:var(--text-tertiary); cursor:pointer; border:1px solid var(--border-primary); white-space:nowrap; }
   .prio.high { color:var(--status-warning); border-color:color-mix(in srgb, var(--status-warning) 30%, transparent); }
