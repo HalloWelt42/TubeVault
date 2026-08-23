@@ -1090,7 +1090,7 @@
 
   /* Job-Karten */
   .jobs { display:flex; flex-direction:column; }
-  .job { display:grid; grid-template-columns:88px minmax(0,1fr) auto; gap:0 16px; align-items:stretch; padding-left:18px; border-bottom:1px solid var(--border-primary); position:relative; }
+  .job { display:grid; grid-template-columns:88px minmax(0,1fr) 210px; gap:0 16px; align-items:stretch; padding-left:18px; border-bottom:1px solid var(--border-primary); position:relative; }
   .job:last-child { border-bottom:none; }
   .job:hover { background:color-mix(in srgb, var(--accent-primary) 3%, transparent); }
   .job.s-done { opacity:.8; }
@@ -1141,7 +1141,9 @@
   .scan-saved { color:var(--status-success); opacity:.75; }
   .scan-eta { color:var(--text-tertiary); font-weight:400; text-transform:none; }
 
-  .job-act { display:flex; align-items:center; gap:6px; padding:13px 14px 13px 0; align-self:center; }
+  /* Feste Aktions-Spalte (Platz fürs größte Button-Set reserviert) → rechte Kante
+     bleibt zeilenübergreifend konsistent, egal wie viele Buttons eine Zeile hat. */
+  .job-act { display:flex; align-items:center; justify-content:flex-end; gap:6px; padding:13px 14px 13px 0; align-self:center; }
   .qb { height:32px; min-width:32px; padding:0 9px; border-radius:8px; border:1px solid var(--border-primary); background:var(--bg-secondary); color:var(--text-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; transition:.12s; }
   .qb:hover { color:var(--text-primary); border-color:var(--border-secondary); background:var(--bg-hover); }
   .qb.pri:hover { border-color:var(--accent-primary); color:var(--accent-primary); }
