@@ -138,6 +138,9 @@
 
   let currentThrottleLive = $state(0); // Live-Wert aus dem cooldown-Broadcast
 
+  // Stage-Reihenfolge für den Monotonie-Schutz (siehe unten)
+  const STAGE_RANK = { resolving: 0, resolved: 1, downloading_video: 2, downloading_audio: 3, merging: 4, finalizing: 5, done: 6 };
+
   function handleWsMessage(msg) {
     // Live-Throttle aus cooldown-Broadcast aufnehmen
     if (msg.type === 'cooldown' && typeof msg.current_throttle_kbps === 'number') {
@@ -145,6 +148,18 @@
     }
     const id = msg.job_id || msg.queue_id;
     if (id) {
+      // Monotonie-Schutz: verwirft veraltete/parallele Rückwärts-Updates innerhalb
+      // eines laufenden Downloads. Ohne das toggelt die Anzeige zwischen Phasen
+      // (z.B. Video 26% ↔ Audio 85%), wenn zwei Progress-Quellen fürs selbe Video
+      // durcheinanderfunken. Ein echter Neustart setzt Status auf queued/retry_wait
+      // (nicht 'active') und hebt die Sperre damit auf.
+      const prev = liveStatus[id];
+      if (prev && prev.status === 'active' && msg.status === 'active') {
+        const pr = STAGE_RANK[prev.stage] ?? -1;
+        const nr = STAGE_RANK[msg.stage] ?? -1;
+        if (nr < pr) return;                                             // Stage-Rückschritt
+        if (nr === pr && (msg.progress ?? 0) < (prev.progress ?? 0) - 0.02) return; // Progress-Rückschritt
+      }
       liveStatus[id] = msg;
       liveStatus = { ...liveStatus };
     }

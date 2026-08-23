@@ -116,6 +116,7 @@ class DownloadService:
 
     def __init__(self):
         self._active_downloads: dict[int, asyncio.Task] = {}
+        self._inflight_videos: set[str] = set()  # video_ids mit gerade laufendem Download (Doppel-Schutz)
         self._progress_callbacks: list[Callable] = []
         self._worker_task: Optional[asyncio.Task] = None
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
@@ -892,6 +893,24 @@ class DownloadService:
                 self._job_opts.pop(job_id, None)
                 return
 
+        # Doppel-Schutz: Läuft für dieses Video bereits ein Download (paralleler/
+        # doppelter Job)? Dann NICHT ein zweites Mal starten – sonst schreiben zwei
+        # Prozesse in denselben Ordner und senden widersprüchlichen Fortschritt
+        # (Video↔Audio-Toggle im UI). Der Duplikat-Job wird verworfen; der bereits
+        # laufende liefert das Video.
+        if vid and vid in self._inflight_videos:
+            logger.warning(f"[DUP-SKIP] {vid}: Download läuft bereits – Duplikat-Job {job_id} entfernt")
+            await db.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+            await self._ws_broadcast({
+                "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                "status": "removed", "progress": 0, "stage": "removed",
+                "stage_label": "Duplikat – läuft bereits",
+            })
+            self._job_opts.pop(job_id, None)
+            return
+        if vid:
+            self._inflight_videos.add(vid)
+
         # Job wurde bereits von _queue_loop via job_service.start(exclusive=False) auf active gesetzt.
         # KEIN zweiter start() hier — das war die Quelle von Doppel-Transitions.
 
@@ -1301,6 +1320,8 @@ class DownloadService:
             _last_ws_time.pop(job_id, None)
             self._job_opts.pop(job_id, None)
             self._rate_samples.pop(job_id, None)
+            if vid:
+                self._inflight_videos.discard(vid)
             # Safety-Net: falls der Job trotzdem noch auf 'active' steht
             # (Exception im Exception-Handler, Netz-Ausfall etc.) → auf error setzen.
             # Verhindert Zombie-"active"-Einträge wie in der pytubefix-Nacht.
