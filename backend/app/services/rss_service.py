@@ -361,6 +361,13 @@ class RSSService:
 
         channel_name, videos = await loop.run_in_executor(None, _fetch)
 
+        # Typed-Feeds (best-effort): getrennte Video-ID-Sets für Shorts + Live/Upcoming.
+        # Live/Upcoming werden NICHT auto-gequeued (sonst "live event will begin"-Flut);
+        # sobald so ein Stream endet und im /videos-Tab auftaucht, wird er unten
+        # zurück auf 'video' gestuft + eingereiht. Bei Feed-Fehler = leere Sets →
+        # Fallback auf altes (gedeckeltes) Verhalten, nichts geht verloren.
+        short_ids, live_ids = await self._fetch_typed_video_ids(channel_id)
+
         # Kanalname updaten wenn nötig
         if channel_name and (not sub.get("channel_name") or sub["channel_name"] == sub["channel_id"]):
             await db.execute(
@@ -374,6 +381,7 @@ class RSSService:
 
         new_count = 0
         latest_published = ""
+        fetched_ids = []
         for v in videos:
             video_id = v.video_id
             if not video_id:
@@ -393,9 +401,17 @@ class RSSService:
             if published < cutoff:
                 continue
 
-            # Video-Typ: Shorts anhand duration; Live-Erkennung in flat-mode unzuverlässig
+            # Video-Typ: Live/Upcoming aus UULV-Feed (zuverlässiger als flat-mode),
+            # sonst Shorts anhand UUSH-Feed bzw. duration, sonst Video.
             duration = v.length or 0
-            video_type = "short" if 0 < duration <= 60 else "video"
+            if video_id in live_ids:
+                video_type = "live"
+            elif video_id in short_ids or (0 < duration <= 60):
+                video_type = "short"
+            else:
+                video_type = "video"
+
+            fetched_ids.append(video_id)
 
             try:
                 await db.execute(
@@ -411,7 +427,9 @@ class RSSService:
                     except Exception:
                         pass
 
-                if sub.get("auto_download"):
+                # Live/Upcoming NICHT auto-queuen (würde nur "live event will begin"
+                # erzeugen); reguläre Videos/Shorts wie bisher.
+                if sub.get("auto_download") and video_type != "live":
                     await self._auto_queue_video(video_id, sub)
 
             except Exception:
@@ -419,6 +437,29 @@ class RSSService:
 
             if published > latest_published:
                 latest_published = published
+
+        # Ended-Livestreams zurückführen: 'live'-Einträge, die jetzt im /videos-Tab
+        # auftauchen und NICHT mehr im Live-Feed sind → sie sind zu regulären VODs
+        # geworden. Auf 'video' umstufen und (falls Auto-DL) einreihen. Positive
+        # Evidenz (im Uploads-Tab) statt bloßer Abwesenheit → robust bei Feed-Fehlern.
+        if fetched_ids:
+            placeholders = ",".join("?" * len(fetched_ids))
+            ended = await db.fetch_all(
+                f"SELECT video_id FROM rss_entries WHERE channel_id = ? "
+                f"AND video_type = 'live' AND video_id IN ({placeholders})",
+                (channel_id, *fetched_ids),
+            )
+            for row in ended:
+                vid2 = row["video_id"]
+                if vid2 in live_ids:
+                    continue  # noch live/upcoming – nicht anfassen
+                await db.execute(
+                    "UPDATE rss_entries SET video_type = 'video' WHERE video_id = ?",
+                    (vid2,),
+                )
+                if sub.get("auto_download"):
+                    await self._auto_queue_video(vid2, sub)
+                logger.info(f"[RSS] Ex-Livestream {vid2} → VOD (video), Kanal {channel_id}")
 
         # Subscription aktualisieren
         await db.execute(

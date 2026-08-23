@@ -183,3 +183,34 @@ def test_terminal_vs_retryable_exclusive():
         r = classify(msg)
         assert not (r.is_terminal and r.is_retryable), (
             f"Sowohl terminal als auch retryable fuer {msg!r}")
+
+
+# ─────────────────────── Offline / Live-Aufzeichnung (nicht permanent) ───────────────────────
+
+@pytest.mark.parametrize("msg", [
+    "ERROR: [youtube] abc12345678: Offline.",
+    "ERROR: [youtube] abc12345678: offline",   # ohne Punkt, reale Variante
+    "ERROR: [youtube] abc12345678: This live stream recording is not available.",
+    "This live event has ended",
+])
+def test_offline_detected(msg):
+    r = classify(msg)
+    assert r.offline is True, f"Expected offline=True for: {msg[:80]}"
+    # Offline ist NICHT permanent (VOD kann später kommen) → retryable, nicht terminal
+    assert r.is_retryable is True
+    assert r.is_terminal is False
+    assert r.unavailable is False
+
+
+def test_offline_has_priority_over_unavailable():
+    """'recording is not available' enthält 'not available' – darf aber NICHT als
+    permanent unavailable klassifiziert werden (sonst Datenverlust der späteren VOD)."""
+    r = classify("ERROR: [youtube] xyz: This live stream recording is not available.")
+    assert r.offline is True
+    assert r.unavailable is False
+
+
+def test_offline_exclusive_flag():
+    r = classify("ERROR: [youtube] abc: Offline.")
+    flags = [r.members_only, r.unavailable, r.bot, r.throttle, r.temporary]
+    assert sum(flags) == 0, f"offline soll exklusiv sein, andere Flags: {flags}"

@@ -1090,6 +1090,7 @@ class DownloadService:
             is_temporary = _cls.temporary
             is_members_only = _cls.members_only
             is_unavailable = _cls.unavailable
+            is_offline = _cls.offline
 
             if is_members_only:
                 # Members-Only ist Bezahl-Inhalt. Permanent ignorieren UND
@@ -1157,6 +1158,40 @@ class DownloadService:
                         "stage_label": "Live noch nicht gestartet (1h)",
                     })
                     logger.info(f"[LIVE-COMING] {vid}: Retry in 1h ({retry_count + 1}/{LIVE_COMING_MAX})")
+
+            elif is_offline:
+                # Live-Aufzeichnung (noch) nicht als VOD verfügbar bzw. Stream
+                # offline. NICHT permanent ignorieren (das war der Datenverlust-
+                # Bug: 'recording is not available' → ignored_videos) – die VOD-
+                # Fassung kommt oft erst später. Längerer Retry (6h) mit Cap,
+                # dann parken (aufnehmbar) statt Verlust.
+                OFFLINE_MAX = 8  # ~2 Tage bei 6h-Intervall
+                if retry_count >= OFFLINE_MAX:
+                    await job_service.park(
+                        job_id,
+                        f"Aufzeichnung nach {OFFLINE_MAX}×6h nicht verfügbar – geparkt",
+                    )
+                    await self._ws_broadcast({
+                        "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                        "status": "parked", "progress": 0, "stage": "parked",
+                        "stage_label": "Aufzeichnung nicht verfügbar · geparkt",
+                    })
+                    logger.info(f"[OFFLINE] {vid}: nach {OFFLINE_MAX}×6h geparkt")
+                else:
+                    from app.utils.file_utils import future_sqlite as _fs
+                    retry_after = _fs(seconds=6 * 3600)
+                    await job_service.retry_wait(
+                        job_id,
+                        error=f"Aufzeichnung noch nicht verfügbar · Retry in 6h ({retry_count + 1}/{OFFLINE_MAX})",
+                        retry_after=retry_after,
+                        retry_count=retry_count + 1,
+                    )
+                    await self._ws_broadcast({
+                        "job_id": job_id, "queue_id": job_id, "video_id": vid,
+                        "status": "retry_wait", "progress": 0, "stage": "retry_wait",
+                        "stage_label": "Aufzeichnung noch nicht verfügbar (6h)",
+                    })
+                    logger.info(f"[OFFLINE] {vid}: Retry in 6h ({retry_count + 1}/{OFFLINE_MAX})")
 
             elif is_unavailable:
                 # Permanent unbrauchbar (private/removed/age-gate/geo-blocked/copyright):

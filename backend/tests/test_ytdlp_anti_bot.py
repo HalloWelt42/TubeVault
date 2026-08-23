@@ -221,6 +221,15 @@ def test_live_coming_not_retried_in_call():
     assert _should_retry("LIVE-COMING") is False
 
 
+def test_offline_classified_and_not_permanent():
+    """OFFLINE (Live-Aufzeichnung noch nicht als VOD verfügbar): eigene Kategorie,
+    VOR UNAVAILABLE erkannt (sonst permanent → Datenverlust), kein In-Call-Retry."""
+    assert _classify_yt_error("ERROR: [youtube] abc: This live stream recording is not available.") == "OFFLINE"
+    assert _classify_yt_error("ERROR: [youtube] abc: Offline.") == "OFFLINE"
+    assert _should_retry("OFFLINE") is False
+    assert "OFFLINE" not in _PERMANENT_CATEGORIES
+
+
 # ─── Login-Cookie-Eskalation ──────────────────────────────────────
 
 def test_age_gate_only_retried_with_login(tmp_path, monkeypatch):

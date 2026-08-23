@@ -20,19 +20,20 @@ class ErrorClass:
     """Klassifikations-Ergebnis. Genau EINES der Flags ist True (außer unknown)."""
     members_only: bool = False
     unavailable: bool = False
+    offline: bool = False
     bot: bool = False
     throttle: bool = False
     temporary: bool = False
 
     @property
     def unknown(self) -> bool:
-        return not (self.members_only or self.unavailable or self.bot
+        return not (self.members_only or self.unavailable or self.offline or self.bot
                     or self.throttle or self.temporary)
 
     @property
     def is_retryable(self) -> bool:
         """Soll der Queue-Worker einen automatischen Retry versuchen?"""
-        return self.throttle or self.temporary or self.bot or self.members_only
+        return self.throttle or self.temporary or self.bot or self.members_only or self.offline
 
     @property
     def is_terminal(self) -> bool:
@@ -57,6 +58,16 @@ _UNAVAILABLE_KW = (
     "not available",
     "age-restricted",
     "sign in to confirm your age",
+)
+
+# OFFLINE: Live-Aufzeichnung (noch) nicht als VOD verfügbar / Stream offline.
+# NICHT permanent – die VOD-Fassung kommt oft erst Minuten/Stunden nach Ende.
+# Hat Vorrang vor unavailable, weil "live stream recording is not available"
+# das breite "not available" enthält, aber KEIN Datenverlust-Fall sein darf.
+_OFFLINE_KW = (
+    "live stream recording is not available",
+    "this live stream recording is not available",
+    "this live event has ended",  # VOD wird oft noch verarbeitet
 )
 
 _BOT_KW = (
@@ -103,7 +114,13 @@ def classify(err: str) -> ErrorClass:
     if any(kw in low for kw in _MEMBERS_ONLY_KW):
         return ErrorClass(members_only=True)
 
-    # 2. unavailable (andere dauerhafte Fehler)
+    # 2. offline (VOR unavailable, weil "recording is not available" 'not available'
+    #    enthaelt): Live-Aufzeichnung noch nicht verfuegbar → NICHT permanent.
+    #    Auch das nackte "<id>: Offline." (Reason endet auf 'offline').
+    if any(kw in low for kw in _OFFLINE_KW) or low.rstrip().rstrip(".").endswith(": offline"):
+        return ErrorClass(offline=True)
+
+    # 3. unavailable (andere dauerhafte Fehler)
     if any(kw in low for kw in _UNAVAILABLE_KW):
         return ErrorClass(unavailable=True)
 

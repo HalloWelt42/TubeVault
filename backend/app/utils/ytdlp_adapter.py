@@ -281,6 +281,13 @@ def _classify_yt_error(msg: str) -> str:
     # vom Resolve mit dem gewählten Player-Client im Download nicht passt.
     if "requested format is not available" in s: return "FORMAT-MISMATCH"
     if "this video has been removed" in s or "video has been removed" in s: return "REMOVED"
+    # OFFLINE: Live-Aufzeichnung (noch) nicht als VOD da / Stream offline. VOR
+    # UNAVAILABLE matchen ("recording is not available" enthält "not available"),
+    # sonst würde ein späterer VOD fälschlich als permanent verworfen.
+    if ("live stream recording is not available" in s
+            or "this live event has ended" in s
+            or s.rstrip().rstrip(".").endswith(": offline")):
+        return "OFFLINE"
     if "video unavailable" in s or "not available" in s: return "UNAVAILABLE"
     if "removed" in s: return "REMOVED"
     if "copyright" in s: return "COPYRIGHT"
@@ -302,7 +309,7 @@ _NEEDS_LOGIN = {"AGE-GATE", "MEMBERS-ONLY"}
 # gestarteten Stream verfügbar. Genau EIN Versuch, dann sofort hoch – der Job
 # wird auf Job-Ebene später erneut geplant (retry_wait). Verhindert die ~5×
 # Amplifikation (4× Client-Rotation + pytubefix) pro Premieren-/Upcoming-Video.
-_NO_INCALL_RETRY = {"LIVE-COMING"}
+_NO_INCALL_RETRY = {"LIVE-COMING", "OFFLINE"}
 _MAX_RETRIES = 3               # → 4 Versuche total
 
 
