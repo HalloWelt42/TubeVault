@@ -88,6 +88,7 @@
   // System-Jobs (nicht-Download: Scans, RSS, AI, etc.)
   let systemJobs = $state([]);
   let jobsTab = $state('all'); // all, active, done, error
+  let selectedId = $state(null); // Klick auf Download-Zeile → Detail-Panel rechts
 
   // Scan-ETA Tracking
   const scanTracker = {};
@@ -389,6 +390,21 @@
   }
 
   let filteredQueue = $derived(queue.queue.filter(q => matchesTab(q, jobsTab)));
+  // Ausgewählter Download für das Detail-Panel (immer live aus der Queue gezogen)
+  let selected = $derived(selectedId != null ? (queue.queue.find(q => q.id === selectedId) || null) : null);
+  function selectItem(id) { selectedId = (selectedId === id) ? null : id; }
+  // Esc + Klick außerhalb schließen das Panel
+  $effect(() => {
+    if (selectedId == null) return;
+    const onKey = (e) => { if (e.key === 'Escape') selectedId = null; };
+    const onClick = (e) => {
+      if (e.target.closest && (e.target.closest('.job') || e.target.closest('.detail-panel'))) return;
+      selectedId = null;
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('click', onClick);
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('click', onClick); };
+  });
   let filteredJobs  = $derived(systemJobs.filter(j => matchesTab(j, jobsTab)));
 
   // Counts über Downloads + System-Jobs gesamt
@@ -666,13 +682,20 @@
           {@const stage = live?.stage || item.status}
           {@const progress = live?.progress ?? item.progress ?? 0}
           {@const label = live?.stage_label || ''}
-          <article class="job"
+          {@const canRetry = item.status === 'retry_wait' || item.status === 'error' || item.status === 'cancelled' || item.status === 'parked'}
+          {@const canDelay = item.status === 'error' || item.status === 'cancelled' || item.status === 'parked'}
+          {@const canCancel = item.status === 'queued' || item.status === 'active' || item.status === 'retry_wait'}
+          <article class="job job-clickable"
                    class:s-active={item.status === 'active'}
                    class:s-queued={item.status === 'queued'}
                    class:s-wait={item.status === 'retry_wait'}
                    class:s-error={item.status === 'error' || item.status === 'parked'}
                    class:s-cancelled={item.status === 'cancelled'}
-                   class:s-done={item.status === 'done'}>
+                   class:s-done={item.status === 'done'}
+                   class:sel={selectedId === item.id}
+                   role="button" tabindex="0"
+                   onclick={(e) => { if (!e.target.closest('.job-act')) selectItem(item.id); }}
+                   onkeydown={(e) => { if (e.key === 'Enter' && !e.target.closest('.job-act')) selectItem(item.id); }}>
             <div class="job-thumb">
               {#if item.video_id}
                 <img src={api.rssThumbUrl(item.video_id)} alt="" loading="lazy" onerror={(e) => e.target.style.visibility='hidden'} />
@@ -722,20 +745,11 @@
             </div>
 
             <div class="job-act">
-              {#if item.status === 'queued' || item.status === 'active'}
-                <button class="qb danger" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
-              {/if}
-              {#if item.status === 'retry_wait'}
-                <button class="qb pri" onclick={() => retryItem(item.id)} title="Neu in Queue (sofort)"><i class="fa-solid fa-rotate-right"></i></button>
-                <button class="qb" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
-                <button class="qb danger" onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
-              {/if}
-              {#if item.status === 'error' || item.status === 'cancelled' || item.status === 'parked'}
-                <button class="qb pri" onclick={() => retryItem(item.id)} title="Neu in Queue"><i class="fa-solid fa-rotate-right"></i></button>
-                <button class="qb" onclick={() => retryDelayed(item.id, 5)} title="In 5 Min erneut"><i class="fa-solid fa-clock"></i> 5m</button>
-                <button class="qb" onclick={() => retryDelayed(item.id, 30)} title="In 30 Min erneut"><i class="fa-solid fa-clock"></i> 30m</button>
-                <button class="qb" onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
-              {/if}
+              <button class="qb pri" class:off={!canRetry} disabled={!canRetry} onclick={() => retryItem(item.id)} title="Neu in Queue"><i class="fa-solid fa-rotate-right"></i></button>
+              <button class="qb" class:off={!canDelay} disabled={!canDelay} onclick={() => retryDelayed(item.id, 5)} title="In 5 Min erneut"><i class="fa-solid fa-clock"></i> 5m</button>
+              <button class="qb" class:off={!canDelay} disabled={!canDelay} onclick={() => retryDelayed(item.id, 30)} title="In 30 Min erneut"><i class="fa-solid fa-clock"></i> 30m</button>
+              <button class="qb" class:off={!canRetry} disabled={!canRetry} onclick={() => ignoreVideoPermanent(item)} title="Dauerhaft ausschließen"><i class="fa-solid fa-ban"></i></button>
+              <button class="qb danger" class:off={!canCancel} disabled={!canCancel} onclick={() => cancelItem(item.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
             </div>
           </article>
         {/each}
@@ -826,9 +840,11 @@
             </div>
 
             <div class="job-act">
-              {#if job.status === 'active' || job.status === 'queued'}
-                <button class="qb danger" onclick={() => cancelSystemJob(job.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
-              {/if}
+              <button class="qb off" disabled><i class="fa-solid fa-rotate-right"></i></button>
+              <button class="qb off" disabled><i class="fa-solid fa-clock"></i> 5m</button>
+              <button class="qb off" disabled><i class="fa-solid fa-clock"></i> 30m</button>
+              <button class="qb off" disabled><i class="fa-solid fa-ban"></i></button>
+              <button class="qb danger" class:off={!(job.status === 'active' || job.status === 'queued')} disabled={!(job.status === 'active' || job.status === 'queued')} onclick={() => cancelSystemJob(job.id)} title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
             </div>
           </article>
         {/each}
@@ -839,8 +855,65 @@
       </div>
     </main>
 
-    <!-- Seite: Neuer Download + Einstellungen -->
+    <!-- Seite: Detail (bei Auswahl) + Neuer Download + Einstellungen -->
     <aside class="daside">
+      {#if selected}
+        {@const dl = getLive(selected.id)}
+        {@const dstage = dl?.stage || selected.status}
+        {@const dprog = dl?.progress ?? selected.progress ?? 0}
+        {@const canRetry = selected.status === 'retry_wait' || selected.status === 'error' || selected.status === 'cancelled' || selected.status === 'parked'}
+        {@const canDelay = selected.status === 'error' || selected.status === 'cancelled' || selected.status === 'parked'}
+        {@const canCancel = selected.status === 'queued' || selected.status === 'active' || selected.status === 'retry_wait'}
+        <section class="panel detail-panel">
+          <div class="panel-h">
+            <h2>Details</h2>
+            <div class="panel-spacer"></div>
+            <button class="diconbtn" onclick={() => selectedId = null} title="Schließen (Esc)"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="detail-body">
+            <div class="detail-thumb">
+              {#if selected.video_id}
+                <img src={api.rssThumbUrl(selected.video_id)} alt="" onerror={(e) => e.target.style.visibility='hidden'} />
+              {/if}
+              <i class="fa-solid fa-play thumb-ph"></i>
+            </div>
+            <h3 class="detail-title">{selected.title || selected.video_id}</h3>
+            <div class="detail-rows">
+              <div class="drow"><span class="dk">Status</span><span class="dv">
+                {#if selected.status === 'active'}<span class="chip active"><i class="fa-solid fa-download"></i> Lädt</span>
+                {:else if selected.status === 'queued'}<span class="chip queued"><i class="fa-solid fa-clock"></i> Wartet</span>
+                {:else if selected.status === 'retry_wait'}<span class="chip wait"><i class="fa-solid fa-hourglass-half"></i> Retry</span>
+                {:else if selected.status === 'error'}<span class="chip error"><i class="fa-solid fa-triangle-exclamation"></i> Fehler</span>
+                {:else if selected.status === 'parked'}<span class="chip offline"><i class="fa-solid fa-box-archive"></i> Geparkt</span>
+                {:else if selected.status === 'cancelled'}<span class="chip canc"><i class="fa-solid fa-ban"></i> Abgebrochen</span>
+                {:else if selected.status === 'done'}<span class="chip done"><i class="fa-solid fa-check"></i> Fertig</span>{/if}
+              </span></div>
+              {#if selected.video_id}<div class="drow"><span class="dk">Video-ID</span><span class="dv mono">{selected.video_id}</span></div>{/if}
+              {#if selected.priority > 0}<div class="drow"><span class="dk">Priorität</span><span class="dv">{PRIORITY_LABELS[selected.priority] || `Prio ${selected.priority}`}</span></div>{/if}
+              {#if dstage}<div class="drow"><span class="dk">Phase</span><span class="dv">{dl?.stage_label || dstage}</span></div>{/if}
+            </div>
+
+            {#if selected.status === 'active' && dprog > 0}
+              <DownloadProgress data={{ progress: dprog, stage: dstage, stage_label: dl?.stage_label || '', phases: dl?.phases || null }} />
+            {:else if selected.status === 'done'}
+              <DownloadProgress data={{ progress: 1.0, stage: 'done', stage_label: 'Abgeschlossen', phases: (dl?.phases || []).map(p => ({ ...p, status: 'done' })) }} />
+            {/if}
+
+            {#if selected.error_message}
+              <div class="err-msg"><i class="fa-solid fa-triangle-exclamation"></i> <span>{selected.error_message}</span></div>
+            {/if}
+
+            <div class="detail-actions">
+              {#if canCancel}<button class="dbtn danger" onclick={() => cancelItem(selected.id)}><i class="fa-solid fa-xmark"></i> Abbrechen</button>{/if}
+              {#if canRetry}<button class="dbtn primary" onclick={() => retryItem(selected.id)}><i class="fa-solid fa-rotate-right"></i> Neu in Queue</button>{/if}
+              {#if canDelay}<button class="dbtn" onclick={() => retryDelayed(selected.id, 5)}><i class="fa-solid fa-clock"></i> 5m</button>
+              <button class="dbtn" onclick={() => retryDelayed(selected.id, 30)}><i class="fa-solid fa-clock"></i> 30m</button>{/if}
+              {#if canRetry}<button class="dbtn" onclick={() => ignoreVideoPermanent(selected)}><i class="fa-solid fa-ban"></i> Ausschließen</button>{/if}
+            </div>
+          </div>
+        </section>
+      {/if}
+
       <section class="panel">
         <div class="panel-h"><h2>Neuer Download</h2></div>
         <div class="add">
@@ -975,6 +1048,8 @@
   .dbtn.ghost { background:none; }
   .dbtn.sm { padding:6px 10px; font-size:12px; border-radius:8px; }
   .dbtn.lg { padding:11px 18px; font-size:14px; }
+  .dbtn.danger { border-color:color-mix(in srgb, var(--status-error) 35%, transparent); color:var(--status-error); }
+  .dbtn.danger:hover:not(:disabled) { background:var(--status-error-bg); border-color:var(--status-error); }
   .link { background:none; border:none; color:var(--accent-primary); font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 2px; display:inline-flex; align-items:center; gap:6px; }
   .link:hover { text-decoration:underline; }
   .link.muted { color:var(--text-tertiary); } .link.danger { color:var(--status-error); }
@@ -1090,7 +1165,7 @@
 
   /* Job-Karten */
   .jobs { display:flex; flex-direction:column; }
-  .job { display:grid; grid-template-columns:88px minmax(0,1fr) 210px; gap:0 16px; align-items:stretch; padding-left:18px; border-bottom:1px solid var(--border-primary); position:relative; }
+  .job { display:grid; grid-template-columns:88px minmax(0,1fr) 250px; gap:0 16px; align-items:stretch; padding-left:18px; border-bottom:1px solid var(--border-primary); position:relative; }
   .job:last-child { border-bottom:none; }
   .job:hover { background:color-mix(in srgb, var(--accent-primary) 3%, transparent); }
   .job.s-done { opacity:.8; }
@@ -1146,6 +1221,26 @@
   .job-act { display:flex; align-items:center; justify-content:flex-end; gap:6px; padding:13px 14px 13px 0; align-self:center; }
   .qb { height:32px; min-width:32px; padding:0 9px; border-radius:8px; border:1px solid var(--border-primary); background:var(--bg-secondary); color:var(--text-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; transition:.12s; }
   .qb:hover { color:var(--text-primary); border-color:var(--border-secondary); background:var(--bg-hover); }
+  /* Reservierte, nicht-anwendbare Aktionen: blass & inaktiv – halten die Reihenfolge/Spalten */
+  .qb.off, .qb:disabled { opacity:.26; pointer-events:none; }
+
+  /* Klickbare Zeile + Auswahl-Highlight (Detail-Panel) */
+  .job-clickable { cursor:pointer; }
+  .job.sel { background:var(--accent-muted); }
+  .job.sel:hover { background:var(--accent-muted); }
+
+  /* Detail-Panel (rechts, bei Klick auf eine Download-Zeile) */
+  .detail-panel { border-color:color-mix(in srgb, var(--accent-primary) 45%, var(--border-primary)); }
+  .detail-body { padding:16px; display:flex; flex-direction:column; gap:14px; }
+  .detail-thumb { position:relative; width:100%; aspect-ratio:16/9; border-radius:10px; overflow:hidden; background:linear-gradient(135deg,#2a2440,#1c2740); display:grid; place-items:center; }
+  .detail-thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .detail-thumb .thumb-ph { color:#ffffff55; font-size:30px; position:relative; }
+  .detail-title { margin:0; font-size:15px; font-weight:650; line-height:1.35; color:var(--text-primary); }
+  .detail-rows { display:flex; flex-direction:column; gap:9px; }
+  .drow { display:flex; align-items:center; gap:12px; font-size:12.5px; }
+  .dk { width:80px; flex:none; color:var(--text-tertiary); font-weight:600; text-transform:uppercase; letter-spacing:.03em; font-size:11px; }
+  .dv { color:var(--text-secondary); min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .detail-actions { display:flex; flex-wrap:wrap; gap:8px; }
   .qb.pri:hover { border-color:var(--accent-primary); color:var(--accent-primary); }
   .qb.danger:hover { border-color:var(--status-error); color:var(--status-error); }
 
