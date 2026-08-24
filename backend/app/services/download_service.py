@@ -1533,20 +1533,56 @@ class DownloadService:
             await self._stage(job_id, vid, "merging", 0.90, "FFmpeg: Merge wird vorbereitet…")
             final = await self._ffmpeg_merge(vdir, vpath, apath, duration, job_id, vid)
 
-        # Integritäts-Check: bei Nicht-Audio-only MUSS eine Audiospur vorhanden sein.
-        # Verhindert, dass ein durch Format-Fallback/SABR video-only geladenes File
-        # still als fertig gespeichert wird (Bug: itag-96-Fehlschlag → av1 video-only,
-        # merge=False → kein Ton). Fehlt Audio → als Fehler behandeln → Retry lädt
-        # über den Quality-Pfad (Video+Audio+Merge) korrekt neu.
+        # Integritäts-Check + Selbstheilung: bei Nicht-Audio-only MUSS Audio da sein.
+        # Unter dem web/default-Client (SABR) gibt es für manche Videos keine
+        # progressiven Formate mehr → der Fallback lädt einen Video-only-Stream und
+        # finalisiert ihn (merge=False) → kein Ton. Statt zu scheitern laden wir die
+        # Audiospur NACH und mergen sie an — der Download heilt sich selbst.
         if not is_audio_only:
             has_audio = await asyncio.get_event_loop().run_in_executor(
                 None, self._has_audio_stream, final)
             if not has_audio:
-                raise RuntimeError(
-                    "Audiospur fehlt nach Download (video-only) – wird erneut versucht")
+                logger.warning(f"[AUDIO-RECOVERY] {vid}: video-only erkannt – lade Audiospur nach & merge")
+                recovered = await self._recover_audio(vdir, final, url, meta, job_id, vid)
+                ok = recovered and await asyncio.get_event_loop().run_in_executor(
+                    None, self._has_audio_stream, recovered)
+                if ok:
+                    final = recovered
+                    logger.info(f"[AUDIO-RECOVERY] {vid}: Audiospur erfolgreich nachgeladen")
+                else:
+                    raise RuntimeError(
+                        "Audiospur fehlt (video-only) und Nachladen fehlgeschlagen")
 
         fsize = Path(final).stat().st_size
         return final, fsize, si, adaptive
+
+    async def _recover_audio(self, vdir: Path, video_path: str, url: str,
+                             meta: dict, job_id: int, vid: str):
+        """Rettet eine video-only Datei: passende Audiospur nachladen + mergen.
+        Returns Pfad zur gemergten Datei oder None wenn kein Audio beschaffbar."""
+        def _dl_audio():
+            from app.utils.pytube_client import make_youtube
+            yt = make_youtube(url)
+            aus = yt.streams.get_audio_only()
+            if not aus:
+                return None
+            af = f"audio_recover.{aus.subtype or 'm4a'}"
+            return aus.download(output_path=str(vdir), filename=af)
+        try:
+            apath = await asyncio.get_event_loop().run_in_executor(None, _dl_audio)
+        except Exception as e:
+            logger.warning(f"[AUDIO-RECOVERY] {vid}: Audio-Download fehlgeschlagen: {e}")
+            return None
+        if not apath:
+            logger.warning(f"[AUDIO-RECOVERY] {vid}: keine Audiospur verfügbar")
+            return None
+        duration = meta.get("duration", 0) or 0
+        await self._stage(job_id, vid, "merging", 0.92, "Audiospur nachladen & mergen…")
+        try:
+            return await self._ffmpeg_merge(vdir, video_path, apath, duration, job_id, vid)
+        except Exception as e:
+            logger.warning(f"[AUDIO-RECOVERY] {vid}: Merge fehlgeschlagen: {e}")
+            return None
 
     @staticmethod
     def _has_audio_stream(path: str) -> bool:
