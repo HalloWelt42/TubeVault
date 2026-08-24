@@ -84,6 +84,10 @@
 
   // Live-Status aus WebSocket (ergänzt Queue-Daten)
   let liveStatus = $state({});
+  // Pro-Job Pro-Phase-Füllstand (0..1): jede Download-Phase (v.a. Video ↓ / Audio ↓)
+  // merkt sich ihren EIGENEN Fortschritt aus ihren eigenen asynchronen Events,
+  // damit beide Balken-Abschnitte sich unabhängig füllen (kein springender Gesamtwert).
+  let phaseFills = $state({});
 
   // System-Jobs (nicht-Download: Scans, RSS, AI, etc.)
   let systemJobs = $state([]);
@@ -162,6 +166,26 @@
       }
       liveStatus[id] = msg;
       liveStatus = { ...liveStatus };
+
+      // Pro-Phase-Füllstand pflegen: aktive Download-Phase aus ihren eigenen Bytes,
+      // fertige Phasen (Backend-phases[].status==='done') voll, bei Neustart/Terminal
+      // leeren. So füllen sich Video ↓ und Audio ↓ unabhängig aus ihren Events.
+      if (msg.status && msg.status !== 'active') {
+        if (phaseFills[id]) { delete phaseFills[id]; phaseFills = { ...phaseFills }; }
+      } else {
+        let next = { ...(phaseFills[id] || {}) };
+        let changed = false;
+        if (typeof msg.stage === 'string' && msg.stage.startsWith('downloading_') && (msg.bytes_total || 0) > 0) {
+          const frac = Math.max(0, Math.min(1, (msg.bytes_done || 0) / msg.bytes_total));
+          if (frac > (next[msg.stage] ?? 0)) { next[msg.stage] = frac; changed = true; }
+        }
+        if (Array.isArray(msg.phases)) {
+          for (const p of msg.phases) {
+            if (p.status === 'done' && next[p.id] !== 1) { next[p.id] = 1; changed = true; }
+          }
+        }
+        if (changed) { phaseFills[id] = next; phaseFills = { ...phaseFills }; }
+      }
     }
     // Queue aktualisieren wenn Terminal-Status (inkl. 'parked')
     const terminal = ['done', 'error', 'cancelled', 'parked'];
@@ -745,7 +769,7 @@
               </div>
 
               {#if item.status === 'active' && progress > 0}
-                <DownloadProgress data={{ progress, stage, stage_label: label, phases: live?.phases || null }} />
+                <DownloadProgress data={{ progress, stage, stage_label: label, phases: live?.phases || null, phaseFills: phaseFills[item.id] || null }} />
               {:else if item.status === 'done'}
                 <DownloadProgress data={{ progress: 1.0, stage: 'done', stage_label: 'Abgeschlossen', phases: (live?.phases || []).map(p => ({ ...p, status: 'done' })) }} />
               {:else if item.status === 'error'}
@@ -909,7 +933,7 @@
             </div>
 
             {#if selected.status === 'active' && dprog > 0}
-              <DownloadProgress data={{ progress: dprog, stage: dstage, stage_label: dl?.stage_label || '', phases: dl?.phases || null }} />
+              <DownloadProgress data={{ progress: dprog, stage: dstage, stage_label: dl?.stage_label || '', phases: dl?.phases || null, phaseFills: phaseFills[selected.id] || null }} />
             {:else if selected.status === 'done'}
               <DownloadProgress data={{ progress: 1.0, stage: 'done', stage_label: 'Abgeschlossen', phases: (dl?.phases || []).map(p => ({ ...p, status: 'done' })) }} />
             {/if}

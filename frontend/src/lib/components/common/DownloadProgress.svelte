@@ -1,7 +1,9 @@
 <!--
-  TubeVault – DownloadProgress v1.8.61
+  TubeVault – DownloadProgress v1.9.0
   Mehrstufiger Fortschrittsbalken mit vorausgefüllten Phasen-Farben.
   Jedes Segment zeigt dunkle Grundfarbe + helle Füllfarbe für hohen Kontrast.
+  Video ↓ / Audio ↓ füllen sich unabhängig aus ihrem eigenen Stream-Fortschritt
+  (data.phaseFills), statt aus einem gemeinsamen, springenden Gesamtwert.
   © HalloWelt42 – Private Nutzung
 -->
 <script>
@@ -58,6 +60,12 @@
   }
 
   function phaseProgress(phase) {
+    // Pro-Phase-Füllung: jedes Segment (v.a. Video ↓ / Audio ↓) wird aus SEINEM
+    // eigenen Stream-Fortschritt gefüllt (data.phaseFills[phase.id], 0..1). So
+    // füllen sich Video und Audio unabhängig aus ihren asynchronen Events —
+    // kein gemeinsamer Balken, der zwischen den Phasen hin- und herspringt.
+    const own = data.phaseFills?.[phase.id];
+    if (own != null) return Math.max(0, Math.min(1, own)) * 100;
     if (phase.status === 'done') return 100;
     if (phase.status === 'pending') return 0;
     const span = phase.end - phase.start;

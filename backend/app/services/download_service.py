@@ -1617,70 +1617,91 @@ class DownloadService:
 
     async def _ffmpeg_merge(self, vdir: Path, vpath: str, apath: str,
                             duration: float = 0, job_id: int = 0, vid: str = "") -> str:
-        """FFmpeg Merge mit Live-Fortschritt via stderr-Parsing."""
+        """FFmpeg Merge mit Live-Fortschritt via stderr-Parsing.
+
+        Robustheit: die echte ffmpeg-Fehlermeldung wird eingefangen & geloggt
+        (nicht nur der Exit-Code). Scheitert der schnelle 'copy'-Merge (z.B. weil
+        der Videostream unter SABR leicht abgeschnitten ist), folgt EIN toleranter
+        Retry mit fehler-toleranten Demux-Flags, der solche Reste noch rettet.
+        """
         out = str(vdir / "video.mp4")
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", vpath, "-i", apath,
-            "-c:v", "copy", "-c:a", "aac",
-            "-movflags", "+faststart",
-            "-progress", "pipe:2",   # Fortschritt auf stderr
-            out,
-        ]
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
 
-        # stderr zeilenweise lesen für time= Fortschritt
-        last_ws = 0.0
-        merge_started = time.time()
-        current_time_us = 0
+        async def _run(pre_input_flags):
+            """Ein ffmpeg-Lauf. Returns (returncode, letzte_diagnose_zeilen)."""
+            cmd = (["ffmpeg", "-y", *pre_input_flags,
+                    "-i", vpath, "-i", apath,
+                    "-c:v", "copy", "-c:a", "aac",
+                    "-movflags", "+faststart",
+                    "-progress", "pipe:2", out])
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            errbuf: list[str] = []   # echte Diagnosezeilen (kein progress key=value)
+            last_ws = 0.0
+            merge_started = time.time()
+            current_time_us = 0
 
-        while True:
-            line = await proc.stderr.readline()
-            if not line:
-                break
-            text = line.decode("utf-8", errors="replace").strip()
+            while True:
+                line = await proc.stderr.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").strip()
 
-            # FFmpeg -progress gibt z.B. "out_time_us=12345678"
-            if text.startswith("out_time_us="):
-                try:
-                    current_time_us = int(text.split("=", 1)[1])
-                except (ValueError, IndexError):
-                    pass
-            # Fallback: klassisches "time=HH:MM:SS.xx" aus stderr
-            elif "time=" in text:
-                m = re.search(r"time=(\d+):(\d+):(\d+)\.(\d+)", text)
-                if m:
-                    h, mi, s, ms = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
-                    current_time_us = (h * 3600 + mi * 60 + s) * 1_000_000 + ms * 10_000
+                # FFmpeg -progress gibt z.B. "out_time_us=12345678"
+                if text.startswith("out_time_us="):
+                    try:
+                        current_time_us = int(text.split("=", 1)[1])
+                    except (ValueError, IndexError):
+                        pass
+                # Fallback: klassisches "time=HH:MM:SS.xx" aus stderr
+                elif "time=" in text:
+                    m = re.search(r"time=(\d+):(\d+):(\d+)\.(\d+)", text)
+                    if m:
+                        h, mi, s, ms = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+                        current_time_us = (h * 3600 + mi * 60 + s) * 1_000_000 + ms * 10_000
+                elif text and "=" not in text:
+                    # echte Meldung (Warnung/Fehler) – für Diagnose merken (nur Tail)
+                    errbuf.append(text)
+                    if len(errbuf) > 40:
+                        del errbuf[:20]
 
-            # WS-Update (max alle 500ms)
-            now_t = time.time()
-            if current_time_us > 0 and now_t - last_ws >= 0.5:
-                last_ws = now_t
-                current_sec = current_time_us / 1_000_000
-                elapsed = now_t - merge_started
+                # WS-Update (max alle 500ms)
+                now_t = time.time()
+                if current_time_us > 0 and now_t - last_ws >= 0.5:
+                    last_ws = now_t
+                    current_sec = current_time_us / 1_000_000
+                    elapsed = now_t - merge_started
 
-                if duration > 0:
-                    merge_pct = min(current_sec / duration, 1.0)
-                    # Merge-Phase liegt bei 0.90–0.96
-                    overall = 0.90 + merge_pct * 0.06
-                    eta_sec = (elapsed / merge_pct * (1 - merge_pct)) if merge_pct > 0.01 else 0
-                    eta_str = f" · ~{int(eta_sec)}s" if eta_sec > 1 else ""
-                    label = f"Merge: {current_sec:.0f}/{duration:.0f}s ({merge_pct*100:.0f}%){eta_str}"
-                else:
-                    overall = 0.93
-                    label = f"Merge: {current_sec:.0f}s verarbeitet…"
+                    if duration > 0:
+                        merge_pct = min(current_sec / duration, 1.0)
+                        # Merge-Phase liegt bei 0.90–0.96
+                        overall = 0.90 + merge_pct * 0.06
+                        eta_sec = (elapsed / merge_pct * (1 - merge_pct)) if merge_pct > 0.01 else 0
+                        eta_str = f" · ~{int(eta_sec)}s" if eta_sec > 1 else ""
+                        label = f"Merge: {current_sec:.0f}/{duration:.0f}s ({merge_pct*100:.0f}%){eta_str}"
+                    else:
+                        overall = 0.93
+                        label = f"Merge: {current_sec:.0f}s verarbeitet…"
 
-                await self._stage(job_id, vid, "merging", round(overall, 3), label)
+                    await self._stage(job_id, vid, "merging", round(overall, 3), label)
 
-        await proc.wait()
-        if proc.returncode != 0:
-            # Restliche stderr für Fehler
-            raise RuntimeError(f"FFmpeg Fehler (code {proc.returncode})")
+            await proc.wait()
+            return proc.returncode, errbuf[-6:]
+
+        rc, errtail = await _run([])
+        if rc != 0:
+            detail = " | ".join(errtail) or "keine Details"
+            logger.warning(
+                f"[MERGE] {vid}: copy-Merge fehlgeschlagen (code {rc}): {detail} "
+                f"– toleranter Retry")
+            # Toleranter Retry: abgeschnittene/leicht kaputte Demux-Reste überspringen
+            rc, errtail = await _run(
+                ["-err_detect", "ignore_err", "-fflags", "+genpts+discardcorrupt"])
+        if rc != 0:
+            detail = " | ".join(errtail) or "keine Details"
+            raise RuntimeError(f"FFmpeg Fehler (code {rc}): {detail}")
 
         # Temp-Dateien aufräumen
         for f in (vpath, apath):

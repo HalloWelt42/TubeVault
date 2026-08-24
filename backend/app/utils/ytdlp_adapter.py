@@ -759,7 +759,10 @@ class StreamAdapter:
             "outtmpl": out_tmpl,
             "progress_hooks": [_hook],
             "retries": max(max_retries, 3),
-            "fragment_retries": 10,
+            # SABR-Resilienz: mehr Fragment-Retries + angebrochene .part fortsetzen,
+            # damit ein kurzer Stall den Download nicht als video-only abbricht.
+            "fragment_retries": 30,
+            "continuedl": True,
             "socket_timeout": timeout or 30,
             "overwrites": True,
             # Kein Post-Processing — wir übernehmen Merge im download_service selbst.
@@ -841,7 +844,8 @@ class StreamAdapter:
                     "outtmpl": out_tmpl,
                     "progress_hooks": [_hook],
                     "retries": max(max_retries, 3),
-                    "fragment_retries": 10,
+                    "fragment_retries": 30,
+                    "continuedl": True,
                     "socket_timeout": timeout or 30,
                     "overwrites": True,
                     "postprocessors": [],
