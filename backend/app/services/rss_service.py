@@ -63,6 +63,9 @@ class RSSService:
         self._last_checked_channel: str = ""
         self._last_checked_at: str = ""
         self._feeds_checked_cycle: int = 0
+        # Log-Drossel: max. 3 "neue Videos"-Zeilen pro RSS-Zyklus, Rest als Summe
+        self._feed_log_count: int = 0
+        self._feed_log_suppressed: int = 0
         self._feeds_pending: int = 0
 
     # ─── Worker Lifecycle ─────────────────────────────────
@@ -104,6 +107,9 @@ class RSSService:
 
     async def _do_tick(self, max_feeds: int = 20) -> dict:
         """Eigentliche Tick-Logik (durch Lock geschützt)."""
+        # Log-Drossel pro Zyklus zurücksetzen
+        self._feed_log_count = 0
+        self._feed_log_suppressed = 0
         enabled = await self._get_setting("rss.enabled")
         if enabled != "true":
             return {"status": "disabled", "message": "RSS-Polling deaktiviert (rss.enabled=false)"}
@@ -256,6 +262,10 @@ class RSSService:
                     )
                 except Exception:
                     pass
+
+        # Log-Drossel: unterdrückte "neue Videos"-Zeilen als Summe nachtragen
+        if self._feed_log_suppressed > 0:
+            logger.info(f"Feed: +{self._feed_log_suppressed} weitere Kanäle mit neuen Videos (Log gedrosselt)")
 
         # Job abschließen
         result_msg = f"{total_new} neue Videos, {len(subs)} Feeds geprüft, {errors} Fehler"
@@ -477,7 +487,13 @@ class RSSService:
             )
 
         if new_count > 0:
-            logger.info(f"Feed: {new_count} neue Videos von {sub.get('channel_name', channel_id)}")
+            # Log-Drossel: nur die ersten 3 Kanäle pro Zyklus einzeln loggen,
+            # der Rest wird gezählt und am Zyklus-Ende als Summe geloggt.
+            self._feed_log_count += 1
+            if self._feed_log_count <= 3:
+                logger.info(f"Feed: {new_count} neue Videos von {sub.get('channel_name', channel_id)}")
+            else:
+                self._feed_log_suppressed += 1
 
         return new_count
 

@@ -1145,38 +1145,38 @@ class DownloadService:
                 logger.info(f"[MEMBERS-ONLY-REMOVED] {vid} (channel={channel_id}) – Job(s) gelöscht: {err_short[:100]}")
 
             elif "live event will begin" in err.lower() or "premieres in" in err.lower():
-                # Live-Stream/Premiere startet noch – stündlich erneut versuchen,
-                # aber NICHT endlos (früher: unbegrenzt → floutete die Logs mit
-                # "live event will begin"). Nach LIVE_COMING_MAX Stunden parken:
-                # nichts geht verloren (parkte Jobs sind per "Erneut versuchen"
-                # wieder aufnehmbar), aber die stündliche Endlos-Schleife endet.
-                LIVE_COMING_MAX = 72  # ~3 Tage stündlich – großzügig für jede Premiere
+                # Premiere/Live startet noch. Wartezeit = 1 Tag (24h) PLUS die
+                # Zeitangabe aus dem Fehlertext (z.B. "premieres in 6 hours" → +6h),
+                # dann neu einreihen. So wird nicht stündlich sinnlos gepollt.
+                LIVE_COMING_MAX = 5  # nach 5 Anläufen (je ≥24h) parken statt endlos
                 if retry_count >= LIVE_COMING_MAX:
                     await job_service.park(
                         job_id,
-                        f"Premiere/Live nach {LIVE_COMING_MAX}h nicht gestartet – geparkt",
+                        f"Premiere/Live nach {LIVE_COMING_MAX} Anläufen nicht gestartet – geparkt",
                     )
                     await self._ws_broadcast({
                         "job_id": job_id, "queue_id": job_id, "video_id": vid,
                         "status": "parked", "progress": 0, "stage": "parked",
                         "stage_label": "Premiere nicht gestartet · geparkt",
                     })
-                    logger.info(f"[LIVE-COMING] {vid}: nach {LIVE_COMING_MAX}h geparkt (kein Start)")
+                    logger.info(f"[LIVE-COMING] {vid}: nach {LIVE_COMING_MAX} Anläufen geparkt")
                 else:
                     from app.utils.file_utils import future_sqlite as _fs
-                    retry_after = _fs(seconds=3600)
+                    extra = self._parse_wait_seconds(err)      # Zeit aus dem Text (Sek.)
+                    wait = 86400 + extra                       # 24h + Textangabe
+                    retry_after = _fs(seconds=wait)
+                    hrs = wait // 3600
+                    label = f"Premiere/Live · Retry in ~{hrs}h ({retry_count + 1}/{LIVE_COMING_MAX})"
                     await job_service.retry_wait(
-                        job_id,
-                        error=f"Live-Stream noch nicht gestartet · Retry in 1h ({retry_count + 1}/{LIVE_COMING_MAX})",
-                        retry_after=retry_after,
+                        job_id, error=label, retry_after=retry_after,
                         retry_count=retry_count + 1,
                     )
                     await self._ws_broadcast({
                         "job_id": job_id, "queue_id": job_id, "video_id": vid,
                         "status": "retry_wait", "progress": 0, "stage": "retry_wait",
-                        "stage_label": "Live noch nicht gestartet (1h)",
+                        "stage_label": f"Premiere · Retry in ~{hrs}h",
                     })
-                    logger.info(f"[LIVE-COMING] {vid}: Retry in 1h ({retry_count + 1}/{LIVE_COMING_MAX})")
+                    logger.info(f"[LIVE-COMING] {vid}: Retry in ~{hrs}h (24h + {extra}s aus Text)")
 
             elif is_offline:
                 # Live-Aufzeichnung (noch) nicht als VOD verfügbar bzw. Stream
@@ -1583,6 +1583,23 @@ class DownloadService:
         except Exception as e:
             logger.warning(f"[AUDIO-RECOVERY] {vid}: Merge fehlgeschlagen: {e}")
             return None
+
+    @staticmethod
+    def _parse_wait_seconds(text: str) -> int:
+        """Zeitangabe aus einem Live-/Premiere-Fehlertext in Sekunden.
+        Erkennt z.B. 'premieres in 6 hours', 'begin in 2 days', '30 minutes',
+        auch kombiniert ('1 day 3 hours'). Summe aller gefundenen Einheiten;
+        0 wenn nichts erkennbar ('in a few moments')."""
+        if not text:
+            return 0
+        units = {"day": 86400, "hour": 3600, "min": 60, "sec": 1}
+        total = 0
+        for num, unit in re.findall(r"(\d+)\s*(day|hour|min(?:ute)?|sec(?:ond)?)s?", text.lower()):
+            for key, mult in units.items():
+                if unit.startswith(key):
+                    total += int(num) * mult
+                    break
+        return total
 
     @staticmethod
     def _has_audio_stream(path: str) -> bool:
