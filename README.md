@@ -1,8 +1,10 @@
+
+
 # TubeVault
 
 **Selbstgehostetes YouTube-Archiv- & Streaming-System** für den Raspberry Pi 5.
 
-Version 2.11.0 · © HalloWelt42 – Private Nutzung
+Version 2.15.2 · © HalloWelt42 – Private Nutzung
 
 ## Funktionen
 
