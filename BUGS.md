@@ -1,6 +1,6 @@
 # TubeVault – Bug- & Verbesserungs-Backlog
 
-Stand: 2026-04-19. Neue Einträge unten anhängen. Format pro Eintrag:
+Stand: 2026-10-02. Neue Einträge unten anhängen. Format pro Eintrag:
 
 ```
 ### [Status] Kurztitel
@@ -38,6 +38,49 @@ Status: `[open]` · `[partial]` · `[done]` · `[deferred]` · `[wont-fix]`
 | **v2.1.8** | category_id beim Auto-Download übernommen, Qualitäts-Picker nicht mehr 4K statt 1080p, auto-archive auch ohne drip_enabled |
 | **v2.1.9** | Medaillen-Regel: prozentual (≥90 % Silber, ≥70 % Bronze; Groß-Kanal-Gold bei ≤1 fehlend) |
 | **v2.1.10** | Zentrale VIDEO_QUALITIES (inkl. 4K/2K), Tag-Liste „+64499 mehr" → Hinweis auf Suchfeld |
+
+---
+
+## Durchsicht Oktober 2026 (v2.15.6 bis v2.20.2)
+
+Anlass: viele kleine Fehler und Unstimmigkeiten im laufenden Betrieb. Jede
+Meldung wurde an den echten Daten nachvollzogen und an der Ursache behoben.
+
+| Meldung | Ursache | Behoben durch |
+|---------|---------|---------------|
+| Suchen laufen unsauber | Lokale Suche schloss das Archiv aus (dort liegen fast alle Videos); Index hing an `videos.rowid` und wurde nur an wenigen Stellen von Hand gepflegt; nur ganze Wörter | `search_index`: Trigger merken jede Änderung vor, eigene Dokumentnummer, Wortanfänge und Teilwörter, Archiv inklusive |
+| YouTube-Suche doppelt/lückenhaft | Jede Seite holte die Trefferliste neu, Reihenfolge verschob sich; Shorts standen doppelt | Zwischengespeicherte Trefferliste je Suchbegriff |
+| Einstellungen werden nicht befolgt | Drei Listen (Datenbank, Oberfläche, Code) liefen auseinander; jeder Einstieg legte Qualität selbst fest; bei 720p kam 360p | `settings_schema` (eine Liste, geprüft), `download_options` (Auftrag > Kanal > Einstellungen), Stream-Auswahl trifft den Wunsch |
+| "Neu holen" holt, ersetzt aber nichts | Datei wurde vorab gelöscht, Status `upgrading` blieb bei Fehlern für immer; alte Stream-Zeile blieb Standard; Seite lud nicht neu | Arbeitsordner, Tausch erst nach Erfolg, ein Stream-Eintrag, Wiedergabe lädt neu |
+| Kanalname fehlt am Video | Quelle liefert bei einem Teil der Videos keinen Namen; Download schrieb den leeren Wert ungeprüft | `channel_identity`: Datenbankregel per Trigger, Bestand ergänzt |
+| Archiv zeigt nie alle Videos | Gespeicherte Filter wirkten unsichtbar weiter; Sortierung ohne eindeutigen letzten Schlüssel (Videos doppelt oder nie) | `videoListFilters` (eine Wahrheit, sichtbar), eindeutige Sortierung, Listenlader verwirft Doppelte |
+| Tag-Verweise führen ins Leere | Ereignis ging verloren, bevor die Zielseite eingehängt war; Ziel war immer die Bibliothek | Filter reist in der Adresse, Ziel ist die Liste des Videos |
+| Falsche Tonspur (englische Übersetzung statt Original) | "Bestes Audio" über alle Sprachen | Nur die Original-Tonspur wird angeboten |
+| Shorts/Musik falsch eingeordnet | "Bis 60 Sekunden = Short" an fünf Stellen; Klick auf das Etikett stellte den Typ um; Bindestrich im Titel = Musik | `video_classifier` (Quelle fragen), Bestand wird nachgeprüft, Etikett ohne Klick, Musik laut Kategorie |
+| Gelöschte Videos hinterlassen Reste | Texte, Werbemarken, Verweise, Kapitelbilder blieben; Löschen ohne Rückfrage | Restloses Löschen, Rückfragen, Kanal wahlweise samt Videos |
+
+Neu dazugekommen: Mobil-Ansicht unter `/m`, Nachvertonung mit umschaltbarer
+Tonspur (`nachvertoner/`), "Shorts ausschließen", eine Versionsquelle
+(`version.json`) mit Prüfung vor Commit und Push, lokale Testumgebung
+(`scripts/dev_seed.py`, `make -C backend test`).
+
+### Offen nach der Durchsicht
+
+- **Abruf-Bausteine aktualisieren:** Token-Dienst 1.3.2 läuft, 2.0.1 ist
+  erschienen (Plugin UND Container gemeinsam anheben, dann Download testen).
+  pytubefix 10.11.0 gegen 11.2.0 (nur Ausweichpfad). Deno 2.9.5 gegen 2.9.7.
+- **Thumbnail-Analyse per KI ist nicht erreichbar:** `ThumbnailAI.svelte` und
+  `routers/thumbnail_ai.py` sind nirgends eingebunden. Entweder wieder
+  anschließen (als abschaltbare Erweiterung) oder entfernen.
+- **Bestehende Musik-Kennzeichen** (760) stammen aus der alten Vermutung und
+  sind nicht nachgeprüft; neu geladene Videos richten sich nach der Quelle.
+- **Kanalnamen, die vom Abo abweichen** (rund 330, ohne die leeren): bleiben
+  unangetastet, weil nicht unterscheidbar ist, ob von Hand gesetzt.
+- **Tageslimit und Zeitfenster des Drip** sind weiterhin fest (morgens).
+- **Mini-Player** spielt immer die Original-Tonspur.
+- **Alter Scan-Index** (`scan_index.db`, rund 15000 Einträge "entdeckt") wird
+  von keiner Seite mehr gezeigt.
+- **Kanal-Kategorie** (`subscriptions.category_id`) hat keine Bedienung.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Selbstgehostetes YouTube-Archiv- & Streaming-System** für den Raspberry Pi 5.
 
-Version 2.11.0 · © HalloWelt42 – Private Nutzung
+© HalloWelt42 – Private Nutzung
 
 ## Funktionen
 
@@ -27,6 +27,13 @@ Version 2.11.0 · © HalloWelt42 – Private Nutzung
   Integritäts-Check, DB-Identitäts-Audit beim Start
 - **Live-Log-Terminal** — WebSocket-Stream mit aufklappbaren Tracebacks, Tageswechsel-Markern,
   Pause-Puffer und Job-/Dienst-Monitor
+- **Mobil-Ansicht** unter `/m` — eigenständig und reduziert: ansehen, suchen, Neues laden;
+  Telefone landen automatisch dort, als App auf dem Startbildschirm nutzbar
+- **Nachvertonung** (abschaltbare Erweiterung) — Videos vormerken, ein eigenes Programm
+  (`nachvertoner/`) vertont bei freier Kapazität auf einem anderen Rechner; die neue Tonspur
+  ist in der Wiedergabe umschaltbar, das Video wird nicht doppelt gespeichert
+- **Verlässliche Einordnung** — Video, Short oder Livestream nach Auskunft der Quelle;
+  Shorts lassen sich global ausschließen
 - Außerdem: Kategorien, Playlists, Favoriten, Verlauf mit „Weiterschauen", Statistiken,
   Thumbnail-Werkzeuge, Kanal-Detailseiten mit Scan und Fehlbestands-Download
 
@@ -66,8 +73,25 @@ redundant als `info.json` neben jedem Video.
 
 ## Tests
 
+Tests laufen lokal gegen eine Wegwerf-Datenbank, nie gegen echte Daten:
+
 ```bash
-cd backend && make test   # pytest läuft im Backend-Container (272 Tests)
+make -C backend venv          # einmalig: Testumgebung anlegen
+make -C backend test          # Backend
+npm --prefix frontend test    # Frontend
+```
+
+Zum Ausprobieren der Oberfläche ohne echte Daten legt `scripts/dev_seed.py`
+eine Testdatenbank unter `data/dev` an (Aufruf und Start stehen im Skript).
+
+## Version
+
+`version.json` ist die eine Quelle; Backend und Frontend tragen Spiegel.
+
+```bash
+scripts/bump.sh patch    # Fehlerbehebung
+scripts/bump.sh minor    # neue Funktion
+bash .githooks/install.sh   # einmalig: Prüfungen vor Commit und Push einschalten
 ```
 
 ## Projektstruktur
