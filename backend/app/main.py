@@ -177,15 +177,12 @@ async def _drip_cron_loop():
                     except Exception as e:
                         logger.warning(f"[DRIP] Queue-Fehler {vid['video_id']}: {e}")
 
-                # Nächsten Run würfeln (morgen 02:00-10:00)
-                from datetime import datetime, timedelta
-                tomorrow = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
-                next_run = tomorrow.replace(
-                    hour=random.randint(2, 9), minute=random.randint(0, 59)
-                )
+                # Nächsten Lauf würfeln (morgen im nächtlichen Zeitfenster)
+                from app.utils.file_utils import next_drip_run
+                next_run = next_drip_run()
                 await db.execute(
                     "UPDATE subscriptions SET drip_next_run = ? WHERE id = ?",
-                    (next_run.strftime("%Y-%m-%d %H:%M:%S"), sub["id"])
+                    (next_run, sub["id"])
                 )
                 logger.info(f"[DRIP] {sub['channel_name']}: {queued} Videos gequeued, nächster Run: {next_run}")
 

@@ -1000,12 +1000,8 @@ class RSSService:
 
         # Drip aktiviert → erste Ausführungszeit würfeln
         if filtered.get("drip_enabled"):
-            from datetime import datetime, timedelta
-            tomorrow = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
-            random_hour = random.randint(2, 9)
-            random_minute = random.randint(0, 59)
-            next_run = tomorrow.replace(hour=random_hour, minute=random_minute)
-            filtered["drip_next_run"] = next_run.strftime("%Y-%m-%d %H:%M:%S")
+            from app.utils.file_utils import next_drip_run
+            filtered["drip_next_run"] = next_drip_run()
         elif "drip_enabled" in filtered and not filtered["drip_enabled"]:
             filtered["drip_next_run"] = None
 

@@ -6,6 +6,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { parseServerTime } from '../../utils/format.js';
 
   const REFRESH_MS = 8000;
 
@@ -31,7 +32,7 @@
 
   function runningFor(item) {
     if (!item.since) return null;
-    const started = new Date(item.since.replace(' ', 'T')).getTime();
+    const started = parseServerTime(item.since).getTime();
     return Number.isNaN(started) ? null : span((now - started) / 1000);
   }
 

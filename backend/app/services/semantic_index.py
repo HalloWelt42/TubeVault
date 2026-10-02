@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS video_embeddings (
     model TEXT NOT NULL,
     text_hash TEXT NOT NULL,
     vector BLOB NOT NULL,
-    updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+    updated_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS semantic_dirty (
     video_id TEXT PRIMARY KEY
@@ -189,7 +189,7 @@ async def index_batch(url: str, model: str) -> int:
                    VALUES (?, ?, ?, ?)
                    ON CONFLICT(video_id) DO UPDATE SET model = excluded.model,
                        text_hash = excluded.text_hash, vector = excluded.vector,
-                       updated_at = datetime('now', 'localtime')""",
+                       updated_at = datetime('now')""",
                 (video_id, model, text_hash, _pack(vector)))
     placeholders = ",".join("?" * len(ids))
     await db.conn.execute(f"DELETE FROM semantic_dirty WHERE video_id IN ({placeholders})", ids)

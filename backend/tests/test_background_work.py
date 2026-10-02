@@ -35,7 +35,7 @@ async def test_nachvertonung_in_arbeit(test_db):
         "INSERT INTO videos (id, title, status, type_verified) VALUES ('abcdefghijk', 'Ein Film', 'ready', 1)")
     await test_db.execute(
         "INSERT INTO dub_requests (video_id, target_language, status, progress, note, worker, claimed_at) "
-        "VALUES ('abcdefghijk', 'de', 'working', 0.4, 'Übersetzen', 'Mac', datetime('now', 'localtime'))")
+        "VALUES ('abcdefghijk', 'de', 'working', 0.4, 'Übersetzen', 'Mac', datetime('now'))")
     await test_db.execute("INSERT INTO dub_requests (video_id, target_language) VALUES ('abcdefghijk', 'en')")
     item = (await background_work.overview())[0]
     assert item.label == "Nachvertonung: Ein Film"

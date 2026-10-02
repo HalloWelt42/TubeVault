@@ -18,6 +18,7 @@ from app.config import SCAN_DIR, VIDEOS_DIR
 from pydantic import BaseModel
 
 from app.services.import_service import import_service
+from app.utils.file_utils import now_sqlite
 
 logger = logging.getLogger(__name__)
 
@@ -595,7 +596,7 @@ async def link_youtube(staging_id: int, req: LinkYoutubeRequest):
             pass
 
     # 9. Video in DB anlegen/updaten
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_sqlite()
     file_size = dest.stat().st_size if dest.exists() else 0
     tags_json = json.dumps(meta.get("keywords", [])[:20], ensure_ascii=False)
 
@@ -782,7 +783,7 @@ async def import_own(staging_id: int, req: ImportOwnRequest):
         except OSError:
             pass
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_sqlite()
     file_size = dest.stat().st_size if dest.exists() else 0
 
     # Channel-ID resolven
@@ -899,7 +900,7 @@ async def replace_video(staging_id: int):
             pass
 
     # DB aktualisieren
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_sqlite()
     file_size = dest.stat().st_size if dest.exists() else 0
     await db.execute(
         """UPDATE videos SET file_path = ?, file_size = ?, status = 'ready',

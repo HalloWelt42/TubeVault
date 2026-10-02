@@ -1,5 +1,6 @@
 <script>
   import { api } from '../lib/api/client.js';
+  import { parseServerTime } from '../lib/utils/format.js';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   let confirmRef;
   import { toast } from '../lib/stores/notifications.js';
@@ -272,7 +273,7 @@
   function dripTooltip(sub) {
     if (sub.drip_completed_at) return 'Komplett – alle Videos geladen';
     const missing = (sub.rss_count||0) - (sub.downloaded_count||0);
-    const next = sub.drip_next_run ? new Date(sub.drip_next_run).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) : '?';
+    const next = sub.drip_next_run ? parseServerTime(sub.drip_next_run).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) : '?';
     return sub.drip_enabled
       ? `Nächster Lauf: ${next} · ${missing} fehlen`
       : `+${sub.drip_count||3} Videos/Tag laden · ${missing} fehlen`;

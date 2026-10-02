@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS audio_tracks (
     file_path TEXT NOT NULL,
     file_size INTEGER,
     duration REAL,
-    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(video_id, language)
 );
 CREATE INDEX IF NOT EXISTS idx_audio_tracks_video ON audio_tracks(video_id);
@@ -139,7 +139,7 @@ async def store_track(video_id: str, language: str, source: Path, *, suffix: str
            ON CONFLICT(video_id, language) DO UPDATE SET
                label = excluded.label, origin = excluded.origin, voice = excluded.voice,
                file_path = excluded.file_path, file_size = excluded.file_size,
-               duration = excluded.duration, created_at = datetime('now', 'localtime')""",
+               duration = excluded.duration, created_at = datetime('now')""",
         (video_id, language, label, origin, voice, str(target), os.path.getsize(target), duration))
     row = await db.fetch_one(
         "SELECT * FROM audio_tracks WHERE video_id = ? AND language = ?", (video_id, language))

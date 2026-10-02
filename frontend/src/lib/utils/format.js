@@ -51,9 +51,23 @@ export function formatStreamSize(bytes) {
 /**
  * Datum als deutsches Format: 15.03.2026
  */
+/**
+ * Zeitstempel vom Server lesen. Die Datenbank speichert Weltzeit (UTC) ohne
+ * Zonenangabe ("2026-10-02 18:55:09"); der Browser würde das als Ortszeit
+ * deuten und je nach Jahreszeit ein bis zwei Stunden danebenliegen
+ * ("vor 2 Std." für etwas, das gerade geschah). Angaben mit Zone oder ohne
+ * Uhrzeit bleiben unverändert.
+ */
+export function parseServerTime(value) {
+  if (value instanceof Date) return value;
+  const text = String(value ?? '').trim();
+  const naive = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text);
+  return new Date(naive ? text.replace(' ', 'T') + 'Z' : text);
+}
+
 export function formatDate(dateStr) {
   if (!dateStr) return '–';
-  const d = new Date(dateStr);
+  const d = parseServerTime(dateStr);
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
@@ -62,7 +76,7 @@ export function formatDate(dateStr) {
  */
 export function formatDateRelative(dateStr) {
   if (!dateStr) return '–';
-  const d = new Date(dateStr);
+  const d = parseServerTime(dateStr);
   const now = new Date();
   const diff = Math.floor((now - d) / 1000);
   if (diff < 60) return 'gerade eben';

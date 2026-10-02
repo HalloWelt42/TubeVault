@@ -76,7 +76,7 @@ async def test_verwaister_auftrag_kehrt_zurueck(client, videos, test_db):
     await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})
     claimed = (await client.post("/api/dubbing/claim", json={"worker": "mac-a"})).json()["request"]
     await test_db.execute(
-        "UPDATE dub_requests SET heartbeat_at = datetime('now', 'localtime', '-2 hours') WHERE id = ?", (claimed["id"],))
+        "UPDATE dub_requests SET heartbeat_at = datetime('now', '-2 hours') WHERE id = ?", (claimed["id"],))
     again = (await client.post("/api/dubbing/claim", json={"worker": "mac-b"})).json()["request"]
     assert again["id"] == claimed["id"] and again["worker"] == "mac-b"
 

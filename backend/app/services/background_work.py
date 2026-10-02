@@ -9,7 +9,7 @@ der Statusleiste. (Downloads haben ihre eigene, ausführlichere Anzeige.)
 Eine neue Hintergrundarbeit trägt sich hier mit einer Funktion ein, die
 ihren Stand als WorkItem liefert (oder None, wenn nichts zu tun ist).
 """
-from datetime import datetime
+from app.utils.file_utils import now_sqlite
 from typing import Awaitable, Callable, Optional
 
 from pydantic import BaseModel
@@ -24,7 +24,7 @@ class WorkItem(BaseModel):
     done: Optional[int] = None        # erledigte Einheiten
     total: Optional[int] = None       # Einheiten insgesamt
     progress: Optional[float] = None  # 0..1, falls bekannt
-    since: Optional[str] = None       # läuft seit (Ortszeit)
+    since: Optional[str] = None       # läuft seit (UTC)
     eta_seconds: Optional[int] = None # geschätzte Restdauer
     waiting: int = 0                  # weitere wartende Aufträge dahinter
 
@@ -38,7 +38,7 @@ def _countdown(key: str, remaining: int) -> tuple[int, int, str]:
     """(erledigt, gesamt, seit) aus einer schrumpfenden Restmenge ableiten."""
     if remaining > _peak.get(key, 0):
         _peak[key] = remaining
-        _first_seen.setdefault(key, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        _first_seen.setdefault(key, now_sqlite())
     total = _peak[key]
     return total - remaining, total, _first_seen[key]
 

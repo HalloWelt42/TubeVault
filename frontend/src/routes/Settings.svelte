@@ -6,7 +6,7 @@
 <script>
   import { api } from '../lib/api/client.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { formatSize } from '../lib/utils/format.js';
+  import { formatSize, parseServerTime } from '../lib/utils/format.js';
   import { theme } from '../lib/stores/theme.js';
   import { settings as globalSettings, reloadSettings } from '../lib/stores/settings.js';
   import { onMount } from 'svelte';
@@ -259,10 +259,10 @@
   function fmtTime(iso) {
     if (!iso) return '–';
     try {
-      const diff = (Date.now() - new Date(iso)) / 1000;
+      const diff = (Date.now() - parseServerTime(iso)) / 1000;
       if (diff < 60) return `vor ${Math.round(diff)}s`;
       if (diff < 3600) return `vor ${Math.round(diff / 60)} Min`;
-      return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      return parseServerTime(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     } catch { return iso; }
   }
 </script>

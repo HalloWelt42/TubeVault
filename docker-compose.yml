@@ -36,6 +36,9 @@ services:
       - /mnt/tb26/youtube:/app/data/scan/youtube
     environment:
       - PYTHONUNBUFFERED=1
+      # Zeitzone für Tageszähler und das nächtliche Drip-Fenster. Zeitstempel in
+      # der Datenbank bleiben davon unabhängig Weltzeit (UTC).
+      - TZ=${TZ:-Europe/Berlin}
       - TUBEVAULT_DATA_DIR=/app/data
       - TUBEVAULT_CONFIG_DIR=/app/config
       - MAX_CONCURRENT_DOWNLOADS=1
