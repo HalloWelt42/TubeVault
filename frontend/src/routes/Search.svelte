@@ -272,6 +272,13 @@
                 <span class="channel">{v.channel_name || 'Unbekannt'}</span>
               </div>
             </div>
+            {#if v.passage}
+              <button class="passage" onclick={() => navigate(`/watch/${v.id}?t=${v.passage.start}`)}
+                      title="Im Video gesagt - an diese Stelle springen">
+                <span class="passage-time"><i class="fa-solid fa-play"></i> {formatDuration(v.passage.start)}</span>
+                <span class="passage-text">{v.passage.text}</span>
+              </button>
+            {/if}
           </div>
         {/each}
       </div>
@@ -409,6 +416,14 @@
   .badge.ok { background: var(--status-success); color: #fff; }
   .badge.archive { background: rgba(0,0,0,0.72); color: #fff; }
   .badge.meaning { left: auto; right: 8px; background: var(--accent-primary); color: #fff; text-transform: none; }
+  .passage {
+    display: flex; gap: 8px; align-items: flex-start; width: 100%; margin-top: 4px; padding: 6px 8px;
+    border: none; border-radius: 8px; background: var(--bg-tertiary); color: var(--text-secondary);
+    font: inherit; font-size: 0.74rem; line-height: 1.35; text-align: left; cursor: pointer;
+  }
+  .passage:hover { color: var(--text-primary); }
+  .passage-time { flex-shrink: 0; font-weight: 600; color: var(--accent-primary); white-space: nowrap; }
+  .passage-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .semantic-note { margin-left: 10px; font-size: 0.74rem; font-weight: 600; color: var(--accent-primary); }
   .pl-form { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; }
   .pl-form input { padding: 5px 10px; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font: inherit; font-size: 0.8rem; font-weight: 400; }

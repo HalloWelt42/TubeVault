@@ -429,6 +429,7 @@
         <span class="action-hint">
           KI-Dienst {semantic.available ? 'erreichbar' : 'nicht erreichbar - die Suche arbeitet als reine Wortsuche'} ·
           {semantic.indexed.toLocaleString('de-DE')} Videos eingebettet{#if semantic.pending > 0}, {semantic.pending.toLocaleString('de-DE')} warten{/if}
+          · {semantic.passages_indexed.toLocaleString('de-DE')} Textstellen aus Transkripten{#if semantic.passages_pending > 0}, {semantic.passages_pending.toLocaleString('de-DE')} warten{/if}
         </span>
       </div>
     {/if}

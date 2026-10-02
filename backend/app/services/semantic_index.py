@@ -50,6 +50,18 @@ AFTER UPDATE OF title, channel_name, description, tags, status ON videos
 BEGIN
     INSERT OR IGNORE INTO semantic_dirty (video_id) VALUES (new.id);
 END;
+-- Vektoren der Transkript-Abschnitte. seq wächst mit jedem neuen Vektor:
+-- so lädt die Suche nur nach, was seit dem letzten Mal dazukam.
+CREATE TABLE IF NOT EXISTS chunk_embeddings (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    chunk_id INTEGER NOT NULL UNIQUE,
+    model TEXT NOT NULL,
+    vector BLOB NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS trg_chunk_embedding_delete AFTER DELETE ON transcript_chunks
+BEGIN
+    DELETE FROM chunk_embeddings WHERE chunk_id = old.id;
+END;
 CREATE TRIGGER IF NOT EXISTS trg_semantic_delete AFTER DELETE ON videos
 BEGIN
     DELETE FROM video_embeddings WHERE video_id = old.id;
@@ -226,6 +238,8 @@ async def background_index() -> None:
                 await mark_missing()
                 while await index_batch(*cfg):
                     await asyncio.sleep(0.05)
+                while await index_chunk_batch(*cfg):
+                    await asyncio.sleep(0.05)
         except Exception as e:
             reset_availability()
             logger.info(f"[BEDEUTUNG] Einbetten unterbrochen: {e.__class__.__name__}: {e}")
@@ -234,6 +248,109 @@ async def background_index() -> None:
             await asyncio.wait_for(_wake.wait(), timeout=_IDLE_PAUSE_S)
         except asyncio.TimeoutError:
             pass
+
+
+# ─── Transkript-Abschnitte ────────────────────────────────────────────
+
+_CHUNK_WAITING_SQL = """
+    FROM transcript_chunks c LEFT JOIN chunk_embeddings e ON e.chunk_id = c.id AND e.model = ?
+    WHERE e.chunk_id IS NULL
+"""
+
+
+async def pending_chunks(model: str) -> int:
+    return await db.fetch_val(f"SELECT COUNT(*) {_CHUNK_WAITING_SQL}", (model,)) or 0
+
+
+async def index_chunk_batch(url: str, model: str) -> int:
+    """Einen Stapel Transkript-Abschnitte einbetten. Gibt die Zahl zurück."""
+    rows = await db.fetch_all(
+        f"SELECT c.id, c.text {_CHUNK_WAITING_SQL} ORDER BY c.id LIMIT ?", (model, _BATCH))
+    if not rows:
+        return 0
+    vectors = await _embed([row["text"] for row in rows], url, model, timeout=_REQUEST_TIMEOUT_S)
+    for row, vector in zip(rows, vectors):
+        await db.conn.execute(
+            """INSERT INTO chunk_embeddings (chunk_id, model, vector) VALUES (?, ?, ?)
+               ON CONFLICT(chunk_id) DO UPDATE SET model = excluded.model, vector = excluded.vector""",
+            (row["id"], model, _pack(vector)))
+    await db.conn.commit()
+    return len(rows)
+
+
+class _ChunkVectors:
+    """Vektoren der Abschnitte im Speicher. Neue werden blockweise angehängt,
+    statt bei jeder Suche alles neu zu laden - der Bestand wächst im
+    Hintergrund laufend. Gelöschte Abschnitte bleiben bis zum Neustart als
+    Zeile stehen; die Suche verwirft Treffer, deren Abschnitt es nicht mehr gibt."""
+
+    def __init__(self):
+        self.model = ""
+        self.last_seq = 0
+        self.ids: list[int] = []
+        self.blocks: list = []
+
+    async def refresh(self, model: str) -> None:
+        import numpy as np
+        if model != self.model:
+            self.__init__()
+            self.model = model
+        rows = await db.fetch_all(
+            "SELECT seq, chunk_id, vector FROM chunk_embeddings WHERE model = ? AND seq > ? ORDER BY seq",
+            (model, self.last_seq))
+        if not rows:
+            return
+        self.blocks.append(np.frombuffer(
+            b"".join(row["vector"] for row in rows), dtype=np.float32).reshape(len(rows), -1))
+        self.ids.extend(row["chunk_id"] for row in rows)
+        self.last_seq = rows[-1]["seq"]
+        if len(self.blocks) > 32:
+            self.blocks = [np.vstack(self.blocks)]
+
+    def scores(self, query):
+        import numpy as np
+        return np.concatenate([block @ query for block in self.blocks]) if self.blocks else None
+
+
+_chunk_vectors = _ChunkVectors()
+PASSAGE_TOP_K = 60
+
+
+async def _query_vector(query: str, url: str, model: str):
+    """Vektor der Suchanfrage (normiert), aus dem Zwischenspeicher oder vom KI-Dienst."""
+    import numpy as np
+    key = (model, query.strip().casefold())
+    vector = _query_cache.get(key)
+    if vector is None:
+        vector = (await _embed([query.strip()], url, model, timeout=_QUERY_TIMEOUT_S))[0]
+        if len(_query_cache) > 200:
+            _query_cache.clear()
+        _query_cache[key] = vector
+    q = np.asarray(vector, dtype=np.float32)
+    return q / (np.linalg.norm(q) or 1.0)
+
+
+async def search_passages(query: str) -> Optional[list[tuple[int, float]]]:
+    """Inhaltlich ähnlichste Transkript-Abschnitte als (chunk_id, Ähnlichkeit).
+    None, wenn die Bedeutungssuche gerade nicht zur Verfügung steht."""
+    cfg = await config()
+    if not cfg or not query.strip() or not await available():
+        return None
+    url, model = cfg
+    import numpy as np
+    await _chunk_vectors.refresh(model)
+    try:
+        q = await _query_vector(query, url, model)
+    except Exception:
+        reset_availability()
+        return None
+    scores = _chunk_vectors.scores(q)
+    if scores is None or q.shape[0] != _chunk_vectors.blocks[0].shape[1]:
+        return []
+    z = MIN_Z if len(scores) >= SMALL_COLLECTION else 0.0
+    floor = max(MIN_SIMILARITY, float(scores.mean()) + z * float(scores.std()))
+    top = np.argsort(-scores)[:PASSAGE_TOP_K]
+    return [(_chunk_vectors.ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 
 
 # ─── Suchen ───────────────────────────────────────────────────────────
@@ -268,20 +385,11 @@ async def search(query: str) -> Optional[list[tuple[str, float]]]:
     ids, matrix, _ = await _load_matrix(model)
     if matrix is None:
         return None
-    key = (model, query.strip().casefold())
-    vector = _query_cache.get(key)
-    if vector is None:
-        try:
-            vector = (await _embed([query.strip()], url, model, timeout=_QUERY_TIMEOUT_S))[0]
-        except Exception:
-            reset_availability()
-            return None
-        if len(_query_cache) > 200:
-            _query_cache.clear()
-        _query_cache[key] = vector
-
-    q = np.asarray(vector, dtype=np.float32)
-    q = q / (np.linalg.norm(q) or 1.0)
+    try:
+        q = await _query_vector(query, url, model)
+    except Exception:
+        reset_availability()
+        return None
     if q.shape[0] != matrix.shape[1]:
         return None   # Modell gewechselt, Vektoren werden gerade neu gerechnet
     scores = matrix @ q
@@ -300,4 +408,6 @@ async def overview() -> dict:
         "model": cfg[1] if cfg else None,
         "indexed": await db.fetch_val("SELECT COUNT(*) FROM video_embeddings") or 0,
         "pending": await pending(),
+        "passages_indexed": await db.fetch_val("SELECT COUNT(*) FROM chunk_embeddings") or 0,
+        "passages_pending": await pending_chunks(cfg[1]) if cfg else 0,
     }

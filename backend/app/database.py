@@ -1173,7 +1173,8 @@ class Database:
             logger.info("Migration v37: Typ-Prüfung (type_verified)")
 
         # Bedeutungssuche (optionale Erweiterung): Vektoren und Warteliste
-        from app.services import semantic_index
+        from app.services import semantic_index, transcripts
+        await transcripts.install_schema(self._connection)   # vor den Vektoren (Trigger)
         await semantic_index.install_schema(self._connection)
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung

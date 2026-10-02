@@ -315,6 +315,9 @@ async def lifespan(app: FastAPI):
     from app.services import semantic_index
     task_manager.register("semantic_index", "Bedeutungssuche: Videos einbetten",
                           semantic_index.background_index, auto_restart=True, essential=False)
+    from app.services import transcripts
+    task_manager.register("transcripts", "Transkripte bei der Quelle holen",
+                          transcripts.background_fetch, auto_restart=True, essential=False)
     task_manager.register("search_index", "Suchindex nachziehen",
                           search_index.background_catch_up, auto_restart=False, essential=False)
     await task_manager.start_all()

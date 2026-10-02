@@ -1321,6 +1321,9 @@ class YoutubeAdapter:
             ))
         return out
 
+    def caption_choice(self, preferred_language: Optional[str] = None) -> Optional[CaptionChoice]:
+        return pick_caption(self._ensure(), preferred_language)
+
     # Captions
     @property
     def captions(self) -> list[CaptionAdapter]:
@@ -1347,6 +1350,44 @@ class YoutubeAdapter:
                     ext=fmt.get("ext", ""),
                 ))
         return out
+
+
+class CaptionChoice:
+    """Die Untertitel, die den gesprochenen Text eines Videos wiedergeben."""
+    __slots__ = ("language", "kind", "url")
+
+    def __init__(self, language: str, kind: str, url: str):
+        self.language = language   # Sprachkürzel ohne Region, z.B. "en"
+        self.kind = kind           # manual (vom Autor) | auto (automatisch erzeugt)
+        self.url = url
+
+
+def pick_caption(info: dict, preferred_language: Optional[str] = None) -> Optional[CaptionChoice]:
+    """Untertitel in der Originalsprache wählen: vom Autor erstellte zuerst,
+    sonst die automatisch erzeugten. Automatische Übersetzungen in andere
+    Sprachen zählen nicht - sie geben nicht wieder, was gesagt wird."""
+    manual = {k: v for k, v in (info.get("subtitles") or {}).items() if k != "live_chat"}
+    automatic = info.get("automatic_captions") or {}
+    # Die Quelle kennzeichnet die Originalsprache der automatischen Untertitel
+    original = next((key[:-5] for key in automatic if key.endswith("-orig")), None)
+    language = (info.get("language") or original or preferred_language or "").split("-")[0].lower()
+
+    def vtt_url(variants) -> Optional[str]:
+        return next((v.get("url") for v in variants or [] if v.get("ext") == "vtt" and v.get("url")), None)
+
+    candidates = [key for key in manual if language and key.split("-")[0].lower() == language]
+    if not language and len(manual) == 1:
+        candidates = list(manual)
+    for key in sorted(candidates, key=len):
+        url = vtt_url(manual[key])
+        if url:
+            return CaptionChoice(key.split("-")[0].lower(), "manual", url)
+    if language:
+        for key in (f"{language}-orig", language):
+            url = vtt_url(automatic.get(key))
+            if url:
+                return CaptionChoice(language, "auto", url)
+    return None
 
 
 def _pick_sub_format(variants: list[dict]) -> Optional[dict]:

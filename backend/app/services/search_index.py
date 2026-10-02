@@ -312,33 +312,57 @@ async def search_videos(
     offset = (page - 1) * per_page
 
     # Bedeutungssuche (optionale Erweiterung): None = steht nicht zur Verfügung
-    from app.services import semantic_index
+    from app.services import semantic_index, transcripts
     semantic = await semantic_index.search(query)
     match_kind: dict[str, str] = {}
 
-    if not semantic:   # nicht verfügbar oder nichts Verwandtes: reine Wortsuche
+    # Textstellen aus Transkripten: Wörter (Volltext) und Bedeutung (Vektoren).
+    # Je Video zählt die beste Stelle; sie wird am Treffer gezeigt.
+    word_passages = await transcripts.keyword_passages(match) if match else []
+    meaning_hits = await semantic_index.search_passages(query) or []
+    meaning_by_id = await transcripts.passages_by_id([chunk_id for chunk_id, _ in meaning_hits])
+    meaning_passages = [meaning_by_id[chunk_id] for chunk_id, _ in meaning_hits if chunk_id in meaning_by_id]
+    best_passage: dict[str, transcripts.Passage] = {}
+    for passage in [*word_passages, *meaning_passages]:
+        best_passage.setdefault(passage.video_id, passage)
+
+    def video_order(passages) -> list[str]:
+        return list(dict.fromkeys(passage.video_id for passage in passages))
+
+    if not semantic and not best_passage:   # reine Wortsuche in Titel, Beschreibung, Stichworten
         total = await db.fetch_val(f"{cte} SELECT COUNT(*) {from_where}", base_params) or 0
         rows = await db.fetch_all(
             f"{cte} SELECT v.* {from_where} {keyword_order} LIMIT ? OFFSET ?",
             [*base_params, per_page, offset])
     else:
-        # Hybrid: Wort- und Bedeutungstreffer zu EINER Rangfolge verschmelzen.
-        # Was beide finden, steht vorn; Bedeutungstreffer müssen dieselben
-        # Filter bestehen (Archiv, Bereich, Shorts) wie Worttreffer.
+        # Mehrere Ranglisten zu EINER verschmelzen: Worttreffer am Video,
+        # Bedeutungstreffer am Video, Wort- und Bedeutungstreffer im Transkript.
+        # Was mehrere finden, steht vorn. Alle müssen dieselben Filter bestehen
+        # (Archiv, Bereich, Shorts) wie die Worttreffer.
         keyword_ids = [r["id"] for r in await db.fetch_all(
             f"{cte} SELECT v.id {from_where} {keyword_order} LIMIT ?", [*base_params, _HYBRID_KEYWORD_CAP])]
-        candidate_ids = [video_id for video_id, _ in semantic]
-        placeholders = ",".join("?" * len(candidate_ids))
-        filter_conditions = [c for i, c in enumerate(conditions) if i != 1]   # ohne die Wort-Bedingung
-        filter_params = params[len(infix_params) + 1:]
-        allowed = {r["id"] for r in await db.fetch_all(
-            f"SELECT v.id FROM videos v WHERE v.id IN ({placeholders}) AND {' AND '.join(filter_conditions)}",
-            [*candidate_ids, *filter_params])}
-        semantic_ids = [video_id for video_id in candidate_ids if video_id in allowed]
+        semantic_order = [video_id for video_id, _ in semantic or []]
+        word_passage_order = video_order(word_passages)
+        meaning_passage_order = video_order(meaning_passages)
+        candidate_ids = list(dict.fromkeys([*semantic_order, *word_passage_order, *meaning_passage_order]))
+        allowed: set[str] = set()
+        if candidate_ids:
+            placeholders = ",".join("?" * len(candidate_ids))
+            filter_conditions = [c for i, c in enumerate(conditions) if i != 1]   # ohne die Wort-Bedingung
+            filter_params = params[len(infix_params) + 1:]
+            allowed = {r["id"] for r in await db.fetch_all(
+                f"SELECT v.id FROM videos v WHERE v.id IN ({placeholders}) AND {' AND '.join(filter_conditions)}",
+                [*candidate_ids, *filter_params])}
 
-        ranked = fuse_rankings(keyword_ids, semantic_ids)
-        keyword_set, semantic_set = set(keyword_ids), set(semantic_ids)
-        match_kind = {vid: ("beides" if vid in keyword_set and vid in semantic_set
+        def permitted(order: list[str]) -> list[str]:
+            return [video_id for video_id in order if video_id in allowed]
+
+        semantic_ids = permitted(semantic_order)
+        ranked = fuse_rankings(keyword_ids, semantic_ids,
+                               permitted(word_passage_order), permitted(meaning_passage_order))
+        keyword_set = set(keyword_ids) | set(permitted(word_passage_order))
+        meaning_set = set(semantic_ids) | set(permitted(meaning_passage_order))
+        match_kind = {vid: ("beides" if vid in keyword_set and vid in meaning_set
                             else "wort" if vid in keyword_set else "bedeutung") for vid in ranked}
         total = len(ranked)
         page_ids = ranked[offset:offset + per_page]
@@ -357,6 +381,10 @@ async def search_videos(
         video.pop("ai_tags", None)
         if match_kind:
             video["match"] = match_kind.get(video["id"], "wort")
+        passage = best_passage.get(video["id"])
+        if passage:
+            # Textstelle aus dem Transkript samt Sprungmarke (Sekunden)
+            video["passage"] = {"text": passage.text, "start": int(passage.start)}
         videos.append(video)
 
     return {

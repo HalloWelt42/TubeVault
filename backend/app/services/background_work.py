@@ -104,8 +104,39 @@ async def _semantic_index() -> Optional[WorkItem]:
         done=done, total=total, progress=done / total if total else None, since=since)
 
 
+async def _transcripts() -> Optional[WorkItem]:
+    from app.services import transcripts
+    remaining = await transcripts.pending()
+    if remaining == 0:
+        _forget("transcripts")
+        return None
+    done, total, since = _countdown("transcripts", remaining)
+    return WorkItem(
+        key="transcripts", label="Transkripte werden geholt",
+        detail="Untertitel der Quelle machen den gesprochenen Inhalt durchsuchbar (bewusst langsam).",
+        done=done, total=total, progress=done / total if total else None, since=since,
+        eta_seconds=int(remaining * transcripts.SECONDS_PER_FETCH))
+
+
+async def _passage_index() -> Optional[WorkItem]:
+    from app.services import semantic_index
+    cfg = await semantic_index.config()
+    if not cfg:
+        return None
+    remaining = await semantic_index.pending_chunks(cfg[1])
+    if remaining < 200:
+        _forget("passage_index")
+        return None
+    done, total, since = _countdown("passage_index", remaining)
+    reachable = await semantic_index.available()
+    return WorkItem(
+        key="passage_index", label="Bedeutungssuche: Transkripte werden eingebettet",
+        detail=None if reachable else "Wartet auf den KI-Dienst (nicht erreichbar).",
+        done=done, total=total, progress=done / total if total else None, since=since)
+
+
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _search_index, _semantic_index, _type_check]
+    _dubbing, _search_index, _semantic_index, _passage_index, _transcripts, _type_check]
 
 
 async def overview() -> list[WorkItem]:
