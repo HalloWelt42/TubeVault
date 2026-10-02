@@ -445,6 +445,11 @@ class DownloadService:
         if not video_id:
             raise ValueError(f"Ungültige YouTube-URL: {url}")
 
+        # Von Hand gestartet: eine frühere Sperre für automatische Downloads
+        # (gelöscht, damals nicht verfügbar ...) gilt nicht für diesen Wunsch.
+        if origin != "auto":
+            await db.execute("DELETE FROM ignored_videos WHERE video_id = ?", (video_id,))
+
         # Duplikat-Check: bereits heruntergeladen?
         existing = await db.fetch_one(
             "SELECT id, status FROM videos WHERE id = ?", (video_id,)

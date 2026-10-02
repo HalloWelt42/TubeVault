@@ -98,6 +98,17 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="general.videos_per_page", default="24", kind="number", category="general",
                section="general", min=12, max=96, label="Videos pro Seite",
                description="So viele Videos lädt eine Liste je Schritt nach."),
+    # ── Erweiterungen ─────────────────────────────────────────────────
+    SettingDef(key="dub.enabled", default="false", kind="toggle", category="dub",
+               section="extensions", label="Nachvertonung",
+               description="Videos zum Nachvertonen vormerken. Die Arbeit erledigt der Nachvertoner "
+                           "auf einem leistungsfähigen Rechner, sobald dort Kapazität frei ist; die "
+                           "fertige Tonspur lässt sich in der Wiedergabe umschalten."),
+    SettingDef(key="dub.target_language", default="de", kind="select", category="dub",
+               section="extensions", options=["de", "en"], label="Zielsprache der Nachvertonung"),
+    SettingDef(key="dub.voice", default="Zeit Stimme", kind="text", category="dub",
+               section="extensions", label="Stimme der Nachvertonung",
+               description="Name der Stimme, mit der der Nachvertoner spricht."),
     # ── System ────────────────────────────────────────────────────────
     SettingDef(key="archive.mount_check_interval", default="30", kind="number", category="archive",
                min=5, max=3600, unit="s", label="Prüfintervall für externe Archive"),

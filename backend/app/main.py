@@ -30,7 +30,7 @@ from app.routers import (
     jobs, subscriptions, playlists, chapters, search, exports, imports,
     ad_markers, own_videos, scan, backup, api_endpoints,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
-    cookies, admin,
+    cookies, admin, dubbing,
 )
 
 # Logging
@@ -460,6 +460,7 @@ app.include_router(blocked_channels.router)
 app.include_router(ignored_videos.router)
 app.include_router(cookies.router)
 app.include_router(admin.router)
+app.include_router(dubbing.router)
 
 
 # --- Root Endpoint ---

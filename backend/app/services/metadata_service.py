@@ -13,6 +13,9 @@ from app.utils.tag_utils import sanitize_tags
 
 logger = logging.getLogger(__name__)
 
+# Grund auf der Ignorierliste für vom Nutzer gelöschte Videos
+MANUALLY_DELETED = "manuell gelöscht"
+
 
 class MetadataService:
     """Video-Metadaten verwalten und anreichern."""
@@ -255,57 +258,111 @@ class MetadataService:
 
         return await self.get_video(video_id)
 
-    async def delete_video(self, video_id: str, ignore_for_future: bool = True) -> bool:
-        """Video und zugehörige Dateien + DB-Einträge löschen.
+    # Alles, was an einem Video hängt. Löschen heisst: nichts davon bleibt.
+    # (Tabelle, Spalte) - jede Zeile mit dieser Video-ID wird entfernt.
+    _VIDEO_ROWS = (
+        ("video_categories", "video_id"),
+        ("favorites", "video_id"),
+        ("playlist_videos", "video_id"),
+        ("watch_history", "video_id"),
+        ("streams", "video_id"),
+        ("stream_combinations", "video_id"),
+        ("chapters", "video_id"),
+        ("ad_markers", "video_id"),
+        ("video_links", "video_id"),
+        ("video_links", "linked_video_id"),
+        ("enrichment_log", "video_id"),
+        ("text_files", "video_id"),
+        ("audio_tracks", "video_id"),
+        ("dub_requests", "video_id"),
+    )
 
-        ignore_for_future=True (Default): Video kommt in ignored_videos, damit
-        Auto-Download (RSS/Drip) es nicht beim nächsten Sync wieder lädt.
-        Auf False setzen wenn das Delete nur eine vorübergehende Bereinigung ist
-        (z.B. Tests, Re-Download nach Korruption)."""
+    @staticmethod
+    def _video_locations(video_id: str) -> list:
+        """Alle Ordner, in denen TubeVault Dateien zu einem Video ablegt."""
+        from app import config
+        from app.services.storage import storage
+        return [
+            config.VIDEOS_DIR / video_id,
+            config.THUMBNAILS_DIR / video_id,
+            config.SUBTITLES_DIR / video_id,
+            config.AUDIO_DIR / video_id,
+            config.METADATA_DIR / video_id,
+            config.DATA_DIR / "chapter_thumbs" / video_id,
+            storage.video_dir(video_id),
+        ]
+
+    async def delete_video(self, video_id: str, ignore_for_future: bool = True) -> bool:
+        """Video restlos löschen - danach ist es, als wäre es nie geladen worden:
+        keine Dateien (Video, Vorschaubilder, Untertitel, Tonspuren, Texte,
+        Kapitelbilder), keine Zeilen in abhängigen Tabellen, kein Treffer in
+        der Suche. Im Feed steht es wieder als nicht geladen.
+
+        ignore_for_future=True (Standard): Das Video kommt auf die Ignorierliste,
+        damit Auto-Download und Drip es nicht von selbst wieder holen. Von Hand
+        lässt es sich jederzeit erneut laden (das hebt den Eintrag auf).
+        Dateien ausserhalb des Datenordners (z.B. Originale importierter
+        eigener Videos) werden nicht angefasst."""
         import shutil
-        from app.config import VIDEOS_DIR, THUMBNAILS_DIR, SUBTITLES_DIR, AUDIO_DIR
+        from pathlib import Path
+        from app import config
 
         video = await self.get_video(video_id)
         if not video:
             return False
 
-        # Dateien löschen
-        for base_dir in (VIDEOS_DIR, THUMBNAILS_DIR, SUBTITLES_DIR, AUDIO_DIR):
-            vid_dir = base_dir / video_id
-            if vid_dir.exists():
-                shutil.rmtree(vid_dir)
+        for location in self._video_locations(video_id):
+            if location.exists():
+                shutil.rmtree(location, ignore_errors=True)
+        # Einzeldatei, die im Datenordner, aber nicht im Video-Ordner liegt
+        file_path = video.get("file_path")
+        if file_path:
+            path = Path(file_path)
+            try:
+                inside = path.resolve().is_relative_to(config.DATA_DIR.resolve())
+            except OSError:
+                inside = False
+            if inside and path.is_file():
+                path.unlink(missing_ok=True)
 
-        # Alle verknüpften DB-Einträge manuell löschen (kein CASCADE auf video_id)
-        await db.execute("DELETE FROM video_categories WHERE video_id = ?", (video_id,))
-        await db.execute("DELETE FROM favorites WHERE video_id = ?", (video_id,))
-        await db.execute("DELETE FROM playlist_videos WHERE video_id = ?", (video_id,))
-        await db.execute("DELETE FROM watch_history WHERE video_id = ?", (video_id,))
-        await db.execute("DELETE FROM streams WHERE video_id = ?", (video_id,))
-        await db.execute("DELETE FROM chapters WHERE video_id = ?", (video_id,))
-        await db.execute("DELETE FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ?", (video_id,))
-        # rss_entries NICHT löschen → Katalog bleibt erhalten
+        for table, column in self._VIDEO_ROWS:
+            await db.execute(f"DELETE FROM {table} WHERE {column} = ?", (video_id,))
+        await db.execute(
+            "DELETE FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ?",
+            (video_id,))
+        # Feed-Katalog bleibt, zeigt das Video aber wieder als nicht geladen
+        await db.execute(
+            "UPDATE rss_entries SET status = 'new', auto_queued = 0 WHERE video_id = ?", (video_id,))
 
-        # Auf ignore-Liste, damit Auto-Download nicht wieder zuschlägt
         if ignore_for_future:
             await db.execute(
                 """INSERT OR IGNORE INTO ignored_videos (video_id, channel_id, reason)
                    VALUES (?, ?, ?)""",
-                (video_id, video.get("channel_id"), "manuell gelöscht"),
+                (video_id, video.get("channel_id"), MANUALLY_DELETED),
             )
 
-        # Video selbst löschen
+        # Video selbst löschen (der Suchindex zieht per Trigger nach)
         await db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
 
-        # Playlist video_counts aktualisieren
         await db.execute(
             """UPDATE playlists SET video_count = (
                 SELECT COUNT(*) FROM playlist_videos WHERE playlist_id = playlists.id
             )"""
         )
 
-        logger.info(f"Video gelöscht: {video_id} (inkl. Favoriten, Playlists, History"
-                    + (", auf Ignore-Liste" if ignore_for_future else "") + ")")
+        logger.info(f"Video restlos gelöscht: {video_id}"
+                    + (" (auf Ignorierliste für automatische Downloads)" if ignore_for_future else ""))
         return True
+
+    async def delete_channel_videos(self, channel_id: str) -> int:
+        """Alle Videos eines Kanals restlos löschen. Ohne Ignorierliste: der
+        Kanal wird ohnehin entfernt, ein späteres neues Abo soll frei laden."""
+        rows = await db.fetch_all("SELECT id FROM videos WHERE channel_id = ?", (channel_id,))
+        deleted = 0
+        for row in rows:
+            if await self.delete_video(row["id"], ignore_for_future=False):
+                deleted += 1
+        return deleted
 
     async def record_play(self, video_id: str, position: int = 0):
         """Wiedergabe aufzeichnen."""

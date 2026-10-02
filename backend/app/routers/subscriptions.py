@@ -925,9 +925,13 @@ async def update_subscription(sub_id: int, updates: SubscriptionUpdate):
 
 
 @router.delete("/{sub_id}")
-async def remove_subscription(sub_id: int):
-    """Abo entfernen."""
-    await rss_service.remove_subscription(sub_id)
+async def remove_subscription(sub_id: int, delete_videos: bool = False):
+    """Abo entfernen. delete_videos=true löscht auch alle Videos des Kanals."""
+    result = await rss_service.remove_subscription(sub_id, delete_videos=delete_videos)
+    if not result["removed"]:
+        raise HTTPException(status_code=404, detail="Abo nicht gefunden")
+    return result
+
     return {"deleted": True}
 
 

@@ -1,5 +1,7 @@
 <script>
   import { api, createActivitySocket } from '../lib/api/client.js';
+  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  let confirmRef;
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
   import { getSettingNum, getSettingBool } from '../lib/stores/settings.js';
@@ -574,12 +576,18 @@
 
   async function deleteVideo() {
     if (!video || previewMode) return;
+    const ok = await confirmRef.ask(
+      'Video löschen?',
+      'Das Video wird restlos entfernt: Datei, Tonspuren, Untertitel, Notizen, Verlauf und '
+      + 'Playlist-Einträge. Es lässt sich später von Hand neu laden.');
+    if (!ok) return;
+    const backTo = video.is_archived ? '/archives' : '/library';
     try {
       await api.deleteVideo(video.id);
       toast.success('Video gelöscht');
       window.dispatchEvent(new CustomEvent('tubevault:video-mutated',
         { detail: { id: video.id, action: 'deleted' } }));
-      navigate('/library');
+      navigate(backTo);
     } catch (e) { toast.error(e.message); }
   }
 
@@ -1287,6 +1295,8 @@
 <!-- Video-Link-Lookup Dialog -->
 <VideoLinkDialog bind:this={videoLinkDialogRef} bind:dialog={videoLinkDialog} parentVideoId={video?.id || ''} onLinked={onLinkedUpdate} onVideoOpen={loadVideo} />
 <AddToPlaylistDialog bind:videoId={addToPlaylistVideoId} />
+
+<ConfirmDialog bind:this={confirmRef} />
 
 <style>
   /* ─── Layout: flexibler Flow statt fixer Sidebars + Padding-Ausgleich ───

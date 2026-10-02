@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
-from app.config import AVATARS_DIR, RSS_THUMBS_DIR
+from app.config import AVATARS_DIR, BANNERS_DIR, RSS_THUMBS_DIR
 from app.utils.file_utils import now_sqlite, past_sqlite
 from app.database import db
 from app.services.job_service import job_service
@@ -956,9 +956,23 @@ class RSSService:
 
     # ─── Abo CRUD ────────────────────────────────────────
 
-    async def remove_subscription(self, sub_id: int):
-        await db.execute("DELETE FROM rss_entries WHERE channel_id = (SELECT channel_id FROM subscriptions WHERE id = ?)", (sub_id,))
+    async def remove_subscription(self, sub_id: int, delete_videos: bool = False) -> dict:
+        """Abo entfernen. delete_videos=True löscht zusätzlich alle Videos des
+        Kanals restlos; sonst bleiben sie in Bibliothek und Archiv."""
+        channel_id = await db.fetch_val(
+            "SELECT channel_id FROM subscriptions WHERE id = ?", (sub_id,))
+        if not channel_id:
+            return {"removed": False, "videos_deleted": 0}
+        videos_deleted = 0
+        if delete_videos:
+            from app.services.metadata_service import metadata_service
+            videos_deleted = await metadata_service.delete_channel_videos(channel_id)
+            await db.execute("DELETE FROM ignored_videos WHERE channel_id = ?", (channel_id,))
+        await db.execute("DELETE FROM rss_entries WHERE channel_id = ?", (channel_id,))
         await db.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
+        for folder, name in ((AVATARS_DIR, f"{channel_id}.jpg"), (BANNERS_DIR, f"{channel_id}.jpg")):
+            (folder / name).unlink(missing_ok=True)
+        return {"removed": True, "videos_deleted": videos_deleted}
 
     async def update_subscription(self, sub_id: int, updates: dict):
         import random

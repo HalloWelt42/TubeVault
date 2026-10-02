@@ -11,19 +11,27 @@
   let message = $state('');
   let confirmLabel = $state('Löschen');
   let danger = $state(true);
+  let alternativeLabel = $state('');
   let _resolve = null;
 
+  /**
+   * Rückfrage stellen. Antwort: true (bestätigt), false (abgebrochen) oder
+   * 'alternative', wenn opts.alternativeLabel gesetzt ist und gewählt wurde -
+   * für Fragen mit zwei möglichen Wegen (z.B. "nur das Abo" / "samt Videos").
+   */
   export function ask(t, msg = '', opts = {}) {
     title = t;
     message = msg;
     confirmLabel = opts.confirmLabel || 'Löschen';
+    alternativeLabel = opts.alternativeLabel || '';
     danger = opts.danger !== false;
     open = true;
     return new Promise(resolve => { _resolve = resolve; });
   }
 
-  function confirm() { open = false; _resolve?.(true); _resolve = null; }
-  function cancel() { open = false; _resolve?.(false); _resolve = null; }
+  function answer(value) { open = false; _resolve?.(value); _resolve = null; }
+  function confirm() { answer(true); }
+  function cancel() { answer(false); }
 
   function onKeydown(e) {
     if (e.key === 'Escape') cancel();
@@ -43,6 +51,9 @@
       {#if message}<p class="cd-message">{message}</p>{/if}
       <div class="cd-actions">
         <button class="cd-btn cd-cancel" onclick={cancel}>Abbrechen</button>
+        {#if alternativeLabel}
+          <button class="cd-btn cd-btn-primary" onclick={() => answer('alternative')}>{alternativeLabel}</button>
+        {/if}
         <button class="cd-btn" class:cd-btn-danger={danger} class:cd-btn-primary={!danger} onclick={confirm}>
           {confirmLabel}
         </button>

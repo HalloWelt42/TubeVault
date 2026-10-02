@@ -386,7 +386,8 @@ export const api = {
   resetSuggestOverrides: (id) => request(`/api/subscriptions/${id}/reset-suggest-overrides`, { method: 'POST' }),
   getDripPrognosis: () => request('/api/subscriptions/drip-prognosis'),
   updateVideoSuggest: (videoId, override) => request(`/api/videos/${videoId}`, { method: 'PUT', body: JSON.stringify({ suggest_override: override }) }),
-  removeSubscription: (id) => request(`/api/subscriptions/${id}`, { method: 'DELETE' }),
+  removeSubscription: (id, { deleteVideos = false } = {}) =>
+    request(`/api/subscriptions/${id}${deleteVideos ? '?delete_videos=true' : ''}`, { method: 'DELETE' }),
   getFeedVideos: (params = {}) => {
     const { channelId, channelIds, videoType = 'all', videoTypes, keywords, durationMin, durationMax, feedTab = 'active', page = 1, perPage = 40 } = params;
     const q = new URLSearchParams({ video_type: videoType, feed_tab: feedTab, page, per_page: perPage });

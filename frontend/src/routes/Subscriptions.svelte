@@ -1,5 +1,7 @@
 <script>
   import { api } from '../lib/api/client.js';
+  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  let confirmRef;
   import { toast } from '../lib/stores/notifications.js';
   import { navigate } from '../lib/router/router.js';
   import { formatDateRelative } from '../lib/utils/format.js';
@@ -277,10 +279,31 @@
   }
 
   async function removeSub(sub) {
-    await api.removeSubscription(sub.id);
-    toast.info(`"${sub.channel_name}" entfernt`);
-    subs = subs.filter(s => s.id !== sub.id);
-    total--;
+    const count = sub.downloaded_count || 0;
+    let deleteVideos = false;
+    if (count > 0) {
+      // Kanal mit geladenen Videos: fragen, was mit ihnen geschehen soll
+      const choice = await confirmRef.ask(
+        `Kanal "${sub.channel_name}" entfernen?`,
+        `Zu diesem Kanal sind ${count} Videos geladen. Sollen sie mit gelöscht werden? `
+        + 'Gelöschte Videos sind restlos weg (Dateien, Notizen, Verlauf).',
+        { confirmLabel: `Kanal und ${count} Videos löschen`, alternativeLabel: 'Nur Kanal entfernen' });
+      if (choice === false) return;
+      deleteVideos = choice === true;
+    } else {
+      const ok = await confirmRef.ask(
+        `Kanal "${sub.channel_name}" entfernen?`, 'Zu diesem Kanal sind keine Videos geladen.',
+        { confirmLabel: 'Kanal entfernen' });
+      if (!ok) return;
+    }
+    try {
+      const result = await api.removeSubscription(sub.id, { deleteVideos });
+      toast.info(deleteVideos
+        ? `"${sub.channel_name}" und ${result.videos_deleted} Videos gelöscht`
+        : `"${sub.channel_name}" entfernt`);
+      subs = subs.filter(s => s.id !== sub.id);
+      total--;
+    } catch (e) { toast.error(e.message); }
   }
 
   async function pollNow() {
@@ -676,6 +699,8 @@
   </div>
   {/if}
 </div>
+
+<ConfirmDialog bind:this={confirmRef} />
 
 <style>
   .page { padding: 24px; max-width: none; }

@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1125,6 +1125,11 @@ class Database:
                     raise
             await self._connection.commit()
             logger.info("Migration v35: videos.language")
+
+        # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
+        from app.services import audio_tracks, dubbing
+        await self._connection.executescript(audio_tracks.SCHEMA_SQL)
+        await self._connection.executescript(dubbing.SCHEMA_SQL)
 
         # 4. Indexes NACH Migration (braucht source-Spalte)
         await self._connection.executescript(INDEXES_SQL)
