@@ -1,14 +1,13 @@
 <!--
   TubeVault – Nachvertonung (Warteliste)
   Zeigt, welche Videos auf ihre Nachvertonung warten, was gerade läuft und
-  was fertig ist. Vorgemerkt wird in Bibliothek, Archiv oder am Video; die
-  Arbeit erledigt der Nachvertoner auf einem anderen Rechner.
+  was fertig ist. Vorgemerkt wird am Video in der Wiedergabe; die Arbeit
+  erledigt der Nachvertoner auf einem anderen Rechner.
 -->
 <script>
   import { api } from '../lib/api/client.js';
   import { navigate } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { getSetting } from '../lib/stores/settings.js';
   import { formatDuration, formatDateRelative } from '../lib/utils/format.js';
   import PageHeader from '../lib/components/common/PageHeader.svelte';
 
@@ -26,7 +25,25 @@
   let counts = $state({ queued: 0, working: 0, done: 0, error: 0, skipped: 0 });
   let loading = $state(true);
 
-  const languageName = (code) => (code ? LANGUAGE_NAMES[code] || code.toUpperCase() : 'unbekannt');
+  const SUBTITLE_USE = {
+    any: 'Untertitel der Quelle als Transkript',
+    manual: 'nur vom Autor erstellte Untertitel',
+    never: 'aus dem Ton transkribiert',
+  };
+
+  const languageName = (code) => LANGUAGE_NAMES[code] || (code || '').toUpperCase();
+
+  // "Englisch → Deutsch"; ist die Sprache des Originals noch nicht bekannt, nur das Ziel
+  function direction(request) {
+    const target = languageName(request.target_language);
+    return request.source_language ? `${languageName(request.source_language)} → ${target}` : `nach ${target}`;
+  }
+
+  function timing(request) {
+    if (request.status === 'working' && request.claimed_at) return `läuft seit ${formatDateRelative(request.claimed_at).replace(/^vor /, '')}`;
+    if (request.status === 'done' && request.finished_at) return `fertig ${formatDateRelative(request.finished_at)}`;
+    return `vorgemerkt ${formatDateRelative(request.created_at)}`;
+  }
 
   async function load() {
     try {
@@ -59,10 +76,9 @@
               unit="offener Auftrag" unitPlural="offene Aufträge" />
 
   <p class="intro">
-    Vorgemerkte Videos werden nach {languageName(getSetting('dub.target_language', 'de'))} nachvertont
-    (Stimme: {getSetting('dub.voice', '')}), sobald auf dem Rechner des Nachvertoners Kapazität frei ist.
-    Die fertige Tonspur lässt sich in der Wiedergabe umschalten; das Video bleibt unverändert.
     Vormerken: am Video in der Wiedergabe über das Sprach-Symbol - dort wählst du Stimme und Zielsprache.
+    Vertont wird, sobald auf dem Rechner des Nachvertoners Kapazität frei ist. Die fertige Tonspur lässt
+    sich in der Wiedergabe umschalten; das Video bleibt unverändert.
   </p>
 
   <div class="pills">
@@ -92,13 +108,19 @@
             <div class="meta">
               {request.channel_name || 'Unbekannt'}
               {#if request.duration} · {formatDuration(request.duration)}{/if}
-              · {languageName(request.source_language)} → {languageName(request.target_language)}
-              · vorgemerkt {formatDateRelative(request.created_at)}
+              · {direction(request)} · {timing(request)}
+            </div>
+            <div class="meta">
+              Stimme: {request.voice || 'Vorauswahl'} · {SUBTITLE_USE[request.subtitles] || ''}
             </div>
             {#if request.status === 'working'}
               <div class="progress"><span style="width: {Math.round((request.progress || 0) * 100)}%"></span></div>
             {/if}
-            {#if request.note}<div class="note">{request.note}</div>{/if}
+            {#if request.note || request.status === 'working'}
+              <div class="note">
+                {#if request.status === 'working'}{Math.round((request.progress || 0) * 100)} %{#if request.note} · {/if}{/if}{request.note || ''}
+              </div>
+            {/if}
           </div>
           <div class="state">
             <span class="badge"><i class={state.icon}></i> {state.label}</span>

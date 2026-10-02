@@ -177,26 +177,29 @@ class Nachvertoner:
         self.pi.post(f"/api/dubbing/requests/{request_id}/fail",
                      json={"note": note[:480], "skipped": skipped}, timeout=30)
 
-    def source_transcript(self, claimed: dict) -> list[dict] | None:
-        """Fertiges Transkript von TubeVault (Untertitel der Quelle), falls es
-        eines anbietet. Jeder Fehler hier heißt nur: der Dienst transkribiert
-        selbst - der Auftrag läuft weiter."""
+    def source_transcript(self, claimed: dict, request_id: int) -> dict | None:
+        """Fertiges Transkript von TubeVault (Untertitel der Quelle):
+        {language, kind, segments}. Gibt es keines, transkribiert der Dienst
+        selbst - der Grund wird am Auftrag sichtbar gemeldet."""
         url = claimed.get("transcript_url")
         if not url:
             return None
         try:
             response = self.pi.get(url, timeout=180)
             response.raise_for_status()
-            transcript = response.json().get("transcript")
+            answer = response.json()
         except Exception as e:
-            log.warning("Transkript von TubeVault nicht erhalten: %s", e)
-            return None
+            answer = {"reason": f"Transkript nicht erhalten ({e.__class__.__name__})"}
+        transcript = answer.get("transcript")
         if not transcript or not transcript.get("segments"):
+            reason = answer.get("reason") or "kein Transkript vorhanden"
+            log.info("Kein Transkript von TubeVault: %s - der Dienst transkribiert selbst", reason)
+            self.report(request_id, 0.03, f"Ohne Untertitel: {reason}")
             return None
-        log.info("Untertitel der Quelle (%s) als Transkript: %d Sätze",
-                 "vom Autor" if transcript.get("kind") == "manual" else "automatisch erzeugt",
-                 len(transcript["segments"]))
-        return transcript["segments"]
+        kind = "vom Autor" if transcript.get("kind") == "manual" else "automatisch erzeugt"
+        log.info("Untertitel der Quelle (%s) als Transkript: %d Sätze", kind, len(transcript["segments"]))
+        self.report(request_id, 0.03, f"Untertitel der Quelle als Transkript ({kind})")
+        return transcript
 
     # ─── Ein Auftrag ─────────────────────────────────────────────────
 
@@ -209,7 +212,11 @@ class Nachvertoner:
         source_id = result_id = dub_job_id = None
         log.info("Auftrag %s: %s", request_id, title)
         try:
-            source = (job.get("source_language") or self.s.default_source_language).lower()
+            # Untertitel der Quelle ersparen dem Dienst das Transkribieren und
+            # sagen zugleich, in welcher Sprache das Original gesprochen ist
+            transcript = self.source_transcript(claimed, request_id)
+            source = (job.get("source_language") or (transcript or {}).get("language")
+                      or self.s.default_source_language).lower()
             target = job["target_language"].lower()
             if source == target:
                 raise Uebersprungen(f"Original ist bereits {target}")
@@ -234,11 +241,8 @@ class Nachvertoner:
                 "mode": "fixed", "voice_id": voice_id,
                 "num_speakers": 1,   # eine Stimme, keine Aufteilung nach Sprechern
             }
-            segments = self.source_transcript(claimed)
-            if segments:
-                # Untertitel der Quelle ersparen dem Dienst das Transkribieren
-                payload["source_segments"] = segments
-                self.report(request_id, 0.07, "Untertitel der Quelle als Transkript")
+            if transcript:
+                payload["source_segments"] = transcript["segments"]
 
             source_id = self.upload(proxy)
             payload["file_id"] = source_id

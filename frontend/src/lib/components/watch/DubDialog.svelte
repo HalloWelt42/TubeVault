@@ -12,9 +12,9 @@
 
   const LANGUAGES = [['de', 'Deutsch'], ['en', 'Englisch']];
   const SUBTITLE_USES = [
+    ['any', 'Ja - Untertitel der Quelle verwenden'],
     ['manual', 'Nur vom Autor erstellte Untertitel'],
-    ['any', 'Auch automatisch erzeugte Untertitel'],
-    ['never', 'Keine - aus dem Ton transkribieren'],
+    ['never', 'Nein - aus dem Ton transkribieren'],
   ];
 
   let video = $state(null);
@@ -22,7 +22,7 @@
   let reportedAt = $state(null);
   let voice = $state('');
   let language = $state('de');
-  let subtitles = $state('manual');
+  let subtitles = $state('any');
   let busy = $state(false);
 
   export async function open(target) {

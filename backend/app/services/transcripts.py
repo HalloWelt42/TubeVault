@@ -165,6 +165,58 @@ def _download_caption(video_id: str, preferred_language: str | None):
     return choice, response.text
 
 
+def _subtitle_file(video_id: str, language: str, kind: str):
+    """Ablageort der Untertitel: automatisch erzeugte tragen die Kennung "a."."""
+    code = language if kind == "manual" else f"a.{language}"
+    return SUBTITLES_DIR / video_id / f"{code}.vtt"
+
+
+class DubTranscript(BaseModel):
+    """Transkript für die Nachvertonung: Sätze mit Zeitangabe."""
+    language: str
+    kind: str                          # manual | auto
+    segments: list[Segment]
+
+
+class DubTranscriptAnswer(BaseModel):
+    transcript: Optional[DubTranscript] = None
+    reason: Optional[str] = None       # warum es keines gibt
+
+
+async def for_dubbing(video_id: str, use: str) -> DubTranscriptAnswer:
+    """Transkript eines Videos für die Nachvertonung. Die Originalsprache
+    bestimmt die Quelle selbst - sie muss am Video nicht bekannt sein. Liegt
+    noch kein Transkript vor, wird es jetzt geholt. Gibt es keines, steht der
+    Grund in der Antwort (der Vertonungsdienst transkribiert dann selbst)."""
+    def missing(reason: str) -> DubTranscriptAnswer:
+        return DubTranscriptAnswer(reason=reason)
+
+    if use == "never":
+        return missing("Untertitel sollen für diesen Auftrag nicht verwendet werden")
+
+    async def state():
+        return await db.fetch_one(
+            "SELECT status, language, kind FROM transcripts WHERE video_id = ?", (video_id,))
+
+    row = await state()
+    path = _subtitle_file(video_id, row["language"], row["kind"]) if row and row["status"] == "ok" else None
+    if not row or row["status"] == "error" or (path and not path.exists()):
+        try:
+            await fetch(video_id)
+        except Exception as e:
+            return missing(f"Untertitel bei der Quelle nicht abrufbar: {str(e)[:160]}")
+        row = await state()
+    if not row or row["status"] != "ok":
+        return missing("Die Quelle hat keine Untertitel in der Originalsprache")
+    if row["kind"] == "auto" and use == "manual":
+        return missing("Es gibt nur automatisch erzeugte Untertitel; gewünscht waren vom Autor erstellte")
+    segments = subtitle_segments.segments_from_file(_subtitle_file(video_id, row["language"], row["kind"]))
+    if not segments:
+        return missing("Die Untertitel enthalten keinen Text")
+    return DubTranscriptAnswer(
+        transcript=DubTranscript(language=row["language"], kind=row["kind"], segments=segments))
+
+
 async def fetch(video_id: str) -> FetchResult:
     """Transkript eines Videos bei der Quelle holen und ablegen. Fehler der
     Quelle werden durchgereicht - der Aufrufer entscheidet, ob er pausiert."""
@@ -174,11 +226,14 @@ async def fetch(video_id: str) -> FetchResult:
         await _mark(video_id, "none")
         return FetchResult(status="none")
 
-    # Die Untertitel auch für die Wiedergabe ablegen
-    folder = SUBTITLES_DIR / video_id
-    folder.mkdir(parents=True, exist_ok=True)
-    code = choice.language if choice.kind == "manual" else f"a.{choice.language}"
-    (folder / f"{code}.vtt").write_text(text, encoding="utf-8")
+    # Die Untertitel auch für Wiedergabe und Nachvertonung ablegen
+    path = _subtitle_file(video_id, choice.language, choice.kind)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    # Die Sprache der Untertitel ist die Sprache des Videos, falls noch unbekannt
+    await db.execute(
+        "UPDATE videos SET language = ? WHERE id = ? AND COALESCE(language, '') = ''",
+        (choice.language, video_id))
 
     sentences = subtitle_segments.into_sentences(
         subtitle_segments.without_repeats(subtitle_segments.parse_vtt(text)))

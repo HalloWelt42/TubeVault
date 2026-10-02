@@ -1,8 +1,8 @@
 """
 TubeVault – Untertitel als Transkript
 
-Für die Nachvertonung: Untertitel der Quelle in Segmente (Start, Ende, Text)
-übersetzen, damit der Vertonungsdienst nicht selbst transkribieren muss.
+Untertitel der Quelle in Sätze mit Zeitangabe übersetzen (reine Aufbereitung;
+Holen und Ablegen macht services/transcripts).
 
 Untertitel sind zum Mitlesen gebaut, nicht zum Sprechen: kurze Zeilen, mitten
 im Satz umbrochen; automatisch erzeugte wiederholen dazu jede Zeile im
@@ -17,7 +17,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-from app.config import SUBTITLES_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +40,6 @@ class Segment(BaseModel):
     start: float
     end: float
     text: str
-
-
-class Transcript(BaseModel):
-    language: str
-    kind: Literal["manual", "auto"]
-    segments: list[Segment]
 
 
 def _seconds(hours, minutes, seconds, millis) -> float:
@@ -123,48 +116,3 @@ def into_sentences(cues: list[Segment]) -> list[Segment]:
 
 def segments_from_file(path: Path) -> list[Segment]:
     return into_sentences(without_repeats(parse_vtt(path.read_text(encoding="utf-8"))))
-
-
-def _stored_file(video_id: str, language: str, use: SubtitleUse) -> tuple[Path, str] | None:
-    """Gespeicherte Untertitel der Sprache: vom Autor erstellte zuerst,
-    automatisch erzeugte (Kennung "a.<sprache>") nur, wenn erlaubt."""
-    folder = SUBTITLES_DIR / video_id
-    if not folder.is_dir():
-        return None
-    files = sorted(folder.glob("*.vtt")) + sorted(folder.glob("*.srt"))
-
-    def matches(path: Path, prefix: str) -> bool:
-        code = path.stem
-        return code == f"{prefix}{language}" or code.startswith(f"{prefix}{language}-")
-
-    for path in files:
-        if matches(path, ""):
-            return path, "manual"
-    if use == "any":
-        for path in files:
-            if matches(path, "a."):
-                return path, "auto"
-    return None
-
-
-async def for_dubbing(video_id: str, language: str, use: SubtitleUse) -> Transcript | None:
-    """Transkript aus den Untertiteln der Quelle - oder None, wenn es keine
-    passenden gibt. Fehlen sie lokal, werden sie einmal bei der Quelle geholt."""
-    if use == "never" or not language:
-        return None
-    found = _stored_file(video_id, language, use)
-    if not found:
-        from app.services.download_service import download_service
-        try:
-            await download_service.download_subtitles(video_id, language)
-        except Exception as e:
-            logger.info(f"[UNTERTITEL] {video_id}: nicht abrufbar ({str(e)[:160]})")
-            return None
-        found = _stored_file(video_id, language, use)
-    if not found:
-        return None
-    path, kind = found
-    segments = segments_from_file(path)
-    if not segments:
-        return None
-    return Transcript(language=language, kind=kind, segments=segments)

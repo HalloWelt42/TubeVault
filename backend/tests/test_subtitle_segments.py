@@ -67,31 +67,3 @@ def test_sprechpause_und_hoechstdauer_trennen():
 def test_automatische_untertitel_ohne_wiederholungen():
     cues = subs.without_repeats(subs.parse_vtt(AUTO))
     assert " ".join(c.text for c in cues) == "hello and welcome to the channel today we solder"
-
-
-async def test_auswahl_nach_einstellung(tmp_path, monkeypatch):
-    monkeypatch.setattr(subs, "SUBTITLES_DIR", tmp_path)
-    fetched = []
-
-    class FakeDownloads:
-        async def download_subtitles(self, video_id, lang):
-            fetched.append((video_id, lang))
-    from app.services import download_service as ds
-    monkeypatch.setattr(ds, "download_service", FakeDownloads())
-
-    folder = tmp_path / "vid00000001"
-    folder.mkdir()
-    (folder / "a.en.vtt").write_text(AUTO, encoding="utf-8")
-
-    assert await subs.for_dubbing("vid00000001", "en", "never") is None
-    assert fetched == []
-    # Nur automatische vorhanden: bei "manual" wird einmal nachgefragt, dann verzichtet
-    assert await subs.for_dubbing("vid00000001", "en", "manual") is None
-    assert fetched == [("vid00000001", "en")]
-    auto = await subs.for_dubbing("vid00000001", "en", "any")
-    assert auto.kind == "auto" and auto.segments
-
-    (folder / "en-GB.vtt").write_text(MANUAL, encoding="utf-8")
-    manual = await subs.for_dubbing("vid00000001", "en", "any")
-    assert manual.kind == "manual" and len(manual.segments) == 2
-    assert await subs.for_dubbing("vid00000001", "de", "any") is None

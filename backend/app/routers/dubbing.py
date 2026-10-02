@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app import config
-from app.services import audio_tracks, dubbing, subtitle_segments
+from app.services import audio_tracks, dubbing, transcripts
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Nachvertonung"])
@@ -57,7 +57,7 @@ class EnqueueRequest(BaseModel):
     video_id: str
     target_language: Optional[str] = None   # leer = Deutsch
     voice: Optional[str] = None             # leer = Vorauswahl
-    subtitles: dubbing.SubtitleUse = "manual"
+    subtitles: dubbing.SubtitleUse = "any"
 
 
 class VoiceReport(BaseModel):
@@ -152,15 +152,13 @@ async def claim_dubbing(request: ClaimRequest):
 
 @router.get("/api/dubbing/requests/{request_id}/transcript")
 async def dubbing_transcript(request_id: int):
-    """Transkript aus den Untertiteln der Quelle, sofern die Einstellung es
-    erlaubt und passende Untertitel existieren. Sonst transcript = null und
-    der Vertonungsdienst transkribiert selbst."""
+    """Transkript aus den Untertiteln der Quelle, sofern der Auftrag es
+    erlaubt und Untertitel existieren. Sonst transcript = null samt Grund,
+    und der Vertonungsdienst transkribiert selbst."""
     request = await dubbing.get(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
-    transcript = await subtitle_segments.for_dubbing(
-        request.video_id, (request.source_language or "").lower(), request.subtitles)
-    return {"transcript": transcript}
+    return await transcripts.for_dubbing(request.video_id, request.subtitles)
 
 
 @router.post("/api/dubbing/requests/{request_id}/progress")

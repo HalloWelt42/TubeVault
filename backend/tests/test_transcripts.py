@@ -106,3 +106,42 @@ async def test_abruf_speichert_oder_vermerkt_fehlen(stock, monkeypatch, tmp_path
     await stock.execute("DELETE FROM videos WHERE id = 'vidkochen1'")
     assert await stock.fetch_val("SELECT COUNT(*) FROM transcript_chunks WHERE video_id = 'vidkochen1'") == 0
     assert (await search_index.search_videos("Pfeffer"))["videos"] == []
+
+
+async def test_transkript_fuer_nachvertonung(stock, monkeypatch, tmp_path):
+    """Die Sprache des Originals muss am Video nicht bekannt sein: die Quelle
+    bestimmt sie, und das Video lernt sie dabei. (Fehler: ohne bekannte Sprache
+    gab es nie ein Transkript, der Vertonungsdienst transkribierte alles selbst.)"""
+    monkeypatch.setattr(transcripts, "SUBTITLES_DIR", tmp_path)
+    from app.utils.ytdlp_adapter import CaptionChoice
+    vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nFirst we add salt.\n\n00:00:03.000 --> 00:00:05.000\nThen pepper.\n"
+    calls = []
+
+    def download(video_id, language):
+        calls.append(video_id)
+        if video_id == "vidkochen1":
+            return CaptionChoice("en", "auto", "u"), vtt
+        return None, None
+    monkeypatch.setattr(transcripts, "_download_caption", download)
+
+    assert await stock.fetch_val("SELECT language FROM videos WHERE id = 'vidkochen1'") is None
+    answer = await transcripts.for_dubbing("vidkochen1", "any")
+    assert answer.transcript.language == "en" and answer.transcript.kind == "auto"
+    assert [s.text for s in answer.transcript.segments] == ["First we add salt.", "Then pepper."]
+    assert await stock.fetch_val("SELECT language FROM videos WHERE id = 'vidkochen1'") == "en"
+
+    # Zweite Anfrage: nichts wird erneut geholt
+    await transcripts.for_dubbing("vidkochen1", "any")
+    assert calls == ["vidkochen1"]
+
+    # Gründe, wenn es keines gibt - der Vertonungsdienst transkribiert dann selbst
+    assert "automatisch" in (await transcripts.for_dubbing("vidkochen1", "manual")).reason
+    assert (await transcripts.for_dubbing("vidkochen1", "never")).transcript is None
+    await stock.execute("INSERT INTO videos (id, title, status, source) VALUES ('ohnetext01', 'x', 'ready', 'youtube')")
+    assert "keine Untertitel" in (await transcripts.for_dubbing("ohnetext01", "any")).reason
+
+    def broken(video_id, language):
+        raise RuntimeError("HTTP Error 429: Too Many Requests")
+    monkeypatch.setattr(transcripts, "_download_caption", broken)
+    await stock.execute("INSERT INTO videos (id, title, status, source) VALUES ('gebremst01', 'x', 'ready', 'youtube')")
+    assert "429" in (await transcripts.for_dubbing("gebremst01", "any")).reason

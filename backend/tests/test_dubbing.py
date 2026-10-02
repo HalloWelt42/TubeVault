@@ -75,7 +75,7 @@ async def test_stimmen_kommen_vom_nachvertoner(client, videos):
     # Ohne Angabe gilt die Vorauswahl
     queued = (await client.post("/api/dubbing/requests", json={"video_id": "en1"})).json()
     assert queued["request"]["voice"] == "Zeit Stimme"
-    assert queued["request"]["subtitles"] == "manual"
+    assert queued["request"]["subtitles"] == "any"
 
 
 async def test_abholen_geht_an_genau_einen(client, videos):

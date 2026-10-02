@@ -180,3 +180,49 @@ def test_arbeitskopie_ist_klein_und_hat_ton(tmp_path):
     streams = json.loads(probe.stdout)["streams"]
     assert {s["codec_type"] for s in streams} == {"video", "audio"}
     assert next(s for s in streams if s["codec_type"] == "video")["width"] == 64
+
+
+def test_untertitel_der_quelle_ersparen_das_transkribieren(make):
+    """Bietet TubeVault ein Transkript an, geht es mit dem Auftrag an den
+    Dienst; seine Sprache gilt, wenn TubeVault die des Videos nicht kennt."""
+    worker, stage = make([DONE], source_language=None)
+    segments = [{"start": 0.0, "end": 4.0, "text": "Bonjour à tous."}]
+    original = stage.pi
+
+    def with_transcript(request):
+        if request.url.path == "/api/dubbing/claim":
+            answer = original(request)
+            body = json.loads(answer.content)
+            if body.get("request"):
+                body["transcript_url"] = "/api/dubbing/requests/7/transcript"
+            return httpx.Response(200, json=body)
+        if request.url.path.endswith("/transcript"):
+            return httpx.Response(200, json={"transcript": {"language": "fr", "kind": "manual", "segments": segments}})
+        return original(request)
+    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(with_transcript))
+
+    assert worker.step() is True
+    payload = stage.created_payload["payload"]
+    assert payload["source_segments"] == segments
+    assert payload["source_language"] == "french"
+    assert any("Untertitel der Quelle" in (p.get("note") or "") for p in stage.progress)
+
+
+def test_ohne_untertitel_wird_der_grund_gemeldet(make):
+    worker, stage = make([DONE])
+    original = stage.pi
+
+    def without_transcript(request):
+        if request.url.path == "/api/dubbing/claim":
+            body = json.loads(original(request).content)
+            if body.get("request"):
+                body["transcript_url"] = "/api/dubbing/requests/7/transcript"
+            return httpx.Response(200, json=body)
+        if request.url.path.endswith("/transcript"):
+            return httpx.Response(200, json={"transcript": None, "reason": "Die Quelle hat keine Untertitel"})
+        return original(request)
+    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(without_transcript))
+
+    assert worker.step() is True
+    assert "source_segments" not in stage.created_payload["payload"]
+    assert any("Die Quelle hat keine Untertitel" in (p.get("note") or "") for p in stage.progress)

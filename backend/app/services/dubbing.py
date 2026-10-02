@@ -141,7 +141,7 @@ class EnqueueOutcome(BaseModel):
 
 
 async def enqueue(video_id: str, target_language: str | None = None,
-                  voice: str | None = None, subtitles: SubtitleUse = "manual") -> EnqueueOutcome:
+                  voice: str | None = None, subtitles: SubtitleUse = "any") -> EnqueueOutcome:
     """Ein Video zur Nachvertonung vormerken - immer eine ausdrückliche
     Entscheidung für genau dieses Video. Ohne Stimme gilt die Vorauswahl."""
     target = (target_language or DEFAULT_TARGET_LANGUAGE).strip().lower()
