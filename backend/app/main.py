@@ -229,6 +229,26 @@ async def _userdata_export_loop():
         await asyncio.sleep(86400)  # 24 h
 
 
+async def _resume_interrupted_upgrades():
+    """Altlast heilen: Früher setzte "neu laden" das Video auf 'upgrading' und
+    löschte die Datei vorab. Scheiterte der Download, blieb das Video für immer
+    unsichtbar. Solche Videos kehren in die Listen zurück; fehlt die Datei,
+    wird der vom Nutzer gewünschte Download erneut eingereiht."""
+    from app.utils.file_utils import is_media_file
+    rows = await db.fetch_all(
+        "SELECT id, file_path FROM videos WHERE status = 'upgrading'")
+    for row in rows:
+        await db.execute("UPDATE videos SET status = 'ready' WHERE id = ?", (row["id"],))
+        if is_media_file(row["file_path"]):
+            continue
+        try:
+            await download_service.add_to_queue(
+                f"https://www.youtube.com/watch?v={row['id']}", force=True)
+            logger.info(f"[STARTUP] {row['id']}: unterbrochenes Neu-Laden wieder eingereiht")
+        except ValueError as e:
+            logger.info(f"[STARTUP] {row['id']}: nicht neu eingereiht ({e})")
+
+
 async def _ghost_check_bg():
     """Ghost-Bereinigung im Hintergrund (blockiert den Start NICHT).
 
@@ -240,17 +260,12 @@ async def _ghost_check_bg():
     Ghosts per DB-Update markieren.
     """
     try:
-        from pathlib import Path as _P
+        from app.utils.file_utils import is_media_file
         rows = await db.fetch_all(
             "SELECT id, file_path FROM videos WHERE status = 'ready'")
 
         def _find_ghosts(rs):
-            out = []
-            for gr in rs:
-                fp = gr["file_path"]
-                if not fp or not _P(fp).exists():
-                    out.append(gr["id"])
-            return out
+            return [gr["id"] for gr in rs if not is_media_file(gr["file_path"])]
 
         ghost_ids = await asyncio.to_thread(_find_ghosts, rows)
         for gid in ghost_ids:
@@ -291,9 +306,10 @@ async def lifespan(app: FastAPI):
         logger.warning(f"[DB-AUDIT] Fehler beim Identitäts-Check: {e}")
     # Ghost-Einträge (Videos ohne Datei) asynchron im Hintergrund bereinigen –
     # blockiert den Serverstart nicht mehr (siehe _ghost_check_bg).
-    asyncio.create_task(_ghost_check_bg())
     job_service.set_loop(asyncio.get_event_loop())
     await job_service.startup()
+    await _resume_interrupted_upgrades()
+    asyncio.create_task(_ghost_check_bg())
     await download_service.start_worker()
     # Download-Progress auch über Activity-WS senden (unified WS)
     from app.routers.jobs import activity_ws

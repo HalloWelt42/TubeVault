@@ -20,6 +20,7 @@ import logging
 import os
 import time as _time
 import re
+import shutil
 import subprocess
 import time
 from datetime import datetime, timedelta
@@ -35,7 +36,7 @@ from app.config import (
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.services.job_service import job_service
-from app.utils.file_utils import now_sqlite, future_sqlite
+from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
 from app.utils.tag_utils import sanitize_tags
 
@@ -43,6 +44,10 @@ logger = logging.getLogger(__name__)
 
 _last_ws_time: dict[int, float] = {}
 WS_THROTTLE = 0.4
+
+# Arbeitsordner eines laufenden Downloads innerhalb des Video-Ordners
+STAGING_DIRNAME = ".download"
+
 
 
 def _srt_to_vtt(srt_text: str) -> str:
@@ -960,10 +965,33 @@ class DownloadService:
             if not video_type:
                 video_type = "video"
 
-            # Video in DB: UPDATE wenn vorhanden (Upgrade), INSERT wenn neu
+            # Video in DB: drei Fälle
+            #   - schon fertig vorhanden  → erneutes Laden: nur die Datei wird
+            #     ersetzt, vom Nutzer gepflegte Angaben (Titel, Tags, Typ,
+            #     Beschreibung) bleiben; Leeres wird aufgefüllt
+            #   - Platzhalter (Lesezeichen, Import-Stub) → Angaben übernehmen
+            #   - unbekannt → neu anlegen
             existing_video = await db.fetch_one(
-                "SELECT id FROM videos WHERE id = ?", (vid,))
-            if existing_video:
+                "SELECT id, status, file_path FROM videos WHERE id = ?", (vid,))
+            if existing_video and existing_video["status"] in ("ready", "upgrading", "ghost"):
+                await db.execute(
+                    """UPDATE videos SET
+                       title=COALESCE(NULLIF(title,''), ?),
+                       channel_name=COALESCE(NULLIF(channel_name,''), ?),
+                       channel_id=COALESCE(NULLIF(channel_id,''), ?),
+                       description=COALESCE(NULLIF(description,''), ?),
+                       duration=COALESCE(?, duration),
+                       upload_date=COALESCE(upload_date, ?),
+                       download_date=?, thumbnail_path=COALESCE(thumbnail_path, ?),
+                       view_count=COALESCE(?, view_count),
+                       status='ready', file_path=?, file_size=?, updated_at=?
+                       WHERE id=?""",
+                    (meta["title"], meta["channel_name"], meta["channel_id"],
+                     meta["description"], meta["duration"], meta.get("upload_date"),
+                     now, thumb, meta.get("view_count"),
+                     str(final_path), file_size, now, vid))
+                self._remove_replaced_file(existing_video["file_path"], final_path, vid)
+            elif existing_video:
                 await db.execute(
                     """UPDATE videos SET title=?, channel_name=?, channel_id=?,
                        description=?, duration=?, upload_date=?,
@@ -998,8 +1026,13 @@ class DownloadService:
             from app.services import meta_sidecar
             await meta_sidecar.write_sidecar(vid)
 
+            # Es gibt genau EINE heruntergeladene Datei je Video. Alte Einträge
+            # entfernen, sonst zeigt die Oberfläche nach erneutem Laden weiter
+            # die frühere Qualität.
             await db.execute(
-                """INSERT OR REPLACE INTO streams
+                "DELETE FROM streams WHERE video_id = ? AND downloaded = 1", (vid,))
+            await db.execute(
+                """INSERT INTO streams
                    (video_id,stream_type,itag,mime_type,quality,codec,file_path,file_size,is_default,is_combined,downloaded)
                    VALUES (?,?,?,?,?,?,?,?,1,?,1)""",
                 (vid, stream_info["type"], stream_info["itag"], stream_info["mime"],
@@ -1341,6 +1374,23 @@ class DownloadService:
                     f"Safety-Net-Fehler für Job #{job_id}: {_safety_err}", exc_info=True
                 )
 
+    @staticmethod
+    def _remove_replaced_file(old_path: str | None, new_path, vid: str) -> None:
+        """Vorgängerdatei nach erfolgreichem Ersetzen löschen - nur wenn sie
+        im Ordner dieses Videos liegt und nicht die neue Datei ist."""
+        if not old_path:
+            return
+        old, new = Path(old_path), Path(new_path)
+        video_dir = (VIDEOS_DIR / vid).resolve()
+        try:
+            if old.resolve() == new.resolve() or old.resolve().parent != video_dir:
+                return
+            if old.is_file():
+                old.unlink()
+                logger.info(f"[ERSETZT] {vid}: Vorgängerdatei entfernt ({old.name})")
+        except OSError as e:
+            logger.warning(f"[ERSETZT] {vid}: Vorgängerdatei nicht entfernt: {e}")
+
     async def _resolve(self, url: str) -> dict:
         def _r():
             yt = make_youtube(url)
@@ -1395,7 +1445,12 @@ class DownloadService:
         req_audio_itag = opts.get("audio_itag")
         is_audio_only = opts.get("audio_only", False) or quality == "audio_only"
 
-        vdir = VIDEOS_DIR / vid
+        # Geladen wird in einen Arbeitsordner NEBEN den fertigen Dateien. Erst
+        # ein vollständiges, geprüftes Ergebnis ersetzt die bisherige Datei
+        # (_promote). Ein fehlgeschlagener Lauf lässt das vorhandene Video
+        # damit unberührt - wichtig beim erneuten Laden.
+        final_dir = VIDEOS_DIR / vid
+        vdir = final_dir / STAGING_DIRNAME
         vdir.mkdir(parents=True, exist_ok=True)
         dl = {"phase": "audio" if is_audio_only else "video", "done": 0, "total": 0}
 
@@ -1553,8 +1608,24 @@ class DownloadService:
                     raise RuntimeError(
                         "Audiospur fehlt (video-only) und Nachladen fehlgeschlagen")
 
+        final = await asyncio.get_event_loop().run_in_executor(
+            None, self._promote, Path(final), final_dir, is_audio_only)
+        shutil.rmtree(vdir, ignore_errors=True)
         fsize = Path(final).stat().st_size
-        return final, fsize, si, adaptive
+        return str(final), fsize, si, adaptive
+
+    @staticmethod
+    def _promote(staged: Path, final_dir: Path, is_audio_only: bool) -> Path:
+        """Fertige Datei aus dem Arbeitsordner an ihren endgültigen Platz
+        setzen (video.<ext> bzw. audio.<ext>). os.replace tauscht atomar: ein
+        laufender Abspielvorgang behält die alte Datei, neue Zugriffe sehen
+        die neue."""
+        if staged.stat().st_size < MIN_MEDIA_BYTES:
+            raise RuntimeError(
+                f"Download unvollständig: {staged.name} hat nur {staged.stat().st_size} Bytes")
+        target = final_dir / f"{'audio' if is_audio_only else 'video'}{staged.suffix}"
+        os.replace(staged, target)
+        return target
 
     async def _recover_audio(self, vdir: Path, video_path: str, url: str,
                              meta: dict, job_id: int, vid: str):

@@ -7,6 +7,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { VIDEO_QUALITIES } from '../../constants/qualities.js';
   import { toast } from '../../stores/notifications.js';
 
   let {
@@ -115,14 +116,12 @@
     currentAudioStream ? `${currentAudioStream.quality || '?'} ${currentAudioStream.codec || ''}`.trim() : 'Kein Audio'
   );
 
-  // Upgrade-Button nur aktiv wenn andere Qualität gewählt
-  let canUpgrade = $derived.by(() => {
-    if (!upgradeQuality || upgrading) return false;
-    if (upgradeQuality === 'best') return true;
-    const cur = currentVideoStream?.quality?.replace('p', '') || '';
-    const target = upgradeQuality.replace('p', '');
-    return cur !== target;
-  });
+  // Erneutes Laden ist immer möglich - auch in derselben Qualität, etwa um
+  // eine defekte Datei zu ersetzen.
+  let canUpgrade = $derived(!!upgradeQuality && !upgrading);
+  let sameQuality = $derived(
+    upgradeQuality !== 'best' && currentVideoStream?.quality === upgradeQuality
+  );
 
   $effect(() => {
     if (video) {
@@ -154,7 +153,7 @@
       currentVideoStream = videoStreams.find(s => s.is_default) || videoStreams[0] || null;
       currentAudioStream = audioStreams.find(s => s.is_default) || audioStreams[0] || null;
       // Aktuelle Qualität als Default vorbelegen
-      if (currentVideoStream?.quality) {
+      if (VIDEO_QUALITIES.some(q => q.value === currentVideoStream?.quality)) {
         upgradeQuality = currentVideoStream.quality;
       } else {
         upgradeQuality = 'best';
@@ -239,7 +238,9 @@
     upgrading = true;
     try {
       const res = await api.upgradeVideo(video.id, upgradeQuality);
-      if (res.status === 'ok') toast.success(`Upgrade auf ${upgradeQuality} gestartet`);
+      if (res.status === 'ok') {
+        toast.success('Download eingereiht - das Video bleibt abspielbar und wird nach Abschluss ersetzt');
+      }
     } catch (e) { toast.error(e.message); }
     upgrading = false;
   }
@@ -337,7 +338,7 @@
 
       {#if video && !video.id?.startsWith('local_') && video.source !== 'local' && video.source !== 'imported'}
         <div class="upgrade-section">
-          <span class="edit-label"><i class="fa-solid fa-arrow-up-right-dots"></i> Qualität wechseln</span>
+          <span class="edit-label"><i class="fa-solid fa-arrow-up-right-dots"></i> Neu laden / Qualität wechseln</span>
 
           <!-- Aktuelle Qualität anzeigen -->
           <div class="current-quality">
@@ -373,35 +374,28 @@
           <div class="upgrade-ctrl">
             <label class="upgrade-target-label" for="upgrade-sel">Ziel:</label>
             <select id="upgrade-sel" class="upgrade-sel" bind:value={upgradeQuality}>
-              <option value="best">Beste verfügbar</option>
-              <option value="2160p">
-                4K (2160p){currentVideoStream?.quality === '2160p' ? ' ← aktuell' : ''}
-              </option>
-              <option value="1440p">
-                1440p{currentVideoStream?.quality === '1440p' ? ' ← aktuell' : ''}
-              </option>
-              <option value="1080p">
-                1080p{currentVideoStream?.quality === '1080p' ? ' ← aktuell' : ''}
-              </option>
-              <option value="720p">
-                720p{currentVideoStream?.quality === '720p' ? ' ← aktuell' : ''}
-              </option>
-              <option value="480p">
-                480p{currentVideoStream?.quality === '480p' ? ' ← aktuell' : ''}
-              </option>
+              {#each VIDEO_QUALITIES as q (q.value)}
+                <option value={q.value}>
+                  {q.label}{currentVideoStream?.quality === q.value ? ' ← aktuell' : ''}
+                </option>
+              {/each}
             </select>
             <button class="btn-tool btn-upgrade" onclick={upgradeVideo} disabled={!canUpgrade}>
               <i class="fa-solid fa-download"></i>
               {#if upgrading}
-                Läuft…
-              {:else if !canUpgrade && upgradeQuality !== 'best'}
-                Bereits {upgradeQuality}
+                Wird eingereiht…
+              {:else if sameQuality}
+                Erneut laden
               {:else}
-                Neu laden
+                Laden und ersetzen
               {/if}
             </button>
           </div>
-          <span class="upgrade-hint">Video wird neu heruntergeladen, DB-Daten bleiben erhalten</span>
+          <span class="upgrade-hint">
+            Das Video wird neu heruntergeladen (Fortschritt unter Jobs). Bis der
+            Download fertig ist, bleibt die bisherige Datei abspielbar; danach
+            wird sie ersetzt. Titel, Tags, Notizen und Bewertung bleiben erhalten.
+          </span>
         </div>
       {/if}
 

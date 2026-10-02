@@ -120,6 +120,7 @@
     } catch { likesData = null; }
   }
   let thumbKey = $state(Date.now());  // Cache-Busting für Thumbnails
+  let mediaKey = $state(0);           // wird erhöht, wenn die Videodatei ersetzt wurde
 
 
   async function loadVideo() {
@@ -187,9 +188,8 @@
             else if (activeSidePanel === 'lyrics') activeSidePanel = null;
           } catch { if (activeSidePanel === 'lyrics') activeSidePanel = null; }
         }
-      } else {
-        watchForDownload();
       }
+      watchForDownload();
     } catch (e) {
       toast.error('Video nicht gefunden');
       navigate('/library');
@@ -627,21 +627,25 @@
     actSocket = null;
   }
 
-  // Download-Abschluss erkennen → Preview-Seite automatisch neu laden
+  // Download-Abschluss für dieses Video erkennen → Seite neu laden.
+  // Gilt für die Vorschau (Video wird erstmals geladen) UND für erneutes
+  // Laden eines vorhandenen Videos: ohne Neuladen spielt der Player weiter
+  // die alte Datei und zeigt die alte Qualität.
   function watchForDownload() {
     actSocket?.close();
-    if (!previewMode) return;
     actSocket = createActivitySocket((msg) => {
       if (msg?.type !== 'job_update' || !msg.job) return;
       const j = msg.job;
-      if (j.type === 'download' && j.status === 'done') {
-        // Prüfe ob die video_id übereinstimmt
-        const vid = j.metadata?.video_id || j.video_id || '';
-        if (vid === $route.id) {
-          toast.success('Download abgeschlossen – Seite wird aktualisiert');
-          setTimeout(() => loadVideo(), 1000);
-        }
-      }
+      if (j.type !== 'download' || j.status !== 'done') return;
+      const vid = j.metadata?.video_id || j.video_id || '';
+      if (vid !== $route.id) return;
+      toast.success(previewMode ? 'Download abgeschlossen - Seite wird aktualisiert' : 'Video wurde ersetzt');
+      setTimeout(() => {
+        saveCurrentPosition();
+        mediaKey = Date.now();
+        thumbKey = Date.now();
+        loadVideo();
+      }, 1000);
     });
   }
 
@@ -734,7 +738,7 @@
           bind:this={videoEl}
           class="video-player"
           class:inverted={invertColors}
-          src={api.streamUrl(video.id)}
+          src={mediaKey ? `${api.streamUrl(video.id)}?v=${mediaKey}` : api.streamUrl(video.id)}
           poster={`${api.thumbnailUrl(video.id)}?v=${thumbKey}`}
           controls
           preload="metadata"

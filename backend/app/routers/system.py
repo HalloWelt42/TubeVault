@@ -628,10 +628,11 @@ async def cleanup_ghost_entries():
     rows = await db.fetch_all(
         "SELECT id, title, file_path, status FROM videos WHERE status = 'ready'"
     )
+    from app.utils.file_utils import is_media_file
     ghosts = []
     for row in rows:
         fp = row["file_path"]
-        if not fp or not Path(fp).exists():
+        if not is_media_file(fp):
             ghosts.append({"id": row["id"], "title": row["title"], "file_path": fp})
 
     if not ghosts:
@@ -670,7 +671,8 @@ async def full_cleanup():
     # 1. Ghost-Videos (status='ready' ohne Datei)
     try:
         ready = await db.fetch_all("SELECT id, title, file_path FROM videos WHERE status = 'ready'")
-        ghosts = [r for r in ready if not r["file_path"] or not Path(r["file_path"]).exists()]
+        from app.utils.file_utils import is_media_file
+        ghosts = [r for r in ready if not is_media_file(r["file_path"])]
         for g in ghosts:
             await db.execute("UPDATE videos SET status = 'ghost' WHERE id = ?", (g["id"],))
         log("ghost_videos", f"{len(ghosts)} Videos ohne Datei → status='ghost'", len(ghosts))

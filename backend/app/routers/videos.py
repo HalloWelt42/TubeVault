@@ -625,45 +625,28 @@ async def auto_link_description(video_id: str):
 
 
 @router.post("/{video_id}/upgrade")
-async def upgrade_video(video_id: str, quality: str = "best"):
-    """Video in besserer Qualität neu herunterladen. DB-Daten bleiben erhalten."""
-    from pathlib import Path
-    from app.services.download_service import download_service
+async def upgrade_video(video_id: str, quality: Optional[str] = None):
+    """Video erneut herunterladen (andere Qualität oder defekte Datei ersetzen).
 
+    Das vorhandene Video bleibt abspielbar und in allen Listen, bis der neue
+    Download vollständig und geprüft ist - erst dann wird die Datei getauscht.
+    Schlägt der Download fehl, ändert sich nichts. Vom Nutzer gepflegte
+    Angaben bleiben erhalten. quality leer = Standard aus den Einstellungen."""
     video = await db.fetch_one(
-        "SELECT id, file_path, status, source FROM videos WHERE id = ?", (video_id,))
+        "SELECT id, source FROM videos WHERE id = ?", (video_id,))
     if not video:
         raise HTTPException(status_code=404, detail="Video nicht gefunden")
-    if video["source"] in ("local", "imported"):
-        raise HTTPException(status_code=400, detail="Importierte Videos können nicht upgraded werden")
-    if video_id.startswith("local_"):
-        raise HTTPException(status_code=400, detail="Lokale Videos können nicht upgraded werden")
+    if video["source"] in ("local", "imported") or video_id.startswith("local_"):
+        raise HTTPException(
+            status_code=400, detail="Eigene und importierte Videos haben keine Quelle zum erneuten Laden")
 
-    # Alte Datei löschen
-    old_path = video["file_path"]
-    if old_path:
-        p = Path(old_path)
-        if p.exists():
-            p.unlink()
-            logger.info(f"[UPGRADE] Alte Datei gelöscht: {p}")
-
-    # Status auf 'upgrading' setzen
-    await db.execute(
-        "UPDATE videos SET status = 'upgrading', updated_at = ? WHERE id = ?",
-        (now_sqlite(), video_id))
-
-    # Neu in Queue mit force
     try:
         url = f"https://www.youtube.com/watch?v={video_id}"
         result = await download_service.add_to_queue(
             url, quality=quality, force=True, priority=10)
-        return {"status": "ok", "quality": quality, "queue_id": result.get("queue_id")}
-    except Exception as e:
-        # Rollback status
-        await db.execute(
-            "UPDATE videos SET status = 'ready', updated_at = ? WHERE id = ?",
-            (now_sqlite(), video_id))
-        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"status": "ok", "quality": quality, "queue_id": result.get("queue_id")}
 
 
 @router.post("/{video_id}/auto-enrich")

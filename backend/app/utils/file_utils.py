@@ -26,6 +26,25 @@ def past_sqlite(seconds: int = 0, minutes: int = 0, hours: int = 0, days: int = 
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+# Arbeitsdateien eines Downloads - nie ein fertiges Video
+WORK_FILE_SUFFIXES = (".part", ".ytdl")
+# Kleiner ist keine Mediendatei, sondern ein Rest (Statusdatei, abgebrochener Lauf)
+MIN_MEDIA_BYTES = 1024
+
+
+def is_media_file(path) -> bool:
+    """True, wenn unter path eine brauchbare Mediendatei liegt.
+    Die eine Regel für "Video hat eine Datei" (Start-Prüfung, Bereinigung)."""
+    if not path:
+        return False
+    p = Path(path)
+    try:
+        return (p.is_file() and p.suffix not in WORK_FILE_SUFFIXES
+                and p.stat().st_size >= MIN_MEDIA_BYTES)
+    except OSError:
+        return False
+
+
 def human_size(size_bytes: int) -> str:
     """Bytes in lesbare Größe konvertieren."""
     if size_bytes < 0:

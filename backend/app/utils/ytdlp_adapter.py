@@ -713,10 +713,19 @@ class StreamAdapter:
         fname_base, _fname_ext = _os.path.splitext(fname)
         out_tmpl = str(out_dir / f"{fname_base}.%(ext)s")
 
+        def _finished_candidates() -> list:
+            """Fertige Dateien zu unserem Basisnamen, grösste zuerst. Arbeits-
+            dateien von yt-dlp (.part, .ytdl) sind KEINE Ergebnisse: eine
+            70-Byte-.ytdl wurde sonst als fertiges Video eingetragen."""
+            found = [
+                c for c in out_dir.glob(f"{fname_base}.*")
+                if c.is_file() and c.suffix not in (".part", ".ytdl") and c.stat().st_size > 0
+            ]
+            return sorted(found, key=lambda c: c.stat().st_size, reverse=True)
+
         if skip_existing:
-            # Trivial-Check: gibt es schon was passendes?
-            existing = list(out_dir.glob(f"{fname_base}.*"))
-            if existing and existing[0].stat().st_size > 0:
+            existing = _finished_candidates()
+            if existing:
                 return str(existing[0])
 
         cb = self._on_progress
@@ -900,10 +909,10 @@ class StreamAdapter:
         # Pfad bestimmen: was der Hook gemeldet hat, oder fallback Suchen
         if final_path["path"] and _os.path.exists(final_path["path"]):
             return final_path["path"]
-        # Fallback: glob auf unseren Basenamen
-        for cand in out_dir.glob(f"{fname_base}.*"):
-            if cand.is_file() and cand.stat().st_size > 0:
-                return str(cand)
+        # Fallback: fertige Datei zu unserem Basisnamen
+        candidates = _finished_candidates()
+        if candidates:
+            return str(candidates[0])
         raise RuntimeError(
             f"StreamAdapter.download: Zieldatei nicht gefunden (outtmpl={out_tmpl})"
         )
