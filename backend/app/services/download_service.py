@@ -1132,6 +1132,19 @@ class DownloadService:
             except Exception as e:
                 logger.debug(f"RYD-Fetch für {vid}: {e}")
 
+        except asyncio.CancelledError:
+            # Das Programm wird beendet (Neustart, Aktualisierung): der Download
+            # ist nicht gescheitert, er wurde unterbrochen. Zurück in die
+            # Warteschlange, damit er nach dem Start von selbst weiterläuft -
+            # sonst stünde er als Fehler da und müsste von Hand wiederholt werden.
+            try:
+                job_check = await job_service.get(job_id)
+                if job_check and job_check.get("status") == "active":
+                    await job_service.requeue(job_id, reset_retry=False)
+                    logger.info(f"Download #{job_id} ({vid}) durch Beenden unterbrochen - wieder eingereiht")
+            except Exception as requeue_error:
+                logger.warning(f"Unterbrochener Download #{job_id} nicht wieder eingereiht: {requeue_error}")
+            raise
         except Exception as e:
             err = str(e)[:500]
             logger.error(f"[ERR] {vid}: {e}", exc_info=True)
