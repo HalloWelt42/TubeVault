@@ -141,6 +141,11 @@ function _restoreScroll(fullUrl) {
 }
 
 export function navigate(path, params = {}, replace = false) {
+  // Immer absolut: ein Pfad ohne führenden Schrägstrich würde vom Browser
+  // relativ zur aktuellen Adresse aufgelöst (aus /watch/abc wird mit
+  // 'settings' die Adresse /watch/settings) - Anzeige und Adresse laufen
+  // auseinander, Neuladen landet auf der falschen Seite.
+  if (!path.startsWith('/')) path = '/' + path;
   // Query-String aus path extrahieren falls eingebettet
   let cleanPath = path;
   if (path.includes('?')) {

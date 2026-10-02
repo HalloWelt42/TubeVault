@@ -30,7 +30,7 @@
   </div>
 
   <div class="header-right">
-    <button class="btn-icon" onclick={() => navigate('downloads')} title="Downloads">
+    <button class="btn-icon" onclick={() => navigate('/downloads')} title="Downloads">
       <i class="fa-solid fa-download"></i>
     </button>
     <button class="btn-icon" onclick={() => theme.toggle()} title="Theme wechseln">
@@ -40,7 +40,7 @@
         <i class="fa-solid fa-moon"></i>
       {/if}
     </button>
-    <button class="btn-icon" onclick={() => navigate('settings')} title="Einstellungen">
+    <button class="btn-icon" onclick={() => navigate('/settings')} title="Einstellungen">
       <i class="fa-solid fa-gear"></i>
     </button>
   </div>

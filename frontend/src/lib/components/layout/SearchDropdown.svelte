@@ -181,11 +181,13 @@
       );
     } else { plResults = []; }
 
-    // Eigene Videos (Scan-Index: sucht Titel, Dateiname, Ordner, Kanal)
+    // Eigene Videos: lokale und importierte Videos der Bibliothek. (Früher
+    // kam hier der alte Scan-Index; dessen Treffer führten auf eine Seite,
+    // die sie gar nicht anzeigen kann.)
     if (scopes.own) {
       promises.push(
-        api.scanIndex({ search: q, per_page: MAX_PER_SECTION + 1 })
-          .then(r => { if (current()) ownResults = (r.items || []).slice(0, MAX_PER_SECTION + 1).map(i => ({ ...i, _isScan: true })); })
+        api.searchLocal(q, { per_page: MAX_PER_SECTION + 1, scope: 'own' })
+          .then(r => { if (current()) ownResults = r.videos || []; })
           .catch(() => { if (current()) ownResults = []; })
       );
     } else { ownResults = []; }
@@ -604,7 +606,7 @@
           </div>
         {/if}
 
-        <!-- Eigene Videos (Scan-Index) -->
+        <!-- Eigene Videos -->
         {#if scopes.own && ownResults.length > 0}
           <div class="sd-section">
             <div class="sd-sec-head">
@@ -613,22 +615,21 @@
               <span class="sd-sec-count">{ownResults.length > MAX_PER_SECTION ? `${MAX_PER_SECTION}+` : ownResults.length}</span>
             </div>
             {#each ownResults.slice(0, MAX_PER_SECTION) as v (v.id)}
-              <button class="sd-row" onclick={() => { navigate('/own-videos', { search: query.trim() }); closeDropdown(); }}>
+              <button class="sd-row" onclick={() => openVideo(v)}>
                 <div class="sd-thumb">
-                  {#if v.has_thumb}
-                    <img src={api.scanThumbUrl(v.id)} alt="" loading="lazy" onerror={(e) => e.target.style.display='none'} />
-                  {:else}
-                    <div class="sd-thumb-icon"><i class="fa-solid fa-film"></i></div>
-                  {/if}
+                  <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" onerror={(e) => e.target.style.display='none'} />
                   {#if v.duration}<span class="sd-dur">{formatDuration(v.duration)}</span>{/if}
                   <span class="sd-src-dot" style="background: #f59e0b" title="Eigenes Video"></span>
                 </div>
                 <div class="sd-info">
-                  <span class="sd-title">{v.title || v.filename}</span>
-                  <span class="sd-channel">{v.channel_name || v.folder || '–'}</span>
+                  <span class="sd-title">{v.title}</span>
+                  <span class="sd-channel">
+                    {v.channel_name || 'Unbekannt'}
+                    {#if v.is_archived}<span class="sd-archived"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
+                  </span>
                 </div>
                 <div class="sd-acts">
-                  <span class="sd-status-badge" class:registered={v.status === 'registered'} class:discovered={v.status === 'discovered'}>{v.status}</span>
+                  <span class="sd-act-btn play" title="Abspielen"><i class="fa-solid fa-play"></i></span>
                 </div>
               </button>
             {/each}
@@ -1007,9 +1008,6 @@
   .sd-thumb-ch { background: rgba(59, 130, 246, 0.08); color: #3b82f6; }
 
   /* Scan status badge */
-  .sd-status-badge { font-size:0.58rem; font-weight:600; padding:1px 5px; border-radius:3px; background:var(--bg-tertiary); color:var(--text-tertiary); text-transform:uppercase; white-space:nowrap; }
-  .sd-status-badge.registered { background:rgba(34,197,94,0.15); color:var(--status-success); }
-  .sd-status-badge.discovered { background:rgba(59,130,246,0.15); color:var(--status-info); }
 
   /* „Weitere Treffer laden"-Button (YouTube-Paginierung) */
   .sd-load-more {
