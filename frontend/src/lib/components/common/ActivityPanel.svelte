@@ -281,11 +281,12 @@
     } catch {}
   }
 
-  async function toggleRateLimit() {
+  // Die Bremse lässt sich hier nur wieder einschalten. Ausschalten gab es
+  // früher als Knopf; das führte nur zu schnelleren Sperren durch die Quelle.
+  async function enableRateLimit() {
     try {
       const res = await api.toggleRateLimit();
       rateLimiterDisabled = res.disabled;
-      toast(res.disabled ? 'Rate-Limiter deaktiviert' : 'Rate-Limiter aktiviert', 'info');
       await pollSystemStatus();
     } catch {}
   }
@@ -737,43 +738,49 @@
 
     <div class="ubar-right">
       <BackgroundWork />
-      <span class="ubar-sys"><span class="led led-ok"></span> Frontend {FE_VERSION}</span>
-      <span class="ubar-sys"><span class="led" class:led-ok={backendOk} class:led-err={!backendOk}></span> Backend {backendVersion}</span>
+      <!-- Rechts: Zustand in Worten, Erklärung beim Überfahren. Ein Eintrag je
+           Sache: Version, Quelle, Kanalprüfung, Bewertungsdienst. -->
+      <span class="ubar-sys" title={backendOk
+              ? (FE_VERSION === backendVersion ? 'Oberfläche und Server laufen in dieser Version'
+                 : `Oberfläche ${FE_VERSION}, Server ${backendVersion} - Seite neu laden`)
+              : 'Server nicht erreichbar'}>
+        <span class="led" class:led-ok={backendOk && FE_VERSION === backendVersion}
+              class:led-warn={backendOk && FE_VERSION !== backendVersion} class:led-err={!backendOk}></span>
+        {backendOk ? backendVersion : 'Server?'}{#if backendOk && FE_VERSION !== backendVersion} · neu laden{/if}
+      </span>
       <span class="ubar-sep"></span>
-      <span class="ubar-sys"><span class="led" class:led-ok={ytOk && !rateWarning && !botDetected && cooldownState.cooldown <= cooldownState.base} class:led-warn={(!ytOk || rateWarning || cooldownState.cooldown > cooldownState.base) && !botDetected} class:led-bot={botDetected}></span> YouTube{botDetected ? ' (Bot!)' : ''}</span>
-      <span class="ubar-sys"><span class="led" class:led-ok={rssRunning} class:led-off={!rssRunning}></span> RSS</span>
-      <span class="ubar-sys"><span class="led" class:led-ok={rydOk} class:led-off={!rydOk}></span> RYD</span>
-
-      {#if botDetected || rateWarning || rateLimiterDisabled || !ytOk || (stats.paused && stats.pause_reason === 'rate_limit')}
-        <span class="ubar-sep"></span>
-        {#if botDetected}
-          <span class="ubar-led lit" style="--c:#f5c542">
-            <i class="fa-solid fa-robot"></i> Bot erkannt – 1h Pause
-          </span>
-        {:else if rateLimiterDisabled}
-          <span class="ubar-led lit" style="--c:var(--status-info)">
-            <i class="fa-solid fa-shield-halved"></i> Limiter AUS
-          </span>
-        {:else if !ytOk}
-          <span class="ubar-led lit" style="--c:var(--status-error)">
-            <i class="fa-solid fa-ban"></i> YouTube blockiert{ytBlockCount > 0 ? ` (${ytBlockCount}×)` : ''}
-          </span>
-        {:else if rateWarning}
-          <span class="ubar-led lit" style="--c:var(--status-warning)">
-            <i class="fa-solid fa-gauge-high"></i> Backoff aktiv
-          </span>
-        {/if}
-        <button class="ubar-btn" onclick={resetRateLimit} title="Rate-Limit zurücksetzen">
+      {#if botDetected}
+        <span class="ubar-sys" title="Die Quelle hält uns für einen Automaten und sperrt; eine Stunde Pause, dann geht es weiter.">
+          <span class="led led-bot"></span> Quelle gesperrt
+        </span>
+      {:else if !ytOk}
+        <span class="ubar-sys" title="Abrufe bei der Quelle scheitern gerade{ytBlockCount > 0 ? ` (${ytBlockCount} Sperren)` : ''}.">
+          <span class="led led-err"></span> Quelle blockiert
+        </span>
+      {:else if rateWarning || cooldownState.cooldown > cooldownState.base}
+        <span class="ubar-sys" title="Die Quelle hat gebremst; Abrufe laufen vorerst in größerem Abstand. Mit dem Pfeil hebst du die Bremse auf.">
+          <span class="led led-warn"></span> Quelle gebremst
+        </span>
+        <button class="ubar-btn" onclick={resetRateLimit} title="Bremse aufheben: wieder im normalen Abstand abrufen">
           <i class="fa-solid fa-rotate-right"></i>
         </button>
-        <button class="ubar-btn" onclick={toggleRateLimit} title={rateLimiterDisabled ? 'Rate-Limiter einschalten' : 'Rate-Limiter ausschalten'}>
-          <i class="fa-solid {rateLimiterDisabled ? 'fa-toggle-off' : 'fa-toggle-on'}"></i>
-        </button>
       {:else}
-        <button class="ubar-btn" onclick={toggleRateLimit} title="Rate-Limiter ausschalten" style="opacity:0.5">
-          <i class="fa-solid fa-shield-halved"></i>
+        <span class="ubar-sys" title="Abrufe bei der Quelle laufen normal."><span class="led led-ok"></span> Quelle</span>
+      {/if}
+      {#if rateLimiterDisabled}
+        <span class="ubar-sys" title="Die Abstände zwischen Abrufen sind ausgeschaltet. Die Quelle sperrt dann schneller.">
+          <span class="led led-warn"></span> ohne Bremse
+        </span>
+        <button class="ubar-btn" onclick={enableRateLimit} title="Abstände zwischen Abrufen wieder einschalten">
+          <i class="fa-solid fa-toggle-off"></i>
         </button>
       {/if}
+      <span class="ubar-sys" title={rssRunning ? 'Kanäle werden regelmäßig auf neue Videos geprüft.' : 'Die Kanalprüfung ist ausgeschaltet (Einstellungen).'}>
+        <span class="led" class:led-ok={rssRunning} class:led-off={!rssRunning}></span> Kanalprüfung
+      </span>
+      <span class="ubar-sys" title={rydOk ? 'Der Dienst für Mag-ich- und Mag-ich-nicht-Zahlen ist erreichbar.' : 'Der Dienst für Mag-ich-Zahlen ist nicht erreichbar; neue Videos bekommen vorerst keine.'}>
+        <span class="led" class:led-ok={rydOk} class:led-off={!rydOk}></span> Bewertungen
+      </span>
     </div>
   </div>
 </div>
