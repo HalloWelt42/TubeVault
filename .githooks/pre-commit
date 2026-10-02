@@ -44,6 +44,24 @@ if echo "$AUTHOR_NAME $AUTHOR_EMAIL" | grep -iE 'claude|anthropic' > /dev/null; 
   FOUND_ISSUE=1
 fi
 
+# 4. Version: Quelle und Spiegel gleich, und gegenüber dem letzten Commit erhöht.
+# Jeder Commit trägt eine eigene Version (scripts/bump.sh patch|minor).
+if [ -x scripts/check-version.sh ]; then
+  if ! NEW_VERSION=$(scripts/check-version.sh); then
+    FOUND_ISSUE=1
+  else
+    OLD_VERSION=$(git show HEAD:version.json 2>/dev/null | sed -n 's/.*"version": *"\([0-9.]*\)".*/\1/p')
+    if [ -n "$OLD_VERSION" ]; then
+      HIGHEST=$(printf '%s\n%s\n' "$OLD_VERSION" "$NEW_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+      if [ "$NEW_VERSION" = "$OLD_VERSION" ] || [ "$HIGHEST" != "$NEW_VERSION" ]; then
+        echo -e "${RED}❌ FEHLER: Version nicht erhöht (letzter Commit: $OLD_VERSION, jetzt: $NEW_VERSION).${NC}"
+        echo "  Vor dem Commit: scripts/bump.sh patch   (oder minor bei neuer Funktion)"
+        FOUND_ISSUE=1
+      fi
+    fi
+  fi
+fi
+
 if [ $FOUND_ISSUE -eq 1 ]; then
   echo ""
   echo -e "${RED}Commit abgelehnt.${NC}"

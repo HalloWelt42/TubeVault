@@ -1,0 +1,73 @@
+/*
+ * TubeVault – Mobil-Ansicht: eigene Gestaltungsmarken.
+ * Schwarzer Grund, grosse Berührflächen (mindestens 44 Punkt), kein Verlass
+ * auf Überfahren. Nichts hiervon wird von der grossen Ansicht benutzt.
+ */
+:root {
+  --m-bg: #000;
+  --m-surface: #101013;
+  --m-surface-2: #1a1a1f;
+  --m-line: #26262d;
+  --m-text: #f3f3f6;
+  --m-dim: #9b9ba8;
+  --m-faint: #6a6a76;
+  --m-accent: #ff6a3d;
+  --m-accent-ink: #1a0a04;
+  --m-ok: #53d18a;
+  --m-warn: #f2b84b;
+  --m-touch: 48px;
+  --m-tabbar: 58px;
+  --m-radius: 12px;
+  --m-safe-top: env(safe-area-inset-top, 0px);
+  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --m-safe-left: env(safe-area-inset-left, 0px);
+  --m-safe-right: env(safe-area-inset-right, 0px);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #app { height: 100%; }
+
+body {
+  background: var(--m-bg);
+  color: var(--m-text);
+  font-family: 'Barlow', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.35;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  overflow: hidden;
+}
+
+button, input { font: inherit; color: inherit; }
+button { background: none; border: none; cursor: pointer; touch-action: manipulation; }
+
+.m-h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: 0.01em; }
+.m-h2 {
+  font-size: 0.78rem; font-weight: 600; color: var(--m-dim);
+  text-transform: uppercase; letter-spacing: 0.09em;
+  padding: 20px 16px 8px;
+}
+.m-note { padding: 28px 16px; color: var(--m-dim); text-align: center; }
+.m-note .m-btn { margin-top: 14px; }
+
+.m-btn {
+  min-height: var(--m-touch); padding: 0 20px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: var(--m-radius); background: var(--m-surface-2);
+  border: 1px solid var(--m-line); font-weight: 600;
+}
+.m-btn:active { background: var(--m-line); }
+.m-btn.primary { background: var(--m-accent); border-color: var(--m-accent); color: var(--m-accent-ink); }
+
+.m-spin { padding: 22px; text-align: center; color: var(--m-faint); }
+
+/* Jede Ansicht rollt in ihrem eigenen Bereich; so behält ein Reiter seine
+   Position, während ein anderer oder ein Video gezeigt wird. */
+.m-view {
+  height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-left: var(--m-safe-left); padding-right: var(--m-safe-right);
+}

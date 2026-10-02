@@ -14,4 +14,5 @@ chmod +x .githooks/pre-commit .githooks/commit-msg .githooks/install.sh
 
 echo "✅ Git-Hooks aktiviert (core.hooksPath = .githooks)"
 echo "   Pre-Commit: blockiert 'claude'/'anthropic' in Inhalten + Dateinamen"
+echo "   Pre-Commit: prüft die Version (scripts/check-version.sh, Erhöhung je Commit)"
 echo "   Commit-Msg: blockiert 'claude'/'anthropic' in Commit-Messages"

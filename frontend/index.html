@@ -6,6 +6,19 @@
   <title>TubeVault</title>
   <meta name="description" content="Selbstgehostetes Video-Vault & Streaming-System" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script>
+    // Telefone landen auf der eigenständigen Mobil-Ansicht (/m). Wer dort
+    // "Volle Ansicht öffnen" wählt, bleibt hier.
+    (function () {
+      try {
+        if (localStorage.getItem('tv_volle_ansicht')) return;
+        if (!window.matchMedia('(pointer: coarse) and (max-width: 820px)').matches) return;
+        var watch = location.pathname.match(/^\/watch\/([^/]+)/);
+        if (watch) location.replace('/m/video/' + watch[1]);
+        else if (location.pathname === '/') location.replace('/m/');
+      } catch (e) { /* ohne Speicherzugriff: grosse Ansicht */ }
+    })();
+  </script>
 </head>
 <body>
   <div id="app"></div>

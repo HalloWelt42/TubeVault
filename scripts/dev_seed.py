@@ -49,6 +49,7 @@ TOPICS = ["Löten", "Hefeteig", "Weichenbau", "Mondfinsternis", "Fräsen", "Saue
 ARCHIVED_COUNT = 160
 LIBRARY_COUNT = 40
 NAMELESS_EVERY = 9   # jedes 9. Video ohne Kanalnamen (Abo kennt ihn)
+FEED_ONLY_COUNT = 15 # neue Feed-Einträge, die noch nicht geladen sind
 
 
 def make_clip(target: Path) -> None:
@@ -123,6 +124,14 @@ async def seed() -> None:
             """INSERT OR IGNORE INTO rss_entries (video_id, channel_id, title, published, duration)
                VALUES (?, ?, ?, ?, ?)""",
             (video_id, channel_id, f"{topic} Folge {n + 1}", upload_date, 240 + n))
+
+    for n in range(FEED_ONLY_COUNT):
+        channel_id, _ = CHANNELS[n % len(CHANNELS)]
+        await db.execute(
+            """INSERT OR IGNORE INTO rss_entries (video_id, channel_id, title, published, duration)
+               VALUES (?, ?, ?, ?, ?)""",
+            (f"neu{n:08d}", channel_id, f"{TOPICS[n % len(TOPICS)]} Neuheit {n + 1}",
+             f"2026-09-{28 - n:02d} 12:00:00", 600 + n))
 
     await db.fts_rebuild_from_resolver()
     await db.disconnect()
