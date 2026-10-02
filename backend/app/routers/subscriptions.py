@@ -306,7 +306,7 @@ async def _get_channel_videos_impl(
                    v.channel_id = ?
                    OR v.id IN (SELECT video_id FROM rss_entries WHERE channel_id = ?)
                ) {dl_type_filter}
-               ORDER BY {dl_order}
+               ORDER BY {dl_order}, v.id
                LIMIT ? OFFSET ?""",
             (channel_id, channel_id, channel_id, *dl_type_params, per_page, offset)
         )
@@ -341,7 +341,7 @@ async def _get_channel_videos_impl(
                 FROM rss_entries re
                 LEFT JOIN videos v ON re.video_id = v.id
                 WHERE re.channel_id = ? {dismiss_filter} {type_filter}
-                ORDER BY {order_by}
+                ORDER BY {order_by}, re.video_id
                 LIMIT ? OFFSET ?""",
             (channel_id, *type_params, per_page, offset)
         )

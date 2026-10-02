@@ -133,15 +133,18 @@ class MetadataService:
         # ORDER BY – is_favorite ist virtuell und wird via EXISTS gebaut.
         # Tiebreaker created_at DESC, damit neue Videos bei gleichem
         # Sortierwert oben bleiben (wichtig bei NULL-Feldern wie upload_date).
+        # v.id als letzter Schlüssel macht die Reihenfolge eindeutig: ohne ihn
+        # ist sie bei Gleichstand (hunderte Videos mit demselben Upload-Tag)
+        # zufällig, und seitenweises Nachladen liefert Videos doppelt oder nie.
         if sort_by == "is_favorite":
             order_by = (
                 f"(EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id)) {order}, "
-                f"v.created_at DESC"
+                f"v.created_at DESC, v.id"
             )
         else:
             # NULLs ans Ende bei DESC, sonst stehen unbekannte Upload-Daten oben
             null_placement = "NULLS LAST" if order == "DESC" else "NULLS FIRST"
-            order_by = f"v.{sort_by} {order} {null_placement}, v.created_at DESC"
+            order_by = f"v.{sort_by} {order} {null_placement}, v.created_at DESC, v.id"
 
         # Total Count
         total = await db.fetch_val(f"SELECT COUNT(*) FROM videos v {where}", params)
@@ -386,7 +389,7 @@ class MetadataService:
                     FROM watch_history GROUP BY video_id
                 ) wh ON v.id = wh.video_id
                 WHERE 1=1 {extra_where}
-                ORDER BY wh.watched_at DESC
+                ORDER BY wh.watched_at DESC, v.id
                 LIMIT ? OFFSET ?""",
             params + [per_page, offset]
         )

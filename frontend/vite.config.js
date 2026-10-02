@@ -2,6 +2,10 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import pkg from './package.json';
 
+// Ziel des Entwicklungs-Proxys. Für Tests gegen ein lokales Backend mit
+// Testdaten: TUBEVAULT_API=http://localhost:8033 npm run dev
+const API_TARGET = process.env.TUBEVAULT_API || 'http://192.168.178.49:8031';
+
 export default defineConfig({
   plugins: [svelte()],
   // Frontend-Version aus package.json in den Build inlinen.
@@ -13,11 +17,20 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://192.168.178.49:8031',
+        target: API_TARGET,
+        ws: true,
         changeOrigin: true,
       },
       '/thumbnails': {
-        target: 'http://192.168.178.49:8031',
+        target: API_TARGET,
+        changeOrigin: true,
+      },
+      '/avatars': {
+        target: API_TARGET,
+        changeOrigin: true,
+      },
+      '/subtitles': {
+        target: API_TARGET,
         changeOrigin: true,
       },
     },

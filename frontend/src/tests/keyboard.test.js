@@ -5,13 +5,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
-import { currentRoute, searchQuery } from '../lib/stores/app.js';
+import { currentRoute } from '../lib/stores/app.js';
 import { initKeyboard, disableKeyboard, enableKeyboard, shortcuts } from '../lib/stores/keyboard.js';
 
 describe('Keyboard Shortcuts', () => {
   beforeEach(() => {
     currentRoute.set('dashboard');
-    searchQuery.set('');
     enableKeyboard();
     initKeyboard();
   });
@@ -80,10 +79,14 @@ describe('Keyboard Shortcuts', () => {
   });
 
   describe('Escape', () => {
-    it('setzt searchQuery zurück', () => {
-      searchQuery.set('test query');
+    it('verlässt das Suchfeld', () => {
+      const input = document.createElement('input');
+      input.className = 'search-input';
+      document.body.appendChild(input);
+      input.focus();
       pressKey('Escape');
-      expect(get(searchQuery)).toBe('');
+      expect(document.activeElement).not.toBe(input);
+      input.remove();
     });
   });
 

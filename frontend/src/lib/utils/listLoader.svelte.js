@@ -27,8 +27,13 @@
  *   - fehlt beides → keine weiteren Seiten (defensiv).
  * Veraltete Antworten (Filterwechsel während ein Request läuft) werden über
  * eine Laufnummer verworfen — kein Durcheinander mehr bei schnellem Filtern.
+ *
+ * Doppelte Einträge werden beim Anhängen verworfen (Schlüssel: keyOf, Standard
+ * `id`). Seitenweises Blättern kann denselben Eintrag zweimal liefern, wenn
+ * sich der Bestand zwischen zwei Seiten verschiebt; ein doppelter Schlüssel
+ * bricht sonst das Rendern der ganzen Liste ab.
  */
-export function createListLoader(fetchPage) {
+export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {}) {
   let items = $state([]);
   let total = $state(0);
   let loading = $state(false);
@@ -39,11 +44,21 @@ export function createListLoader(fetchPage) {
   let runId = 0;  // Stale-Guard: nur die jüngste Antwort zählt
 
   function applyResult(res, reset) {
-    const newItems = res?.items || [];
-    items = reset ? newItems : [...items, ...newItems];
+    const incoming = res?.items || [];
+    const base = reset ? [] : items;
+    const seen = new Set(base.map(keyOf));
+    const fresh = incoming.filter((item) => {
+      const key = keyOf(item);
+      if (key === undefined || key === null) return true;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    items = [...base, ...fresh];
     if (typeof res?.total === 'number') total = res.total;
     if (typeof res?.hasMore === 'boolean') hasMore = res.hasMore;
-    else if (typeof res?.total === 'number') hasMore = items.length < res.total;
+    // Eine leere Seite beendet das Nachladen auch dann, wenn total mehr verspricht
+    else if (typeof res?.total === 'number') hasMore = incoming.length > 0 && items.length < res.total;
     else hasMore = false;
   }
 

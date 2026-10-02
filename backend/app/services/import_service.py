@@ -463,7 +463,7 @@ class ImportService:
                        v.thumbnail_path, v.source, v.import_path, v.tags,
                        v.created_at, v.rating, v.play_count, v.video_type
                 FROM videos v {where}
-                ORDER BY {sort_by} {order}
+                ORDER BY {sort_by} {order}, v.id
                 LIMIT ? OFFSET ?""",
             tuple(params) + (per_page, offset)
         )

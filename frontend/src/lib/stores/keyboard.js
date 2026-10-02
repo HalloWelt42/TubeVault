@@ -4,7 +4,6 @@
  */
 
 import { navigate } from '../router/router.js';
-import { searchQuery } from './app.js';
 
 const shortcuts = {
   'd': '/',
@@ -61,9 +60,8 @@ function handleKey(e) {
     return;
   }
 
-  // Escape → Clear search, back to dashboard
+  // Escape → Suchfeld verlassen
   if (e.key === 'Escape') {
-    searchQuery.set('');
     const searchEl = document.querySelector('.search-input');
     if (searchEl) searchEl.blur();
     return;

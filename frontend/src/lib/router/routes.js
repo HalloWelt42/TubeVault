@@ -55,7 +55,7 @@ export const routeDefinitions = {
     group: 'main',
     hasId: false,
     badge: 'videos',
-    queryParams: ['sort', 'order', 'types', 'channels', 'categories', 'tags', 'q'],
+    queryParams: ['sort', 'order', 'types', 'channels', 'categories', 'tags', 'q', 'music'],
     description: 'Heruntergeladene Videos mit Filtern',
   },
   'downloads': {
@@ -115,7 +115,7 @@ export const routeDefinitions = {
     group: 'main',
     hasId: false,
     badge: 'archives',
-    queryParams: ['sort', 'order', 'type', 'channel', 'category', 'tag', 'q', 'page'],
+    queryParams: ['sort', 'order', 'types', 'channels', 'categories', 'tags', 'q'],
     description: 'Archivierte Videos',
   },
   'own-videos': {

@@ -32,7 +32,6 @@ export const currentChannelId = currentChannelIdCompat;
 // ─── Nicht-Router Stores (bleiben hier) ──────────────────
 
 export const sidebarOpen = writable(true);
-export const searchQuery = writable('');
 
 /** Wird inkrementiert wenn Backend neue Feed-Einträge meldet → Feed.svelte reagiert */
 export const feedVersion = writable(0);

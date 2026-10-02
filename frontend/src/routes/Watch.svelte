@@ -585,8 +585,9 @@
 
   // Phase 3: Metadata bearbeiten
   function filterByTag(tag) {
-    navigate('/library');
-    window.dispatchEvent(new CustomEvent('tubevault:tag-filter', { detail: tag }));
+    // Der Filter reist in der URL mit. Ziel ist die Liste, in der dieses Video
+    // selbst steht (Archiv oder Bibliothek) - sonst führt der Tag ins Leere.
+    navigate(video?.is_archived ? '/archives' : '/library', { tags: tag });
   }
 
   async function setRating(r) {

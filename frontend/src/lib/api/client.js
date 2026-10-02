@@ -7,12 +7,19 @@
 // Fallback falls Build-Step den Wert nicht ersetzt (z.B. im Dev-Modus ohne Define).
 export const FE_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
 
-// Über Nginx-Proxy (Port 8032) → relative Pfade, Nginx leitet an Backend weiter
-// Im Dev-Modus (vite:5173) → vite proxy in vite.config.js
-// Direkt auf Backend → explizite URL
-const API_BASE = (window.location.port === '8032' || window.location.port === '5173' || window.location.port === '')
-  ? ''
-  : `${window.location.protocol}//${window.location.hostname}:8031`;
+// Die Oberfläche spricht das Backend immer über den eigenen Ursprung an:
+// im Betrieb leitet Nginx /api weiter, in der Entwicklung der Vite-Proxy.
+// Damit funktioniert jeder Frontend-Port (auch ein per
+// TUBEVAULT_FRONTEND_PORT umgestellter). Nur wer die Oberfläche bewusst von
+// einem anderen Ursprung ausliefert, setzt VITE_API_BASE beim Build.
+const API_BASE = import.meta.env?.VITE_API_BASE || '';
+
+/** Basis-Adresse für WebSockets (ws/wss passend zum Ursprung bzw. zu API_BASE). */
+export function wsBaseUrl() {
+  if (API_BASE) return API_BASE.replace(/^http/, 'ws');
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}`;
+}
 
 // Verbindungsstatus (für Offline-Banner)
 let _connectionOk = true;
@@ -559,11 +566,7 @@ export const api = {
 
 // WebSocket für ALLE Job-/Aktivitäts-Updates
 export function createActivitySocket(onMessage) {
-  const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const wsBase = API_BASE
-    ? API_BASE.replace(/^http/, 'ws')
-    : `${wsProto}://${window.location.host}`;
-  const wsUrl = wsBase + '/api/jobs/ws';
+  const wsUrl = wsBaseUrl() + '/api/jobs/ws';
   let ws = null;
   let reconnectTimer = null;
   let pingTimer = null;

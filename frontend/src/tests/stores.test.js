@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
-import { currentRoute, currentVideoId, currentChannelId, sidebarOpen, searchQuery } from '../lib/stores/app.js';
+import { currentRoute, currentVideoId, currentChannelId, sidebarOpen } from '../lib/stores/app.js';
 import { toast } from '../lib/stores/notifications.js';
 
 // ============================================================
@@ -17,7 +17,6 @@ describe('App Store', () => {
     currentVideoId.set(null);
     currentChannelId.set(null);
     sidebarOpen.set(true);
-    searchQuery.set('');
   });
 
   describe('currentRoute', () => {
@@ -89,16 +88,6 @@ describe('App Store', () => {
     });
   });
 
-  describe('searchQuery', () => {
-    it('Startwert ist leer', () => {
-      expect(get(searchQuery)).toBe('');
-    });
-
-    it('Suchtext setzen', () => {
-      searchQuery.set('python tutorial');
-      expect(get(searchQuery)).toBe('python tutorial');
-    });
-  });
 });
 
 // ============================================================

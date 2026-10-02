@@ -17,20 +17,26 @@
     showDuration = false,
     showMusic = false,
     feedTab = 'active',
+    // Startauswahl im Format von onchange ({ types, channels, categories,
+    // keywords, search, is_music }). Damit zeigt die Leiste von Anfang an
+    // genau das, was die Seite filtert (z.B. gespeicherte Auswahl, Verweis).
+    initial = null,
     onchange = () => {},
   } = $props();
 
+  const fromList = (v) => (v ? String(v).split(',').filter(Boolean) : []);
+
   // Selektionen
-  let selectedTypes = $state([]);
-  let selectedChannels = $state([]);
-  let selectedCategories = $state([]);
-  let selectedTags = $state([]);
+  let selectedTypes = $state(fromList(initial?.types));
+  let selectedChannels = $state(fromList(initial?.channels));
+  let selectedCategories = $state(fromList(initial?.categories));
+  let selectedTags = $state(fromList(initial?.keywords));
   let selectedDurations = $state([]);
-  let musicOnly = $state(false);
+  let musicOnly = $state(!!initial?.is_music);
   let customDurMin = $state('');
   let customDurMax = $state('');
   let customDurActive = $state(false);
-  let searchText = $state('');
+  let searchText = $state(initial?.search || '');
   let searchTimer = null;
 
   // Dropdown-Daten
@@ -66,7 +72,7 @@
   onMount(async () => {
     if (showChannels) {
       try {
-        // Im Feed-Modus: Kanaele aus Subscriptions/RSS, sonst aus Videos
+        // Im Feed-Modus: Kanäle aus Subscriptions/RSS, sonst aus Videos
         if (showTags) {
           channels = await api.getFeedChannels(feedTab) || [];
         } else {
@@ -209,7 +215,8 @@
   let hasActive = $derived(
     selectedTypes.length > 0 || selectedChannels.length > 0 ||
     selectedCategories.length > 0 || selectedTags.length > 0 ||
-    selectedDurations.length > 0 || customDurActive || searchText.trim().length > 0
+    selectedDurations.length > 0 || customDurActive || searchText.trim().length > 0 ||
+    musicOnly
   );
 
   let filteredChannels = $derived(
@@ -305,7 +312,7 @@
       <span class="filter-label">Kanal:</span>
       <div class="filter-dropdown-wrap channel">
         <button class="dropdown-trigger" onclick={(e) => { e.stopPropagation(); showChannelDD = !showChannelDD; showCategoryDD = false; showTagDD = false; }}>
-          {selectedChannels.length === 0 ? 'Alle Kanaele' : `${selectedChannels.length} ausgewaehlt`}
+          {selectedChannels.length === 0 ? 'Alle Kanäle' : `${selectedChannels.length} ausgewählt`}
           <i class="fa-solid fa-chevron-down dd-arrow" class:open={showChannelDD}></i>
         </button>
         {#if showChannelDD}
@@ -339,7 +346,7 @@
       <span class="filter-label">Kategorie:</span>
       <div class="filter-dropdown-wrap category">
         <button class="dropdown-trigger" onclick={(e) => { e.stopPropagation(); showCategoryDD = !showCategoryDD; showChannelDD = false; showTagDD = false; }}>
-          {selectedCategories.length === 0 ? 'Alle Kategorien' : `${selectedCategories.length} ausgewaehlt`}
+          {selectedCategories.length === 0 ? 'Alle Kategorien' : `${selectedCategories.length} ausgewählt`}
           <i class="fa-solid fa-chevron-down dd-arrow" class:open={showCategoryDD}></i>
         </button>
         {#if showCategoryDD}
@@ -373,7 +380,7 @@
       <span class="filter-label">Tags:</span>
       <div class="filter-dropdown-wrap tag">
         <button class="dropdown-trigger" onclick={(e) => { e.stopPropagation(); showTagDD = !showTagDD; showChannelDD = false; showCategoryDD = false; }}>
-          {selectedTags.length === 0 ? 'Alle Tags' : `${selectedTags.length} ausgewaehlt`}
+          {selectedTags.length === 0 ? 'Alle Tags' : `${selectedTags.length} ausgewählt`}
           <i class="fa-solid fa-chevron-down dd-arrow" class:open={showTagDD}></i>
         </button>
         {#if showTagDD}
@@ -404,7 +411,7 @@
 
   {#if hasActive}
     <button class="filter-reset" onclick={clearAll}>
-      <i class="fa-solid fa-xmark"></i> Zuruecksetzen
+      <i class="fa-solid fa-xmark"></i> Zurücksetzen
     </button>
   {/if}
 </div>

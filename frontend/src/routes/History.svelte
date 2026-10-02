@@ -11,14 +11,15 @@
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   import PageHeader from '../lib/components/common/PageHeader.svelte';
 
-  const PER_PAGE = getSettingNum('general.videos_per_page', 24);
+  // Bei jedem Laden frisch lesen: eine geänderte Einstellung gilt sofort
+  const perPage = () => getSettingNum('general.videos_per_page', 24);
 
   let histFilter = $state({ types: null, channels: null, search: null });
 
   // Zentraler List-Loader: page darin bewusst nicht-reaktiv — das Nachladen
   // kann keinen Effect mehr triggern (Bug: Liste sprang beim Scrollen zurück).
   const list = createListLoader(async (page) => {
-    const params = { page, per_page: PER_PAGE };
+    const params = { page, per_page: perPage() };
     if (histFilter.search) params.search = histFilter.search;
     if (histFilter.types) params.video_types = histFilter.types;
     if (histFilter.channels) params.channel_ids = histFilter.channels;

@@ -1169,7 +1169,7 @@ class RSSService:
                 JOIN subscriptions s ON r.channel_id = s.channel_id
                 LEFT JOIN videos v ON r.video_id = v.id
                 {base_where}
-                ORDER BY r.published DESC
+                ORDER BY r.published DESC, r.id DESC
                 LIMIT ? OFFSET ?""",
             tuple(all_params + [per_page, offset])
         )

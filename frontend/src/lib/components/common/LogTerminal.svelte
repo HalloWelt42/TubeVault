@@ -6,6 +6,7 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import { api, wsBaseUrl } from '../../api/client.js';
   import { onMount, onDestroy } from 'svelte';
 
   let { visible = $bindable(false) } = $props();
@@ -198,13 +199,7 @@
   // ─── WebSocket ───
   function connect() {
     if (ws) return;
-    const port = window.location.port;
-    const isProxy = (port === '8032' || port === '5173' || port === '');
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const wsBase = isProxy
-      ? `${proto}://${window.location.host}`
-      : `${proto}://${window.location.hostname}:8031`;
-    ws = new WebSocket(`${wsBase}/api/system/ws/logs`);
+    ws = new WebSocket(`${wsBaseUrl()}/api/system/ws/logs`);
 
     ws.onopen = () => { wsConnected = true; };
     ws.onmessage = (e) => {
@@ -316,10 +311,7 @@
     if (frontendBuffer.length === 0) return;
     const batch = frontendBuffer.splice(0, 50);
     try {
-      const port = window.location.port;
-      const isProxy = (port === '8032' || port === '5173' || port === '');
-      const base = isProxy ? '' : `http://${window.location.hostname}:8031`;
-      await fetch(`${base}/api/system/logs/frontend`, {
+      await fetch(`${api.baseUrl}/api/system/logs/frontend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch),

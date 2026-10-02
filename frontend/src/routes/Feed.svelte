@@ -42,7 +42,8 @@
   // Stream-Auswahl Dialog
   let streamDialog = $state(null);
 
-  const PER_PAGE = getSettingNum('general.videos_per_page', 24);
+  // Bei jedem Laden frisch lesen: eine geänderte Einstellung gilt sofort
+  const perPage = () => getSettingNum('general.videos_per_page', 24);
 
 
   const FEED_TABS = [
@@ -88,7 +89,7 @@
   });
 
   const list = createListLoader(async (page) => {
-    const params = { feedTab, page, perPage: PER_PAGE };
+    const params = { feedTab, page, perPage: perPage() };
     if (feedFilter.types) params.videoTypes = feedFilter.types;
     if (feedFilter.channels) params.channelIds = feedFilter.channels;
     if (feedFilter.keywords) params.keywords = feedFilter.keywords;

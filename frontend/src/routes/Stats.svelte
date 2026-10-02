@@ -38,7 +38,7 @@
   }
 
   function exportData(type) {
-    const base = window.location.port === '8032' ? '' : `${window.location.protocol}//${window.location.hostname}:8031`;
+    const base = api.baseUrl;
     const urls = {
       videos_json: '/api/exports/videos/json',
       videos_csv: '/api/exports/videos/csv',

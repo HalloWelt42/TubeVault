@@ -6,10 +6,9 @@
 -->
 <script>
   import { api } from '../lib/api/client.js';
-  import { searchQuery } from '../lib/stores/app.js';
   import { toast } from '../lib/stores/notifications.js';
   import { getSettingNum } from '../lib/stores/settings.js';
-  import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
+  import { createVideoListFilters } from '../lib/utils/videoListFilters.svelte.js';
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
@@ -19,53 +18,37 @@
   import TagFilterBar from '../lib/components/common/TagFilterBar.svelte';
   import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
 
-  let sortBy = $state(getFilter('archives', 'sortBy', 'upload_date'));
-  let sortOrder = $state(getFilter('archives', 'sortOrder', 'desc'));
+  // Sortierung, Tags und Mehrfachfilter: eine Wahrheit (URL > gespeicherte Auswahl)
+  const filters = createVideoListFilters('archives');
+
   let selectMode = $state(false);
   let selected = $state(new Set());
-
-  let activeTags = $state(getFilter('archives', 'activeTags', []));
+  let filterRef;
   let allTags = $state([]);
-  let multiFilter = $state(getFilter('archives', 'multiFilter', { types: null, channels: null, categories: null }));
 
   async function loadTags() {
     // Tags nur für die im Archiv gefilterten Videos — nicht global.
     try {
-      const filters = {
-        archived: true,
-        video_types: multiFilter.types || undefined,
-        channel_ids: multiFilter.channels || undefined,
-        category_ids: multiFilter.categories || undefined,
-      };
-      allTags = (await api.getAllTags(filters)) || [];
+      allTags = (await api.getAllTags({ archived: true, ...filters.tagParams() })) || [];
     } catch {}
   }
 
   // Zentraler List-Loader: page ist darin bewusst nicht-reaktiv,
   // dadurch kann der Filter-$effect das Nachladen nicht mehr zurücksetzen.
   const list = createListLoader(async (page) => {
-    const params = { page, per_page: getSettingNum('general.videos_per_page', 24), sort_by: sortBy, sort_order: sortOrder, is_archived: true };
-    const q = $searchQuery;
-    if (q) params.search = q;
-    if (activeTags.length > 0) params.tags = activeTags.join(',');
-    if (multiFilter.types) params.video_types = multiFilter.types;
-    if (multiFilter.channels) params.channel_ids = multiFilter.channels;
-    if (multiFilter.categories) params.category_ids = multiFilter.categories;
+    const params = {
+      page, per_page: getSettingNum('general.videos_per_page', 24),
+      is_archived: true, ...filters.apiParams(),
+    };
     try {
       const result = await api.getVideos(params);
       return { items: result.videos || [], total: result.total || 0 };
     } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
   });
 
-  function toggleTag(tag) { activeTags = activeTags.includes(tag) ? activeTags.filter(t => t !== tag) : [...activeTags, tag]; }
-  function clearFilters() { activeTags = []; multiFilter = { types: null, channels: null, categories: null }; }
-  function onFilterChange(f) {
-    multiFilter = f;
-    loadTags();
-  }
-  function changeSort(field) {
-    if (sortBy === field) sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
-    else { sortBy = field; sortOrder = 'desc'; }
+  function clearFilters() {
+    filters.clearTags();
+    filterRef?.reset();   // leert die Leiste und meldet den leeren Filter zurück
   }
 
   // ─── Dearchivieren ───
@@ -95,28 +78,19 @@
     selected = s;
   }
 
-  $effect(() => { loadTags(); });
+  // Jede Filter-Änderung: Auswahl sichern (Speicher + URL), Liste und Tags neu laden
   $effect(() => {
-    // Filter-Änderungen → Liste von vorne laden. list.load() liest intern
-    // kein reaktives page mehr — Nachladen kann den Effect nicht triggern.
-    $searchQuery; sortBy; sortOrder; activeTags;
-    multiFilter.types; multiFilter.channels; multiFilter.categories;
-    // Alle Filter persistieren (User-Wunsch: Auswahl bleibt erhalten)
-    saveFilters('archives', {
-      sortBy, sortOrder,
-      activeTags: [...activeTags],
-      multiFilter: { ...multiFilter },
-    });
+    filters.signature;
+    filters.persist();
     list.load(true);
+    loadTags();
   });
   // Reagiere auf Video-Mutationen aus anderen Views (z.B. Watch → Dearchive)
   $effect(() => onVideoMutation(() => { list.load(true); loadTags(); }));
-
-  let hasActiveFilter = $derived(activeTags.length > 0 || multiFilter.types || multiFilter.channels || multiFilter.categories);
 </script>
 
 <div class="library">
-  <PageHeader title="Archiv" icon="fa-solid fa-box-archive" count={list.total} hasFilter={!!hasActiveFilter} onClearFilter={clearFilters}>
+  <PageHeader title="Archiv" icon="fa-solid fa-box-archive" count={list.total} hasFilter={filters.hasActive} onClearFilter={clearFilters}>
     <button class="btn-select" class:active={selectMode} onclick={() => { selectMode = !selectMode; selected = new Set(); }}>
       <i class="fa-solid {selectMode ? 'fa-xmark' : 'fa-check-double'}"></i>
       {selectMode ? 'Abbrechen' : 'Auswählen'}
@@ -130,17 +104,18 @@
     </BatchToolbar>
   {/if}
 
-  <MultiFilter showTypes={true} showChannels={true} showCategories={true} onchange={onFilterChange} />
+  <MultiFilter bind:this={filterRef} showSearch={true} showTypes={true} showChannels={true} showCategories={true}
+               initial={filters.multi} onchange={filters.setMulti} />
 
-  <TagFilterBar {allTags} {activeTags} onToggle={toggleTag} />
+  <TagFilterBar {allTags} activeTags={filters.activeTags} onToggle={filters.toggleTag} />
 
   <div class="toolbar">
     <div class="sort-group">
       <span class="toolbar-label">Sortieren:</span>
       {#each [['created_at', 'Datum'], ['upload_date', 'Upload'], ['is_favorite', 'Favoriten'], ['title', 'Titel'], ['duration', 'Dauer'], ['file_size', 'Größe'], ['rating', 'Bewertung'], ['play_count', 'Abgespielt']] as [field, label]}
-        <button class="sort-btn" class:active={sortBy === field} onclick={() => changeSort(field)}>
+        <button class="sort-btn" class:active={filters.sortBy === field} onclick={() => filters.changeSort(field)}>
           {label}
-          {#if sortBy === field}<span class="sort-arrow">{sortOrder === 'desc' ? '↓' : '↑'}</span>{/if}
+          {#if filters.sortBy === field}<span class="sort-arrow">{filters.sortOrder === 'desc' ? '↓' : '↑'}</span>{/if}
         </button>
       {/each}
     </div>
@@ -172,7 +147,7 @@
     {#if list.loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
   {:else}
     <div class="empty">
-      {#if hasActiveFilter}
+      {#if filters.hasActive}
         <p>Keine archivierten Videos für diesen Filter.</p>
         <button class="btn-reset" onclick={clearFilters}>Filter zurücksetzen</button>
       {:else}
