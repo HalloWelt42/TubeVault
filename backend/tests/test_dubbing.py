@@ -60,7 +60,8 @@ async def test_vormerken_mit_gruenden(client, videos):
     assert first["queued"] and first["request"]["voice"] == "Andere"
     assert first["request"]["subtitles"] == "any"
     assert (await vormerken("en2"))["queued"]
-    assert "bereits Deutsch" in (await vormerken("de1"))["reason"]
+    # Gleiche Sprache ist erlaubt: das Video wird neu gesprochen
+    assert (await vormerken("de1"))["queued"]
     assert "nicht geladen" in (await vormerken("stub"))["reason"]
     again = await vormerken("en1")
     assert not again["queued"] and "vorgemerkt" in again["reason"]
@@ -193,3 +194,17 @@ async def test_tonspur_loeschen(client, videos, tmp_path):
     track = await audio_tracks.store_track("en1", "de", _tone(tmp_path / "a.m4a"), suffix=".m4a")
     assert (await client.delete(f"/api/videos/en1/audio-tracks/{track.id}")).status_code == 200
     assert await audio_tracks.list_tracks("en1") == []
+
+
+async def test_gleiche_sprache_heisst_neu_gesprochen(client, videos, tmp_path):
+    """Ein deutsches Video nach Deutsch: die Spur ist als neu gesprochen
+    beschriftet, damit sie neben dem Original unterscheidbar bleibt."""
+    await client.post("/api/dubbing/requests", json={"video_id": "de1"})
+    job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
+    assert job["source_language"] == job["target_language"] == "de"
+    with _tone(tmp_path / "neu.m4a").open("rb") as fh:
+        r = await client.post(
+            f"/api/dubbing/requests/{job['id']}/result",
+            files={"file": ("de.m4a", fh, "audio/mp4")}, data={"source_language": "de"})
+    assert r.status_code == 200, r.text
+    assert r.json()["track"]["label"] == "Deutsch (neu gesprochen)"

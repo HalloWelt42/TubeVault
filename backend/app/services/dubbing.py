@@ -143,7 +143,8 @@ class EnqueueOutcome(BaseModel):
 async def enqueue(video_id: str, target_language: str | None = None,
                   voice: str | None = None, subtitles: SubtitleUse = "any") -> EnqueueOutcome:
     """Ein Video zur Nachvertonung vormerken - immer eine ausdrückliche
-    Entscheidung für genau dieses Video. Ohne Stimme gilt die Vorauswahl."""
+    Entscheidung für genau dieses Video. Ohne Stimme gilt die Vorauswahl.
+    Ist die Zielsprache die des Originals, wird nur neu gesprochen."""
     target = (target_language or DEFAULT_TARGET_LANGUAGE).strip().lower()
     voice = (voice or "").strip() or (await voice_choice()).default
 
@@ -153,8 +154,8 @@ async def enqueue(video_id: str, target_language: str | None = None,
     video = await db.fetch_one("SELECT id, status, language FROM videos WHERE id = ?", (video_id,))
     if not video or video["status"] != "ready":
         return refused("Video ist nicht geladen")
-    if (video["language"] or "").lower() == target:
-        return refused(f"Original ist bereits {audio_tracks.language_name(target)}")
+    # Gleiche Sprache ist erlaubt: das Video wird dann mit einer anderen Stimme
+    # neu gesprochen, ohne Übersetzung.
     if await db.fetch_one(
             "SELECT id FROM audio_tracks WHERE video_id = ? AND language = ?", (video_id, target)):
         return refused(f"Tonspur {audio_tracks.language_name(target)} ist schon vorhanden")

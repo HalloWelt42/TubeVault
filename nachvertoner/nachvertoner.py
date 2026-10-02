@@ -218,8 +218,8 @@ class Nachvertoner:
             source = (job.get("source_language") or (transcript or {}).get("language")
                       or self.s.default_source_language).lower()
             target = job["target_language"].lower()
-            if source == target:
-                raise Uebersprungen(f"Original ist bereits {target}")
+            # source == target ist gewollt: neu sprechen mit anderer Stimme.
+            # Der Dienst übersetzt dann nicht.
             voice_id = self.voice_id(job.get("voice") or DEFAULT_VOICE)
 
             self.report(request_id, 0.02, "Video laden")

@@ -140,11 +140,14 @@ def test_fehler_wird_sichtbar_gemeldet(make):
     assert stage.result_upload is None
 
 
-def test_schon_zielsprache_wird_uebersprungen(make):
+def test_gleiche_sprache_wird_neu_gesprochen(make):
+    """Ein deutsches Video nach Deutsch: kein Überspringen, sondern Vertonung
+    ohne Übersetzung (Quell- und Zielsprache gleich)."""
     worker, stage = make([DONE], source_language="de")
-    worker.step()
-    assert stage.failed["skipped"] is True
-    assert stage.created_payload is None, "keine Vertonung angestossen"
+    assert worker.step() is True
+    payload = stage.created_payload["payload"]
+    assert payload["source_language"] == payload["target_language"] == "german"
+    assert stage.failed is None and stage.result_upload
 
 
 def test_entfernter_auftrag_bricht_ab(make):

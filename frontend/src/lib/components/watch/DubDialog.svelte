@@ -24,10 +24,11 @@
   let language = $state('de');
   let subtitles = $state('any');
   let busy = $state(false);
+  let sameLanguage = $derived(!!video && (video.language || '').toLowerCase() === language);
 
   export async function open(target) {
     video = target;
-    language = (target.language || '').toLowerCase() === 'de' ? 'en' : 'de';
+    language = 'de';
     try {
       const choice = await api.getDubbingVoices();
       voices = choice.voices;
@@ -44,7 +45,7 @@
       const outcome = await api.enqueueDubbing({
         video_id: video.id, target_language: language, voice: voice || null, subtitles,
       });
-      if (outcome.queued) toast.success('Zur Nachvertonung vorgemerkt');
+      if (outcome.queued) toast.success(sameLanguage ? 'Zum Neu-Sprechen vorgemerkt' : 'Zur Nachvertonung vorgemerkt');
       else toast.info(`Nicht vorgemerkt: ${outcome.reason}`);
       close();
     } catch (e) { toast.error(e.message); }
@@ -66,6 +67,10 @@
           {#each LANGUAGES as [code, label]}<option value={code}>{label}</option>{/each}
         </select>
       </label>
+
+      {#if sameLanguage}
+        <p class="dub-note">Das Video ist bereits {LANGUAGES.find(([code]) => code === language)?.[1]}: es wird ohne Übersetzung mit der gewählten Stimme neu gesprochen.</p>
+      {/if}
 
       <label class="dub-row">
         <span>Stimme</span>
@@ -121,7 +126,7 @@
     background: var(--bg-tertiary); color: var(--text-primary); font: inherit; min-width: 0;
   }
   .dub-hint, .dub-note { font-size: 0.74rem; color: var(--text-tertiary); }
-  .dub-note { margin: 0 0 4px; }
+  .dub-note { margin: 0 0 10px; }
   .dub-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
   .dub-btn {
     padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border-primary);

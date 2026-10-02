@@ -213,10 +213,15 @@ async def dubbing_result(
         staged = Path(tmp.name)
         while chunk := await file.read(_UPLOAD_CHUNK):
             tmp.write(chunk)
+    # Gleiche Sprache wie das Original: neu gesprochen, nicht übersetzt
+    original = (source_language or job.source_language or "").strip().lower()
+    label = None
+    if original and original == job.target_language.lower():
+        label = f"{audio_tracks.language_name(job.target_language)} (neu gesprochen)"
     try:
         track = await audio_tracks.store_track(
             job.video_id, job.target_language, staged,
-            suffix=suffix, origin="dub", voice=voice or job.voice)
+            suffix=suffix, origin="dub", voice=voice or job.voice, label=label)
     except ValueError as e:
         staged.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=str(e))

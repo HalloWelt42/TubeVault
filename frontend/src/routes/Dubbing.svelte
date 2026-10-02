@@ -38,6 +38,7 @@
   // "Englisch → Deutsch"; ist die Sprache des Originals noch nicht bekannt, nur das Ziel
   function direction(request) {
     const target = languageName(request.target_language);
+    if (request.source_language === request.target_language) return `${target}, neu gesprochen`;
     return request.source_language ? `${languageName(request.source_language)} → ${target}` : `nach ${target}`;
   }
 
