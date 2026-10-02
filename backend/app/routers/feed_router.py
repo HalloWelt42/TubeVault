@@ -103,34 +103,28 @@ async def set_entry_status(entry_id: int, status: str = Query(...)):
 
 @router.post("/feed/{entry_id}/type")
 async def set_entry_type(entry_id: int, video_type: str = Query(...)):
-    """Video-Typ manuell aendern (video/short/live)."""
-    if video_type not in ("video", "short", "live"):
-        raise HTTPException(status_code=400, detail=f"Ungueltiger Typ: {video_type}")
-    await db.execute(
-        "UPDATE rss_entries SET video_type = ? WHERE id = ?", (video_type, entry_id)
-    )
+    """Video-Typ von Hand ändern (video/short/live)."""
     row = await db.fetch_one("SELECT video_id FROM rss_entries WHERE id = ?", (entry_id,))
-    if row:
-        await db.execute(
-            "UPDATE videos SET video_type = ? WHERE id = ?", (video_type, row["video_id"])
-        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Feed-Eintrag nicht gefunden")
+    await _set_type([row["video_id"]], video_type)
     return {"ok": True, "video_type": video_type}
 
 
 @router.post("/feed/type-by-video")
 async def set_type_by_video_id(video_id: str = Query(...), video_type: str = Query(...)):
     """Video-Typ per video_id ändern (für ChannelDetail)."""
-    if video_type not in ("video", "short", "live"):
-        raise HTTPException(status_code=400, detail=f"Ungültiger Typ: {video_type}")
-    # RSS-Einträge aktualisieren (kann mehrere geben)
-    await db.execute(
-        "UPDATE rss_entries SET video_type = ? WHERE video_id = ?", (video_type, video_id)
-    )
-    # Videos-Tabelle aktualisieren
-    await db.execute(
-        "UPDATE videos SET video_type = ? WHERE id = ?", (video_type, video_id)
-    )
+    await _set_type([video_id], video_type)
     return {"ok": True, "video_id": video_id, "video_type": video_type}
+
+
+async def _set_type(video_ids: list[str], video_type: str) -> None:
+    """Typ von Hand setzen - eine Stelle für Video und Feed (video_classifier)."""
+    from app.services import video_classifier
+    try:
+        await video_classifier.set_manual(video_ids, video_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/feed/bulk-status")
@@ -156,19 +150,11 @@ async def set_bulk_type(body: dict):
         raise HTTPException(status_code=400, detail="entry_ids und video_type (video/short/live) erforderlich")
 
     placeholders = ",".join("?" * len(entry_ids))
-    await db.execute(
-        f"UPDATE rss_entries SET video_type = ? WHERE id IN ({placeholders})",
-        (video_type, *entry_ids)
-    )
     rows = await db.fetch_all(
         f"SELECT video_id FROM rss_entries WHERE id IN ({placeholders})",
         tuple(entry_ids)
     )
-    for row in rows:
-        await db.execute(
-            "UPDATE videos SET video_type = ? WHERE id = ?",
-            (video_type, row["video_id"])
-        )
+    await _set_type([row["video_id"] for row in rows], video_type)
     return {"ok": True, "count": len(entry_ids), "video_type": video_type}
 
 

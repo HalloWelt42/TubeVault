@@ -268,6 +268,8 @@ export const api = {
   // Settings
   getSettings: () => request('/api/settings'),
   getSettingsSchema: () => request('/api/settings/schema'),
+  getShortsOverview: () => request('/api/system/shorts'),
+  deleteShorts: () => request('/api/system/shorts/delete', { method: 'POST' }),
 
   // Tonspuren und Nachvertonung
   getAudioTracks: (videoId) => request(`/api/videos/${videoId}/audio-tracks`),

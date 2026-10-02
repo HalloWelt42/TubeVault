@@ -282,6 +282,11 @@ async def search_videos(
     ]
     params = [*infix_params, query.strip()]
 
+    from app.services import video_classifier
+    shorts_clause = await video_classifier.without_shorts("v")
+    if shorts_clause:
+        conditions.append(shorts_clause.removeprefix(" AND "))
+
     if archived is True:
         conditions.append("COALESCE(v.is_archived, 0) = 1")
     elif archived is False:

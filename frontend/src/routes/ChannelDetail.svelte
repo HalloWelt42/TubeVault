@@ -7,6 +7,7 @@
 -->
 <script>
   import { api } from '../lib/api/client.js';
+  import { settings } from '../lib/stores/settings.js';
   import { toast } from '../lib/stores/notifications.js';
   import { route, navigate } from '../lib/router/router.js';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
@@ -611,7 +612,7 @@
         ['playlists', 'Playlists', channelPlaylists.length + localPlaylists.length],
         ['meta', 'Meta', 0]
       ] as [key, label, count]}
-        {#if key === 'all' || key === 'playlists' || key === 'meta' || count > 0}
+        {#if (key === 'all' || key === 'playlists' || key === 'meta' || count > 0) && !(key === 'short' && $settings['shorts.exclude'] === 'true')}
           <button class="type-tab" class:active={videoType === key} onclick={() => changeType(key)}>
             {label} {#if count > 0}<span class="tab-count">{count}</span>{/if}
           </button>

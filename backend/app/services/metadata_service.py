@@ -117,6 +117,12 @@ class MetadataService:
                 params.append(f'%"{t}"%')
             conditions.append(f"({' OR '.join(tag_conditions)})")
 
+        # Shorts global ausgeschlossen?
+        from app.services import video_classifier
+        shorts_clause = await video_classifier.without_shorts("v")
+        if shorts_clause:
+            conditions.append(shorts_clause.removeprefix(" AND "))
+
         # Musik-Filter
         if is_music is True:
             conditions.append("v.is_music = 1")
@@ -245,12 +251,11 @@ class MetadataService:
                 except Exception as e:
                     logger.warning(f"text_export description {video_id}: {e}")
 
-        # video_type auch in rss_entries synchronisieren
-        if "video_type" in updates and updates["video_type"] in ("video", "short", "live"):
-            await db.execute(
-                "UPDATE rss_entries SET video_type = ? WHERE video_id = ?",
-                (updates["video_type"], video_id)
-            )
+        # Typ von Hand gesetzt: gilt auch für den Feed und bleibt vor der
+        # automatischen Prüfung geschützt
+        if "video_type" in filtered:
+            from app.services import video_classifier
+            await video_classifier.set_manual([video_id], filtered["video_type"])
 
         # Meta-Redundanz: Sidecar nachziehen (idempotent, wirft nie)
         from app.services import meta_sidecar
@@ -430,6 +435,8 @@ class MetadataService:
             params.extend(vtypes)
 
         extra_where = f"AND {' AND '.join(conditions)}" if conditions else ""
+        from app.services import video_classifier
+        extra_where += await video_classifier.without_shorts("v")
 
         total = await db.fetch_val(
             f"""SELECT COUNT(DISTINCT wh.video_id)
@@ -523,7 +530,8 @@ class MetadataService:
                 )
                 params.extend(catids)
 
-        where = " AND ".join(conditions)
+        from app.services import video_classifier
+        where = " AND ".join(conditions) + await video_classifier.without_shorts()
         rows = await db.fetch_all(f"SELECT tags FROM videos WHERE {where}", tuple(params))
 
         tag_count = {}

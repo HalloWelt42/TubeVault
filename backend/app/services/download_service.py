@@ -36,7 +36,7 @@ from app.config import (
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.services.job_service import job_service
-from app.services import download_options
+from app.services import download_options, video_classifier
 from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
 from app.utils.tag_utils import sanitize_tags
@@ -78,14 +78,9 @@ def extract_video_id(url: str) -> Optional[str]:
 
 
 def detect_video_type(yt, source_url: str = "") -> str:
-    """Erkennt Video-Typ: 'video', 'short' oder 'live'.
-
-    Signale (Priorität):
-    1. InnerTube videoDetails: isLive, isLiveContent, isPostLiveDvr → "live"
-    2. URL enthält /shorts/ → "short"
-    3. Canonical URL in microformat enthält /shorts/ → "short"
-    4. Duration allein reicht NICHT für Short-Erkennung
-    """
+    """Vorläufiger Typ aus den Angaben der Quelle: 'live' oder 'video' (bzw.
+    'short', wenn die Adresse es ausdrücklich sagt). Die verbindliche
+    Entscheidung Short/Video trifft video_classifier.classify()."""
     try:
         details = yt.vid_info.get("videoDetails", {})
         # Live-Erkennung
@@ -421,6 +416,10 @@ class DownloadService:
         try:
             result = await asyncio.get_event_loop().run_in_executor(None, _fetch)
             rate_limiter.success("pytubefix")
+            # Short oder Video: die Quelle fragen (detect_video_type kennt nur "live")
+            typed = await video_classifier.classify(
+                video_id, is_live=result["video_type"] == "live", duration=result.get("duration"))
+            result["video_type"] = typed.video_type
             return result
         except ValueError:
             raise  # Wird als 400 behandelt
@@ -954,16 +953,10 @@ class DownloadService:
             tags_json = json.dumps(sanitize_tags(meta.get("tags", [])))
             source_url = f"https://www.youtube.com/watch?v={vid}"
 
-            # Video-Typ: zuerst aus meta (get_video_info), dann rss_entries, fallback video
-            video_type = meta.get("video_type", None)
-            if not video_type or video_type == "video":
-                vtype_row = await db.fetch_one(
-                    "SELECT video_type FROM rss_entries WHERE video_id = ? LIMIT 1", (vid,)
-                )
-                if vtype_row and vtype_row[0] and vtype_row[0] != "video":
-                    video_type = vtype_row[0]
-            if not video_type:
-                video_type = "video"
+            # Video-Typ: eine Stelle entscheidet (Quelle fragen, nicht raten)
+            typed = await video_classifier.classify(
+                vid, is_live=bool(meta.get("is_live")), duration=meta.get("duration"))
+            video_type = typed.video_type
 
             # Video in DB: drei Fälle
             #   - schon fertig vorhanden  → erneutes Laden: nur die Datei wird
@@ -1029,6 +1022,21 @@ class DownloadService:
                            SELECT 1 FROM subscriptions s
                            WHERE s.channel_id = videos.channel_id AND s.drip_auto_archive = 1)""",
                     (vid,))
+
+            # Geprüften Typ festhalten (auch am Feed-Eintrag); Nutzerwahl bleibt
+            await video_classifier.apply(vid, typed)
+
+            # Musik: die Kategorie der Quelle entscheidet (nicht ein Bindestrich
+            # im Titel). Eine frühere Festlegung - auch von Hand - bleibt.
+            music = meta.get("music_info") or {}
+            await db.execute(
+                """UPDATE videos SET is_music = ?,
+                       music_artist = COALESCE(music_artist, ?),
+                       music_title = COALESCE(music_title, ?),
+                       music_album = COALESCE(music_album, ?)
+                   WHERE id = ? AND is_music IS NULL""",
+                (1 if meta.get("is_music") else 0, music.get("artist"), music.get("title"),
+                 music.get("album"), vid))
 
             # Sprache der geladenen (Original-)Tonspur festhalten
             if meta.get("language"):
@@ -1421,16 +1429,12 @@ class DownloadService:
                     })
             except Exception:
                 pass
-            # Video-Typ aus InnerTube videoDetails
-            video_type = "video"
+            # Livestream? (Short oder Video entscheidet der video_classifier)
+            is_live = False
             try:
                 details = yt.vid_info.get("videoDetails", {})
-                if details.get("isLive"):
-                    video_type = "live"
-                elif details.get("isLiveContent") or details.get("isPostLiveDvr"):
-                    video_type = "live"
-                elif yt.length and yt.length <= 60:
-                    video_type = "short"
+                is_live = bool(details.get("isLive") or details.get("isLiveContent")
+                               or details.get("isPostLiveDvr"))
             except Exception:
                 pass
             return {
@@ -1439,7 +1443,9 @@ class DownloadService:
                 "upload_date": str(yt.publish_date) if yt.publish_date else None,
                 "view_count": yt.views, "tags": sanitize_tags(yt.keywords or []),
                 "thumbnail_url": yt.thumbnail_url, "stream_count": len(yt.streams),
-                "chapters": chapters, "video_type": video_type,
+                "chapters": chapters, "is_live": is_live,
+                "is_music": bool(getattr(yt, "is_music", False)),
+                "music_info": getattr(yt, "music_info", None) or {},
                 "language": getattr(yt, "language", None),
             }
         result = await asyncio.get_event_loop().run_in_executor(None, _r)

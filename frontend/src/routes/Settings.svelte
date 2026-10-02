@@ -82,6 +82,7 @@
     loadScheduler();
     loadBackups();
     loadCookiesStatus();
+    loadShorts();
     pollTimer = setInterval(loadScheduler, 5000);
     return () => clearInterval(pollTimer);
   });
@@ -201,6 +202,29 @@
     e.target.value = '';
   }
 
+
+  // Shorts im Bestand (Reiter Feed)
+  let shorts = $state(null);
+  let deletingShorts = $state(false);
+
+  async function loadShorts() {
+    try { shorts = await api.getShortsOverview(); } catch { shorts = null; }
+  }
+
+  async function removeShorts() {
+    const ok = await confirmRef.ask(
+      `${shorts.confirmed_shorts} Shorts löschen?`,
+      'Gelöscht werden nur Videos, die die Quelle als Short bestätigt hat. Sie sind danach restlos weg.',
+      { confirmLabel: 'Shorts löschen' });
+    if (!ok) return;
+    deletingShorts = true;
+    try {
+      const result = await api.deleteShorts();
+      toast.success(`${result.deleted} Shorts gelöscht`);
+    } catch (e) { toast.error(e.message); }
+    deletingShorts = false;
+    loadShorts();
+  }
 
   async function resetAll() {
     if (!await confirmRef.ask('Einstellungen zurücksetzen?', 'Alle Werte gehen auf Default.', { confirmLabel: 'Zurücksetzen' })) return;
@@ -559,6 +583,23 @@
           {@render settingRow(item)}
         {/each}
       </div>
+      {#if cat.key === 'feed' && shorts}
+        <div class="setting-card">
+          <div class="card-header"><i class="fa-solid fa-bolt"></i><h3>Shorts im Bestand</h3></div>
+          <div class="action-row">
+            <button class="action-btn danger" onclick={removeShorts} disabled={deletingShorts || shorts.confirmed_shorts === 0}>
+              <i class="fa-regular fa-trash-can"></i>
+              {deletingShorts ? 'Wird gelöscht…' : `${shorts.confirmed_shorts} bestätigte Shorts löschen`}
+            </button>
+            <span class="action-hint">
+              {shorts.confirmed_shorts} geladene Videos führt die Quelle als Short ({formatSize(shorts.confirmed_bytes)}).
+              {#if shorts.unverified > 0}
+                {shorts.unverified} Einträge werden im Hintergrund noch geprüft; sie bleiben bis dahin unangetastet.
+              {/if}
+            </span>
+          </div>
+        </div>
+      {/if}
     {/each}
   {/if}
   {/if}

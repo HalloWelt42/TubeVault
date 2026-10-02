@@ -257,6 +257,9 @@ async def _get_channel_videos_impl(
         else:
             type_filter = "AND re.video_type = ?"
             type_params = [video_type]
+    # Shorts global ausgeschlossen: auch die Kanalseite zeigt sie nicht
+    from app.services import video_classifier
+    type_filter += await video_classifier.without_shorts("re")
 
     # Sort-Mapping
     sort_map = {
@@ -280,6 +283,7 @@ async def _get_channel_videos_impl(
             else:
                 dl_type_filter = "AND re2.video_type = ?"
                 dl_type_params = [video_type]
+        dl_type_filter += await video_classifier.without_shorts("v")
 
         # Sort für downloaded
         dl_sort_map = {

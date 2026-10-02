@@ -237,9 +237,10 @@ def detect_music(title: str, tags: str = "[]") -> dict:
     m = ARTIST_TITLE_RE.match(title)
     has_separator = m is not None
 
-    # Entscheidung: mindestens 2 von 3 Signalen
-    signals = sum([has_music_tag, has_pattern, has_separator])
-    is_music = signals >= 1 and has_separator  # Muss zumindest Artist-Title haben
+    # Entscheidung: die Form "Interpret - Titel" UND ein weiteres Signal
+    # (Musik-Tag oder Musik-Muster im Titel). Der Bindestrich allein genügt
+    # nicht - sonst gilt jedes "Thema - Untertitel"-Video als Musik.
+    is_music = has_separator and (has_music_tag or has_pattern)
 
     artist = None
     song_title = None

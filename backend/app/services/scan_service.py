@@ -319,19 +319,12 @@ class ScanService:
         file_size = dest_path.stat().st_size
         source = "imported" if row.get("youtube_id") else "local"
 
-        # Video-Typ (Short-Erkennung)
+        # Eigene Dateien sind Videos. Ob ein importiertes Video bei der Quelle
+        # als Short geführt wird, klärt die Typ-Prüfung (video_classifier) -
+        # aus Hochformat und Kürze wird hier nichts mehr geraten.
         video_type = "video"
-        if resolution:
-            try:
-                w, h = resolution.split("x")
-                if int(h) > int(w) and duration and duration <= 60:
-                    video_type = "short"
-            except (ValueError, AttributeError):
-                pass
 
         tags = ["#Import"] if source == "imported" else ["#Eigenes Video"]
-        if video_type == "short":
-            tags.append("#Short")
 
         await db.execute(
             """INSERT INTO videos

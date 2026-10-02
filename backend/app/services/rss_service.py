@@ -29,6 +29,7 @@ from app.config import AVATARS_DIR, BANNERS_DIR, RSS_THUMBS_DIR
 from app.utils.file_utils import now_sqlite, past_sqlite
 from app.database import db
 from app.services.job_service import job_service
+from app.services import video_classifier
 from app.services.rate_limiter import rate_limiter
 from app.services.channel_scanner import fetch_all_channel_videos as _scan_channel
 
@@ -409,23 +410,27 @@ class RSSService:
             if published < cutoff:
                 continue
 
-            # Video-Typ: Live/Upcoming aus UULV-Feed (zuverlässiger als flat-mode),
-            # sonst Shorts anhand UUSH-Feed bzw. duration, sonst Video.
+            # Video-Typ: Livestreams und Shorts aus den Listen der Quelle
+            # (UULV / UUSH). Steht ein kurzes Video in keiner der Listen,
+            # fragt der video_classifier die Quelle - geraten wird nicht.
             duration = v.length or 0
             if video_id in live_ids:
-                video_type = "live"
-            elif video_id in short_ids or (0 < duration <= 60):
-                video_type = "short"
+                video_type, type_verified = "live", video_classifier.VERIFIED
+            elif video_id in short_ids:
+                video_type, type_verified = "short", video_classifier.VERIFIED
             else:
-                video_type = "video"
+                typed = await video_classifier.classify(video_id, duration=duration or None)
+                video_type = typed.video_type
+                type_verified = video_classifier.VERIFIED if typed.verified else video_classifier.UNVERIFIED
 
             fetched_ids.append(video_id)
 
             try:
                 await db.execute(
-                    """INSERT INTO rss_entries (video_id, channel_id, title, published, thumbnail_url, video_type)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (video_id, channel_id, title, published, thumb_url, video_type)
+                    """INSERT INTO rss_entries
+                       (video_id, channel_id, title, published, thumbnail_url, video_type, type_verified)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (video_id, channel_id, title, published, thumb_url, video_type, type_verified)
                 )
                 new_count += 1
 
@@ -436,8 +441,9 @@ class RSSService:
                         pass
 
                 # Live/Upcoming NICHT auto-queuen (würde nur "live event will begin"
-                # erzeugen); reguläre Videos/Shorts wie bisher.
-                if sub.get("auto_download") and video_type != "live":
+                # erzeugen). Shorts nur, solange sie nicht ausgeschlossen sind.
+                skip_short = video_type == "short" and await video_classifier.shorts_excluded()
+                if sub.get("auto_download") and video_type != "live" and not skip_short:
                     await self._auto_queue_video(video_id, sub)
 
             except Exception:
@@ -1074,8 +1080,8 @@ class RSSService:
         """
         offset = (page - 1) * per_page
 
-        # Shorts ausblenden wenn in Einstellungen aktiviert
-        hide_shorts = await self._get_setting("feed.hide_shorts")
+        # Shorts global ausgeschlossen? Dann fehlen sie in jeder Feed-Ansicht.
+        shorts_clause = await video_classifier.without_shorts("r")
 
         # Typ-Filter: video_types (Komma-getrennt) hat Vorrang
         type_filter = ""
@@ -1092,8 +1098,6 @@ class RSSService:
             type_filter = "AND r.video_type = 'short'"
         elif video_type == "live":
             type_filter = "AND r.video_type = 'live'"
-        elif video_type == "all" and hide_shorts == "true":
-            type_filter = "AND r.video_type != 'short'"
 
         # Kanal-Filter: channel_ids (Komma-getrennt) hat Vorrang
         channel_filter = ""
@@ -1142,7 +1146,7 @@ class RSSService:
             status_filter = "AND r.feed_status = 'archived'"
         # feed_tab == "all" → kein Filter
 
-        base_where = f"WHERE 1=1 {status_filter} {channel_filter} {type_filter} {keyword_filter} {duration_filter}"
+        base_where = f"WHERE 1=1 {status_filter} {channel_filter} {type_filter} {keyword_filter} {duration_filter}{shorts_clause}"
         all_params = channel_params + type_params + keyword_params + duration_params
 
         # Total
@@ -1172,7 +1176,7 @@ class RSSService:
             tc = await db.fetch_val(
                 f"""SELECT COUNT(*) FROM rss_entries r
                     JOIN subscriptions s ON r.channel_id = s.channel_id
-                    WHERE COALESCE(r.feed_status, 'active') = ?""",
+                    WHERE COALESCE(r.feed_status, 'active') = ?{shorts_clause}""",
                 (tab,)
             ) or 0
             tab_counts[tab] = tc

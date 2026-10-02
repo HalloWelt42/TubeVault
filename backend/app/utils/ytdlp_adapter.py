@@ -1188,6 +1188,19 @@ class YoutubeAdapter:
         return name
 
     @property
+    def is_music(self) -> bool:
+        """Musik laut Quelle: Kategorie "Music" oder ausgewiesener Titel/Interpret."""
+        info = self._ensure()
+        return "Music" in (info.get("categories") or []) or bool(info.get("track"))
+
+    @property
+    def music_info(self) -> dict:
+        """Interpret, Titel und Album, soweit die Quelle sie ausweist."""
+        info = self._ensure()
+        return {"artist": info.get("artist") or info.get("creator"),
+                "title": info.get("track"), "album": info.get("album")}
+
+    @property
     def language(self) -> str | None:
         """Sprache der Original-Tonspur (z.B. 'en', 'de'), falls bekannt."""
         info = self._ensure()

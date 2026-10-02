@@ -331,18 +331,9 @@ class ImportService:
         elif source == "local" and "#Eigenes Video" not in tags_list:
             tags_list.append("#Eigenes Video")
 
-        # Video-Typ erkennen: Portrait-Format + kurz → Short
+        # Eigene Dateien sind Videos; aus Hochformat und Kürze wird kein
+        # Short geraten (siehe video_classifier).
         video_type = "video"
-        res_str = probe.get("resolution") if probe else None
-        if res_str:
-            try:
-                w, h = res_str.split("x")
-                if int(h) > int(w) and duration and int(duration) <= 60:
-                    video_type = "short"
-                    if "#Short" not in tags_list:
-                        tags_list.append("#Short")
-            except (ValueError, AttributeError):
-                pass
 
         await db.execute(
             """INSERT INTO videos

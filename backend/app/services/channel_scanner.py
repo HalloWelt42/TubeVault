@@ -27,6 +27,10 @@ from app.services.rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
+# Der Scan liest getrennte Listen der Quelle (Videos, Shorts, Livestreams):
+# der Typ ist damit bestätigt und gilt als geprüft (siehe video_classifier).
+_TYPE_VERIFIED = 1
+
 _executor = ThreadPoolExecutor(max_workers=1)  # Pi: nur 1 gleichzeitiger Scan
 
 # Batch-Größe: alle N Einträge automatisch in DB speichern
@@ -43,14 +47,15 @@ async def _save_entries_batch(entries, channel_id):
             cursor = await db.execute(
                 """INSERT OR IGNORE INTO rss_entries
                    (video_id, channel_id, title, published, thumbnail_url,
-                    duration, views, description, video_type, keywords, status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+                    duration, views, description, video_type, keywords, status, type_verified)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)""",
                 (v["video_id"], channel_id, v.get("title"),
                  v.get("published"), v.get("thumbnail_url"),
                  v.get("duration"), v.get("views"),
                  (v.get("description") or "")[:5000],
                  v.get("video_type", "video"),
-                 json.dumps(v.get("keywords", [])))
+                 json.dumps(v.get("keywords", [])),
+                 _TYPE_VERIFIED if v.get("video_type") else 0)
             )
             if cursor.rowcount > 0:
                 inserted += 1
@@ -62,14 +67,15 @@ async def _save_entries_batch(entries, channel_id):
                         description = CASE WHEN ? IS NOT NULL AND ? != '' THEN ? ELSE description END,
                         title = COALESCE(?, title),
                         thumbnail_url = COALESCE(?, thumbnail_url),
-                        video_type = COALESCE(?, video_type),
+                        video_type = CASE WHEN COALESCE(type_verified, 0) = 2 THEN video_type ELSE COALESCE(?, video_type) END,
+                        type_verified = CASE WHEN COALESCE(type_verified, 0) = 2 THEN 2 WHEN ? IS NOT NULL THEN 1 ELSE type_verified END,
                         keywords = CASE WHEN ? != '[]' THEN ? ELSE keywords END
                        WHERE video_id = ? AND channel_id = ?""",
                     (v.get("duration"), v.get("views"),
                      v.get("description"), v.get("description"),
                      (v.get("description") or "")[:5000],
                      v.get("title"), v.get("thumbnail_url"),
-                     v.get("video_type"),
+                     v.get("video_type"), v.get("video_type"),
                      json.dumps(v.get("keywords", [])),
                      json.dumps(v.get("keywords", [])),
                      v["video_id"], channel_id)
@@ -524,14 +530,15 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
                 cursor = await db.execute(
                     """INSERT OR IGNORE INTO rss_entries
                        (video_id, channel_id, title, published, thumbnail_url,
-                        duration, views, description, video_type, keywords, status)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+                        duration, views, description, video_type, keywords, status, type_verified)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)""",
                     (v["video_id"], channel_id, v.get("title"),
                      v.get("published"), v.get("thumbnail_url"),
                      v.get("duration"), v.get("views"),
                      (v.get("description") or "")[:5000],
                      v.get("video_type", "video"),
-                     json.dumps(v.get("keywords", [])))
+                     json.dumps(v.get("keywords", [])),
+                     _TYPE_VERIFIED if v.get("video_type") else 0)
                 )
                 if cursor.rowcount > 0:
                     inserted += 1
@@ -543,14 +550,15 @@ async def fetch_all_channel_videos(channel_id: str, job_id: int = None) -> dict:
                             description = CASE WHEN ? IS NOT NULL AND ? != '' THEN ? ELSE description END,
                             title = COALESCE(?, title),
                             thumbnail_url = COALESCE(?, thumbnail_url),
-                            video_type = COALESCE(?, video_type),
+                            video_type = CASE WHEN COALESCE(type_verified, 0) = 2 THEN video_type ELSE COALESCE(?, video_type) END,
+                        type_verified = CASE WHEN COALESCE(type_verified, 0) = 2 THEN 2 WHEN ? IS NOT NULL THEN 1 ELSE type_verified END,
                             keywords = CASE WHEN ? != '[]' THEN ? ELSE keywords END
                            WHERE video_id = ? AND channel_id = ?""",
                         (v.get("duration"), v.get("views"),
                          v.get("description"), v.get("description"),
                          (v.get("description") or "")[:5000],
                          v.get("title"), v.get("thumbnail_url"),
-                         v.get("video_type"),
+                         v.get("video_type"), v.get("video_type"),
                          json.dumps(v.get("keywords", [])),
                          json.dumps(v.get("keywords", [])),
                          v["video_id"], channel_id)

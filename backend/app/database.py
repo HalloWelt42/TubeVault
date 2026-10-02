@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 38
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1125,6 +1125,29 @@ class Database:
                     raise
             await self._connection.commit()
             logger.info("Migration v35: videos.language")
+
+        if current_version < 38:
+            # "Shorts im Feed ausblenden" wird zu "Shorts ausschliessen" (überall)
+            await self._connection.execute(
+                """INSERT OR REPLACE INTO settings (key, value, description, category)
+                   SELECT 'shorts.exclude', value, 'Shorts ausschliessen', 'feed'
+                   FROM settings WHERE key = 'feed.hide_shorts'""")
+            await self._connection.execute("DELETE FROM settings WHERE key = 'feed.hide_shorts'")
+            await self._connection.commit()
+
+        if current_version < 37:
+            # Geprüft-Kennzeichen für den Video-Typ (siehe video_classifier):
+            # 0 = ungeprüft, 1 = von der Quelle bestätigt, 2 = vom Nutzer gesetzt.
+            # Der Bestand gilt als ungeprüft und wird im Hintergrund nachgeholt.
+            for table in ("videos", "rss_entries"):
+                try:
+                    await self._connection.execute(
+                        f"ALTER TABLE {table} ADD COLUMN type_verified INTEGER DEFAULT 0")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        raise
+            await self._connection.commit()
+            logger.info("Migration v37: Typ-Prüfung (type_verified)")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

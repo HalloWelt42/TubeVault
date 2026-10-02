@@ -6,6 +6,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from '../../api/client.js';
+  import { settings } from '../../stores/settings.js';
 
   // Props
   let {
@@ -53,6 +54,11 @@
   let channelSearch = $state('');
   let categorySearch = $state('');
   let tagSearch = $state('');
+
+  // Sind Shorts global ausgeschlossen, gibt es dafür auch keinen Filter
+  const visibleTypes = $derived(
+    VIDEO_TYPES.filter(t => t.id !== 'short' || $settings['shorts.exclude'] !== 'true')
+  );
 
   const VIDEO_TYPES = [
     { id: 'video', label: 'Videos', icon: 'fa-solid fa-play' },
@@ -260,7 +266,7 @@
     <div class="filter-group">
       <span class="filter-label">Typ:</span>
       <div class="chip-row">
-        {#each VIDEO_TYPES as vt}
+        {#each visibleTypes as vt}
           <button class="filter-chip" class:active={selectedTypes.includes(vt.id)}
                   onclick={() => toggleType(vt.id)}>
             <i class={vt.icon}></i> {vt.label}

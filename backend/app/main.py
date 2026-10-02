@@ -25,6 +25,7 @@ from app.services.download_service import download_service
 from app.services.job_service import job_service
 from app.services.rss_service import rss_service
 from app.services.task_manager import task_manager
+from app.services import video_classifier
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
@@ -122,6 +123,7 @@ async def _drip_cron_loop():
             )
             for sub in due:
                 # (Auto-Archive ist oben in Schritt 1 für alle Kanäle gelaufen.)
+                loadable = _DRIP_LOADABLE + await video_classifier.without_shorts("r")
                 drip_count = sub["drip_count"] or 3
                 # Je Lauf genau drip_count Videos: das neueste fehlende plus
                 # die ältesten fehlenden (bei 1 also nur das neueste).
@@ -131,7 +133,7 @@ async def _drip_cron_loop():
                 # Älteste fehlende
                 oldest = await db.fetch_all(
                     f"""SELECT r.video_id, r.title FROM rss_entries r
-                       WHERE r.channel_id = ? AND {_DRIP_LOADABLE}
+                       WHERE r.channel_id = ? AND {loadable}
                        ORDER BY r.published ASC, r.id ASC LIMIT ?""",
                     (sub["channel_id"], old_count)
                 ) if old_count else []
@@ -146,7 +148,7 @@ async def _drip_cron_loop():
                 params.append(new_count)
                 newest = await db.fetch_all(
                     f"""SELECT r.video_id, r.title FROM rss_entries r
-                        WHERE r.channel_id = ? AND {_DRIP_LOADABLE}
+                        WHERE r.channel_id = ? AND {loadable}
                           {exclude_clause}
                         ORDER BY r.published DESC, r.id DESC LIMIT ?""",
                     tuple(params)
@@ -329,6 +331,8 @@ async def lifespan(app: FastAPI):
     task_manager.register("userdata_export", "Nutzerdaten-Export (täglich)",
                           _userdata_export_loop, auto_restart=True, essential=False)
     from app.services import search_index
+    task_manager.register("type_check", "Video-Typen bei der Quelle prüfen",
+                          video_classifier.verify_backlog, auto_restart=True, essential=False)
     task_manager.register("search_index", "Suchindex nachziehen",
                           search_index.background_catch_up, auto_restart=False, essential=False)
     await task_manager.start_all()

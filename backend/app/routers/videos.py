@@ -180,7 +180,8 @@ async def get_random_video(exclude: str = None, count: int = 1, pool: str = "all
     conditions.append("""COALESCE(suggest_override,
         CASE WHEN channel_id IN (SELECT channel_id FROM subscriptions WHERE suggest_exclude = 1)
         THEN 'exclude' ELSE 'include' END) != 'exclude'""")
-    where = " AND ".join(conditions)
+    from app.services import video_classifier
+    where = " AND ".join(conditions) + await video_classifier.without_shorts()
     params.append(count)
     rows = await db.fetch_all(
         f"""SELECT id, title, channel_name, duration, thumbnail_path, source
@@ -427,20 +428,11 @@ class TypeBatchRequest(BaseModel):
 @router.post("/type/batch")
 async def set_type_batch(req: TypeBatchRequest):
     """Batch: Video-Typ für mehrere Videos setzen."""
-    if req.video_type not in ("video", "short", "live"):
-        raise HTTPException(status_code=400, detail=f"Ungültiger Typ: {req.video_type}")
-    count = 0
-    for vid in req.video_ids[:200]:
-        cursor = await db.execute(
-            "UPDATE videos SET video_type = ?, updated_at = datetime('now') WHERE id = ?",
-            (req.video_type, vid)
-        )
-        count += cursor.rowcount
-        # Auch RSS-Einträge aktualisieren
-        await db.execute(
-            "UPDATE rss_entries SET video_type = ? WHERE video_id = ?",
-            (req.video_type, vid)
-        )
+    from app.services import video_classifier
+    try:
+        count = await video_classifier.set_manual(req.video_ids[:200], req.video_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"updated": count, "video_type": req.video_type}
 
 

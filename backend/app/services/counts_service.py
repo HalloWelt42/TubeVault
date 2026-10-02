@@ -19,6 +19,8 @@ import os
 from app.database import db
 from app.config import VIDEOS_DIR, DB_DIR
 
+from app.services import video_classifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,12 +30,14 @@ class CountsService:
         """Ready & nicht archiviert (jede source) – wie die Library-Seite."""
         return await db.fetch_val(
             "SELECT COUNT(*) FROM videos WHERE status='ready' AND COALESCE(is_archived,0)=0"
+            + await video_classifier.without_shorts()
         ) or 0
 
     async def archived_videos(self) -> int:
         """Ready & archiviert – wie die Archiv-Seite."""
         return await db.fetch_val(
             "SELECT COUNT(*) FROM videos WHERE status='ready' AND COALESCE(is_archived,0)=1"
+            + await video_classifier.without_shorts()
         ) or 0
 
     async def own_videos(self) -> int:
@@ -63,6 +67,7 @@ class CountsService:
         return await db.fetch_val(
             "SELECT COUNT(*) FROM rss_entries WHERE status='new' "
             "AND COALESCE(feed_status,'active')='active'"
+            + await video_classifier.without_shorts()
         ) or 0
 
     async def subscriptions_enabled(self) -> int:

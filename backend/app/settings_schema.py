@@ -53,9 +53,11 @@ SETTINGS: list[SettingDef] = [
                min=7, max=365, unit="Tage", label="Maximales Video-Alter",
                description="Bei der Prüfung auf neue Videos werden ältere Einträge übergangen."),
     # ── Feed ──────────────────────────────────────────────────────────
-    SettingDef(key="feed.hide_shorts", default="false", kind="toggle", category="feed", section="feed",
-               label="Shorts ausblenden",
-               description="Shorts im Feed nicht anzeigen, solange kein Typ-Filter gewählt ist."),
+    SettingDef(key="shorts.exclude", default="false", kind="toggle", category="feed", section="feed",
+               label="Shorts ausschließen",
+               description="Shorts erscheinen nirgends (Feed, Bibliothek, Archiv, Suche) und werden "
+                           "nicht automatisch geladen. Was ein Short ist, bestätigt die Quelle - "
+                           "die Dauer allein entscheidet nicht."),
     # ── Auto-Download ─────────────────────────────────────────────────
     SettingDef(key="rss.auto_quality", default="720p", kind="select", category="rss", section="auto_dl",
                options=VIDEO_QUALITIES, label="Qualität für automatische Downloads",
@@ -132,6 +134,7 @@ REMOVED_KEYS = [
     "theme.accent",
     "general.language",
     "general.default_view",
+    "feed.hide_shorts",            # ersetzt durch shorts.exclude (gilt überall)
 ]
 
 

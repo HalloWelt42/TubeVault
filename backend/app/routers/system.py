@@ -364,6 +364,20 @@ async def get_badges():
     }
 
 
+@router.get("/shorts")
+async def shorts_overview():
+    """Wie viele bestätigte Shorts sind geladen, wie viele Typen noch ungeprüft?"""
+    from app.services import video_classifier
+    return await video_classifier.shorts_overview()
+
+
+@router.post("/shorts/delete")
+async def delete_shorts():
+    """Alle geladenen, als Short bestätigten Videos restlos löschen."""
+    from app.services import video_classifier
+    return {"deleted": await video_classifier.delete_shorts()}
+
+
 @router.get("/version")
 async def get_version():
     return {"app": APP_NAME, "version": VERSION, "api_version": "v1"}

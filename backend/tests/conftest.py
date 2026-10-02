@@ -39,6 +39,17 @@ def pytest_sessionfinish(session, exitstatus):
         pass
 
 
+@pytest.fixture(autouse=True)
+def no_network_type_probe(monkeypatch):
+    """Die Typ-Prüfung fragt sonst die Quelle im Netz. Tests bekommen "unklar";
+    wer eine Antwort braucht, setzt probe_short selbst."""
+    from app.services import video_classifier
+
+    async def _unknown(video_id, client=None):
+        return None
+    monkeypatch.setattr(video_classifier, "probe_short", _unknown)
+
+
 @pytest_asyncio.fixture
 async def test_db():
     """Frische SQLite-DB pro Test-Funktion.
