@@ -76,18 +76,14 @@ Tonspur (`nachvertoner/`), "Shorts ausschließen", eine Versionsquelle
 - **Abruf-Bausteine aktualisieren:** Token-Dienst 1.3.2 läuft, 2.0.1 ist
   erschienen (Plugin UND Container gemeinsam anheben, dann Download testen).
   pytubefix 10.11.0 gegen 11.2.0 (nur Ausweichpfad). Deno 2.9.5 gegen 2.9.7.
-- **Thumbnail-Analyse per KI ist nicht erreichbar:** `ThumbnailAI.svelte` und
-  `routers/thumbnail_ai.py` sind nirgends eingebunden. Entweder wieder
-  anschließen (als abschaltbare Erweiterung) oder entfernen.
 - **Bestehende Musik-Kennzeichen** (760) stammen aus der alten Vermutung und
   sind nicht nachgeprüft; neu geladene Videos richten sich nach der Quelle.
 - **Kanalnamen, die vom Abo abweichen** (rund 330, ohne die leeren): bleiben
   unangetastet, weil nicht unterscheidbar ist, ob von Hand gesetzt.
 - **Tageslimit und Zeitfenster des Drip** sind weiterhin fest (morgens).
 - **Mini-Player** spielt immer die Original-Tonspur.
-- **Alter Scan-Index** (`scan_index.db`, rund 15000 Einträge "entdeckt") wird
-  von keiner Seite mehr gezeigt.
-- **Kanal-Kategorie** (`subscriptions.category_id`) hat keine Bedienung.
+- **Datei `scan_index.db`** des entfernten Scan-Index liegt noch im
+  Datenordner; sie wird nicht mehr gelesen und kann von Hand gelöscht werden.
 
 ---
 

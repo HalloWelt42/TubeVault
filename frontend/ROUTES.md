@@ -48,7 +48,6 @@ Kein externer Router — eigener Store `src/lib/stores/router.js` (~60 Zeilen).
 | `/own-videos`        | `own-videos`    | OwnVideos.svelte  | Eigene/lokale Videos          |
 | `/stats`             | `stats`         | Stats.svelte      | Statistiken                   |
 | `/import`            | `import`        | Import.svelte     | Datei-Import                  |
-| `/thumbnail-ai`      | `thumbnail-ai`  | ThumbnailAI.svelte| AI-Analyse Dashboard          |
 | `/settings`          | `settings`      | Settings.svelte   | Einstellungen                 |
 
 
@@ -250,9 +249,6 @@ Search-Parameter:
 ### Thumbnail AI
 
 ```
-/thumbnail-ai
-/thumbnail-ai?view=log             # Direkt zum Log scrollen
-/thumbnail-ai?view=queue           # Direkt zur Queue
 ```
 
 

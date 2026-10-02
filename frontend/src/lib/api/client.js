@@ -499,24 +499,6 @@ export const api = {
   },
   previewStreamUrl: (path) => `${API_BASE}/api/own-videos/preview/stream?path=${encodeURIComponent(path)}`,
 
-  // Scan-Index
-  scanStart: (path, youtubeArchive = true) =>
-    request('/api/scan/start', { method: 'POST', body: JSON.stringify({ path, youtube_archive: youtubeArchive }) }),
-  scanStop: () => request('/api/scan/stop', { method: 'POST' }),
-  scanProgress: () => request('/api/scan/progress'),
-  scanIndex: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/api/scan/index?${q}`);
-  },
-  scanStats: () => request('/api/scan/stats'),
-  scanFolders: () => request('/api/scan/folders'),
-  scanRegister: (ids) => request('/api/scan/register', { method: 'POST', body: JSON.stringify({ ids }) }),
-  scanRegisterAll: () => request('/api/scan/register-all', { method: 'POST' }),
-  scanLink: (id, youtubeId, title = null, channel = null) =>
-    request(`/api/scan/${id}/link`, { method: 'POST', body: JSON.stringify({ youtube_id: youtubeId, title, channel }) }),
-  scanDeleteOriginal: (id) => request(`/api/scan/${id}/delete-original`, { method: 'POST' }),
-  scanDeleteOriginals: (ids) => request('/api/scan/delete-originals', { method: 'POST', body: JSON.stringify({ ids }) }),
-
   // Sofort-Aktionen für Eigene Videos
   stagingLinkYoutube: (stagingId, youtubeId, categoryId = null) =>
     request(`/api/own-videos/staging/${stagingId}/link-youtube`, { method: 'POST', body: JSON.stringify({ youtube_id: youtubeId, category_id: categoryId }) }),
@@ -530,20 +512,13 @@ export const api = {
     request('/api/own-videos/staging/cleanup-missing', { method: 'POST' }),
   stagingDeleteFolder: (sessionId, folder) =>
     request(`/api/own-videos/staging/delete-folder?session_id=${sessionId}&folder=${encodeURIComponent(folder)}`, { method: 'POST' }),
-  scanPreviewFrames: (id, count = 6) => request(`/api/scan/${id}/preview-frames?count=${count}`),
-  scanFrameUrl: (id, index) => `${API_BASE}/api/scan/frame/${id}/${index}`,
-  scanThumbUrl: (id) => `${API_BASE}/api/scan/${id}/thumb`,
-  scanSetThumbnail: (id, frameIndex) => request(`/api/scan/${id}/set-thumbnail?frame_index=${frameIndex}`, { method: 'POST' }),
-  scanRepairThumbnail: (videoId) => request(`/api/scan/repair-thumbnail/${videoId}`, { method: 'POST' }),
-  enrichFromYoutube: (videoId) => request(`/api/scan/enrich/${videoId}`, { method: 'POST' }),
+  thumbnailFromFile: (videoId, position = null) =>
+    request(`/api/video-repair/${videoId}/thumbnail-from-file${position === null ? '' : `?position=${position}`}`, { method: 'POST' }),
+  metadataFromSource: (videoId) => request(`/api/video-repair/${videoId}/metadata-from-source`, { method: 'POST' }),
   autoEnrich: (videoId) => request(`/api/videos/${videoId}/auto-enrich`, { method: 'POST' }),
   saveNotes: (videoId, notes) => request(`/api/videos/${videoId}/notes`, { method: 'PUT', body: JSON.stringify({ notes }) }),
   searchNotes: (q) => request(`/api/videos/search/notes?q=${encodeURIComponent(q)}`),
-  thumbnailAtPosition: (videoId, position) => request(`/api/scan/thumbnail-at-position/${videoId}?position=${position}`, { method: 'POST' }),
-  fetchYtThumbnail: (videoId) => request(`/api/scan/fetch-yt-thumbnail/${videoId}`, { method: 'POST' }),
-  cleanupRegistered: () => request('/api/scan/cleanup-registered', { method: 'POST' }),
-  scanUpdateStatus: (id, status) => request(`/api/scan/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  scanReset: () => request('/api/scan/reset', { method: 'DELETE' }),
+  thumbnailFromSource: (videoId) => request(`/api/video-repair/${videoId}/thumbnail-from-source`, { method: 'POST' }),
 
   // Like/Dislike (Return YouTube Dislike API)
   getVideoLikes: (videoId, force = false) => request(`/api/videos/${videoId}/likes?force=${force}`),

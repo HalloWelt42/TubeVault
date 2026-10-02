@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     auto_download BOOLEAN DEFAULT 0,
     download_quality TEXT DEFAULT '720p',
     audio_only BOOLEAN DEFAULT 0,
-    category_id INTEGER,
+    category_id INTEGER,              -- ohne Funktion (Altbestand)
     last_checked TEXT,
     last_video_date TEXT,
     last_scanned TEXT,

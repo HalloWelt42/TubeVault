@@ -28,7 +28,6 @@ TEXTS_DIR = DATA_DIR / "texts"
 
 # Datenbank
 DB_PATH = DB_DIR / "tubevault.db"
-SCAN_DB_PATH = DB_DIR / "scan_index.db"
 
 # Server
 HOST = os.getenv("TUBEVAULT_HOST", "0.0.0.0")
@@ -41,7 +40,7 @@ DEFAULT_FORMAT = os.getenv("DEFAULT_FORMAT", "mp4")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", str(1024 * 1024)))  # 1MB
 
 # Versioning
-VERSION = "2.24.0"
+VERSION = "2.24.1"
 APP_NAME = "TubeVault"
 
 # CORS – immer offen, keine Einschränkungen

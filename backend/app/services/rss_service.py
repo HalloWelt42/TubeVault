@@ -1006,13 +1006,13 @@ class RSSService:
 
     async def update_subscription(self, sub_id: int, updates: dict):
         import random
-        allowed = {"auto_download", "download_quality", "audio_only", "category_id",
+        allowed = {"auto_download", "download_quality", "audio_only",
                     "check_interval", "enabled", "drip_enabled", "drip_count",
                     "drip_auto_archive", "suggest_exclude"}
         filtered = {k: v for k, v in updates.items() if k in allowed}
-        # Nur Qualität und Kategorie dürfen geleert werden ("Standard" / "keine")
+        # Nur die Qualität darf geleert werden ("Standard aus den Einstellungen")
         filtered = {k: v for k, v in filtered.items()
-                    if v is not None or k in ("download_quality", "category_id")}
+                    if v is not None or k == "download_quality"}
         if not filtered:
             return
         if filtered.get("download_quality") == "":

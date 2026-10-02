@@ -1067,23 +1067,6 @@ class DownloadService:
                  str(final_path), file_size, 1 if not merged else 0)
             )
 
-            # Auto-Category aus dem Abo übernehmen: wenn der Kanal dem Nutzer
-            # eine Kategorie zugewiesen hat (subscriptions.category_id),
-            # landet das Video automatisch in dieser Kategorie (via M2M).
-            try:
-                sub_cat = await db.fetch_val(
-                    "SELECT category_id FROM subscriptions WHERE channel_id = ?",
-                    (meta["channel_id"],)
-                )
-                if sub_cat:
-                    await db.execute(
-                        "INSERT OR IGNORE INTO video_categories (video_id, category_id) VALUES (?, ?)",
-                        (vid, sub_cat)
-                    )
-                    logger.info(f"[CAT] {vid}: Kategorie #{sub_cat} (aus Abo-Einstellung)")
-            except Exception as e:
-                logger.debug(f"Auto-Category {vid}: {e}")
-
             # Kapitel speichern (pytubefix chapters) – NACH video INSERT
             auto_chapters = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.auto_chapters'")
             if auto_chapters != "false" and meta.get("chapters"):

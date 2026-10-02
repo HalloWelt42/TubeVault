@@ -188,11 +188,9 @@
     if (!video) return;
     enriching = true;
     try {
-      const res = await api.enrichFromYoutube(video.id);
-      if (res.status === 'ok') {
-        toast.success(`YT-Daten: ${res.updated_fields.join(', ')}`);
-        onVideoUpdate();
-      } else { toast.error(res.message); }
+      const res = await api.metadataFromSource(video.id);
+      toast.success(`Übernommen: ${res.updated_fields.join(', ')}`);
+      onVideoUpdate();
     } catch (e) { toast.error(e.message); }
     enriching = false;
   }
@@ -201,11 +199,9 @@
     if (!video || thumbLoading) return;
     thumbLoading = true;
     try {
-      const res = await api.fetchYtThumbnail(video.id);
-      if (res.status === 'ok') {
-        toast.success(`YT-Thumbnail geladen (${res.quality})`);
-        onVideoUpdate();
-      } else { toast.error(res.message || 'Kein YT-Thumbnail verfügbar'); }
+      await api.thumbnailFromSource(video.id);
+      toast.success('Vorschaubild der Quelle geladen');
+      onVideoUpdate();
     } catch (e) { toast.error(e.message); }
     thumbLoading = false;
   }
@@ -215,9 +211,9 @@
     thumbLoading = true;
     const pos = Math.floor(getCurrentTime());
     try {
-      const res = await api.thumbnailAtPosition(video.id, pos);
-      if (res.status === 'ok') { toast.success(`Thumbnail bei ${pos}s gesetzt`); onVideoUpdate(); }
-      else { toast.error(res.message); }
+      await api.thumbnailFromFile(video.id, pos);
+      toast.success(`Vorschaubild bei ${pos} s gesetzt`);
+      onVideoUpdate();
     } catch (e) { toast.error(e.message); }
     thumbLoading = false;
   }
@@ -226,9 +222,9 @@
     if (!video || thumbLoading) return;
     thumbLoading = true;
     try {
-      const res = await api.scanRepairThumbnail(video.id);
-      if (res.status === 'ok') { toast.success('Thumbnail repariert'); onVideoUpdate(); }
-      else { toast.error(res.message); }
+      await api.thumbnailFromFile(video.id);
+      toast.success('Vorschaubild neu erzeugt');
+      onVideoUpdate();
     } catch (e) { toast.error(e.message); }
     thumbLoading = false;
   }

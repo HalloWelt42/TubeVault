@@ -35,7 +35,6 @@ _LOGGER_CAT_MAP = {
     "channel_scanner": "scan",
     "import_service": "import",
     "metadata_service": "meta",
-    "scan_service": "scan",
     "lyrics_service": "lyrics",
     "lyrics": "lyrics",
     "playlist_service": "playlist",

@@ -43,7 +43,6 @@ class SubscriptionUpdate(BaseModel):
     audio_only: Optional[bool] = None
     check_interval: Optional[int] = None
     enabled: Optional[bool] = None
-    category_id: Optional[int] = None
     drip_enabled: Optional[bool] = None
     drip_count: Optional[int] = None
     drip_auto_archive: Optional[bool] = None

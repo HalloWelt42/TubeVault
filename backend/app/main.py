@@ -20,7 +20,6 @@ from app.config import (
     ensure_directories,
 )
 from app.database import db
-from app.database_scan import scan_db
 from app.services.download_service import download_service
 from app.services.job_service import job_service
 from app.services.rss_service import rss_service
@@ -29,7 +28,7 @@ from app.services import loadable as loadable_entries, video_classifier
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
-    ad_markers, own_videos, scan, backup, api_endpoints,
+    ad_markers, own_videos, video_repair, backup, api_endpoints,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
     cookies, admin, dubbing,
 )
@@ -267,7 +266,6 @@ async def lifespan(app: FastAPI):
     logger.info(f"[START] {APP_NAME} v{VERSION} startet...")
     ensure_directories()
     await db.connect()
-    await scan_db.connect()
     # DB-Identitäts-Audit: macht im Log sofort sichtbar, WELCHE DB geladen wurde
     # (Schutz gegen früheren Bug: versehentlich falsche/leere DB gekoppelt).
     try:
@@ -334,7 +332,6 @@ async def lifespan(app: FastAPI):
     await download_service.stop_worker()
     await job_service.shutdown()
     await db.disconnect()
-    await scan_db.disconnect()
     logger.info(f"[BYE] {APP_NAME} gestoppt")
 
 
@@ -435,7 +432,7 @@ app.include_router(feed_router.router)
 app.include_router(channel_playlists.router)
 app.include_router(imports.router)
 app.include_router(own_videos.router)
-app.include_router(scan.router)
+app.include_router(video_repair.router)
 app.include_router(backup.router)
 # System
 app.include_router(settings.router)
