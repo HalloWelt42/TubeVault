@@ -110,16 +110,9 @@ SETTINGS: list[SettingDef] = [
     # ── Erweiterungen ─────────────────────────────────────────────────
     SettingDef(key="dub.enabled", default="false", kind="toggle", category="dub",
                section="extensions", label="Nachvertonung",
-               description="Videos zum Nachvertonen vormerken. Die Arbeit erledigt der Nachvertoner "
-                           "auf einem leistungsfähigen Rechner, sobald dort Kapazität frei ist; die "
-                           "fertige Tonspur lässt sich in der Wiedergabe umschalten."),
-    SettingDef(key="dub.target_language", default="de", kind="select", category="dub",
-               section="extensions", options=["de", "en"],
-               option_labels={"de": "Deutsch", "en": "Englisch"},
-               label="Zielsprache der Nachvertonung"),
-    SettingDef(key="dub.voice", default="Zeit Stimme", kind="text", category="dub",
-               section="extensions", label="Stimme der Nachvertonung",
-               description="Name der Stimme, mit der der Nachvertoner spricht."),
+               description="Einzelne Videos in der Wiedergabe zum Nachvertonen vormerken (Stimme und "
+                           "Sprache wählst du dort). Die Arbeit erledigt der Nachvertoner auf einem "
+                           "leistungsfähigen Rechner; die fertige Tonspur ist in der Wiedergabe umschaltbar."),
     SettingDef(key="ai.enabled", default="false", kind="toggle", category="ai",
                section="extensions", label="Bedeutungssuche mit lokaler KI",
                description="Die Suche findet zusätzlich inhaltlich Verwandtes, auch ohne Wortgleichheit. "
@@ -156,6 +149,9 @@ REMOVED_KEYS = [
     "general.language",
     "general.default_view",
     "feed.hide_shorts",            # ersetzt durch shorts.exclude (gilt überall)
+    "dub.voice",                   # Stimme und Sprache wählt man je Video
+    "dub.target_language",
+    "dub.subtitles",
 ]
 
 

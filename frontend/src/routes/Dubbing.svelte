@@ -62,7 +62,7 @@
     Vorgemerkte Videos werden nach {languageName(getSetting('dub.target_language', 'de'))} nachvertont
     (Stimme: {getSetting('dub.voice', '')}), sobald auf dem Rechner des Nachvertoners Kapazität frei ist.
     Die fertige Tonspur lässt sich in der Wiedergabe umschalten; das Video bleibt unverändert.
-    Vormerken: in Bibliothek oder Archiv Videos auswählen und "Nachvertonen" wählen, oder am Video selbst.
+    Vormerken: am Video in der Wiedergabe über das Sprach-Symbol - dort wählst du Stimme und Zielsprache.
   </p>
 
   <div class="pills">

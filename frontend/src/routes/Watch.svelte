@@ -3,7 +3,9 @@
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   import AudioTrackSwitch from '../lib/components/watch/AudioTrackSwitch.svelte';
   import { settings } from '../lib/stores/settings.js';
-  import { dubbingEnabled, enqueueForDubbing } from '../lib/utils/dubbingActions.js';
+  import { dubbingEnabled } from '../lib/utils/dubbingActions.js';
+  import DubDialog from '../lib/components/watch/DubDialog.svelte';
+  let dubRef;
   let confirmRef;
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
@@ -861,8 +863,8 @@
             {#if video?.notes}<span class="btn-badge"><i class="fa-solid fa-pen" style="font-size:0.4rem"></i></span>{/if}
           </button>
           {#if dubbingEnabled($settings)}
-            <button class="action-btn" onclick={() => enqueueForDubbing([video.id])}
-                    title="Zur Nachvertonung vormerken (Tonspur wird später umschaltbar)">
+            <button class="action-btn" onclick={() => dubRef.open(video)}
+                    title="Nachvertonen: Stimme und Sprache wählen, Tonspur wird später umschaltbar">
               <i class="fa-solid fa-language"></i>
             </button>
           {/if}
@@ -1310,6 +1312,8 @@
 <AddToPlaylistDialog bind:videoId={addToPlaylistVideoId} />
 
 <ConfirmDialog bind:this={confirmRef} />
+
+<DubDialog bind:this={dubRef} />
 
 <style>
   /* ─── Layout: flexibler Flow statt fixer Sidebars + Padding-Ausgleich ───

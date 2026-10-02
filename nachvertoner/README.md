@@ -7,15 +7,17 @@ TubeVault lässt sie sich dann in der Wiedergabe umschalten.
 
 ## Einrichten
 
-1. In TubeVault unter Einstellungen → Erweiterungen die Nachvertonung
-   einschalten und die Stimme eintragen.
+1. In TubeVault unter Einstellungen - Erweiterungen die Nachvertonung
+   einschalten. Vorgemerkt wird je Video in der Wiedergabe; Stimme und
+   Zielsprache wählt man dort. Die Auswahl der Stimmen meldet der
+   Nachvertoner selbst, sobald er läuft.
 2. Einstellungen anlegen:
 
    ```bash
    cp nachvertoner.beispiel.toml nachvertoner.toml
    ```
 
-3. Prüfen, ob beide Seiten erreichbar sind und die Stimme gefunden wird:
+3. Prüfen, ob beide Seiten erreichbar sind (meldet dabei die Stimmen):
 
    ```bash
    ./nachvertoner.py --pruefen

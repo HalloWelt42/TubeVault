@@ -165,7 +165,8 @@ def test_beschaeftigter_dienst_holt_nichts_ab(make):
     worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(busy))
 
     assert worker.step() is False
-    assert stage.pi_calls == [], "ohne freie Kapazität wird nichts reserviert"
+    claims = [call for call in stage.pi_calls if call[1].endswith("/claim")]
+    assert claims == [], "ohne freie Kapazität wird nichts reserviert"
 
 
 def test_arbeitskopie_ist_klein_und_hat_ton(tmp_path):

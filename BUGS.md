@@ -68,11 +68,6 @@ Tonspur (`nachvertoner/`), "Shorts ausschließen", eine Versionsquelle
 
 ### Offen nach der Durchsicht
 
-- **Vorhandene Untertitel beim Nachvertonen nutzen:** spart das Transkribieren
-  (bei deutschen Untertiteln auch das Übersetzen). Der Vertonungsdienst nimmt
-  bisher kein fertiges Transkript an; nötig ist dort ein Eingang für Segmente
-  (Auftragsfeld), danach reicht der Nachvertoner die Untertitel durch.
-
 - **Abruf-Bausteine aktualisieren:** Token-Dienst 1.3.2 läuft, 2.0.1 ist
   erschienen (Plugin UND Container gemeinsam anheben, dann Download testen).
   pytubefix 10.11.0 gegen 11.2.0 (nur Ausweichpfad). Deno 2.9.5 gegen 2.9.7.

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS dub_requests (
     video_id TEXT NOT NULL,
     target_language TEXT NOT NULL,
     voice TEXT,
+    subtitles TEXT NOT NULL DEFAULT 'manual',
     status TEXT NOT NULL DEFAULT 'queued',
     progress REAL DEFAULT 0,
     note TEXT,
@@ -39,9 +40,32 @@ CREATE TABLE IF NOT EXISTS dub_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_dub_requests_status ON dub_requests(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_dub_requests_video ON dub_requests(video_id);
+
+-- Stimmen, die der Nachvertoner zuletzt als verfügbar gemeldet hat
+CREATE TABLE IF NOT EXISTS dub_voices (
+    name TEXT PRIMARY KEY,
+    reported_at TEXT DEFAULT (datetime('now'))
+);
 """
 
+
+async def install_schema(connection) -> None:
+    await connection.executescript(SCHEMA_SQL)
+    try:
+        await connection.execute(
+            "ALTER TABLE dub_requests ADD COLUMN subtitles TEXT NOT NULL DEFAULT 'manual'")
+    except Exception as e:
+        if "duplicate column" not in str(e).lower():
+            raise
+    await connection.commit()
+
+
 Status = Literal["queued", "working", "done", "error", "skipped"]
+# Welche Untertitel der Quelle als Transkript dienen dürfen
+SubtitleUse = Literal["never", "manual", "any"]
+DEFAULT_TARGET_LANGUAGE = "de"
+# Vorauswahl: die erste gemeldete Stimme, deren Name so beginnt
+DEFAULT_VOICE_HINT = "zeit"
 OPEN_STATUSES = ("queued", "working")
 # Ohne Lebenszeichen gilt ein abgeholter Auftrag nach dieser Zeit als verwaist
 STALE_AFTER_MINUTES = 30
@@ -56,6 +80,7 @@ class DubRequest(BaseModel):
     source_language: Optional[str] = None
     target_language: str
     voice: Optional[str] = None
+    subtitles: SubtitleUse = "manual"
     status: Status
     progress: float = 0
     note: Optional[str] = None
@@ -63,11 +88,6 @@ class DubRequest(BaseModel):
     created_at: Optional[str] = None
     claimed_at: Optional[str] = None
     finished_at: Optional[str] = None
-
-
-class EnqueueResult(BaseModel):
-    queued: list[str]
-    skipped: dict[str, str]   # video_id → Grund
 
 
 _SELECT = """
@@ -91,38 +111,62 @@ async def is_enabled() -> bool:
     return (await _setting("dub.enabled")) == "true"
 
 
-async def enqueue(video_ids: list[str], target_language: str | None = None,
-                  voice: str | None = None) -> EnqueueResult:
-    """Videos zur Nachvertonung vormerken. Übersprungen wird, was nicht bereit
-    ist, schon in der Zielsprache vorliegt oder bereits vorgemerkt ist."""
-    target = (target_language or await _setting("dub.target_language")).strip().lower()
-    voice = voice or await _setting("dub.voice")
-    queued, skipped = [], {}
-    for video_id in dict.fromkeys(video_ids):   # Reihenfolge behalten, Doppelte raus
-        video = await db.fetch_one(
-            "SELECT id, status, language FROM videos WHERE id = ?", (video_id,))
-        if not video or video["status"] != "ready":
-            skipped[video_id] = "Video ist nicht geladen"
-            continue
-        if (video["language"] or "").lower() == target:
-            skipped[video_id] = f"Original ist bereits {audio_tracks.language_name(target)}"
-            continue
-        if await db.fetch_one(
-                "SELECT id FROM audio_tracks WHERE video_id = ? AND language = ?", (video_id, target)):
-            skipped[video_id] = f"Tonspur {audio_tracks.language_name(target)} ist schon vorhanden"
-            continue
-        if await db.fetch_one(
-                "SELECT id FROM dub_requests WHERE video_id = ? AND target_language = ? "
-                "AND status IN ('queued', 'working')", (video_id, target)):
-            skipped[video_id] = "ist bereits vorgemerkt"
-            continue
-        await db.execute(
-            "INSERT INTO dub_requests (video_id, target_language, voice) VALUES (?, ?, ?)",
-            (video_id, target, voice))
-        queued.append(video_id)
-    if queued:
-        logger.info(f"[NACHVERTONUNG] {len(queued)} Videos vorgemerkt ({target})")
-    return EnqueueResult(queued=queued, skipped=skipped)
+class VoiceChoice(BaseModel):
+    voices: list[str]
+    default: Optional[str] = None
+    reported_at: Optional[str] = None
+
+
+async def report_voices(names: list[str]) -> None:
+    """Der Nachvertoner meldet, welche Stimmen der Vertonungsdienst gerade hat."""
+    names = sorted({name.strip() for name in names if name and name.strip()}, key=str.lower)
+    await db.execute("DELETE FROM dub_voices")
+    for name in names:
+        await db.execute("INSERT INTO dub_voices (name) VALUES (?)", (name,))
+
+
+async def voice_choice() -> VoiceChoice:
+    """Verfügbare Stimmen und die Vorauswahl."""
+    rows = await db.fetch_all("SELECT name, reported_at FROM dub_voices ORDER BY name COLLATE NOCASE")
+    voices = [row["name"] for row in rows]
+    default = next((v for v in voices if v.lower().startswith(DEFAULT_VOICE_HINT)), None)
+    return VoiceChoice(voices=voices, default=default or (voices[0] if voices else None),
+                       reported_at=rows[0]["reported_at"] if rows else None)
+
+
+class EnqueueOutcome(BaseModel):
+    queued: bool
+    reason: Optional[str] = None      # warum nicht vorgemerkt
+    request: Optional[DubRequest] = None
+
+
+async def enqueue(video_id: str, target_language: str | None = None,
+                  voice: str | None = None, subtitles: SubtitleUse = "manual") -> EnqueueOutcome:
+    """Ein Video zur Nachvertonung vormerken - immer eine ausdrückliche
+    Entscheidung für genau dieses Video. Ohne Stimme gilt die Vorauswahl."""
+    target = (target_language or DEFAULT_TARGET_LANGUAGE).strip().lower()
+    voice = (voice or "").strip() or (await voice_choice()).default
+
+    def refused(reason: str) -> EnqueueOutcome:
+        return EnqueueOutcome(queued=False, reason=reason)
+
+    video = await db.fetch_one("SELECT id, status, language FROM videos WHERE id = ?", (video_id,))
+    if not video or video["status"] != "ready":
+        return refused("Video ist nicht geladen")
+    if (video["language"] or "").lower() == target:
+        return refused(f"Original ist bereits {audio_tracks.language_name(target)}")
+    if await db.fetch_one(
+            "SELECT id FROM audio_tracks WHERE video_id = ? AND language = ?", (video_id, target)):
+        return refused(f"Tonspur {audio_tracks.language_name(target)} ist schon vorhanden")
+    if await db.fetch_one(
+            "SELECT id FROM dub_requests WHERE video_id = ? AND target_language = ? "
+            "AND status IN ('queued', 'working')", (video_id, target)):
+        return refused("ist bereits vorgemerkt")
+    cursor = await db.execute(
+        "INSERT INTO dub_requests (video_id, target_language, voice, subtitles) VALUES (?, ?, ?, ?)",
+        (video_id, target, voice, subtitles))
+    logger.info(f"[NACHVERTONUNG] {video_id} vorgemerkt ({target}, Stimme {voice or 'Vorauswahl'})")
+    return EnqueueOutcome(queued=True, request=await get(cursor.lastrowid))
 
 
 async def list_requests(status: str | None = None, limit: int = 200) -> list[DubRequest]:

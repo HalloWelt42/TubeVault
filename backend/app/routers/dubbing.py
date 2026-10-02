@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app import config
-from app.services import audio_tracks, dubbing
+from app.services import audio_tracks, dubbing, subtitle_segments
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Nachvertonung"])
@@ -54,9 +54,14 @@ async def delete_audio_track(video_id: str, track_id: int):
 # ─── Warteliste (Oberfläche) ──────────────────────────────────────────
 
 class EnqueueRequest(BaseModel):
-    video_ids: list[str]
-    target_language: Optional[str] = None   # leer = Einstellung
-    voice: Optional[str] = None             # leer = Einstellung
+    video_id: str
+    target_language: Optional[str] = None   # leer = Deutsch
+    voice: Optional[str] = None             # leer = Vorauswahl
+    subtitles: dubbing.SubtitleUse = "manual"
+
+
+class VoiceReport(BaseModel):
+    voices: list[str]
 
 
 async def _require_enabled() -> None:
@@ -72,11 +77,23 @@ async def dubbing_status():
 
 @router.post("/api/dubbing/requests")
 async def enqueue_dubbing(request: EnqueueRequest):
-    """Videos zur Nachvertonung vormerken (auch viele auf einmal)."""
+    """Ein Video zur Nachvertonung vormerken, mit Stimme und Zielsprache."""
     await _require_enabled()
-    if not request.video_ids:
-        raise HTTPException(status_code=400, detail="Keine Videos angegeben")
-    return await dubbing.enqueue(request.video_ids, request.target_language, request.voice)
+    return await dubbing.enqueue(
+        request.video_id, request.target_language, request.voice, request.subtitles)
+
+
+@router.get("/api/dubbing/voices")
+async def dubbing_voices():
+    """Stimmen, die der Vertonungsdienst zuletzt gemeldet hat, samt Vorauswahl."""
+    return await dubbing.voice_choice()
+
+
+@router.post("/api/dubbing/voices")
+async def report_dubbing_voices(report: VoiceReport):
+    """Der Nachvertoner meldet die verfügbaren Stimmen."""
+    await dubbing.report_voices(report.voices)
+    return await dubbing.voice_choice()
 
 
 @router.get("/api/dubbing/requests")
@@ -129,7 +146,21 @@ async def claim_dubbing(request: ClaimRequest):
         "request": claimed,
         "media_url": f"/api/player/{claimed.video_id}",
         "result_url": f"/api/dubbing/requests/{claimed.id}/result",
+        "transcript_url": f"/api/dubbing/requests/{claimed.id}/transcript",
     }
+
+
+@router.get("/api/dubbing/requests/{request_id}/transcript")
+async def dubbing_transcript(request_id: int):
+    """Transkript aus den Untertiteln der Quelle, sofern die Einstellung es
+    erlaubt und passende Untertitel existieren. Sonst transcript = null und
+    der Vertonungsdienst transkribiert selbst."""
+    request = await dubbing.get(request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    transcript = await subtitle_segments.for_dubbing(
+        request.video_id, (request.source_language or "").lower(), request.subtitles)
+    return {"transcript": transcript}
 
 
 @router.post("/api/dubbing/requests/{request_id}/progress")

@@ -18,7 +18,6 @@
   import TagFilterBar from '../lib/components/common/TagFilterBar.svelte';
   import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
   import { settings } from '../lib/stores/settings.js';
-  import { dubbingEnabled, enqueueForDubbing } from '../lib/utils/dubbingActions.js';
 
   // Sortierung, Tags und Mehrfachfilter: eine Wahrheit (URL > gespeicherte Auswahl)
   const filters = createVideoListFilters('archives');
@@ -74,11 +73,6 @@
     } catch (e) { toast.error(e.message); }
   }
 
-  async function dubSelected() {
-    if (selected.size === 0) return;
-    if (await enqueueForDubbing([...selected])) { selected = new Set(); selectMode = false; }
-  }
-
   function toggleSelect(id) {
     const s = new Set(selected);
     if (s.has(id)) s.delete(id); else s.add(id);
@@ -107,11 +101,6 @@
   {#if selectMode}
     <BatchToolbar selectedCount={selected.size} totalCount={list.items.length}
                   onSelectAll={() => selected = new Set(list.items.map(v => v.id))}>
-      {#if dubbingEnabled($settings)}
-        <button class="bulk-btn" onclick={dubSelected} title="Ausgewählte Videos zur Nachvertonung vormerken">
-          <i class="fa-solid fa-language"></i> Nachvertonen
-        </button>
-      {/if}
       <button class="bulk-btn" onclick={unarchiveSelected}><i class="fa-solid fa-box-open"></i> Dearchivieren</button>
     </BatchToolbar>
   {/if}

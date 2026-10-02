@@ -94,6 +94,10 @@ class Settings:
         )
 
 
+# Ohne Angabe am Auftrag spricht die Stimme, deren Name so beginnt
+DEFAULT_VOICE = "zeit"
+
+
 class Nachvertoner:
     def __init__(self, settings: Settings):
         self.s = settings
@@ -117,9 +121,21 @@ class Nachvertoner:
     def service_busy(self) -> bool:
         return bool(self.dub.get("/api/jobs", timeout=10).json().get("active"))
 
-    def voice_id(self, name: str) -> str:
+    def voices(self) -> list[dict]:
         voices = self.dub.get("/api/voices", timeout=30).json()
-        voices = voices.get("voices", voices) if isinstance(voices, dict) else voices
+        return voices.get("voices", voices) if isinstance(voices, dict) else voices
+
+    def report_voices(self) -> None:
+        """TubeVault mitteilen, welche Stimmen es gerade gibt - daraus wird
+        dort die Auswahl beim Vormerken. Ein Fehlschlag hält nichts auf."""
+        try:
+            names = [str(v.get("name")) for v in self.voices() if v.get("name")]
+            self.pi.post("/api/dubbing/voices", json={"voices": names}, timeout=15)
+        except httpx.HTTPError as e:
+            log.debug("Stimmen nicht gemeldet (%s)", e.__class__.__name__)
+
+    def voice_id(self, name: str) -> str:
+        voices = self.voices()
         wanted = name.strip().lower()
         exact = [v for v in voices if str(v.get("name", "")).strip().lower() == wanted]
         partial = [v for v in voices if wanted in str(v.get("name", "")).lower()]
@@ -161,6 +177,27 @@ class Nachvertoner:
         self.pi.post(f"/api/dubbing/requests/{request_id}/fail",
                      json={"note": note[:480], "skipped": skipped}, timeout=30)
 
+    def source_transcript(self, claimed: dict) -> list[dict] | None:
+        """Fertiges Transkript von TubeVault (Untertitel der Quelle), falls es
+        eines anbietet. Jeder Fehler hier heißt nur: der Dienst transkribiert
+        selbst - der Auftrag läuft weiter."""
+        url = claimed.get("transcript_url")
+        if not url:
+            return None
+        try:
+            response = self.pi.get(url, timeout=180)
+            response.raise_for_status()
+            transcript = response.json().get("transcript")
+        except Exception as e:
+            log.warning("Transkript von TubeVault nicht erhalten: %s", e)
+            return None
+        if not transcript or not transcript.get("segments"):
+            return None
+        log.info("Untertitel der Quelle (%s) als Transkript: %d Sätze",
+                 "vom Autor" if transcript.get("kind") == "manual" else "automatisch erzeugt",
+                 len(transcript["segments"]))
+        return transcript["segments"]
+
     # ─── Ein Auftrag ─────────────────────────────────────────────────
 
     def process(self, claimed: dict) -> None:
@@ -176,7 +213,7 @@ class Nachvertoner:
             target = job["target_language"].lower()
             if source == target:
                 raise Uebersprungen(f"Original ist bereits {target}")
-            voice_id = self.voice_id(job.get("voice") or "")
+            voice_id = self.voice_id(job.get("voice") or DEFAULT_VOICE)
 
             self.report(request_id, 0.02, "Video laden")
             original = folder / "original.mp4"
@@ -191,16 +228,23 @@ class Nachvertoner:
             build_proxy(original, proxy)
             original.unlink(missing_ok=True)
 
+            payload = {
+                "source_language": LANGUAGE_NAMES.get(source, source),
+                "target_language": LANGUAGE_NAMES.get(target, target),
+                "mode": "fixed", "voice_id": voice_id,
+                "num_speakers": 1,   # eine Stimme, keine Aufteilung nach Sprechern
+            }
+            segments = self.source_transcript(claimed)
+            if segments:
+                # Untertitel der Quelle ersparen dem Dienst das Transkribieren
+                payload["source_segments"] = segments
+                self.report(request_id, 0.07, "Untertitel der Quelle als Transkript")
+
             source_id = self.upload(proxy)
+            payload["file_id"] = source_id
             created = self.dub.post("/api/jobs", json={
                 "type": "video_dub", "label": f"TubeVault: {title[:80]}",
-                "payload": {
-                    "file_id": source_id,
-                    "source_language": LANGUAGE_NAMES.get(source, source),
-                    "target_language": LANGUAGE_NAMES.get(target, target),
-                    "mode": "fixed", "voice_id": voice_id,
-                    "num_speakers": 1,   # eine Stimme, keine Aufteilung nach Sprechern
-                },
+                "payload": payload,
             })
             created.raise_for_status()
             dub_job_id = created.json()["id"]
@@ -262,6 +306,7 @@ class Nachvertoner:
         if problem:
             log.info("Pause: %s", problem)
             return False
+        self.report_voices()
         if self.service_busy():
             log.debug("Vertonungsdienst ist beschäftigt")
             return False
@@ -283,9 +328,11 @@ class Nachvertoner:
             print("TubeVault: erreichbar, Nachvertonung",
                   "eingeschaltet" if status["enabled"] else "ausgeschaltet",
                   f"- {status['counts']['queued']} warten")
-            voice = self.pi.get("/api/settings/dub.voice", timeout=10).json()["value"]
             if not problem:
-                print(f"Stimme '{voice}':", self.voice_id(voice))
+                self.report_voices()
+                choice = self.pi.get("/api/dubbing/voices", timeout=10).json()
+                print(f"Stimmen an TubeVault gemeldet: {len(choice['voices'])}, "
+                      f"Vorauswahl: {choice['default'] or 'keine'}")
         except Exception as e:
             print("TubeVault:", f"{e.__class__.__name__}: {e}")
             return 1

@@ -1103,10 +1103,12 @@ class Database:
             await self._connection.commit()
             logger.info(f"Migration v33: Kanal-Zuordnung, {repaired} Videos ergänzt")
 
+        # Einstellungen ohne Wirkung entfernen (siehe settings_schema) - bei
+        # jedem Start, damit auch später gestrichene verschwinden.
+        for key in _REMOVED_SETTING_KEYS:
+            await self._connection.execute("DELETE FROM settings WHERE key = ?", (key,))
+
         if current_version < 34:
-            # Einstellungen ohne Wirkung entfernen (siehe settings_schema).
-            for key in _REMOVED_SETTING_KEYS:
-                await self._connection.execute("DELETE FROM settings WHERE key = ?", (key,))
             # Kanal-Qualität: leer bedeutet ab jetzt "Standard aus den
             # Einstellungen". Kanäle, deren Wert heute beiden Standards gleicht,
             # verhalten sich unverändert, folgen künftig aber einer geänderten
@@ -1177,7 +1179,7 @@ class Database:
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing
         await self._connection.executescript(audio_tracks.SCHEMA_SQL)
-        await self._connection.executescript(dubbing.SCHEMA_SQL)
+        await dubbing.install_schema(self._connection)
 
         # 4. Indexes NACH Migration (braucht source-Spalte)
         await self._connection.executescript(INDEXES_SQL)

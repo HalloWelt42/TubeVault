@@ -47,33 +47,49 @@ def _tone(path, seconds=2):
 
 async def test_ausgeschaltet_nimmt_nichts_an(client, test_db):
     await test_db.execute("INSERT INTO videos (id, title, status) VALUES ('en1', 'T', 'ready')")
-    r = await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})
+    r = await client.post("/api/dubbing/requests", json={"video_id": "en1"})
     assert r.status_code == 409
     assert (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"] is None
 
 
 async def test_vormerken_mit_gruenden(client, videos):
-    r = await client.post("/api/dubbing/requests", json={"video_ids": ["en1", "en2", "de1", "stub", "en1"]})
-    body = r.json()
-    assert body["queued"] == ["en1", "en2"]
-    assert "bereits Deutsch" in body["skipped"]["de1"]
-    assert "nicht geladen" in body["skipped"]["stub"]
+    async def vormerken(video_id, **extra):
+        return (await client.post("/api/dubbing/requests", json={"video_id": video_id, **extra})).json()
 
-    again = (await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})).json()
-    assert again["queued"] == [] and "vorgemerkt" in again["skipped"]["en1"]
+    first = await vormerken("en1", voice="Andere", subtitles="any")
+    assert first["queued"] and first["request"]["voice"] == "Andere"
+    assert first["request"]["subtitles"] == "any"
+    assert (await vormerken("en2"))["queued"]
+    assert "bereits Deutsch" in (await vormerken("de1"))["reason"]
+    assert "nicht geladen" in (await vormerken("stub"))["reason"]
+    again = await vormerken("en1")
+    assert not again["queued"] and "vorgemerkt" in again["reason"]
+
+
+async def test_stimmen_kommen_vom_nachvertoner(client, videos):
+    assert (await client.get("/api/dubbing/voices")).json()["voices"] == []
+    reported = (await client.post(
+        "/api/dubbing/voices", json={"voices": ["Bert", "Zeit Stimme", "anna", "Bert"]})).json()
+    assert reported["voices"] == ["anna", "Bert", "Zeit Stimme"]
+    assert reported["default"] == "Zeit Stimme"
+    # Ohne Angabe gilt die Vorauswahl
+    queued = (await client.post("/api/dubbing/requests", json={"video_id": "en1"})).json()
+    assert queued["request"]["voice"] == "Zeit Stimme"
+    assert queued["request"]["subtitles"] == "manual"
 
 
 async def test_abholen_geht_an_genau_einen(client, videos):
-    await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
     first = (await client.post("/api/dubbing/claim", json={"worker": "mac-a"})).json()
     second = (await client.post("/api/dubbing/claim", json={"worker": "mac-b"})).json()
-    assert first["request"]["video_id"] == "en1" and first["request"]["voice"] == "Zeit Stimme"
+    # Noch keine Stimmen gemeldet: die Vorauswahl trifft dann der Nachvertoner
+    assert first["request"]["video_id"] == "en1" and first["request"]["voice"] is None
     assert first["media_url"] == "/api/player/en1"
     assert second["request"] is None
 
 
 async def test_verwaister_auftrag_kehrt_zurueck(client, videos, test_db):
-    await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
     claimed = (await client.post("/api/dubbing/claim", json={"worker": "mac-a"})).json()["request"]
     await test_db.execute(
         "UPDATE dub_requests SET heartbeat_at = datetime('now', '-2 hours') WHERE id = ?", (claimed["id"],))
@@ -82,7 +98,7 @@ async def test_verwaister_auftrag_kehrt_zurueck(client, videos, test_db):
 
 
 async def test_lebenszeichen_und_abbruch(client, videos):
-    await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
     job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
     ok = await client.post(f"/api/dubbing/requests/{job['id']}/progress", json={"progress": 0.4, "note": "Übersetzen"})
     assert ok.status_code == 200
@@ -92,7 +108,7 @@ async def test_lebenszeichen_und_abbruch(client, videos):
 
 
 async def test_fehlschlag_und_wiederholen(client, videos):
-    await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
     job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
     await client.post(f"/api/dubbing/requests/{job['id']}/fail", json={"note": "Worker nicht erreichbar"})
     listed = (await client.get("/api/dubbing/requests?status=error")).json()
@@ -103,7 +119,7 @@ async def test_fehlschlag_und_wiederholen(client, videos):
 
 @needs_ffmpeg
 async def test_tonspur_abliefern_und_abspielen(client, videos, tmp_path):
-    await client.post("/api/dubbing/requests", json={"video_ids": ["en2"]})
+    await client.post("/api/dubbing/requests", json={"video_id": "en2"})
     job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
     audio = _tone(tmp_path / "deutsch.m4a")
 
@@ -124,13 +140,13 @@ async def test_tonspur_abliefern_und_abspielen(client, videos, tmp_path):
     done = (await client.get("/api/dubbing/requests?status=done")).json()["requests"][0]
     assert done["progress"] == 1 and done["source_language"] == "en", "unbekannte Quellsprache wird nachgetragen"
 
-    again = (await client.post("/api/dubbing/requests", json={"video_ids": ["en2"]})).json()
-    assert "schon vorhanden" in again["skipped"]["en2"]
+    again = (await client.post("/api/dubbing/requests", json={"video_id": "en2"})).json()
+    assert "schon vorhanden" in again["reason"]
 
 
 @needs_ffmpeg
 async def test_kaputte_datei_wird_abgelehnt(client, videos, tmp_path):
-    await client.post("/api/dubbing/requests", json={"video_ids": ["en1"]})
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
     job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
     bad = tmp_path / "kaputt.m4a"
     bad.write_bytes(b"kein audio")
