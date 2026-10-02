@@ -929,6 +929,62 @@ class StreamAdapter:
         )
 
 
+def _base_language(code) -> str:
+    """'de-DE' → 'de'; leer bleibt leer."""
+    return str(code or "").split("-")[0].lower()
+
+
+def original_audio_language(formats: list[dict], info_language: str | None) -> str | None:
+    """Sprache der ORIGINAL-Tonspur eines Videos, oder None, wenn es nur eine
+    Tonspur gibt bzw. das Original nicht bestimmbar ist.
+
+    YouTube liefert bei manchen Videos zusätzlich automatisch übersetzte
+    Tonspuren. Erkennungsmerkmale, in dieser Reihenfolge:
+      1. Hinweis "original" in der Formatbeschreibung
+      2. höchste language_preference (yt-dlp vergibt sie für das Original)
+      3. Sprache des Videos laut Metadaten
+    """
+    with_audio = [f for f in formats if f.get("acodec") not in (None, "none")]
+    languages = {_base_language(f.get("language")) for f in with_audio if f.get("language")}
+    if len(languages) <= 1:
+        return next(iter(languages), None) or (_base_language(info_language) or None)
+
+    for f in with_audio:
+        if "original" in str(f.get("format_note") or "").lower() and f.get("language"):
+            return _base_language(f["language"])
+
+    preferred = [f for f in with_audio if f.get("language") and (f.get("language_preference") or -1) > 0]
+    if preferred:
+        best = max(preferred, key=lambda f: f.get("language_preference") or -1)
+        top = [f for f in preferred if f.get("language_preference") == best.get("language_preference")]
+        if len({_base_language(f["language"]) for f in top}) == 1:
+            return _base_language(best["language"])
+
+    if _base_language(info_language) in languages:
+        return _base_language(info_language)
+    return None
+
+
+def keep_original_audio(formats: list[dict], info_language: str | None) -> list[dict]:
+    """Formate mit fremdsprachiger (automatisch übersetzter) Tonspur entfernen.
+    Formate ohne Ton und Formate ohne Sprachangabe bleiben. Ist das Original
+    nicht bestimmbar, bleibt die Liste unverändert."""
+    original = original_audio_language(formats, info_language)
+    if not original:
+        return formats
+
+    def is_foreign(f: dict) -> bool:
+        if f.get("acodec") in (None, "none") or not f.get("language"):
+            return False
+        return _base_language(f["language"]) != original
+
+    kept = [f for f in formats if not is_foreign(f)]
+    # Nie alle Tonspuren verlieren (Sicherheitsnetz bei unerwarteten Daten)
+    if not any(f.get("acodec") not in (None, "none") for f in kept):
+        return formats
+    return kept
+
+
 class StreamQueryAdapter:
     """pytubefix.StreamQuery-kompatibel."""
 
@@ -1132,6 +1188,12 @@ class YoutubeAdapter:
         return name
 
     @property
+    def language(self) -> str | None:
+        """Sprache der Original-Tonspur (z.B. 'en', 'de'), falls bekannt."""
+        info = self._ensure()
+        return original_audio_language(info.get("formats") or [], info.get("language"))
+
+    @property
     def channel_id(self) -> str:
         return self._ensure().get("channel_id") or ""
 
@@ -1207,6 +1269,18 @@ class YoutubeAdapter:
         fmts = [f for f in fmts if f.get("url")]
         # Storyboards/Bilder raus (sb*)
         fmts = [f for f in fmts if f.get("ext") not in ("mhtml",)]
+        # Nur die Original-Tonspur anbieten. Die Auswahl im download_service
+        # nimmt schlicht "bestes Audio"; standen automatisch übersetzte Spuren
+        # mit in der Liste, gewann je nach Bitrate mal das Original, mal die
+        # Übersetzung. Hier gefiltert gilt es für JEDE Auswahl (Download,
+        # Nur-Audio, Stream-Dialog, Audio-Nachladen).
+        before = len(fmts)
+        fmts = keep_original_audio(fmts, info.get("language"))
+        if len(fmts) != before:
+            logger.info(
+                f"[TONSPUR] {self.video_id}: Original ist "
+                f"'{original_audio_language(info.get('formats') or [], info.get('language'))}', "
+                f"{before - len(fmts)} übersetzte Formate ausgeblendet")
         video_duration = int(info.get("duration") or 0)
         return StreamQueryAdapter([
             StreamAdapter(

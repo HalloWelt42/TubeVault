@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1115,6 +1115,16 @@ class Database:
                      AND download_quality = (SELECT value FROM settings WHERE key = 'download.quality')""")
             await self._connection.commit()
             logger.info("Migration v34: wirkungslose Einstellungen entfernt, Kanal-Qualität erbt Standard")
+
+        if current_version < 35:
+            # Sprache der Original-Tonspur (z.B. 'en', 'de'); leer = unbekannt
+            try:
+                await self._connection.execute("ALTER TABLE videos ADD COLUMN language TEXT")
+            except Exception as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
+            await self._connection.commit()
+            logger.info("Migration v35: videos.language")
 
         # 4. Indexes NACH Migration (braucht source-Spalte)
         await self._connection.executescript(INDEXES_SQL)

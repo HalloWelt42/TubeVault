@@ -1025,6 +1025,11 @@ class DownloadService:
                            WHERE s.channel_id = videos.channel_id AND s.drip_auto_archive = 1)""",
                     (vid,))
 
+            # Sprache der geladenen (Original-)Tonspur festhalten
+            if meta.get("language"):
+                await db.execute(
+                    "UPDATE videos SET language = ? WHERE id = ?", (meta["language"], vid))
+
             try:
                 from app.services import text_export
                 await text_export.export_description(vid)
@@ -1430,6 +1435,7 @@ class DownloadService:
                 "view_count": yt.views, "tags": sanitize_tags(yt.keywords or []),
                 "thumbnail_url": yt.thumbnail_url, "stream_count": len(yt.streams),
                 "chapters": chapters, "video_type": video_type,
+                "language": getattr(yt, "language", None),
             }
         result = await asyncio.get_event_loop().run_in_executor(None, _r)
         return result
