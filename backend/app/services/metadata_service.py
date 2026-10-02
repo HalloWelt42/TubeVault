@@ -76,10 +76,13 @@ class MetadataService:
             # Standard: nur 'ready' Videos anzeigen (keine Stubs/Bookmarks/Pending)
             conditions.append("v.status = 'ready'")
 
-        if search:
-            conditions.append("(v.title LIKE ? OR v.channel_name LIKE ? OR v.description LIKE ? OR v.notes LIKE ?)")
-            search_term = f"%{search}%"
-            params.extend([search_term, search_term, search_term, search_term])
+        if search and search.strip():
+            # Gleiche Regeln wie die globale Suche (eine Wahrheit, siehe search_index)
+            from app.services import search_index
+            await search_index.refresh_before_query()
+            search_sql, search_params = search_index.condition(search, "v")
+            conditions.append(search_sql)
+            params.extend(search_params)
 
         # Kategorie-Filter: Mehrfach (category_ids) hat Vorrang vor Einzel (category_id)
         cat_ids = self._parse_multi_int(category_ids) if category_ids else ([category_id] if category_id else [])

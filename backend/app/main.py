@@ -311,6 +311,9 @@ async def lifespan(app: FastAPI):
                           _backfill_banners, auto_restart=False, essential=False)
     task_manager.register("userdata_export", "Nutzerdaten-Export (täglich)",
                           _userdata_export_loop, auto_restart=True, essential=False)
+    from app.services import search_index
+    task_manager.register("search_index", "Suchindex nachziehen",
+                          search_index.background_catch_up, auto_restart=False, essential=False)
     await task_manager.start_all()
     logger.info(f"[OK] {APP_NAME} v{VERSION} bereit")
     logger.info(f"   API: http://{HOST}:{PORT}")

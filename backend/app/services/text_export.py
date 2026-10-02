@@ -84,12 +84,22 @@ async def _write_text_file(video_id: str, kind: str, content: str) -> dict:
            VALUES (?, ?, ?, ?, ?, datetime('now'))""",
         (video_id, kind, rel_name, size, new_hash),
     )
+    await _note_search_change(video_id, kind)
     return {
         "filename": rel_name,
         "size": size,
         "sha256": new_hash,
         "skipped": False,
     }
+
+
+async def _note_search_change(video_id: str, kind: str) -> None:
+    """Die Beschreibungsdatei ist die Wahrheit für den Suchindex: nach jeder
+    Änderung das Video zum Nachziehen vormerken."""
+    if kind != "description":
+        return
+    from app.services import search_index
+    await search_index.mark_dirty(video_id)
 
 
 async def _delete_text_file(video_id: str, kind: str) -> bool:
@@ -107,6 +117,7 @@ async def _delete_text_file(video_id: str, kind: str) -> bool:
         "DELETE FROM text_files WHERE video_id=? AND kind=?",
         (video_id, kind),
     )
+    await _note_search_change(video_id, kind)
     # Ordner aufräumen wenn leer (lässt andere Kinds-Files unberührt)
     try:
         d = _resolve_video_dir(video_id)

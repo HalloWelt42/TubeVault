@@ -6,9 +6,9 @@ Unified: Ein Search()-Call liefert Videos, Shorts, Playlists, Channels
 """
 
 import asyncio
-import json
 import logging
 import re
+import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -178,121 +178,138 @@ async def resolve_url(data: dict):
 
 # ─── Shared YouTube-Suche (DRY) ──────────────────────────────────
 
+# Zwischenspeicher je Suchbegriff. Die Quelle kennt kein echtes Blättern:
+# für Seite N muss die Trefferliste bis zum Ende von Seite N neu geholt
+# werden. Ohne Zwischenspeicher wurde jede Seite langsamer, und weil sich die
+# Reihenfolge zwischen zwei Abrufen verschiebt, tauchten Treffer doppelt auf
+# oder fehlten. Mit Zwischenspeicher blättern alle Seiten durch DIESELBE Liste.
+_YT_CACHE_TTL_S = 600
+_YT_CACHE_MAX_QUERIES = 30
+_YT_SHORT_MAX_S = 60
+_yt_cache: dict[str, dict] = {}
+
+
+def _safe_items(getter, convert) -> list[dict]:
+    """Elemente einer Adapter-Liste umwandeln; einzelne kaputte überspringen."""
+    out = []
+    try:
+        items = list(getter())
+    except Exception:
+        return out
+    for item in items:
+        try:
+            out.append(convert(item))
+        except Exception:
+            pass
+    return out
+
+
+def _fetch_yt(q: str, max_results: int) -> dict:
+    """Ein Abruf bei der Quelle, aufbereitet und nach Videos/Shorts getrennt."""
+    from app.utils.pytube_client import make_search
+
+    s = make_search(q, max_results=max_results)
+    seen: set[str] = set()
+    entries = []
+    for v in _safe_items(lambda: s.videos, lambda v: {
+        "id": v.video_id, "title": v.title,
+        "channel_name": v.author, "channel_id": v.channel_id,
+        "duration": v.length, "view_count": v.views,
+        "thumbnail_url": v.thumbnail_url,
+    }):
+        if v["id"] and v["id"] not in seen:
+            seen.add(v["id"])
+            entries.append(v)
+
+    def _is_short(v: dict) -> bool:
+        return 0 < (v.get("duration") or 0) <= _YT_SHORT_MAX_S
+
+    return {
+        "fetched_at": time.time(),
+        "requested": max_results,
+        # weniger geliefert als verlangt → es gibt nichts mehr
+        "exhausted": len(entries) < max_results,
+        # Shorts stehen NUR unter shorts (vorher zusätzlich unter videos = doppelt)
+        "videos": [v for v in entries if not _is_short(v)],
+        "shorts": [v for v in entries if _is_short(v)],
+        "playlists": _safe_items(lambda: s.playlist, lambda p: {
+            "id": p.playlist_id, "title": p.title, "url": p.playlist_url,
+            "owner": getattr(p, "owner", None),
+            "video_count": p.length if hasattr(p, "length") else None,
+        }),
+        "channels": _safe_items(lambda: s.channel, lambda c: {
+            "id": c.channel_id, "name": c.channel_name,
+        }),
+        "suggestions": _safe_items(lambda: s.completion_suggestions, lambda x: x),
+    }
+
+
+def _yt_results(q: str, needed_videos: int) -> dict:
+    """Trefferliste mit mindestens needed_videos Videos (oder allem, was es gibt)."""
+    key = " ".join(q.lower().split())
+    cached = _yt_cache.get(key)
+    fresh = cached and time.time() - cached["fetched_at"] < _YT_CACHE_TTL_S
+    if fresh and (len(cached["videos"]) >= needed_videos or cached["exhausted"]):
+        return cached
+
+    # Etwas Vorrat holen (Shorts fallen aus der Videoliste heraus)
+    request = needed_videos + max(10, needed_videos // 2)
+    result = _fetch_yt(q, request)
+    if not result["exhausted"] and len(result["videos"]) < needed_videos:
+        result = _fetch_yt(q, request * 2)
+    if fresh:
+        # Bereits gezeigte Treffer behalten ihren Platz; Neues wird angehängt.
+        # Sonst würfelt ein grösserer Abruf die Seiten neu durcheinander.
+        for kind in ("videos", "shorts"):
+            known = {v["id"] for v in cached["videos"]} | {v["id"] for v in cached["shorts"]}
+            result[kind] = cached[kind] + [v for v in result[kind] if v["id"] not in known]
+        for kind in ("playlists", "channels", "suggestions"):
+            result[kind] = cached[kind] or result[kind]
+
+    _yt_cache[key] = result
+    while len(_yt_cache) > _YT_CACHE_MAX_QUERIES:
+        oldest = min(_yt_cache, key=lambda k: _yt_cache[k]["fetched_at"])
+        _yt_cache.pop(oldest)
+    return result
+
+
 def _do_yt_search(q: str, max_videos: int = 15, include_extras: bool = False,
                    page: int = 1, per_page: Optional[int] = None) -> dict:
-    """YouTube-Suche via yt-dlp Adapter — mit Paginierung.
+    """YouTube-Suche mit Blättern über eine zwischengespeicherte Trefferliste.
 
     Args:
         q: Suchbegriff
-        max_videos: Legacy (pre-Paginierung) — wenn per_page=None, werden bis
-                    max_videos Videos geliefert ab Seite 1.
+        max_videos: Anzahl, wenn per_page nicht gesetzt ist (eine Seite)
         include_extras: True → auch Shorts, Playlists, Channels, Suggestions
         page: 1-basierte Seitenzahl
         per_page: Elemente pro Seite. Wenn gesetzt, hat Vorrang vor max_videos.
-
-    Returns:
-        dict mit videos, optional shorts/playlists/channels/suggestions und
-        pagination-Meta (page, per_page, has_more).
     """
-    from app.utils.pytube_client import make_search
-
     if per_page is None:
-        # Legacy: Einzel-Seite mit max_videos
         per_page = max_videos
         page = 1
 
-    # yt-dlp holt alles bis zum Ende der gewünschten Seite. +1 um has_more zu erkennen.
-    total_needed = page * per_page + 1
-    s = make_search(q, max_results=total_needed)
-
-    all_videos = list(s.videos)
     start = (page - 1) * per_page
     end = page * per_page
-    page_videos = all_videos[start:end]
-    has_more = len(all_videos) > end  # yt-dlp lieferte mehr als angefragt → es gibt mehr
+    found = _yt_results(q, end + 1)   # +1, um weitere Seiten zu erkennen
 
-    videos = []
-    for v in page_videos:
-        try:
-            videos.append({
-                "id": v.video_id, "title": v.title,
-                "channel_name": v.author, "channel_id": v.channel_id,
-                "duration": v.length, "view_count": v.views,
-                "thumbnail_url": v.thumbnail_url,
-            })
-        except Exception:
-            pass
-
+    videos = [dict(v) for v in found["videos"][start:end]]
     result = {
         "videos": videos,
         "page": page,
         "per_page": per_page,
-        "has_more": has_more,
+        "has_more": len(found["videos"]) > end,
         "count_on_page": len(videos),
     }
-
     if not include_extras:
         return result
 
-    # Shorts/Playlists/Channels nur auf Seite 1 (Paginierung zielt auf Videos)
-    if page > 1:
-        result.update({"shorts": [], "playlists": [], "channels": [], "suggestions": []})
-        return result
-
-    # Shorts
-    shorts = []
-    try:
-        for v in s.shorts[:8]:
-            try:
-                shorts.append({
-                    "id": v.video_id, "title": v.title,
-                    "channel_name": v.author, "duration": v.length,
-                    "thumbnail_url": v.thumbnail_url,
-                })
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # Playlists
-    playlists = []
-    try:
-        for p in s.playlist[:6]:
-            try:
-                playlists.append({
-                    "id": p.playlist_id, "title": p.title,
-                    "url": p.playlist_url,
-                    "owner": getattr(p, "owner", None),
-                    "video_count": p.length if hasattr(p, "length") else None,
-                })
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # Channels
-    channels = []
-    try:
-        for c in s.channel[:4]:
-            try:
-                channels.append({
-                    "id": c.channel_id, "name": c.channel_name,
-                })
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # Autocomplete Suggestions
-    suggestions = []
-    try:
-        suggestions = s.completion_suggestions[:8]
-    except Exception:
-        pass
-
+    # Shorts/Playlists/Channels nur auf Seite 1 (Blättern zielt auf Videos)
+    first = page == 1
     result.update({
-        "shorts": shorts, "playlists": playlists,
-        "channels": channels, "suggestions": suggestions,
+        "shorts": [dict(v) for v in found["shorts"][:8]] if first else [],
+        "playlists": list(found["playlists"][:6]) if first else [],
+        "channels": list(found["channels"][:4]) if first else [],
+        "suggestions": list(found["suggestions"][:8]) if first else [],
     })
     return result
 
@@ -398,89 +415,16 @@ async def search_local(
     per_page: int = Query(24, ge=1, le=100),
     source: Optional[str] = None,
     scope: Optional[str] = None,
+    archived: Optional[bool] = None,
 ):
-    """Lokale Suche – FTS5 bevorzugt, LIKE als Fallback."""
-    offset = (page - 1) * per_page
+    """Lokale Suche über Bibliothek UND Archiv (archived=true/false grenzt ein).
 
-    # Scope/Source-Filter für FTS5 nicht direkt möglich → nur bei einfacher Suche FTS5
-    use_fts = (not source and not scope)
-
-    if use_fts:
-        try:
-            terms = q.strip().split()
-            fts_query = " AND ".join(f'"{t}"' for t in terms if t)
-            total = await db.fetch_val(
-                """SELECT COUNT(*) FROM videos_fts f
-                   JOIN videos v ON v.id = f.id
-                   WHERE videos_fts MATCH ?
-                   AND v.status = 'ready' AND COALESCE(v.is_archived, 0) = 0""",
-                (fts_query,)
-            ) or 0
-            rows = await db.fetch_all(
-                """SELECT v.* FROM videos_fts f
-                   JOIN videos v ON v.id = f.id
-                   WHERE videos_fts MATCH ?
-                   AND v.status = 'ready' AND COALESCE(v.is_archived, 0) = 0
-                   ORDER BY rank
-                   LIMIT ? OFFSET ?""",
-                (fts_query, per_page, offset)
-            )
-            videos = []
-            for r in rows:
-                d = dict(r)
-                if isinstance(d.get("tags"), str):
-                    try: d["tags"] = json.loads(d["tags"])
-                    except: d["tags"] = []
-                d.pop("ai_summary", None); d.pop("ai_tags", None)
-                videos.append(d)
-            return {"query": q, "videos": videos, "total": total,
-                    "page": page, "per_page": per_page,
-                    "total_pages": max(1, (total + per_page - 1) // per_page),
-                    "engine": "fts5"}
-        except Exception as e:
-            logger.debug(f"FTS5 Fallback: {e}")
-
-    # LIKE-Fallback (auch für scope/source-Filter)
-    conditions = [
-        "v.status = 'ready'",
-        "COALESCE(v.is_archived, 0) = 0",
-        "(v.title LIKE ? OR v.channel_name LIKE ? OR v.description LIKE ? OR v.tags LIKE ?)",
-    ]
-    search_term = f"%{q}%"
-    params = [search_term, search_term, search_term, search_term]
-
-    if source:
-        conditions.append("v.source = ?")
-        params.append(source)
-
-    if scope == "favorites":
-        conditions.append("v.id IN (SELECT video_id FROM favorites)")
-    elif scope == "playlists":
-        conditions.append("v.id IN (SELECT video_id FROM playlist_videos)")
-    elif scope == "own":
-        conditions.append("v.source IN ('local', 'imported')")
-
-    where = f"WHERE {' AND '.join(conditions)}"
-    total = await db.fetch_val(f"SELECT COUNT(*) FROM videos v {where}", params)
-    offset = (page - 1) * per_page
-
-    rows = await db.fetch_all(
-        f"""SELECT v.* FROM videos v {where}
-            ORDER BY v.play_count DESC, v.updated_at DESC
-            LIMIT ? OFFSET ?""",
-        params + [per_page, offset]
+    Regeln und Rangfolge liegen in search_index: Wortanfänge im Volltext
+    (Titel, Kanal, Beschreibung, Tags, Notizen) plus Teilwörter in Titel und
+    Kanalname. Jeder Treffer trägt is_archived, damit die Oberfläche zeigen
+    kann, wo das Video liegt."""
+    from app.services import search_index
+    return await search_index.search_videos(
+        q, page=page, per_page=per_page,
+        archived=archived, source=source, scope=scope,
     )
-
-    videos = []
-    for r in rows:
-        d = dict(r)
-        if isinstance(d.get("tags"), str):
-            try: d["tags"] = json.loads(d["tags"])
-            except: d["tags"] = []
-        d.pop("ai_summary", None); d.pop("ai_tags", None)
-        videos.append(d)
-
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    return {"query": q, "videos": videos, "total": total,
-            "page": page, "per_page": per_page,
-            "total_pages": total_pages, "engine": "like"}

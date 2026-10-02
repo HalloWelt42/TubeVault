@@ -25,7 +25,6 @@
   const perPage = 20;
   let ytShorts = $state([]);
   let ytChannels = $state([]);
-  let localVideos = $state([]);
   let subscribedIds = $state(new Set());
   let downloading = $state(new Set());
   // Stream-Dialog (Qualitäts-Auswahl)
@@ -52,26 +51,26 @@
     }
     const seen = new Set(page === 1 ? [] : yt.items.map(v => v.id));
     const items = newVids.filter(v => v?.id && !seen.has(v.id) && seen.add(v.id));
-    return { items, hasMore: r.has_more || newVids.length >= perPage };
+    return { items, hasMore: !!r.has_more };
+  });
+
+  // Lokale Treffer (Bibliothek UND Archiv) über denselben Loader, mit Gesamtzahl
+  const LOCAL_PER_PAGE = 12;
+  const local = createListLoader(async (page) => {
+    if (scope === 'youtube' || !query.trim()) return { items: [], total: 0 };
+    const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE });
+    return { items: r.videos || [], total: r.total || 0 };
   });
 
   async function runSearch(reset = true) {
     if (!query.trim()) return;
-    if (reset) { ytShorts = []; ytChannels = []; localVideos = []; loading = true; }
+    if (reset) { ytShorts = []; ytChannels = []; loading = true; }
     updateParams({ q: query, scope: scope !== 'both' ? scope : null });
     try {
-      // Lokal (dedupliziert)
-      if (scope !== 'youtube' && reset) {
-        try {
-          const r = await api.searchLocal(query, { per_page: 12 });
-          const seen = new Set();
-          localVideos = (r.videos || []).filter(v => {
-            if (!v?.id || seen.has(v.id)) return false;
-            seen.add(v.id); return true;
-          });
-        } catch { localVideos = []; }
-      }
-      if (scope !== 'local' && reset) await yt.load(true);
+      // Lokal sofort anzeigen, YouTube darf länger brauchen
+      const localRun = reset ? local.load(true).catch(() => { local.items = []; }) : null;
+      if (reset) await yt.load(true);
+      await localRun;
     } catch (e) { toast.error(e.message); }
     finally { loading = false; }
   }
@@ -163,7 +162,7 @@
       if (q && q !== query) {
         query = q;
         runSearch(true);
-      } else if (q && yt.items.length === 0 && !loading) {
+      } else if (q && yt.items.length === 0 && local.items.length === 0 && !loading) {
         runSearch(true);
       }
     });
@@ -178,12 +177,12 @@
   <form class="search-form" onsubmit={onSubmit}>
     <div class="search-input-wrap">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
-      <input type="text" class="search-input" placeholder="Bibliothek + YouTube durchsuchen…"
+      <input type="text" class="search-input" placeholder="Bibliothek, Archiv und YouTube durchsuchen…"
              bind:value={query} />
-      {#if query}<button type="button" class="search-clear" onclick={() => { query = ''; yt.items = []; localVideos = []; }}><i class="fa-solid fa-xmark"></i></button>{/if}
+      {#if query}<button type="button" class="search-clear" onclick={() => { query = ''; yt.items = []; local.items = []; local.total = 0; }}><i class="fa-solid fa-xmark"></i></button>{/if}
     </div>
     <div class="search-scope">
-      {#each [['both','Beides'],['local','Bibliothek'],['youtube','YouTube']] as [id, label]}
+      {#each [['both','Alles'],['local','Lokal'],['youtube','YouTube']] as [id, label]}
         <button type="button" class="scope-btn" class:active={scope === id}
                 onclick={() => { scope = id; runSearch(true); }}>{label}</button>
       {/each}
@@ -193,18 +192,18 @@
     </button>
   </form>
 
-  {#if loading && yt.items.length === 0 && localVideos.length === 0}
+  {#if loading && yt.items.length === 0 && local.items.length === 0}
     <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Suche läuft…</div>
-  {:else if query && yt.items.length === 0 && localVideos.length === 0 && !loading}
+  {:else if query && yt.items.length === 0 && local.items.length === 0 && !loading && !local.loading}
     <div class="empty"><i class="fa-solid fa-magnifying-glass"></i><h3>Keine Treffer für „{query}"</h3></div>
   {/if}
 
   <!-- Lokale Ergebnisse -->
-  {#if scope !== 'youtube' && localVideos.length > 0}
+  {#if scope !== 'youtube' && local.items.length > 0}
     <section class="section">
-      <h2 class="section-title"><i class="fa-solid fa-photo-film"></i> Bibliothek ({localVideos.length})</h2>
+      <h2 class="section-title"><i class="fa-solid fa-photo-film"></i> Lokal ({local.total})</h2>
       <div class="grid">
-        {#each localVideos as v (v.id)}
+        {#each local.items as v (v.id)}
           <div class="card-wrap">
             <div class="video-card" role="button" tabindex="0"
                  onclick={() => openVideo(v.id)}
@@ -212,6 +211,7 @@
               <div class="thumb-wrap">
                 <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" />
                 {#if v.duration}<span class="duration">{formatDuration(v.duration)}</span>{/if}
+                {#if v.is_archived}<span class="badge archive"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
                 <HoverActionOverlay>
                   <HoverActionBtn variant="success" onclick={() => openVideo(v.id)} title="Abspielen">
                     <i class="fa-solid fa-play"></i>
@@ -220,12 +220,17 @@
               </div>
               <div class="info">
                 <h3 class="title">{v.title}</h3>
-                <span class="channel">{v.channel_name || '–'}</span>
+                <span class="channel">{v.channel_name || 'Unbekannt'}</span>
               </div>
             </div>
           </div>
         {/each}
       </div>
+      {#if local.hasMore}
+        <button class="load-more" onclick={local.loadMore} disabled={local.loadingMore}>
+          {#if local.loadingMore}<i class="fa-solid fa-spinner fa-spin"></i> Lade…{:else}Weitere lokale Treffer ({local.total - local.items.length}){/if}
+        </button>
+      {/if}
     </section>
   {/if}
 
@@ -353,6 +358,7 @@
   .duration { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-family: monospace; }
   .badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
   .badge.ok { background: var(--status-success); color: #fff; }
+  .badge.archive { background: rgba(0,0,0,0.72); color: #fff; }
   .badge.queue { background: var(--status-warning, #f59e0b); color: #fff; }
 
   .info { padding: 12px; display: flex; flex-direction: column; gap: 4px; }

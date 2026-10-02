@@ -22,6 +22,9 @@
 
   // Ergebnisse
   let localResults = $state([]);
+  let localTotal = $state(0);
+  // Laufnummer: nur die Antwort der jüngsten Eingabe darf Ergebnisse setzen
+  let searchRun = 0;
   let rssResults = $state([]);
   let ytResults = $state([]);
   let ytPlaylists = $state([]);
@@ -110,7 +113,8 @@
     clearTimeout(debounceTimer);
     const q = query.trim();
     if (q.length < 2) {
-      localResults = []; rssResults = []; favResults = []; plResults = []; ownResults = [];
+      searchRun++;   // laufende Antworten zu längeren Eingaben verwerfen
+      localResults = []; localTotal = 0; rssResults = []; favResults = []; plResults = []; ownResults = [];
       searched = false;
       showHistory = q.length === 0;
       return;
@@ -126,27 +130,29 @@
     open = true;
     showHistory = false;
 
+    const run = ++searchRun;
+    const current = () => run === searchRun;
     const promises = [];
 
     // Lokal
     if (scopes.local) {
       loadingLocal = true;
       promises.push(
-        api.searchLocal(q, { per_page: MAX_PER_SECTION + 1 })
-          .then(r => { localResults = (r.videos || []).filter(v => v.status === 'ready').slice(0, MAX_PER_SECTION + 1); })
-          .catch(() => { localResults = []; })
-          .finally(() => { loadingLocal = false; })
+        api.searchLocal(q, { per_page: MAX_PER_SECTION })
+          .then(r => { if (current()) { localResults = r.videos || []; localTotal = r.total || 0; } })
+          .catch(() => { if (current()) { localResults = []; localTotal = 0; } })
+          .finally(() => { if (current()) loadingLocal = false; })
       );
-    } else { localResults = []; }
+    } else { localResults = []; localTotal = 0; }
 
     // RSS
     if (scopes.rss) {
       loadingRss = true;
       promises.push(
         api.searchRss(q)
-          .then(r => { rssResults = (r.results || []).slice(0, MAX_PER_SECTION + 1); })
-          .catch(() => { rssResults = []; })
-          .finally(() => { loadingRss = false; })
+          .then(r => { if (current()) rssResults = (r.results || []).slice(0, MAX_PER_SECTION + 1); })
+          .catch(() => { if (current()) rssResults = []; })
+          .finally(() => { if (current()) loadingRss = false; })
       );
     } else { rssResults = []; }
 
@@ -154,8 +160,8 @@
     if (scopes.favorites) {
       promises.push(
         api.searchLocal(q, { per_page: MAX_PER_SECTION + 1, scope: 'favorites' })
-          .then(r => { favResults = (r.videos || []).filter(v => v.status === 'ready').slice(0, MAX_PER_SECTION + 1); })
-          .catch(() => { favResults = []; })
+          .then(r => { if (current()) favResults = (r.videos || []).slice(0, MAX_PER_SECTION + 1); })
+          .catch(() => { if (current()) favResults = []; })
       );
     } else { favResults = []; }
 
@@ -164,6 +170,7 @@
       promises.push(
         api.getPlaylists()
           .then(pls => {
+            if (!current()) return;
             const qLower = q.toLowerCase();
             plResults = pls
               .filter(p => p.name?.toLowerCase().includes(qLower) || p.description?.toLowerCase().includes(qLower))
@@ -178,16 +185,18 @@
     if (scopes.own) {
       promises.push(
         api.scanIndex({ search: q, per_page: MAX_PER_SECTION + 1 })
-          .then(r => { ownResults = (r.items || []).slice(0, MAX_PER_SECTION + 1).map(i => ({ ...i, _isScan: true })); })
-          .catch(() => { ownResults = []; })
+          .then(r => { if (current()) ownResults = (r.items || []).slice(0, MAX_PER_SECTION + 1).map(i => ({ ...i, _isScan: true })); })
+          .catch(() => { if (current()) ownResults = []; })
       );
     } else { ownResults = []; }
 
     await Promise.allSettled(promises);
+    if (!current()) return;
 
-    // Deduplizieren: lokale Videos aus RSS entfernen (Scan-Items haben separate IDs)
+    // Deduplizieren: was lokal vorhanden ist, steht unter "Lokal" (auch wenn es
+    // dort erst hinter "Alle anzeigen" kommt) und nicht nochmal im RSS-Katalog.
     const localIds = new Set(localResults.map(v => v.id));
-    rssResults = rssResults.filter(v => !localIds.has(v.video_id || v.id));
+    rssResults = rssResults.filter(v => !localIds.has(v.video_id || v.id) && !(scopes.local && v.in_library));
   }
 
   async function searchYouTube() {
@@ -310,12 +319,18 @@
 
   function clearSearch() {
     query = '';
-    localResults = []; rssResults = []; ytResults = []; ytPlaylists = []; ytChannels = []; favResults = []; plResults = []; ownResults = [];
+    searchRun++;
+    localResults = []; localTotal = 0; rssResults = []; ytResults = []; ytPlaylists = []; ytChannels = []; favResults = []; plResults = []; ownResults = [];
     searched = false; ytSearched = false;
     closeDropdown();
   }
 
   // ═══ Actions ═══
+  function showAllLocal() {
+    navigate('/search', { q: query.trim(), scope: 'local' });
+    closeDropdown();
+  }
+
   function openVideo(v) {
     const id = v.video_id || v.id;
     navigate(`/watch/${id}`);
@@ -498,9 +513,12 @@
           <div class="sd-section">
             <div class="sd-sec-head">
               <span class="sd-sec-dot" style="background: var(--status-success)"></span>
-              <span class="sd-sec-label">Bibliothek</span>
-              <span class="sd-sec-count">{localResults.length > MAX_PER_SECTION ? `${MAX_PER_SECTION}+` : localResults.length}</span>
+              <span class="sd-sec-label">Lokal</span>
+              <span class="sd-sec-count">{localTotal}</span>
               {#if loadingLocal}<i class="fa-solid fa-spinner fa-spin sd-spin"></i>{/if}
+              {#if localTotal > MAX_PER_SECTION}
+                <button class="sd-all" onclick={showAllLocal}>Alle {localTotal} anzeigen</button>
+              {/if}
             </div>
             {#each localResults.slice(0, MAX_PER_SECTION) as v (v.id)}
               <button class="sd-row" onclick={() => openVideo(v)}>
@@ -512,7 +530,10 @@
                 </div>
                 <div class="sd-info">
                   <span class="sd-title">{v.title}</span>
-                  <span class="sd-channel">{v.channel_name || '–'}</span>
+                  <span class="sd-channel">
+                    {v.channel_name || 'Unbekannt'}
+                    {#if v.is_archived}<span class="sd-archived"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
+                  </span>
                 </div>
                 <div class="sd-acts">
                   <span class="sd-act-btn play" title="Abspielen"><i class="fa-solid fa-play"></i></span>
@@ -540,7 +561,10 @@
                 </div>
                 <div class="sd-info">
                   <span class="sd-title">{v.title}</span>
-                  <span class="sd-channel">{v.channel_name || '–'}</span>
+                  <span class="sd-channel">
+                    {v.channel_name || 'Unbekannt'}
+                    {#if v.is_archived}<span class="sd-archived"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
+                  </span>
                 </div>
                 <div class="sd-acts">
                   <span class="sd-act-btn play" title="Abspielen"><i class="fa-solid fa-play"></i></span>
@@ -898,6 +922,13 @@
     background: var(--bg-tertiary); border-radius: 8px;
   }
   .sd-spin { font-size: 0.7rem; color: var(--text-tertiary); }
+  .sd-all {
+    background: none; border: none; padding: 0 2px; cursor: pointer;
+    color: var(--accent-primary); font-size: 0.68rem; font-weight: 600;
+    text-transform: none; letter-spacing: 0;
+  }
+  .sd-all:hover { text-decoration: underline; }
+  .sd-archived { margin-left: 6px; font-size: 0.66rem; color: var(--text-tertiary); white-space: nowrap; }
 
   /* Ergebnis-Zeile */
   .sd-row {

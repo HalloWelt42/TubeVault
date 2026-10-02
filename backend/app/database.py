@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1106,6 +1106,14 @@ class Database:
             await self._connection.commit()
             logger.info(f"Migration v30: {len(dead_settings)} tote Settings entfernt")
 
+        # v32: Suchindex mit eigener, stabiler Dokumentnummer und Triggern.
+        # Ersetzt den an videos.rowid gebundenen Altindex (siehe search_index).
+        from app.services import search_index
+        await search_index.install_schema(self._connection, rebuild=current_version < 32)
+        if current_version < 32:
+            await self._connection.commit()
+            logger.info("Migration v32: Suchindex neu angelegt, Videos werden nachgezogen")
+
         # 4. Indexes NACH Migration (braucht source-Spalte)
         await self._connection.executescript(INDEXES_SQL)
 
@@ -1148,95 +1156,35 @@ class Database:
         row = await self.fetch_one(sql, params)
         return row[0] if row else None
 
-    # ─── FTS5 Sync ──────────────────────────────────────────────────
+    # ─── Suchindex (Delegation) ─────────────────────────────────────
+    # Aufbau, Pflege und Abfrage liegen in app.services.search_index. Die
+    # Methoden hier bleiben als bekannte Einstiegspunkte erhalten.
 
     async def fts_sync_video(self, video_id: str):
-        """FTS5 Index für ein Video aktualisieren.
-        description kommt aus text_resolver (File-first, DB-Fallback), damit
-        der Index auch funktioniert nachdem die DB-Spalte geleert ist."""
-        try:
-            row = await self.fetch_one(
-                "SELECT rowid, id, title, channel_name, description, tags, notes FROM videos WHERE id = ?",
-                (video_id,)
-            )
-            if not row:
-                return
-            # description: File-first (unabhängig von der DB-Spalte)
-            from app.services.text_resolver import get_description
-            description = await get_description(video_id) or ""
-            # Alte DB-description als Delete-Key verwenden (das ist was der
-            # Index evtl. noch aus der vorherigen Synchronisation kennt)
-            old_description = row["description"] or description
-            await self.conn.execute(
-                "INSERT INTO videos_fts(videos_fts, rowid, id, title, channel_name, description, tags, notes) VALUES('delete', ?, ?, ?, ?, ?, ?, ?)",
-                (row["rowid"], row["id"], row["title"] or "", row["channel_name"] or "", old_description, row["tags"] or "", row["notes"] or "")
-            )
-            await self.conn.execute(
-                "INSERT INTO videos_fts(rowid, id, title, channel_name, description, tags, notes) VALUES(?, ?, ?, ?, ?, ?, ?)",
-                (row["rowid"], row["id"], row["title"] or "", row["channel_name"] or "", description, row["tags"] or "", row["notes"] or "")
-            )
-            await self.conn.commit()
-        except Exception as e:
-            logger.debug(f"FTS sync für {video_id}: {e}")
+        """Ein Video sofort im Suchindex nachziehen."""
+        from app.services import search_index
+        await search_index.mark_dirty(video_id)
+        await search_index.flush()
 
     async def fts_delete_video(self, video_id: str):
-        """FTS5 Eintrag für ein Video entfernen."""
-        try:
-            row = await self.fetch_one(
-                "SELECT rowid, id, title, channel_name, description, tags, notes FROM videos WHERE id = ?",
-                (video_id,)
-            )
-            if row:
-                await self.conn.execute(
-                    "INSERT INTO videos_fts(videos_fts, rowid, id, title, channel_name, description, tags, notes) VALUES('delete', ?, ?, ?, ?, ?, ?, ?)",
-                    (row["rowid"], row["id"], row["title"] or "", row["channel_name"] or "", row["description"] or "", row["tags"] or "", row["notes"] or "")
-                )
-                await self.conn.commit()
-        except Exception as e:
-            logger.debug(f"FTS delete für {video_id}: {e}")
+        """Nach dem Löschen eines Videos den Indexeintrag entfernen.
+        (Der Lösch-Trigger merkt das Video ohnehin vor.)"""
+        from app.services import search_index
+        await search_index.mark_dirty(video_id)
+        await search_index.flush()
 
     async def fts_rebuild_from_resolver(self) -> dict:
-        """FTS5-Index komplett neu aufbauen – description kommt aus dem
-        text_resolver (File-first). So bleibt die Volltextsuche funktionsfähig,
-        auch wenn die DB-Spalte videos.description später geleert wird."""
-        from app.services.text_resolver import get_description
-        # Alles flushen – 'delete-all' löscht alle Einträge
-        await self.conn.execute("INSERT INTO videos_fts(videos_fts) VALUES('delete-all')")
-        rows = await self.fetch_all(
-            "SELECT rowid, id, title, channel_name, tags, notes FROM videos WHERE status='ready'"
-        )
-        written = 0
-        for r in rows:
-            description = await get_description(r["id"]) or ""
-            await self.conn.execute(
-                "INSERT INTO videos_fts(rowid, id, title, channel_name, description, tags, notes) VALUES(?, ?, ?, ?, ?, ?, ?)",
-                (r["rowid"], r["id"], r["title"] or "", r["channel_name"] or "",
-                 description, r["tags"] or "", r["notes"] or "")
-            )
-            written += 1
-        await self.conn.commit()
-        count = await self.fetch_val("SELECT COUNT(*) FROM videos_fts")
-        return {"rebuilt": written, "fts_count": count}
+        """Suchindex komplett neu aufbauen (Beschreibung aus dem text_resolver)."""
+        from app.services import search_index
+        return await search_index.rebuild()
 
     async def fts_search(self, query: str, limit: int = 50, offset: int = 0) -> list:
-        """FTS5 Volltextsuche über Videos."""
-        try:
-            # Suchbegriffe für FTS5 aufbereiten (Spaces → AND)
-            terms = query.strip().split()
-            fts_query = " AND ".join(f'"{t}"' for t in terms if t)
-            rows = await self.fetch_all(
-                """SELECT v.* FROM videos_fts f
-                   JOIN videos v ON v.id = f.id
-                   WHERE videos_fts MATCH ?
-                   AND v.status = 'ready' AND COALESCE(v.is_archived, 0) = 0
-                   ORDER BY rank
-                   LIMIT ? OFFSET ?""",
-                (fts_query, limit, offset)
-            )
-            return [dict(r) for r in rows]
-        except Exception as e:
-            logger.warning(f"FTS5 Suche Fehler: {e}")
-            return []
+        """Volltextsuche über die Bibliothek (ohne Archiv)."""
+        from app.services import search_index
+        page = offset // limit + 1 if limit else 1
+        result = await search_index.search_videos(
+            query, page=page, per_page=limit, archived=False)
+        return result["videos"]
 
 
 # Singleton
