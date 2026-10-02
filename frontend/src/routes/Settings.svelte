@@ -72,6 +72,7 @@
     { key: 'download', label: 'Downloads', icon: 'fa-download' },
     { key: 'player', label: 'Player', icon: 'fa-play' },
     { key: 'general', label: 'Allgemein', icon: 'fa-gear' },
+    { key: 'extensions', label: 'Erweiterungen', icon: 'fa-puzzle-piece' },
     { key: 'api', label: 'Dienste & APIs', icon: 'fa-plug' },
     { key: 'system', label: 'System', icon: 'fa-server' },
   ];
@@ -210,7 +211,7 @@
   function settingsFor(catKey) {
     return schema.filter(d => d.section === catKey).map(d => ({
       key: d.key, label: d.label, desc: d.description, type: d.kind,
-      min: d.min, max: d.max, unit: d.unit, options: d.options,
+      min: d.min, max: d.max, unit: d.unit, options: d.options, optionLabels: d.option_labels || {},
       value: settings[d.key] ?? d.default,
     }));
   }
@@ -584,7 +585,7 @@
         </div>
       {:else if item.type === 'select'}
         <select class="select-input" value={item.value} onchange={(e) => save(item.key, e.target.value)}>
-          {#each item.options as opt}<option value={opt}>{opt}</option>{/each}
+          {#each item.options as opt}<option value={opt}>{item.optionLabels[opt] || opt}</option>{/each}
         </select>
       {:else}
         <input type="text" class="text-input" value={item.value} onchange={(e) => save(item.key, e.target.value)} />

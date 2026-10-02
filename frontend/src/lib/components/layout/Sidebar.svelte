@@ -8,6 +8,7 @@
   import { sidebarOpen } from '../../stores/app.js';
   import { miniPlayer } from '../../stores/miniPlayer.js';
   import { api } from '../../api/client.js';
+  import { settings } from '../../stores/settings.js';
   import MiniPlayer from './MiniPlayer.svelte';
   import VideoSuggestion from './VideoSuggestion.svelte';
 
@@ -16,7 +17,8 @@
   let badges = $state({});
 
   // Routen aus zentraler Registry
-  const navItems = getMainRoutes();
+  // Einträge mit `feature` erscheinen nur, wenn die Einstellung eingeschaltet ist
+  const navItems = $derived(getMainRoutes().filter(r => !r.feature || $settings[r.feature] === 'true'));
   const systemItems = getSystemRoutes();
   const adminItems = getAdminRoutes();
 

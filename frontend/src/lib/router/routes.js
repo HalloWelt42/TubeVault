@@ -118,6 +118,17 @@ export const routeDefinitions = {
     queryParams: ['sort', 'order', 'types', 'channels', 'categories', 'tags', 'q'],
     description: 'Archivierte Videos',
   },
+  'dubbing': {
+    path: '/dubbing',
+    label: 'Nachvertonung',
+    icon: 'fa-solid fa-language',
+    group: 'main',
+    hasId: false,
+    badge: 'dubbing',
+    feature: 'dub.enabled',   // nur sichtbar, wenn die Erweiterung eingeschaltet ist
+    queryParams: [],
+    description: 'Warteliste der Nachvertonung',
+  },
   'own-videos': {
     path: '/own-videos',
     label: 'Eigene Videos',

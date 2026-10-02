@@ -10,6 +10,7 @@
   import { back } from '../router.js';
   import { say } from '../notice.js';
   import HoldButton from '../parts/HoldButton.svelte';
+  import { followVideo, preferredLanguage, rememberLanguage } from '../../lib/utils/audioTrackSync.js';
 
   let { id } = $props();
 
@@ -25,6 +26,10 @@
   let showDescription = $state(false);
   let queued = $state(false);
   let player = $state(null);
+  let tracks = $state([]);          // zusätzliche Tonspuren (z.B. Nachvertonung)
+  let activeTrackId = $state(null); // null = Original-Ton
+  let trackAudio = $state(null);
+  let activeTrack = $derived(tracks.find(t => t.id === activeTrackId) || null);
   let playRecorded = false;
   let saveTimer = null;
 
@@ -41,6 +46,10 @@
       if (!video.preview_mode) {
         api.checkFavorite(id).then(r => { isFav = !!r.is_favorite; }).catch(() => {});
         api.getChapters(id).then(r => { chapters = r.chapters || []; }).catch(() => {});
+        api.getAudioTracks(id).then(r => {
+          tracks = r.tracks || [];
+          activeTrackId = tracks.find(t => t.language === preferredLanguage())?.id ?? null;
+        }).catch(() => {});
       }
     } catch { failed = true; }
   }
@@ -91,6 +100,18 @@
     } catch (e) { say(e.message, 'warn'); }
   }
 
+  function chooseTrack(track) {
+    activeTrackId = track ? track.id : null;
+    rememberLanguage(track ? track.language : '');
+  }
+
+  // Zusatzspur im Gleichlauf mit dem Video führen
+  $effect(() => {
+    if (!activeTrack || !player || !trackAudio) return;
+    const sync = followVideo(player, trackAudio);
+    return () => sync.stop();
+  });
+
   function seek(seconds) {
     if (!player) return;
     player.currentTime = seconds;
@@ -131,6 +152,18 @@
       <video class="stage" bind:this={player} src={api.streamUrl(id)} poster={api.thumbnailUrl(id)}
              controls playsinline preload="metadata"
              onloadedmetadata={onLoadedMetadata} onplay={onPlay} onpause={onPause} onended={onPause}></video>
+    {/if}
+
+    {#if tracks.length > 0}
+      <div class="tracks" role="group" aria-label="Tonspur">
+        <button class:on={activeTrackId === null} onclick={() => chooseTrack(null)}>Original</button>
+        {#each tracks as track (track.id)}
+          <button class:on={activeTrackId === track.id} onclick={() => chooseTrack(track)}>{track.label}</button>
+        {/each}
+      </div>
+      {#if activeTrack}
+        <audio bind:this={trackAudio} src={api.audioTrackUrl(id, activeTrack.id)} preload="auto"></audio>
+      {/if}
     {/if}
 
     <section class="info">
@@ -185,6 +218,9 @@
   .back { width: 52px; height: 48px; font-size: 1.15rem; color: var(--m-text); }
   .stage { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; max-height: 62dvh; }
   .poster img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .tracks { display: flex; gap: 3px; margin: 12px 16px 0; padding: 3px; background: var(--m-surface-2); border-radius: var(--m-radius); }
+  .tracks button { flex: 1; min-height: 44px; border-radius: 9px; color: var(--m-dim); font-weight: 600; }
+  .tracks button.on { background: var(--m-accent); color: var(--m-accent-ink); }
   .info { padding: 16px; }
   .title { font-size: 1.2rem; font-weight: 600; line-height: 1.25; }
   .meta { margin-top: 6px; color: var(--m-dim); font-size: 0.9rem; }

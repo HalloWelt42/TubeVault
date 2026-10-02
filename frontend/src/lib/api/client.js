@@ -268,6 +268,15 @@ export const api = {
   // Settings
   getSettings: () => request('/api/settings'),
   getSettingsSchema: () => request('/api/settings/schema'),
+
+  // Tonspuren und Nachvertonung
+  getAudioTracks: (videoId) => request(`/api/videos/${videoId}/audio-tracks`),
+  audioTrackUrl: (videoId, trackId) => `${API_BASE}/api/player/${videoId}/track/${trackId}`,
+  deleteAudioTrack: (videoId, trackId) => request(`/api/videos/${videoId}/audio-tracks/${trackId}`, { method: 'DELETE' }),
+  enqueueDubbing: (videoIds) => request('/api/dubbing/requests', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
+  getDubbingRequests: (status = '') => request(`/api/dubbing/requests${status ? '?status=' + status : ''}`),
+  retryDubbing: (id) => request(`/api/dubbing/requests/${id}/retry`, { method: 'POST' }),
+  removeDubbing: (id) => request(`/api/dubbing/requests/${id}`, { method: 'DELETE' }),
   getSetting: (key) => request(`/api/settings/${encodeURIComponent(key)}`),
   updateSetting: (key, value) => request(`/api/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   resetSettings: () => request('/api/settings/reset', { method: 'POST' }),

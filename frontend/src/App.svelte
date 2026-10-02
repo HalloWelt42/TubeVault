@@ -32,6 +32,7 @@
   import Admin from './routes/Admin.svelte';
   import AdminTexts from './routes/AdminTexts.svelte';
   import AdminRebuild from './routes/AdminRebuild.svelte';
+  import Dubbing from './routes/Dubbing.svelte';
 
   /** Route-Key → Svelte-Komponente */
   const pages = {
@@ -53,6 +54,7 @@
     'own-videos': OwnVideos,
     category: Categories,
     search: Search,
+    dubbing: Dubbing,
     admin: Admin,
     'admin-texts': AdminTexts,
     'admin-rebuild': AdminRebuild,

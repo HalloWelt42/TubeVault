@@ -37,6 +37,7 @@ class SettingDef(BaseModel):
     max: Optional[float] = None
     unit: Optional[str] = None
     options: Optional[list[str]] = None
+    option_labels: Optional[dict[str, str]] = None   # Anzeige je Auswahlwert
 
 
 SETTINGS: list[SettingDef] = [
@@ -105,7 +106,9 @@ SETTINGS: list[SettingDef] = [
                            "auf einem leistungsfähigen Rechner, sobald dort Kapazität frei ist; die "
                            "fertige Tonspur lässt sich in der Wiedergabe umschalten."),
     SettingDef(key="dub.target_language", default="de", kind="select", category="dub",
-               section="extensions", options=["de", "en"], label="Zielsprache der Nachvertonung"),
+               section="extensions", options=["de", "en"],
+               option_labels={"de": "Deutsch", "en": "Englisch"},
+               label="Zielsprache der Nachvertonung"),
     SettingDef(key="dub.voice", default="Zeit Stimme", kind="text", category="dub",
                section="extensions", label="Stimme der Nachvertonung",
                description="Name der Stimme, mit der der Nachvertoner spricht."),

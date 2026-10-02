@@ -359,6 +359,8 @@ async def get_badges():
         "archives": await cs.archived_videos(),
         "own_videos": await cs.own_videos(),   # jetzt = OwnVideos-Seite (file_size>0)
         "batch_queue": batch_waiting,
+        "dubbing": await db.fetch_val(
+            "SELECT COUNT(*) FROM dub_requests WHERE status IN ('queued', 'working')") or 0,
     }
 
 

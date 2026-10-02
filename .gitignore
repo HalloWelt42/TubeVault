@@ -59,3 +59,7 @@ build/
 docs/
 notes/
 NOTES.md
+
+# Nachvertoner: eigene Einstellungen und Arbeitsdateien
+nachvertoner/nachvertoner.toml
+nachvertoner/arbeit/

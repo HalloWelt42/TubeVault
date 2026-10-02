@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS dub_requests (
     progress REAL DEFAULT 0,
     note TEXT,
     worker TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
     claimed_at TEXT,
     heartbeat_at TEXT,
     finished_at TEXT
@@ -157,7 +157,7 @@ async def _release_stale() -> None:
             SET status = 'queued', worker = NULL, claimed_at = NULL, progress = 0,
                 note = 'Nachvertoner hat sich nicht mehr gemeldet - erneut in der Warteliste'
             WHERE status = 'working'
-              AND COALESCE(heartbeat_at, claimed_at) < datetime('now', '-{STALE_AFTER_MINUTES} minutes')""")
+              AND COALESCE(heartbeat_at, claimed_at) < datetime('now', 'localtime', '-{STALE_AFTER_MINUTES} minutes')""")
 
 
 async def claim(worker: str) -> DubRequest | None:
@@ -169,8 +169,8 @@ async def claim(worker: str) -> DubRequest | None:
         return None
     cursor = await db.execute(
         """UPDATE dub_requests
-           SET status = 'working', worker = ?, claimed_at = datetime('now'),
-               heartbeat_at = datetime('now'), progress = 0, note = NULL
+           SET status = 'working', worker = ?, claimed_at = datetime('now', 'localtime'),
+               heartbeat_at = datetime('now', 'localtime'), progress = 0, note = NULL
            WHERE id = ? AND status = 'queued'""", (worker, row["id"]))
     if cursor.rowcount != 1:
         return None   # ein anderer Nachvertoner war schneller
@@ -180,7 +180,7 @@ async def claim(worker: str) -> DubRequest | None:
 async def heartbeat(request_id: int, progress: float | None = None, note: str | None = None) -> bool:
     cursor = await db.execute(
         """UPDATE dub_requests
-           SET heartbeat_at = datetime('now'),
+           SET heartbeat_at = datetime('now', 'localtime'),
                progress = COALESCE(?, progress), note = COALESCE(?, note)
            WHERE id = ? AND status = 'working'""",
         (None if progress is None else max(0.0, min(1.0, progress)), note, request_id))
@@ -190,7 +190,7 @@ async def heartbeat(request_id: int, progress: float | None = None, note: str | 
 async def finish(request_id: int, status: Status, note: str | None = None) -> None:
     await db.execute(
         """UPDATE dub_requests
-           SET status = ?, note = ?, finished_at = datetime('now'),
+           SET status = ?, note = ?, finished_at = datetime('now', 'localtime'),
                progress = CASE WHEN ? = 'done' THEN 1 ELSE progress END
            WHERE id = ?""", (status, note, status, request_id))
 

@@ -1,6 +1,9 @@
 <script>
   import { api, createActivitySocket } from '../lib/api/client.js';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  import AudioTrackSwitch from '../lib/components/watch/AudioTrackSwitch.svelte';
+  import { settings } from '../lib/stores/settings.js';
+  import { dubbingEnabled, enqueueForDubbing } from '../lib/utils/dubbingActions.js';
   let confirmRef;
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
@@ -797,6 +800,10 @@
   <div class="video-details">
     <h1 class="video-title">{video.title || video.id}</h1>
 
+    {#if !previewMode}
+      <AudioTrackSwitch videoId={video.id} {videoEl} originalLanguage={video.language} {mediaKey} />
+    {/if}
+
     <div class="video-meta-row">
       <div class="meta-left">
         <button class="channel" onclick={() => { if (video.channel_id) { navigate(`/channel/${video.channel_id}`); } }}>
@@ -853,6 +860,12 @@
             <i class="fa-solid fa-note-sticky"></i>
             {#if video?.notes}<span class="btn-badge"><i class="fa-solid fa-pen" style="font-size:0.4rem"></i></span>{/if}
           </button>
+          {#if dubbingEnabled($settings)}
+            <button class="action-btn" onclick={() => enqueueForDubbing([video.id])}
+                    title="Zur Nachvertonung vormerken (Tonspur wird später umschaltbar)">
+              <i class="fa-solid fa-language"></i>
+            </button>
+          {/if}
           <button class="action-btn danger" onclick={deleteVideo} title="Löschen">
             <i class="fa-regular fa-trash-can"></i>
           </button>

@@ -1,0 +1,23 @@
+# Einstellungen des Nachvertoners. Kopieren nach nachvertoner.toml und anpassen.
+
+# Name, unter dem dieser Rechner in der Warteliste erscheint (leer = Rechnername)
+name = ""
+
+# Wie oft nach Arbeit gefragt wird, wenn nichts zu tun war (Sekunden)
+abfrage_sekunden = 60
+
+# Wie oft der Fortschritt an TubeVault gemeldet wird (Sekunden)
+fortschritt_sekunden = 15
+
+# Ordner für Arbeitsdateien (leer = Unterordner "arbeit" neben dem Skript)
+arbeitsordner = ""
+
+[tubevault]
+# Adresse des TubeVault-Backends
+url = "http://192.168.178.49:8031"
+
+[vertonungsdienst]
+# Adresse des Vertonungsdienstes auf diesem Rechner
+url = "http://localhost:10031"
+# Sprache des Originals, wenn TubeVault sie nicht kennt (de, en, fr, es, it)
+quellsprache = "en"
