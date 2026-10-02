@@ -32,6 +32,14 @@
 - **Nachvertonung** (abschaltbare Erweiterung) — Videos vormerken, ein eigenes Programm
   (`nachvertoner/`) vertont bei freier Kapazität auf einem anderen Rechner; die neue Tonspur
   ist in der Wiedergabe umschaltbar, das Video wird nicht doppelt gespeichert
+- **Hybride Suche** — Wortsuche über Bibliothek und Archiv (Wortanfänge, Teilwörter) plus
+  optionale Bedeutungssuche mit lokaler KI: findet inhaltlich Verwandtes ohne Wortgleichheit;
+  ohne KI bleibt die Wortsuche voll nutzbar
+- **Serien erkennen** — nummerierte Folgen in den Titeln werden je Kanal und Serie
+  zusammengefasst und als Playlist in Folgenreihenfolge angelegt; Suchtreffer lassen sich
+  ebenfalls als Playlist speichern
+- **Sichtbare Hintergrundarbeiten** — Stand, Laufzeit und Restdauer lang laufender Vorgänge
+  in der Statusleiste
 - **Verlässliche Einordnung** — Video, Short oder Livestream nach Auskunft der Quelle;
   Shorts lassen sich global ausschließen
 - Außerdem: Kategorien, Playlists, Favoriten, Verlauf mit „Weiterschauen", Statistiken,

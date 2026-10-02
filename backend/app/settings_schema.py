@@ -36,6 +36,7 @@ class SettingDef(BaseModel):
     min: Optional[float] = None
     max: Optional[float] = None
     unit: Optional[str] = None
+    step: Optional[float] = None      # Schrittweite des Eingabefelds (Standard 1)
     options: Optional[list[str]] = None
     option_labels: Optional[dict[str, str]] = None   # Anzeige je Auswahlwert
 
@@ -124,6 +125,11 @@ SETTINGS: list[SettingDef] = [
                description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.178.20:1234/v1"),
     SettingDef(key="ai.embedding_model", default="text-embedding-bge-m3", kind="text", category="ai",
                section="extensions", label="Modell für Einbettungen"),
+    SettingDef(key="ai.min_similarity", default="0.5", kind="number", category="ai",
+               section="extensions", min=0.2, max=0.9, step=0.01,
+               label="Mindest-Ähnlichkeit der Bedeutungssuche",
+               description="Ab welcher Ähnlichkeit ein Video als inhaltlich verwandt gilt. Niedriger "
+                           "findet mehr, aber auch Unpassendes; höher ist strenger."),
     # ── System ────────────────────────────────────────────────────────
     SettingDef(key="archive.mount_check_interval", default="30", kind="number", category="archive",
                min=5, max=3600, unit="s", label="Prüfintervall für externe Archive"),

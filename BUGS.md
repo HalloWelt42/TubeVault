@@ -41,7 +41,7 @@ Status: `[open]` · `[partial]` · `[done]` · `[deferred]` · `[wont-fix]`
 
 ---
 
-## Durchsicht Oktober 2026 (v2.15.6 bis v2.20.2)
+## Durchsicht Oktober 2026 (ab v2.15.6)
 
 Anlass: viele kleine Fehler und Unstimmigkeiten im laufenden Betrieb. Jede
 Meldung wurde an den echten Daten nachvollzogen und an der Ursache behoben.
@@ -59,12 +59,18 @@ Meldung wurde an den echten Daten nachvollzogen und an der Ursache behoben.
 | Shorts/Musik falsch eingeordnet | "Bis 60 Sekunden = Short" an fünf Stellen; Klick auf das Etikett stellte den Typ um; Bindestrich im Titel = Musik | `video_classifier` (Quelle fragen), Bestand wird nachgeprüft, Etikett ohne Klick, Musik laut Kategorie |
 | Gelöschte Videos hinterlassen Reste | Texte, Werbemarken, Verweise, Kapitelbilder blieben; Löschen ohne Rückfrage | Restloses Löschen, Rückfragen, Kanal wahlweise samt Videos |
 
-Neu dazugekommen: Mobil-Ansicht unter `/m`, Nachvertonung mit umschaltbarer
+Neu dazugekommen: hybride Suche (`semantic_index`), Serien-Playlisten
+(`series_detector`), sichtbare Hintergrundarbeiten, Mobil-Ansicht unter `/m`, Nachvertonung mit umschaltbarer
 Tonspur (`nachvertoner/`), "Shorts ausschließen", eine Versionsquelle
 (`version.json`) mit Prüfung vor Commit und Push, lokale Testumgebung
 (`scripts/dev_seed.py`, `make -C backend test`).
 
 ### Offen nach der Durchsicht
+
+- **Vorhandene Untertitel beim Nachvertonen nutzen:** spart das Transkribieren
+  (bei deutschen Untertiteln auch das Übersetzen). Der Vertonungsdienst nimmt
+  bisher kein fertiges Transkript an; nötig ist dort ein Eingang für Segmente
+  (Auftragsfeld), danach reicht der Nachvertoner die Untertitel durch.
 
 - **Abruf-Bausteine aktualisieren:** Token-Dienst 1.3.2 läuft, 2.0.1 ist
   erschienen (Plugin UND Container gemeinsam anheben, dann Download testen).

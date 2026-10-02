@@ -242,7 +242,7 @@
   function settingsFor(catKey) {
     return schema.filter(d => d.section === catKey).map(d => ({
       key: d.key, label: d.label, desc: d.description, type: d.kind,
-      min: d.min, max: d.max, unit: d.unit, options: d.options, optionLabels: d.option_labels || {},
+      min: d.min, max: d.max, step: d.step ?? 1, unit: d.unit, options: d.options, optionLabels: d.option_labels || {},
       value: settings[d.key] ?? d.default,
     }));
   }
@@ -639,12 +639,12 @@
         <button class="toggle" class:on={item.value === 'true'} onclick={() => toggleSetting(item.key)}><span class="toggle-knob"></span></button>
       {:else if item.type === 'duration'}
         <div class="duration-wrap">
-          <input type="number" class="number-input" value={item.value} min={item.min} max={item.max} onchange={(e) => save(item.key, e.target.value)} />
+          <input type="number" class="number-input" value={item.value} min={item.min} max={item.max} step={item.step} onchange={(e) => save(item.key, e.target.value)} />
           <span class="duration-hint">{fmtDur(item.value)}</span>
         </div>
       {:else if item.type === 'number'}
         <div class="number-wrap">
-          <input type="number" class="number-input" value={item.value} min={item.min} max={item.max} onchange={(e) => save(item.key, e.target.value)} />
+          <input type="number" class="number-input" value={item.value} min={item.min} max={item.max} step={item.step} onchange={(e) => save(item.key, e.target.value)} />
           {#if item.unit}<span class="unit-hint">{item.unit}</span>{/if}
         </div>
       {:else if item.type === 'select'}

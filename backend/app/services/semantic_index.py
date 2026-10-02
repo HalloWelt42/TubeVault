@@ -57,22 +57,25 @@ BEGIN
 END;
 """
 
-_BATCH = 32
+# Kleine Stapel: der KI-Dienst arbeitet nacheinander, eine Suchanfrage soll
+# während des Einbettens nicht lange hinter einem Stapel warten.
+_BATCH = 16
 _DESCRIPTION_CHARS = 1200
 _REQUEST_TIMEOUT_S = 60
 _QUERY_TIMEOUT_S = 4            # die Suche wartet nicht lange auf die KI
 _AVAILABILITY_TTL_S = 60
 _IDLE_PAUSE_S = 300
-# Welche Videos gelten als inhaltlich verwandt? Die rohen Ähnlichkeitswerte
-# liegen je nach Modell eng beieinander (verwandt 0,40-0,55, fremd 0,30-0,42),
-# eine feste Schwelle trennt deshalb schlecht. Gemessen wird, wie weit ein
-# Video aus der Masse aller Videos herausragt: Treffer ist, was mindestens
-# MIN_Z Standardabweichungen über dem Durchschnitt liegt - höchstens TOP_K.
+# Welche Videos gelten als inhaltlich verwandt? Zwei Bedingungen, beide nötig:
+#   1. Mindest-Ähnlichkeit (Einstellung ai.min_similarity). An echten Titeln
+#      gemessen (bge-m3): passende Treffer ab etwa 0,50, Zufallstreffer bei
+#      sinnlosen Anfragen bis etwa 0,48.
+#   2. Das Video ragt aus der Masse heraus: mindestens MIN_Z
+#      Standardabweichungen über dem Durchschnitt aller Videos. Das fängt
+#      Anfragen ab, zu denen alles ein wenig passt.
+# Höchstens TOP_K Treffer.
 TOP_K = 80
 MIN_Z = 2.5
-SMALL_COLLECTION = 200
-# Darunter ist nichts verwandt, egal wie der Rest aussieht
-MIN_SIMILARITY = 0.25
+SMALL_COLLECTION = 200   # darunter sagt die Streuung wenig
 
 _available: tuple[float, bool] = (0.0, False)
 _matrix = None                  # (ids, numpy-Matrix, Stempel)
@@ -273,7 +276,11 @@ async def search(query: str) -> Optional[list[tuple[str, float]]]:
     scores = matrix @ q
     # In kleinen Beständen sagt die Streuung wenig; dort genügt "über dem Durchschnitt".
     z = MIN_Z if len(ids) >= SMALL_COLLECTION else 0.0
-    floor = max(MIN_SIMILARITY, float(scores.mean()) + z * float(scores.std()))
+    try:
+        min_similarity = float(await _setting("ai.min_similarity"))
+    except ValueError:
+        min_similarity = 0.5
+    floor = max(min_similarity, float(scores.mean()) + z * float(scores.std()))
     top = np.argsort(-scores)[:TOP_K]
     return [(ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 

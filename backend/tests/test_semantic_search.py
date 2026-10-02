@@ -45,6 +45,7 @@ async def ai(test_db, set_setting, monkeypatch):
     semantic_index._query_cache.clear()
     await set_setting("ai.enabled", "true")
     await set_setting("ai.url", "http://ki.test/v1")
+    await set_setting("ai.min_similarity", "0.25")   # die Attrappe kennt nur grobe Themenachsen
     yield calls
     semantic_index.reset_availability()
     semantic_index._matrix = None
