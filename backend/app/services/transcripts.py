@@ -72,8 +72,13 @@ CHUNK_CHARS = 700
 # Nach einer längeren Sprechpause beginnt ein neuer Abschnitt - sonst läge
 # die Sprungmarke weit vor der Textstelle
 CHUNK_MAX_GAP_SECONDS = 20
-# Pause zwischen zwei Abrufen bei der Quelle
+# Pause zwischen zwei Abrufen bei der Quelle. Die Quelle drosselt Untertitel
+# streng und ohne festen Wert, deshalb passt sich der Abstand an: nach jeder
+# Bremsung wird er verdoppelt, nach einer Reihe geglückter Abrufe wieder
+# langsam kürzer.
 SECONDS_PER_FETCH = 20
+MAX_SECONDS_PER_FETCH = 600
+SPEED_UP_AFTER = 20          # geglückte Abrufe in Folge, bis der Abstand sinkt
 # Pause, wenn die Quelle bremst oder nicht erreichbar ist
 BACKOFF_SECONDS = 1800
 # Fehlgeschlagene Abrufe frühestens nach so vielen Tagen erneut versuchen
@@ -211,12 +216,34 @@ def is_blocked(error: Exception) -> bool:
     return any(marker in message for marker in _BLOCK_MARKERS)
 
 
+class _Pace:
+    """Aktueller Abstand zwischen zwei Abrufen."""
+    seconds = SECONDS_PER_FETCH
+    successes = 0
+
+    @classmethod
+    def blocked(cls) -> None:
+        cls.seconds = min(cls.seconds * 2, MAX_SECONDS_PER_FETCH)
+        cls.successes = 0
+
+    @classmethod
+    def succeeded(cls) -> None:
+        cls.successes += 1
+        if cls.successes >= SPEED_UP_AFTER:
+            cls.seconds = max(SECONDS_PER_FETCH, int(cls.seconds * 0.8))
+            cls.successes = 0
+
+
+def seconds_per_fetch() -> int:
+    return _Pace.seconds
+
+
 async def background_fetch() -> None:
-    """Hintergrundlauf: neueste Videos zuerst, ein Abruf alle SECONDS_PER_FETCH
-    Sekunden. Bremst die Quelle, ruht der Lauf, statt weiter anzufragen."""
+    """Hintergrundlauf: neueste Videos zuerst. Bremst die Quelle, ruht der
+    Lauf und fragt danach in größerem Abstand."""
     await asyncio.sleep(90)
     while True:
-        pause = SECONDS_PER_FETCH
+        pause = _Pace.seconds
         try:
             row = await db.fetch_one(
                 f"SELECT v.id {_WAITING_SQL} ORDER BY v.download_date DESC, v.id LIMIT 1")
@@ -226,10 +253,13 @@ async def background_fetch() -> None:
                 video_id = row["id"]
                 try:
                     result = await fetch(video_id)
+                    _Pace.succeeded()
                     logger.debug(f"[TRANSKRIPT] {video_id}: {result.status} ({result.chunks} Abschnitte)")
                 except Exception as e:
                     if is_blocked(e):
-                        logger.info(f"[TRANSKRIPT] Quelle bremst, Pause {BACKOFF_SECONDS // 60} Min: {str(e)[:120]}")
+                        _Pace.blocked()
+                        logger.info(f"[TRANSKRIPT] Quelle bremst, Pause {BACKOFF_SECONDS // 60} Min, "
+                                    f"danach alle {_Pace.seconds} s: {str(e)[:120]}")
                         pause = BACKOFF_SECONDS
                     else:
                         await _mark(video_id, "error", note=str(e)[:300])

@@ -734,7 +734,7 @@ async def get_channel_filesystem(channel_id: str):
 
     for v in dl_videos[:100]:  # Max 100 für Performance
         vid = v["id"]
-        entry = {"id": vid, "title": v["title"], "type": v.get("video_type", "video"), "files": {}}
+        entry = {"id": vid, "title": v["title"], "type": v["video_type"] or "video", "files": {}}
 
         try:
             # Video-Datei

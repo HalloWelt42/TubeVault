@@ -113,9 +113,10 @@ async def _transcripts() -> Optional[WorkItem]:
     done, total, since = _countdown("transcripts", remaining)
     return WorkItem(
         key="transcripts", label="Transkripte werden geholt",
-        detail="Untertitel der Quelle machen den gesprochenen Inhalt durchsuchbar (bewusst langsam).",
+        detail="Untertitel der Quelle machen den gesprochenen Inhalt durchsuchbar. Die Quelle "
+               f"drosselt das stark; derzeit ein Abruf alle {transcripts.seconds_per_fetch()} s.",
         done=done, total=total, progress=done / total if total else None, since=since,
-        eta_seconds=int(remaining * transcripts.SECONDS_PER_FETCH))
+        eta_seconds=int(remaining * transcripts.seconds_per_fetch()))
 
 
 async def _passage_index() -> Optional[WorkItem]:
