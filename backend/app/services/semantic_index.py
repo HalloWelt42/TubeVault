@@ -81,6 +81,8 @@ EMBEDDING_MODEL = "text-embedding-bge-m3"
 SMALL_COLLECTION = 200   # darunter sagt die Streuung wenig
 
 _available: tuple[float, bool] = (0.0, False)
+# Wird gesetzt, wenn sich die KI-Einstellungen ändern
+_wake = asyncio.Event()
 _matrix = None                  # (ids, numpy-Matrix, Stempel)
 _query_cache: dict[tuple[str, str], list[float]] = {}
 
@@ -132,8 +134,11 @@ async def available() -> bool:
 
 
 def reset_availability() -> None:
+    """Erreichbarkeit neu prüfen und den Hintergrundlauf sofort wecken -
+    nach dem Einschalten soll nicht erst die Ruhepause ablaufen."""
     global _available
     _available = (0.0, False)
+    _wake.set()
 
 
 # ─── Index pflegen ────────────────────────────────────────────────────
@@ -224,7 +229,11 @@ async def background_index() -> None:
         except Exception as e:
             reset_availability()
             logger.info(f"[BEDEUTUNG] Einbetten unterbrochen: {e.__class__.__name__}: {e}")
-        await asyncio.sleep(_IDLE_PAUSE_S)
+        _wake.clear()
+        try:
+            await asyncio.wait_for(_wake.wait(), timeout=_IDLE_PAUSE_S)
+        except asyncio.TimeoutError:
+            pass
 
 
 # ─── Suchen ───────────────────────────────────────────────────────────
