@@ -28,6 +28,11 @@ async def stock(test_db, tmp_path, monkeypatch):
         await test_db.execute(
             "INSERT INTO rss_entries (video_id, channel_id, title, video_type, published) "
             "VALUES (?, 'UCx', ?, ?, '2026-01-01')", (vid, f"Clip {vid}", vtype))
+    # Im Feed zählt nur, was noch nicht geladen ist
+    for vid, vtype in (("neuesvideo1", "video"), ("neuershort", "short")):
+        await test_db.execute(
+            "INSERT INTO rss_entries (video_id, channel_id, title, video_type, published) "
+            "VALUES (?, 'UCx', ?, ?, '2026-01-02')", (vid, f"Neu {vid}", vtype))
 
 
 async def _ids():
@@ -45,7 +50,7 @@ async def test_ausgeschlossen_ueberall(stock, set_setting):
     assert await counts_service.library_videos() == 1
     assert [v["id"] for v in (await search_index.search_videos("Clip"))["videos"]] == ["normalvideo"]
     feed = await rss_service.get_new_videos()
-    assert [e["video_id"] for e in feed["entries"]] == ["normalvideo"]
+    assert [e["video_id"] for e in feed["entries"]] == ["neuesvideo1"]
     assert feed["tab_counts"]["active"] == 1
 
 

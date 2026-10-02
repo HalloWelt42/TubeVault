@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.database import db
+from app.services import feed_scope
 from app.services.rss_service import rss_service
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Feed"])
@@ -23,7 +24,7 @@ async def get_feed_channels(feed_tab: str = Query("active")):
     """Alle abonnierten Kanaele fuer Feed-Filter – IMMER alle, auch ohne Entries."""
     status_filter = ""
     if feed_tab == "active":
-        status_filter = "AND COALESCE(r.feed_status, 'active') = 'active'"
+        status_filter = f"AND {feed_scope.new_entry('r')}"
     elif feed_tab in ("later", "dismissed", "archived"):
         status_filter = f"AND r.feed_status = '{feed_tab}'"
 
@@ -46,7 +47,7 @@ async def get_feed_tags(feed_tab: str = Query("active")):
     """Alle einzigartigen Tags/Keywords aus RSS-Entries zurueckgeben."""
     status_filter = ""
     if feed_tab == "active":
-        status_filter = "AND COALESCE(r.feed_status, 'active') = 'active'"
+        status_filter = f"AND {feed_scope.new_entry('r')}"
     elif feed_tab in ("later", "dismissed", "archived"):
         status_filter = f"AND r.feed_status = '{feed_tab}'"
 

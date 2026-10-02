@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import AVATARS_DIR, RSS_THUMBS_DIR
 from app.database import db
-from app.services import channel_reference, loadable
+from app.services import channel_reference, feed_scope, loadable
 from app.services.rss_service import rss_service, ChannelNotFound
 from app.routers.jobs import activity_ws
 
@@ -117,7 +117,7 @@ async def get_channel_detail(channel_id: str):
         "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ?", (channel_id,)
     ) or 0
     new_count = await db.fetch_val(
-        "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND COALESCE(feed_status, 'active') = 'active'",
+        f"SELECT COUNT(*) FROM rss_entries r WHERE r.channel_id = ? AND {feed_scope.new_entry('r')}",
         (channel_id,)
     ) or 0
     downloaded_count = await db.fetch_val(

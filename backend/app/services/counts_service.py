@@ -19,7 +19,7 @@ import os
 from app.database import db
 from app.config import VIDEOS_DIR, DB_DIR
 
-from app.services import video_classifier
+from app.services import feed_scope, video_classifier
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +65,8 @@ class CountsService:
     async def feed_new(self) -> int:
         """Neue RSS-Einträge in aktiven Feeds – wie das Feed-Badge/-Tab."""
         return await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries WHERE status='new' "
-            "AND COALESCE(feed_status,'active')='active'"
-            + await video_classifier.without_shorts()
+            "SELECT COUNT(*) FROM rss_entries r WHERE " + feed_scope.new_entry("r")
+            + await video_classifier.without_shorts("r")
         ) or 0
 
     async def subscriptions_enabled(self) -> int:

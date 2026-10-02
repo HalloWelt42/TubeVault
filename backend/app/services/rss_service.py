@@ -28,7 +28,7 @@ from app.config import AVATARS_DIR, BANNERS_DIR, RSS_THUMBS_DIR
 from app.utils.file_utils import now_sqlite, past_sqlite
 from app.database import db
 from app.services.job_service import job_service
-from app.services import loadable, video_classifier
+from app.services import feed_scope, loadable, video_classifier
 from app.services.rate_limiter import rate_limiter
 from app.services.channel_scanner import (
     fetch_all_channel_videos as _scan_channel,
@@ -1043,7 +1043,7 @@ class RSSService:
             f"""WITH feed AS (
                    SELECT r.channel_id,
                           COUNT(*) AS rss_count,
-                          SUM(r.status = 'new' AND COALESCE(r.feed_status, 'active') = 'active') AS new_videos
+                          SUM({feed_scope.new_entry("r")}) AS new_videos
                    FROM rss_entries r WHERE 1=1{await video_classifier.without_shorts("r")}
                    GROUP BY r.channel_id),
                  loaded AS (
@@ -1178,7 +1178,7 @@ class RSSService:
         # Feed-Status-Filter (ersetzt altes dismissed=0)
         status_filter = ""
         if feed_tab == "active":
-            status_filter = "AND COALESCE(r.feed_status, 'active') = 'active'"
+            status_filter = f"AND {feed_scope.new_entry('r')}"
         elif feed_tab == "later":
             status_filter = "AND r.feed_status = 'later'"
         elif feed_tab == "dismissed":
@@ -1214,11 +1214,11 @@ class RSSService:
         # Tab-Counts (fuer Tab-Badges)
         tab_counts = {}
         for tab in ["active", "later", "dismissed", "archived"]:
+            tab_condition = feed_scope.new_entry("r") if tab == "active" else f"r.feed_status = '{tab}'"
             tc = await db.fetch_val(
                 f"""SELECT COUNT(*) FROM rss_entries r
                     JOIN subscriptions s ON r.channel_id = s.channel_id
-                    WHERE COALESCE(r.feed_status, 'active') = ?{shorts_clause}""",
-                (tab,)
+                    WHERE {tab_condition}{shorts_clause}"""
             ) or 0
             tab_counts[tab] = tc
 
@@ -1363,7 +1363,8 @@ class RSSService:
     async def get_stats(self) -> dict:
         total_subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions") or 0
         enabled_subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions WHERE enabled = 1") or 0
-        new_videos = await db.fetch_val("SELECT COUNT(*) FROM rss_entries WHERE status = 'new' AND COALESCE(feed_status, 'active') = 'active'") or 0
+        new_videos = await db.fetch_val(
+            f"SELECT COUNT(*) FROM rss_entries r WHERE {feed_scope.new_entry('r')}") or 0
         total_entries = await db.fetch_val("SELECT COUNT(*) FROM rss_entries") or 0
         auto_subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions WHERE auto_download = 1") or 0
         error_subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions WHERE error_count > 0") or 0

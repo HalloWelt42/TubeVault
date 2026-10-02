@@ -435,6 +435,28 @@ async def test_abo_liste_zaehlt_je_kanal(feeds, test_db):
     assert names == ["Alpha", "beta"]          # Groß-/Kleinschreibung trennt nicht
     beta = result["subscriptions"][1]
     assert (beta["rss_count"], beta["new_videos"], beta["downloaded_count"],
-            beta["problem_count"]) == (3, 3, 1, 1)
+            beta["problem_count"]) == (3, 2, 1, 1)      # das geladene Video ist nicht mehr neu
     alpha = result["subscriptions"][0]
     assert (alpha["rss_count"], alpha["downloaded_count"], alpha["problem_count"]) == (0, 0, 0)
+
+
+# ─── Feed ─────────────────────────────────────────────────
+
+async def test_geladene_videos_zaehlen_im_feed_nicht_als_neu(feeds, test_db):
+    from app.services.counts_service import counts_service
+    await subscribe(test_db, CH[0])
+    for video_id in ("neu00000001", "neu00000002", "geladen0001"):
+        await test_db.execute(
+            "INSERT INTO rss_entries (video_id, channel_id, status) VALUES (?, ?, 'new')",
+            (video_id, CH[0]))
+    await test_db.execute(
+        "INSERT INTO videos (id, title, channel_id, status) VALUES ('geladen0001', 't', ?, 'ready')",
+        (CH[0],))
+
+    feed = await rss_service.get_new_videos(feed_tab="active")
+    assert sorted(entry["video_id"] for entry in feed["entries"]) == ["neu00000001", "neu00000002"]
+    assert feed["total"] == 2 and feed["tab_counts"]["active"] == 2
+    assert await counts_service.feed_new() == 2
+    assert (await rss_service.get_stats())["new_videos"] == 2
+    listed = (await rss_service.get_subscriptions())["subscriptions"][0]
+    assert (listed["rss_count"], listed["new_videos"]) == (3, 2)
