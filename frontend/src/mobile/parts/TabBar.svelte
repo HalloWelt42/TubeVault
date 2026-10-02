@@ -1,10 +1,11 @@
-<!-- Untere Leiste: die vier Bereiche der Mobil-Ansicht. -->
+<!-- Untere Leiste: die Bereiche der Mobil-Ansicht. -->
 <script>
   import { route, go } from '../router.js';
 
   const tabs = [
     { view: 'start', path: '/', label: 'Start', icon: 'fa-house' },
     { view: 'videos', path: '/videos', label: 'Videos', icon: 'fa-photo-film' },
+    { view: 'listen', path: '/listen', label: 'Listen', icon: 'fa-list-ul' },
     { view: 'suche', path: '/suche', label: 'Suche', icon: 'fa-magnifying-glass' },
     { view: 'neu', path: '/neu', label: 'Neu', icon: 'fa-rss' },
   ];
@@ -12,7 +13,7 @@
 
 <nav class="tabbar">
   {#each tabs as tab (tab.view)}
-    <button class:active={$route.view === tab.view} onclick={() => go(tab.path)}
+    <button class:active={$route.view === tab.view || (tab.view === 'listen' && $route.view === 'liste')} onclick={() => go(tab.path)}
             aria-current={$route.view === tab.view ? 'page' : undefined}>
       <i class="fa-solid {tab.icon}"></i>
       <span>{tab.label}</span>

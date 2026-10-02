@@ -1,6 +1,6 @@
 <!--
   TubeVault – Mobil-Ansicht
-  Vier Bereiche in einer unteren Leiste, das Video legt sich darüber. Besuchte
+  Die Bereiche liegen in einer unteren Leiste, Playlist und Video legen sich darüber. Besuchte
   Bereiche bleiben eingehängt: Wer aus einem Video zurückkommt, steht wieder
   an derselben Stelle der Liste.
 -->
@@ -14,8 +14,10 @@
   import Suche from './views/Suche.svelte';
   import Neu from './views/Neu.svelte';
   import Video from './views/Video.svelte';
+  import Listen from './views/Listen.svelte';
+  import Liste from './views/Liste.svelte';
 
-  const tabViews = { start: Start, videos: Videos, suche: Suche, neu: Neu };
+  const tabViews = { start: Start, videos: Videos, listen: Listen, suche: Suche, neu: Neu };
 
   let ready = $state(false);
   let activeTab = $state('start');
@@ -28,6 +30,9 @@
     if (view in tabViews) {
       activeTab = view;
       if (!visited.has(view)) visited = new Set([...visited, view]);
+    } else if (view === 'liste') {
+      activeTab = 'listen';
+      if (!visited.has('listen')) visited = new Set([...visited, 'listen']);
     } else if (visited.size === 0) {
       visited = new Set(['start']);   // direkter Einstieg über ein Video
     }
@@ -42,9 +47,18 @@
           <div class="pane" hidden={name !== activeTab}><View /></div>
         {/if}
       {/each}
-      {#if $route.view === 'video'}
+      {#if $route.view === 'liste'}
         {#key $route.id}
-          <div class="pane over"><Video id={$route.id} /></div>
+          <div class="pane over"><Liste id={$route.id} /></div>
+        {/key}
+      {/if}
+      {#if $route.view === 'video'}
+        <!-- Innerhalb einer Playlist bleibt der Player derselbe: nur so darf
+             das Telefon das nächste Stück ohne erneuten Tipp starten. -->
+        {#key $route.params.liste ? `liste-${$route.params.liste}` : $route.id}
+          <div class="pane over">
+            <Video id={$route.id} listId={$route.params.liste || null} shuffle={$route.params.zufall === '1'} />
+          </div>
         {/key}
       {/if}
     {/if}

@@ -2,17 +2,20 @@
   Wiedergabe: Player oben, darunter das Nötigste (Titel, Kanal, Favorit,
   Kapitel, Beschreibung). Die Position wird gemerkt und fortgesetzt.
   Im Querformat füllt ein laufendes Video den ganzen Bildschirm.
+  Mit listId spielt die Playlist am Stück: nach dem Ende folgt das nächste
+  Video, Sperrbildschirm und Kopfhörer steuern vor und zurück.
 -->
 <script>
   import { keepVolume } from '../../lib/utils/playerVolume.js';
   import { api } from '../../lib/api/client.js';
   import { formatDuration, formatDateRelative } from '../../lib/utils/format.js';
-  import { back } from '../router.js';
+  import { back, go } from '../router.js';
+  import { loadQueue } from '../playQueue.js';
   import { say } from '../notice.js';
   import HoldButton from '../parts/HoldButton.svelte';
   import { followVideo, preferredLanguage, rememberLanguage } from '../../lib/utils/audioTrackSync.js';
 
-  let { id } = $props();
+  let { id, listId = null, shuffle = false } = $props();
 
   const SAVE_EVERY_MS = 10000;
   const RESUME_MIN_S = 5;
@@ -32,6 +35,32 @@
   let activeTrack = $derived(tracks.find(t => t.id === activeTrackId) || null);
   let playRecorded = false;
   let saveTimer = null;
+  let loadedId = null;        // Video, zu dem Player und Position gerade gehören
+  let continuing = false;     // nächstes Stück der Playlist: von vorn und sofort spielen
+
+  // ─── Playlist ───
+  let queue = $state(null);
+  let place = $derived(queue ? queue.videos.findIndex(v => v.id === id) : -1);
+  let previous = $derived(place > 0 ? queue.videos[place - 1] : null);
+  let next = $derived(place >= 0 && place < queue.videos.length - 1 ? queue.videos[place + 1] : null);
+
+  function playFromQueue(target) {
+    if (!target) return;
+    continuing = true;
+    go(`/video/${target.id}`, { liste: listId, zufall: shuffle ? 1 : null }, { replace: true });
+  }
+
+  function announce() {
+    if (!('mediaSession' in navigator) || !video) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: video.title || '', artist: video.channel_name || '', album: queue?.name || '',
+      artwork: [{ src: new URL(api.thumbnailUrl(id), location.href).href }],
+    });
+    navigator.mediaSession.setActionHandler('previoustrack', previous ? () => playFromQueue(previous) : null);
+    navigator.mediaSession.setActionHandler('nexttrack', next ? () => playFromQueue(next) : null);
+  }
+
+  $effect(() => { queue; previous; next; video; announce(); });
 
   let isLongDescription = $derived(
     (video?.description || '').length > LONG_DESCRIPTION_CHARS
@@ -40,6 +69,10 @@
 
   async function load() {
     failed = false;
+    loadedId = id;
+    playRecorded = false;
+    isFav = false; chapters = []; tracks = []; activeTrackId = null; showDescription = false;
+    if (listId && !queue) loadQueue(listId, shuffle).then(q => { queue = q; }).catch(() => {});
     try {
       video = await api.getVideoPreview(id);
       if (!video.preview_mode) {
@@ -55,6 +88,11 @@
 
   function onLoadedMetadata() {
     keepVolume(player);
+    if (continuing) {
+      continuing = false;
+      player.play().catch(() => {});
+      return;
+    }
     const pos = video.last_position || 0;
     if (pos > RESUME_MIN_S && pos < (player.duration || 0) - RESUME_END_GAP_S) {
       player.currentTime = pos;
@@ -63,8 +101,8 @@
   }
 
   function savePosition() {
-    if (!player || player.currentTime < 1) return;
-    api.savePosition(id, player.currentTime).catch(() => {});
+    if (!player || !loadedId || player.currentTime < 1) return;
+    api.savePosition(loadedId, player.currentTime).catch(() => {});
   }
 
   // Querformat: läuft das Video, füllt es den Bildschirm - und bleibt so, bis
@@ -96,7 +134,7 @@
     updateFill();
     if (!playRecorded) {
       playRecorded = true;
-      api.recordPlay(id, player.currentTime).catch(() => {});
+      api.recordPlay(loadedId, player.currentTime).catch(() => {});
     }
     clearInterval(saveTimer);
     saveTimer = setInterval(savePosition, SAVE_EVERY_MS);
@@ -106,6 +144,11 @@
     playing = false;
     clearInterval(saveTimer);
     savePosition();
+  }
+
+  function onEnded() {
+    onPause();
+    playFromQueue(next);
   }
 
   async function toggleFavorite() {
@@ -143,8 +186,14 @@
     player.play().catch(() => {});
   }
 
+  // Wechsel des Videos innerhalb einer Playlist: derselbe Player, neue Quelle
   $effect(() => {
+    if (id === loadedId) return;
+    if (loadedId) savePosition();   // Stand des bisherigen Videos sichern
     load();
+  });
+
+  $effect(() => {
     const onHide = () => { if (document.hidden) savePosition(); };
     document.addEventListener('visibilitychange', onHide);
     return () => {
@@ -176,7 +225,22 @@
       <!-- svelte-ignore a11y_media_has_caption -->
       <video class="stage" class:fill={filled} bind:this={player} src={api.streamUrl(id)} poster={api.thumbnailUrl(id)}
              controls playsinline preload="metadata"
-             onloadedmetadata={onLoadedMetadata} onplay={onPlay} onpause={onPause} onended={onPause}></video>
+             onloadedmetadata={onLoadedMetadata} onplay={onPlay} onpause={onPause} onended={onEnded}></video>
+    {/if}
+
+    {#if queue && place >= 0}
+      <div class="queue">
+        <button aria-label="Vorheriges" disabled={!previous} onclick={() => playFromQueue(previous)}>
+          <i class="fa-solid fa-backward-step"></i>
+        </button>
+        <button class="where" onclick={() => go(`/liste/${listId}`, {}, { replace: true })}>
+          <span class="queue-name">{queue.name}</span>
+          <span class="queue-place">{place + 1} von {queue.videos.length}{#if shuffle} · gemischt{/if}</span>
+        </button>
+        <button aria-label="Nächstes" disabled={!next} onclick={() => playFromQueue(next)}>
+          <i class="fa-solid fa-forward-step"></i>
+        </button>
+      </div>
     {/if}
 
     {#if tracks.length > 0}
@@ -246,6 +310,15 @@
     position: fixed; inset: 0; z-index: 1000; width: 100vw; height: 100dvh;
     max-height: none; aspect-ratio: auto; object-fit: contain;
   }
+  .queue {
+    display: flex; align-items: stretch; margin: 12px 16px 0; border-radius: var(--m-radius);
+    background: var(--m-surface-2); overflow: hidden;
+  }
+  .queue button { min-width: 56px; min-height: 52px; color: var(--m-text); font-size: 1.1rem; }
+  .queue button:disabled { color: var(--m-faint); }
+  .queue .where { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; font-size: 1rem; }
+  .queue-name { font-weight: 600; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .queue-place { color: var(--m-dim); font-size: 0.78rem; }
   .poster img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .tracks { display: flex; gap: 3px; margin: 12px 16px 0; padding: 3px; background: var(--m-surface-2); border-radius: var(--m-radius); }
   .tracks button { flex: 1; min-height: 44px; border-radius: 9px; color: var(--m-dim); font-weight: 600; }
