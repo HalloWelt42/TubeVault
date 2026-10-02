@@ -105,7 +105,7 @@
       await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}` });
       v.already_in_queue = true;
       yt.items = [...yt.items];
-      toast.success('Zur Queue hinzugefügt');
+      toast.success('Zur Warteschlange hinzugefügt');
     } catch (err) { toast.error(err.message); }
     downloading = new Set([...downloading].filter(id => id !== v.id));
   }
@@ -137,7 +137,7 @@
     downloading = new Set([...downloading, v.id]);
     try {
       await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, audio_only: audioOnly, itag, audio_itag: audioItag, merge_audio: mergeAudio, priority });
-      toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In Queue gelegt');
+      toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In die Warteschlange gelegt');
       // Markiere als queued
       const idx = yt.items.findIndex(x => x.id === v.id);
       if (idx >= 0) {
@@ -264,7 +264,7 @@
                 <img src={v.already_downloaded ? api.thumbnailUrl(v.id) : api.rssThumbUrl(v.id)} alt="" loading="lazy" />
                 {#if v.duration}<span class="duration">{formatDuration(v.duration)}</span>{/if}
                 {#if v.already_downloaded}<span class="badge ok">Lokal</span>
-                {:else if v.already_in_queue}<span class="badge queue">In Queue</span>{/if}
+                {:else if v.already_in_queue}<span class="badge queue">Wartet</span>{/if}
                 <HoverActionOverlay>
                   {#if v.already_downloaded}
                     <HoverActionBtn variant="success" onclick={() => openVideo(v.id)} title="Abspielen">

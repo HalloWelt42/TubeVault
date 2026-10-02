@@ -143,7 +143,7 @@
   }
 
   :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Barlow', system-ui, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.5;

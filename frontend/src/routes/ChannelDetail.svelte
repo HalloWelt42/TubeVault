@@ -194,20 +194,6 @@
     navigate(`/watch/${video.video_id}`);
   }
 
-  // Typ-Badge klicken: video → short → live → video
-  async function cycleType(video) {
-    const current = video.video_type || 'video';
-    const order = ['video', 'short', 'live'];
-    const next = order[(order.indexOf(current) + 1) % order.length];
-    try {
-      await api.setVideoType(video.video_id, next);
-      video.video_type = next;
-      list.items = [...list.items]; // Reaktivität triggern
-      const labels = { video: 'Video', short: 'Short', live: 'Live' };
-      toast.success(`Typ → ${labels[next]}`);
-    } catch (e) { toast.error(e.message); }
-  }
-
   function goBack() { navigate('/subscriptions'); }
 
   async function subscribeChannel() {
@@ -1083,7 +1069,7 @@
                 {#if video.is_downloaded}
                   <span class="badge badge-ok">Lokal</span>
                 {:else if video.is_in_queue}
-                  <span class="badge badge-queue"><i class="fa-solid fa-download"></i> Queue</span>
+                  <span class="badge badge-queue"><i class="fa-solid fa-download"></i> Wartet</span>
                 {:else if video.rss_status === 'new'}
                   <span class="badge badge-new">Neu</span>
                 {/if}
@@ -1092,17 +1078,11 @@
                     <i class="fa-solid fa-podcast"></i> Audio
                   </span>
                 {:else}
-                  <button class="type-badge badge-{video.video_type || 'video'}"
-                    onclick={(e) => { e.stopPropagation(); cycleType(video); }}
-                    title="Klick: Typ ändern (Video → Short → Live)">
-                    {#if video.video_type === 'short'}
-                      <i class="fa-solid fa-bolt"></i> Short
-                    {:else if video.video_type === 'live'}
-                      <i class="fa-solid fa-tower-broadcast"></i> Live
-                    {:else}
-                      <i class="fa-solid fa-film"></i> Video
-                    {/if}
-                  </button>
+                  {#if video.video_type === 'short'}
+                    <span class="type-badge badge-short"><i class="fa-solid fa-bolt"></i> Short</span>
+                  {:else if video.video_type === 'live'}
+                    <span class="type-badge badge-live"><i class="fa-solid fa-tower-broadcast"></i> Live</span>
+                  {/if}
                 {/if}
               </div>
             </div>

@@ -82,7 +82,6 @@
 <div class="dashboard">
   <div class="welcome-section">
     <h1 class="page-title">Dashboard</h1>
-    <p class="page-subtitle">Willkommen bei TubeVault</p>
   </div>
 
   <!-- Quick Download -->

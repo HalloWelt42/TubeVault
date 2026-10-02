@@ -16,7 +16,7 @@
 
 <header class="header">
   <div class="header-left">
-    <button class="btn-icon" onclick={toggleSidebar} title="Sidebar">
+    <button class="btn-icon" onclick={toggleSidebar} title="Seitenleiste ein- oder ausblenden">
       <i class="fa-solid fa-bars"></i>
     </button>
     <button class="logo" onclick={() => navigate('/')}>
@@ -33,7 +33,7 @@
     <button class="btn-icon" onclick={() => navigate('/downloads')} title="Downloads">
       <i class="fa-solid fa-download"></i>
     </button>
-    <button class="btn-icon" onclick={() => theme.toggle()} title="Theme wechseln">
+    <button class="btn-icon" onclick={() => theme.toggle()} title="Hell oder dunkel">
       {#if $theme === 'dark'}
         <i class="fa-solid fa-sun"></i>
       {:else}

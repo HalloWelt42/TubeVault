@@ -109,7 +109,7 @@
                 audioItag: dialog.selectedAudioItag,
                 audioOnly: true, priority: 0
               })}>
-                <i class="fa-solid fa-list"></i> In Queue
+                <i class="fa-solid fa-list"></i> In die Warteschlange
               </button>
               <button class="sd-btn-primary" onclick={() => ondownload({
                 audioItag: dialog.selectedAudioItag,
@@ -227,7 +227,7 @@
               mergeAudio: dialog.mergeAudio ?? true,
               priority: 0
             })} disabled={!dialog.selectedVideoItag}>
-              <i class="fa-solid fa-list"></i> In Queue
+              <i class="fa-solid fa-list"></i> In die Warteschlange
             </button>
             <button class="sd-btn-primary" onclick={() => ondownload({
               itag: dialog.selectedVideoItag,

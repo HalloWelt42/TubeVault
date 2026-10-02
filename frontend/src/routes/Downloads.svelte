@@ -35,9 +35,9 @@
     settingsSaving = true;
     try {
       await api.setDownloadThrottle(throttleKbps, throttleRealtime);
-      if (throttleRealtime) toast.success('Throttling: dynamisch (Video-Länge)');
-      else if (throttleKbps > 0) toast.success(`Throttling: ${throttleKbps} KB/s`);
-      else toast.success('Throttling deaktiviert');
+      if (throttleRealtime) toast.success('Drosselung: dynamisch (nach Videolänge)');
+      else if (throttleKbps > 0) toast.success(`Drosselung: ${throttleKbps} KB/s`);
+      else toast.success('Drosselung ausgeschaltet');
     } catch (e) { toast.error(e.message); }
     settingsSaving = false;
   }
@@ -540,7 +540,7 @@
       {#if workerDead}
         <span class="wchip dead"><span class="wdot"></span> Worker gestoppt</span>
       {:else}
-        <span class="wchip ok"><span class="wdot"></span> Worker läuft</span>
+        <span class="wchip ok"><span class="wdot"></span> Verarbeitung läuft</span>
       {/if}
       <button class="diconbtn" onclick={restartWorker} disabled={restartingWorker} title="Download-Worker neu starten">
         {#if restartingWorker}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-solid fa-rotate"></i>{/if}
@@ -966,7 +966,7 @@
               {#if resolving}<i class="fa-solid fa-spinner fa-spin"></i> Wird aufgelöst…{:else}<i class="fa-solid fa-magnifying-glass"></i> Auflösen{/if}
             </button>
             <button class="dbtn primary add-quick" onclick={quickDownload} disabled={!urlInput.trim()}>
-              <i class="fa-solid fa-bolt"></i> Schnell-DL
+              <i class="fa-solid fa-bolt"></i> Schnell laden
             </button>
           </div>
           <div class="seg">
@@ -976,7 +976,7 @@
             {/each}
           </div>
           <button class="link" onclick={() => showBatch = !showBatch}>
-            <i class="fa-solid fa-list"></i> {showBatch ? 'Batch schließen' : 'Batch-Download (mehrere URLs)'}
+            <i class="fa-solid fa-list"></i> {showBatch ? 'Mehrfach-Eingabe schließen' : 'Mehrere Adressen auf einmal'}
           </button>
           {#if showBatch}
             <div class="batch-area">
@@ -993,7 +993,7 @@
         <div class="panel-h"><h2>Einstellungen</h2><span class="panel-sub">live</span></div>
         <div class="ctrls">
           <div class="ctrl">
-            <div class="ctrl-top"><i class="fa-solid fa-gauge-high"></i><span class="ctrl-title">Throttling</span></div>
+            <div class="ctrl-top"><i class="fa-solid fa-gauge-high"></i><span class="ctrl-title">Drosselung</span></div>
             <div class="ctrl-hint">
               {#if throttleRealtime}
                 {#if currentThrottleLive > 0}aktiv: {currentThrottleLive.toLocaleString('de-DE')} KB/s (aus Video-Länge){:else}wartet auf Download…{/if}
@@ -1026,7 +1026,7 @@
                        onblur={() => saveCooldown(cooldownSec)} onkeydown={(e) => e.key === 'Enter' && saveCooldown(cooldownSec)} />
                 <span class="u">s</span>
               </div>
-              <button class="dbtn sm ghost" onclick={resetDefaults} title="Throttling aus, Wartezeit 30s"><i class="fa-solid fa-rotate-left"></i> Default</button>
+              <button class="dbtn sm ghost" onclick={resetDefaults} title="Drosselung aus, Wartezeit 30 s"><i class="fa-solid fa-rotate-left"></i> Default</button>
             </div>
           </div>
         </div>

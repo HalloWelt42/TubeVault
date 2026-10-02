@@ -34,20 +34,6 @@
     } catch (err) { toast.error(err.message); }
   }
 
-  async function cycleType(e) {
-    e.stopPropagation();
-    const current = video.video_type || 'video';
-    const order = ['video', 'short', 'live'];
-    const next = order[(order.indexOf(current) + 1) % order.length];
-    try {
-      await api.setVideoType(video.id, next);
-      video.video_type = next;
-      const labels = { video: 'Video', short: 'Short', live: 'Live' };
-      toast.success(`Typ → ${labels[next]}`);
-      onUpdate?.();
-    } catch (err) { toast.error(err.message); }
-  }
-
   function openChannel(e) {
     e.stopPropagation();
     if (video.channel_id) {
@@ -83,12 +69,13 @@
     {#if video.status !== 'ready'}
       <span class="status-badge status-{video.status}">{video.status}</span>
     {/if}
+    <!-- Nur Abweichendes kennzeichnen: ein normales Video braucht kein Etikett.
+         Der Typ wird im Bearbeiten-Reiter oder über die Mehrfachauswahl geändert -
+         nicht per Klick auf das Etikett (das führte zu versehentlichen Umstellungen). -->
     {#if video.video_type === 'short'}
-      <button class="type-badge type-short" onclick={cycleType} title="Klick: Typ ändern (Short → Live → Video)"><i class="fa-solid fa-mobile-screen"></i> Short</button>
+      <span class="type-badge type-short"><i class="fa-solid fa-mobile-screen"></i> Short</span>
     {:else if video.video_type === 'live'}
-      <button class="type-badge type-live" onclick={cycleType} title="Klick: Typ ändern (Live → Video → Short)"><i class="fa-solid fa-tower-broadcast"></i> Live</button>
-    {:else}
-      <button class="type-badge type-video" onclick={cycleType} title="Klick: Typ ändern (Video → Short → Live)"><i class="fa-solid fa-play"></i> Video</button>
+      <span class="type-badge type-live"><i class="fa-solid fa-tower-broadcast"></i> Live</span>
     {/if}
     <!-- Like/Dislike Thumbnail-Bar (Variante E) -->
     {#if video.like_count && video.dislike_count != null}
@@ -115,8 +102,10 @@
       <span class="video-channel">{video.channel_name || 'Unbekannt'}</span>
     {/if}
     <div class="video-meta">
-      <span>{formatViews(video.view_count)} Aufrufe</span>
-      <span class="meta-dot">·</span>
+      {#if video.view_count}
+        <span>{formatViews(video.view_count)} Aufrufe</span>
+        <span class="meta-dot">·</span>
+      {/if}
       <span>{formatSize(video.file_size)}</span>
       {#if video.like_count && video.dislike_count != null}
         <span class="meta-dot">·</span>

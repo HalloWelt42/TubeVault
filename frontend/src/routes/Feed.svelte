@@ -136,21 +136,6 @@
     await setStatus(entry, 'active');
   }
 
-  // Typ-Badge klicken: video → short → live → video
-  async function cycleType(entry) {
-    const current = entry.video_type_safe || entry.video_type || 'video';
-    const order = ['video', 'short', 'live'];
-    const next = order[(order.indexOf(current) + 1) % order.length];
-    try {
-      await api.setFeedEntryType(entry.id, next);
-      entry.video_type = next;
-      entry.video_type_safe = next;
-      list.items = [...list.items]; // Reaktivitaet triggern
-      const labels = { video: 'Video', short: 'Short', live: 'Live' };
-      toast.success(`Typ: ${labels[next]}`);
-    } catch (e) { toast.error(e.message); }
-  }
-
   // Scheduler-Status alle 5s aktualisieren
   async function loadScheduler() {
     try { scheduler = await api.getSchedulerStatus(); } catch {}
@@ -261,7 +246,7 @@
       };
       if (isAudioOnly) payload.audio_only = true;
       await api.addDownload(payload);
-      const label = priority >= 10 ? 'Sofort-Download' : 'In Queue gelegt';
+      const label = priority >= 10 ? 'Sofort-Download' : 'In die Warteschlange gelegt';
       toast.success(`${label}: ${entry.title || entry.video_id}`);
       streamDialog = null;
       // Eintrag nicht sofort entfernen – bleibt bis Benutzer dismissed
@@ -392,7 +377,7 @@
           </span>
         {/if}
       {:else}
-        <span class="sched-info sched-off"><i class="fa-solid fa-pause"></i> RSS deaktiviert</span>
+        <span class="sched-info sched-off"><i class="fa-solid fa-pause"></i> Scanner ausgeschaltet</span>
       {/if}
       <span class="sched-count">{scheduler.feeds_checked_total || 0} geprüft</span>
       <button class="sched-trigger" title="RSS-Feeds jetzt prüfen" onclick={triggerPollNow}>
@@ -518,11 +503,11 @@
             {#if entry.audio_only}
               <span class="type-badge badge-audio" title="Audio-Only Kanal">Audio</span>
             {:else}
-              <button class="type-badge badge-{entry.video_type_safe || entry.video_type || 'video'}"
-                onclick={(e) => { e.stopPropagation(); cycleType(entry); }}
-                title="Typ aendern">
-                {(entry.video_type_safe || entry.video_type) === 'short' ? 'Short' : (entry.video_type_safe || entry.video_type) === 'live' ? 'Live' : 'Video'}
-              </button>
+              {#if (entry.video_type_safe || entry.video_type) === 'short'}
+                <span class="type-badge badge-short">Short</span>
+              {:else if (entry.video_type_safe || entry.video_type) === 'live'}
+                <span class="type-badge badge-live">Live</span>
+              {/if}
             {/if}
 
             {#if entry.video_status === 'ready'}

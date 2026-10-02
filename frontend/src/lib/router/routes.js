@@ -60,7 +60,7 @@ export const routeDefinitions = {
   },
   'downloads': {
     path: '/downloads',
-    label: 'Jobs',
+    label: 'Downloads',
     icon: 'fa-solid fa-bolt',
     group: 'main',
     hasId: false,

@@ -211,7 +211,7 @@
         // Qualität und Nur-Audio: Kanal bzw. Einstellungen (Backend löst auf)
         itag, audio_itag: audioItag, merge_audio: mergeAudio, priority,
       });
-      const label = priority >= 10 ? 'Sofort-Download gestartet' : 'In Queue gelegt';
+      const label = priority >= 10 ? 'Sofort-Download gestartet' : 'In die Warteschlange gelegt';
       toast.success(label);
       streamDialog = null;
     } catch (e) { toast.error(e.message); }
@@ -737,7 +737,7 @@
               <i class="fa-solid fa-sliders"></i> Stream wählen
             </button>
             <button class="preview-bar-btn" onclick={() => startPreviewDownload({ priority: 0 })} disabled={downloadingPreview}>
-              <i class="fa-solid fa-list"></i> In Queue
+              <i class="fa-solid fa-list"></i> In die Warteschlange
             </button>
           </div>
         </div>
@@ -1293,7 +1293,7 @@
             <button class="btn-queue-dl" onclick={() => startPreviewDownload({
               itag: streamDialog.selectedVideoItag, audioItag: streamDialog.selectedAudioItag,
               mergeAudio: streamDialog.mergeAudio, priority: 0
-            })} disabled={!streamDialog.selectedVideoItag}><i class="fa-solid fa-list"></i> In Queue</button>
+            })} disabled={!streamDialog.selectedVideoItag}><i class="fa-solid fa-list"></i> In die Warteschlange</button>
             <button class="btn-primary-dl" onclick={() => startPreviewDownload({
               itag: streamDialog.selectedVideoItag, audioItag: streamDialog.selectedAudioItag,
               mergeAudio: streamDialog.mergeAudio, priority: 10

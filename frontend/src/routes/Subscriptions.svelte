@@ -274,7 +274,7 @@
     const missing = (sub.rss_count||0) - (sub.downloaded_count||0);
     const next = sub.drip_next_run ? new Date(sub.drip_next_run).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) : '?';
     return sub.drip_enabled
-      ? `Nächster Run: ${next} · ${missing} fehlen`
+      ? `Nächster Lauf: ${next} · ${missing} fehlen`
       : `+${sub.drip_count||3} Videos/Tag laden · ${missing} fehlen`;
   }
 
@@ -403,7 +403,7 @@
         <i class="fa-solid fa-rss"></i> Feed{#if rssStats?.new_videos > 0}<span class="badge-red">{rssStats.new_videos}</span>{/if}
       </button>
       <button class="btn-ghost" onclick={resetAllIntervals} title="Alle Intervalle zurücksetzen">
-        <i class="fa-solid fa-clock-rotate-left"></i> Reset Checks
+        <i class="fa-solid fa-clock-rotate-left"></i> Prüfzeiten zurücksetzen
       </button>
       <button class="btn-primary" onclick={pollNow}><i class="fa-solid fa-rotate-right"></i> Jetzt prüfen</button>
     </div>
@@ -411,7 +411,7 @@
 
   {#if rssStats}
   <div class="filter-bar">
-    {#each [['all','Alle',total],['active','Aktiv',rssStats.enabled_subscriptions],['auto','Auto-DL',rssStats.auto_download_subscriptions],['errors','Fehler',subs.filter(s=>s.error_count>0).length]] as [key,label,count]}
+    {#each [['all','Alle',total],['active','Aktiv',rssStats.enabled_subscriptions],['auto','Auto-Download',rssStats.auto_download_subscriptions],['errors','Fehler',subs.filter(s=>s.error_count>0).length]] as [key,label,count]}
       <button class="filter-chip" class:active={filterMode===key} onclick={()=>filterMode=key}>
         <strong>{count}</strong> {label}
       </button>

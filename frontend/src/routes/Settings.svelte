@@ -283,7 +283,7 @@
         <i class="fa-solid fa-satellite-dish"></i>
         <h3>RSS-Scanner</h3>
         {#if scheduler?.running}
-          <span class="status-pill active"><i class="fa-solid fa-clock"></i> Cron-Modus</span>
+          <span class="status-pill active"><i class="fa-solid fa-clock"></i> Zeitgesteuert</span>
         {:else}
           <span class="status-pill inactive"><i class="fa-solid fa-circle"></i> Gestoppt</span>
         {/if}
@@ -330,9 +330,9 @@
         </div>
 
         <div class="sub-section">
-          <h4><i class="fa-solid fa-rss"></i> RSS-Entries</h4>
+          <h4><i class="fa-solid fa-rss"></i> Feed-Einträge</h4>
           <div class="stat-pills">
-            <span class="pill">{scheduler.entries.total} Entries</span>
+            <span class="pill">{scheduler.entries.total} Einträge</span>
             <span class="pill ok">{scheduler.subscriptions.channels_with_entries} Kanäle mit Videos</span>
             {#if scheduler.subscriptions.channels_without_entries > 0}<span class="pill warn">{scheduler.subscriptions.channels_without_entries} ohne Videos</span>{/if}
           </div>
@@ -367,7 +367,7 @@
 
         {#if scheduler.upcoming?.length > 0}
         <div class="sub-section">
-          <h4><i class="fa-solid fa-list-check"></i> Nächste in der Queue</h4>
+          <h4><i class="fa-solid fa-list-check"></i> Nächste in der Warteschlange</h4>
           <div class="upcoming-list">
             {#each scheduler.upcoming as u}
               <div class="upcoming-item">

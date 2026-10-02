@@ -220,7 +220,7 @@
         <span><i class="fa-solid fa-images"></i> {status?.total_analyzed || 0} analysiert</span>
         <span><i class="fa-solid fa-arrows-rotate"></i> {status?.total_type_changes || 0} Typ-Korrekturen</span>
         <span><i class="fa-solid fa-triangle-exclamation"></i> {status?.total_errors || 0} Fehler</span>
-        <span><i class="fa-solid fa-list-ol"></i> {status?.queue_count || 0} in Queue</span>
+        <span><i class="fa-solid fa-list-ol"></i> {status?.queue_count || 0} in der Warteschlange</span>
       </div>
       {#if status?.last_error}
         <div class="status-error"><i class="fa-solid fa-xmark"></i> {status.last_error}</div>
@@ -301,7 +301,7 @@
               {savingPrompt ? 'Speichert…' : 'Prompt speichern'}
             </button>
             <button class="btn-action" onclick={resetPrompt} disabled={savingPrompt || isDefaultPrompt}>
-              <i class="fa-solid fa-rotate-left"></i> Default wiederherstellen
+              <i class="fa-solid fa-rotate-left"></i> Standard wiederherstellen
             </button>
             {#if promptDirty}
               <span class="prompt-dirty-hint"><i class="fa-solid fa-pen"></i> Ungespeicherte Änderungen</span>
@@ -362,7 +362,7 @@
 
     <!-- Queue-Verwaltung -->
     <div class="queue-card">
-      <h2><i class="fa-solid fa-list-ol"></i> Queue</h2>
+      <h2><i class="fa-solid fa-list-ol"></i> Warteschlange</h2>
       <div class="queue-stats">
         <span class="queue-stat"><i class="fa-solid fa-hourglass-half"></i> {queue?.queue_count || 0} ausstehend</span>
         <span class="queue-stat"><i class="fa-solid fa-check-circle"></i> {queue?.analyzed_count || 0} analysiert</span>

@@ -3,6 +3,10 @@
  * © HalloWelt42 – Private Nutzung
  */
 
+import '@fontsource/barlow/400.css';
+import '@fontsource/barlow/500.css';
+import '@fontsource/barlow/600.css';
+import '@fontsource/barlow/700.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import App from './App.svelte';
 import { mount } from 'svelte';

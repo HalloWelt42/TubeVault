@@ -356,7 +356,7 @@
       await api.addDownload({ url: `https://www.youtube.com/watch?v=${id}` });
       v.already_in_queue = true;
       ytResults = [...ytResults]; rssResults = [...rssResults];
-      toast.success(`Zur Queue hinzugefügt`);
+      toast.success(`Zur Warteschlange hinzugefügt`);
     } catch (e2) { toast.error(e2.message); }
     downloading = new Set([...downloading].filter(x => x !== id));
   }
@@ -389,7 +389,7 @@
     try {
       // Quality weglassen, da itag explizit gesetzt ist → Backend hat Vorrang
       await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, audio_only: audioOnly, itag, audio_itag: audioItag, merge_audio: mergeAudio, priority });
-      toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In Queue gelegt');
+      toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In die Warteschlange gelegt');
       streamDialog = null;
     } catch (e2) { toast.error(e2.message); }
     downloading = new Set([...downloading].filter(id => id !== v.id));
@@ -659,7 +659,7 @@
                 </div>
                 <div class="sd-acts" onclick={(e) => e.stopPropagation()}>
                   {#if v.already_in_queue || downloading.has(v.video_id || v.id)}
-                    <span class="sd-act-btn queued" title="In Queue"><i class="fa-solid fa-clock"></i></span>
+                    <span class="sd-act-btn queued" title="In der Warteschlange"><i class="fa-solid fa-clock"></i></span>
                   {:else}
                     <button class="sd-act-btn dl" title="Herunterladen" onclick={(e) => quickDownload(v, e)}><i class="fa-solid fa-download"></i></button>
                     <button class="sd-act-btn" title="Download-Optionen" onclick={(e) => openStreamDialog(v, e)}><i class="fa-solid fa-sliders"></i></button>
@@ -717,7 +717,7 @@
                   {#if v.already_downloaded}
                     <button class="sd-act-btn play" title="Abspielen" onclick={() => openVideo(v)}><i class="fa-solid fa-play"></i></button>
                   {:else if v.already_in_queue || downloading.has(v.id)}
-                    <span class="sd-act-btn queued" title="In Queue"><i class="fa-solid fa-clock"></i></span>
+                    <span class="sd-act-btn queued" title="In der Warteschlange"><i class="fa-solid fa-clock"></i></span>
                   {:else}
                     <button class="sd-act-btn dl" title="Herunterladen" onclick={(e) => quickDownload(v, e)}><i class="fa-solid fa-download"></i></button>
                     <button class="sd-act-btn" title="Download-Optionen" onclick={(e) => openStreamDialog(v, e)}><i class="fa-solid fa-sliders"></i></button>
