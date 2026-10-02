@@ -36,6 +36,7 @@ async def list_videos(
     video_types: Optional[str] = None,
     is_archived: Optional[bool] = None,
     is_music: Optional[bool] = None,
+    has_extra_audio: Optional[bool] = None,
 ):
     """Alle Videos abrufen (paginiert, filterbar, sortierbar). Mehrfachfilter via Komma-getrennte IDs."""
     result = await metadata_service.get_videos(
@@ -45,7 +46,7 @@ async def list_videos(
         category_ids=category_ids,
         channel_id=channel_id, channel_ids=channel_ids,
         tag=tag, tags=tags, video_type=video_type, video_types=video_types,
-        is_archived=is_archived, is_music=is_music,
+        is_archived=is_archived, is_music=is_music, has_extra_audio=has_extra_audio,
     )
     return result
 

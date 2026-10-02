@@ -110,10 +110,23 @@ async def retry_dubbing(request_id: int):
     return {"queued": True}
 
 
+@router.post("/api/dubbing/requests/{request_id}/cancel")
+async def cancel_dubbing(request_id: int):
+    """Offenen Auftrag abbrechen; er bleibt als abgebrochen in der Liste."""
+    if not await dubbing.cancel(request_id):
+        raise HTTPException(status_code=409, detail="Nur wartende oder laufende Aufträge lassen sich abbrechen")
+    return {"cancelled": True}
+
+
 @router.delete("/api/dubbing/requests/{request_id}")
 async def remove_dubbing(request_id: int):
-    if not await dubbing.remove(request_id):
+    """Abgeschlossenen Auftrag aus der Liste nehmen (eine fertige Tonspur bleibt)."""
+    job = await dubbing.get(request_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    if job.status in dubbing.OPEN_STATUSES:
+        raise HTTPException(status_code=409, detail="Offene Aufträge erst abbrechen")
+    await dubbing.remove(request_id)
     return {"removed": True}
 
 
@@ -174,7 +187,8 @@ async def dubbing_progress(request_id: int, request: ProgressRequest):
 async def dubbing_failed(request_id: int, request: FailRequest):
     if not await dubbing.get(request_id):
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
-    await dubbing.finish(request_id, "skipped" if request.skipped else "error", request.note[:500])
+    if (await dubbing.get(request_id)).status == "working":   # abgebrochene bleiben abgebrochen
+        await dubbing.finish(request_id, "skipped" if request.skipped else "error", request.note[:500])
     return {"ok": True}
 
 
@@ -190,6 +204,8 @@ async def dubbing_result(
     job = await dubbing.get(request_id)
     if not job:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    if job.status != "working":
+        raise HTTPException(status_code=409, detail="Auftrag ist nicht mehr in Arbeit")
     suffix = Path(file.filename or "").suffix.lower()
 
     config.TEMP_DIR.mkdir(parents=True, exist_ok=True)

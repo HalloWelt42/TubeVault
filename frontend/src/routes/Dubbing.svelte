@@ -18,11 +18,13 @@
     done: { label: 'Fertig', icon: 'fa-solid fa-circle-check', tone: 'ok' },
     error: { label: 'Fehlgeschlagen', icon: 'fa-solid fa-triangle-exclamation', tone: 'error' },
     skipped: { label: 'Übersprungen', icon: 'fa-solid fa-forward', tone: 'muted' },
+    cancelled: { label: 'Abgebrochen', icon: 'fa-solid fa-ban', tone: 'muted' },
   };
   const LANGUAGE_NAMES = { de: 'Deutsch', en: 'Englisch', fr: 'Französisch', es: 'Spanisch', it: 'Italienisch' };
 
   let requests = $state([]);
-  let counts = $state({ queued: 0, working: 0, done: 0, error: 0, skipped: 0 });
+  let counts = $state({ queued: 0, working: 0, done: 0, error: 0, skipped: 0, cancelled: 0 });
+  const isOpen = (request) => request.status === 'queued' || request.status === 'working';
   let loading = $state(true);
 
   const SUBTITLE_USE = {
@@ -42,6 +44,7 @@
   function timing(request) {
     if (request.status === 'working' && request.claimed_at) return `läuft seit ${formatDateRelative(request.claimed_at).replace(/^vor /, '')}`;
     if (request.status === 'done' && request.finished_at) return `fertig ${formatDateRelative(request.finished_at)}`;
+    if (request.status === 'cancelled' && request.finished_at) return `abgebrochen ${formatDateRelative(request.finished_at)}`;
     return `vorgemerkt ${formatDateRelative(request.created_at)}`;
   }
 
@@ -59,9 +62,14 @@
     catch (e) { toast.error(e.message); }
   }
 
+  // Offene Aufträge werden abgebrochen und bleiben sichtbar; abgeschlossene
+  // lassen sich aus der Liste nehmen.
   async function remove(request) {
-    try { await api.removeDubbing(request.id); load(); }
-    catch (e) { toast.error(e.message); }
+    try {
+      if (isOpen(request)) { await api.cancelDubbing(request.id); toast.info('Auftrag abgebrochen'); }
+      else await api.removeDubbing(request.id);
+      load();
+    } catch (e) { toast.error(e.message); }
   }
 
   $effect(() => {
@@ -87,6 +95,7 @@
     <span class="pill ok">{counts.done} fertig</span>
     {#if counts.error > 0}<span class="pill error">{counts.error} fehlgeschlagen</span>{/if}
     {#if counts.skipped > 0}<span class="pill">{counts.skipped} übersprungen</span>{/if}
+    {#if counts.cancelled > 0}<span class="pill">{counts.cancelled} abgebrochen</span>{/if}
   </div>
 
   {#if loading}
@@ -127,14 +136,21 @@
             {#if request.status === 'working' && request.worker}<span class="worker">{request.worker}</span>{/if}
           </div>
           <div class="actions">
-            {#if request.status === 'error' || request.status === 'skipped'}
+            {#if request.status === 'done'}
+              <button class="icon-btn" title="Video mit der neuen Tonspur öffnen"
+                      onclick={() => navigate(`/watch/${request.video_id}`)}>
+                <i class="fa-solid fa-play"></i>
+              </button>
+            {/if}
+            {#if ['error', 'skipped', 'cancelled'].includes(request.status)}
               <button class="icon-btn" title="Erneut vormerken" onclick={() => retry(request)}>
                 <i class="fa-solid fa-rotate-right"></i>
               </button>
             {/if}
             <button class="icon-btn" onclick={() => remove(request)}
-                    title={request.status === 'done' ? 'Aus der Liste nehmen (die Tonspur bleibt)' : 'Auftrag entfernen'}>
-              <i class="fa-solid fa-xmark"></i>
+                    title={isOpen(request) ? 'Auftrag abbrechen'
+                           : request.status === 'done' ? 'Aus der Liste nehmen (die Tonspur bleibt)' : 'Aus der Liste nehmen'}>
+              <i class="fa-solid {isOpen(request) ? 'fa-stop' : 'fa-xmark'}"></i>
             </button>
           </div>
         </div>

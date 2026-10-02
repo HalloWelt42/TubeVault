@@ -285,6 +285,7 @@ export const api = {
   getDubbingRequests: (status = '') => request(`/api/dubbing/requests${status ? '?status=' + status : ''}`),
   retryDubbing: (id) => request(`/api/dubbing/requests/${id}/retry`, { method: 'POST' }),
   removeDubbing: (id) => request(`/api/dubbing/requests/${id}`, { method: 'DELETE' }),
+  cancelDubbing: (id) => request(`/api/dubbing/requests/${id}/cancel`, { method: 'POST' }),
   getSetting: (key) => request(`/api/settings/${encodeURIComponent(key)}`),
   updateSetting: (key, value) => request(`/api/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   resetSettings: () => request('/api/settings/reset', { method: 'POST' }),

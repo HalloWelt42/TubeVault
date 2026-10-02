@@ -58,6 +58,7 @@ class MetadataService:
         video_types: str | None = None,
         is_archived: bool | None = None,
         is_music: bool | None = None,
+        has_extra_audio: bool | None = None,
     ) -> dict:
         """Videos mit Paginierung, Filter und Sortierung abrufen.
         Mehrfachfilter: category_ids, channel_ids, video_types als Komma-getrennte Werte.
@@ -129,6 +130,10 @@ class MetadataService:
         elif is_music is False:
             conditions.append("COALESCE(v.is_music, 0) = 0")
 
+        # Nur Videos mit zusätzlicher Tonspur (z.B. nachvertont)
+        if has_extra_audio:
+            conditions.append("EXISTS (SELECT 1 FROM audio_tracks a WHERE a.video_id = v.id)")
+
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
         # Erlaubte Sortierfelder
@@ -164,7 +169,10 @@ class MetadataService:
         # Paginierte Ergebnisse
         offset = (page - 1) * per_page
         rows = await db.fetch_all(
-            f"""SELECT v.* FROM videos v {where}
+            f"""SELECT v.*,
+                       (SELECT GROUP_CONCAT(a.language) FROM audio_tracks a
+                        WHERE a.video_id = v.id) AS extra_audio
+                FROM videos v {where}
                 ORDER BY {order_by}
                 LIMIT ? OFFSET ?""",
             params + [per_page, offset]
@@ -173,12 +181,18 @@ class MetadataService:
         total_pages = max(1, (total + per_page - 1) // per_page)
 
         return {
-            "videos": [self._row_to_dict(r) for r in rows],
+            "videos": [self._with_extra_audio(self._row_to_dict(r)) for r in rows],
             "total": total,
             "page": page,
             "per_page": per_page,
             "total_pages": total_pages,
         }
+
+    @staticmethod
+    def _with_extra_audio(video: dict) -> dict:
+        """Sprachkürzel der zusätzlichen Tonspuren als Liste (leer = nur Original)."""
+        video["extra_audio"] = [code for code in (video.get("extra_audio") or "").split(",") if code]
+        return video
 
     async def update_video(self, video_id: str, updates: dict) -> dict | None:
         """Video-Metadaten aktualisieren."""

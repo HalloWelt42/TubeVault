@@ -102,9 +102,39 @@ async def test_lebenszeichen_und_abbruch(client, videos):
     job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
     ok = await client.post(f"/api/dubbing/requests/{job['id']}/progress", json={"progress": 0.4, "note": "Übersetzen"})
     assert ok.status_code == 200
-    await client.delete(f"/api/dubbing/requests/{job['id']}")
+    # Ein laufender Auftrag lässt sich nicht einfach löschen, nur abbrechen
+    assert (await client.delete(f"/api/dubbing/requests/{job['id']}")).status_code == 409
+    assert (await client.post(f"/api/dubbing/requests/{job['id']}/cancel")).status_code == 200
     gone = await client.post(f"/api/dubbing/requests/{job['id']}/progress", json={"progress": 0.5})
-    assert gone.status_code == 409, "entfernter Auftrag: Nachvertoner soll abbrechen"
+    assert gone.status_code == 409, "abgebrochener Auftrag: Nachvertoner soll aufhören"
+
+    # Er bleibt sichtbar, mit dem Stand beim Abbruch
+    listed = (await client.get("/api/dubbing/requests")).json()
+    assert listed["counts"]["cancelled"] == 1
+    assert listed["requests"][0]["status"] == "cancelled" and "40 %" in listed["requests"][0]["note"]
+    # Eine späte Fehlermeldung des Nachvertoners ändert daran nichts
+    await client.post(f"/api/dubbing/requests/{job['id']}/fail", json={"note": "abgebrochen"})
+    assert (await client.get("/api/dubbing/requests")).json()["requests"][0]["status"] == "cancelled"
+    # Erneut vormerken oder aus der Liste nehmen
+    assert (await client.post(f"/api/dubbing/requests/{job['id']}/retry")).status_code == 200
+    assert (await client.post(f"/api/dubbing/requests/{job['id']}/cancel")).status_code == 200
+    assert (await client.delete(f"/api/dubbing/requests/{job['id']}")).status_code == 200
+
+
+async def test_videoliste_kennzeichnet_und_filtert_nachvertonte(client, videos, test_db):
+    await test_db.execute(
+        "INSERT INTO audio_tracks (video_id, language, label, origin, file_path) "
+        "VALUES ('en2', 'de', 'Deutsch', 'dub', '/x/de.m4a')")
+    from app.models.video import VideoResponse
+    from app.services.metadata_service import metadata_service
+    everything = (await metadata_service.get_videos())["videos"]
+    assert {v["id"]: v["extra_audio"] for v in everything}["en2"] == ["de"]
+    assert {v["id"]: v["extra_audio"] for v in everything}["en1"] == []
+    en2 = next(v for v in everything if v["id"] == "en2")
+    assert VideoResponse(**en2).extra_audio == ["de"]        # kommt in der Antwort an
+    only = await metadata_service.get_videos(has_extra_audio=True)
+    assert [v["id"] for v in only["videos"]] == ["en2"] and only["total"] == 1
+
 
 
 async def test_fehlschlag_und_wiederholen(client, videos):

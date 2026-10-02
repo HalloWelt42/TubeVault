@@ -60,7 +60,7 @@ async def install_schema(connection) -> None:
     await connection.commit()
 
 
-Status = Literal["queued", "working", "done", "error", "skipped"]
+Status = Literal["queued", "working", "done", "error", "skipped", "cancelled"]
 # Welche Untertitel der Quelle als Transkript dienen dürfen
 SubtitleUse = Literal["never", "manual", "any"]
 DEFAULT_TARGET_LANGUAGE = "de"
@@ -185,7 +185,7 @@ async def list_requests(status: str | None = None, limit: int = 200) -> list[Dub
 
 async def counts() -> dict[str, int]:
     rows = await db.fetch_all("SELECT status, COUNT(*) AS n FROM dub_requests GROUP BY status")
-    result = {s: 0 for s in ("queued", "working", "done", "error", "skipped")}
+    result = {s: 0 for s in ("queued", "working", "done", "error", "skipped", "cancelled")}
     result.update({r["status"]: r["n"] for r in rows})
     return result
 
@@ -244,7 +244,19 @@ async def retry(request_id: int) -> bool:
         """UPDATE dub_requests
            SET status = 'queued', worker = NULL, claimed_at = NULL, finished_at = NULL,
                progress = 0, note = NULL
-           WHERE id = ? AND status IN ('error', 'skipped')""", (request_id,))
+           WHERE id = ? AND status IN ('error', 'skipped', 'cancelled')""", (request_id,))
+    return cursor.rowcount == 1
+
+
+async def cancel(request_id: int) -> bool:
+    """Offenen Auftrag abbrechen. Er bleibt als "abgebrochen" in der Liste;
+    ein Nachvertoner, der daran arbeitet, erfährt es beim nächsten Lebenszeichen."""
+    cursor = await db.execute(
+        """UPDATE dub_requests
+           SET status = 'cancelled', finished_at = datetime('now'),
+               note = CASE WHEN status = 'working' THEN 'Abgebrochen bei ' || CAST(ROUND(progress * 100) AS INTEGER) || ' %'
+                           ELSE 'Abgebrochen, bevor die Arbeit begann' END
+           WHERE id = ? AND status IN ('queued', 'working')""", (request_id,))
     return cursor.rowcount == 1
 
 

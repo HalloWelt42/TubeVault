@@ -34,6 +34,7 @@
   let selectedTags = $state(fromList(initial?.keywords));
   let selectedDurations = $state([]);
   let musicOnly = $state(!!initial?.is_music);
+  let extraAudioOnly = $state(!!initial?.extra_audio);
   let customDurMin = $state('');
   let customDurMax = $state('');
   let customDurActive = $state(false);
@@ -127,6 +128,7 @@
       durationMin,
       durationMax,
       is_music: musicOnly || null,
+      extra_audio: extraAudioOnly || null,
     });
   }
 
@@ -193,6 +195,7 @@
     customDurMax = '';
     customDurActive = false;
     musicOnly = false;
+    extraAudioOnly = false;
     searchText = '';
     channelSearch = '';
     categorySearch = '';
@@ -222,7 +225,7 @@
     selectedTypes.length > 0 || selectedChannels.length > 0 ||
     selectedCategories.length > 0 || selectedTags.length > 0 ||
     selectedDurations.length > 0 || customDurActive || searchText.trim().length > 0 ||
-    musicOnly
+    musicOnly || extraAudioOnly
   );
 
   let filteredChannels = $derived(
@@ -276,6 +279,11 @@
           <button class="filter-chip music-chip" class:active={musicOnly}
                   onclick={() => { musicOnly = !musicOnly; emitChange(); }}>
             <i class="fa-solid fa-music"></i> Musik
+          </button>
+          <button class="filter-chip music-chip" class:active={extraAudioOnly}
+                  title="Nur Videos mit zusätzlicher Tonspur (nachvertont)"
+                  onclick={() => { extraAudioOnly = !extraAudioOnly; emitChange(); }}>
+            <i class="fa-solid fa-language"></i> Nachvertont
           </button>
         {/if}
       </div>

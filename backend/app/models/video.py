@@ -54,6 +54,7 @@ class VideoResponse(VideoBase):
     last_position: int = 0
     created_at: str
     updated_at: str
+    extra_audio: list[str] = []     # Sprachen zusätzlicher Tonspuren (z.B. nachvertont)
 
     class Config:
         from_attributes = True

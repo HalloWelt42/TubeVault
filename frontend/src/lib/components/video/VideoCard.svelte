@@ -77,6 +77,11 @@
     {:else if video.video_type === 'live'}
       <span class="type-badge type-live"><i class="fa-solid fa-tower-broadcast"></i> Live</span>
     {/if}
+    {#if video.extra_audio?.length}
+      <span class="audio-badge" title="Zusätzliche Tonspur: {video.extra_audio.join(', ').toUpperCase()} - in der Wiedergabe umschaltbar">
+        <i class="fa-solid fa-language"></i> {video.extra_audio.join(' ').toUpperCase()}
+      </span>
+    {/if}
     <!-- Like/Dislike Thumbnail-Bar (Variante E) -->
     {#if video.like_count && video.dislike_count != null}
       <LikeBar likes={video.like_count} dislikes={video.dislike_count} mode="thumbnail" />
@@ -148,6 +153,11 @@
     position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 4px;
     font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
     z-index: 1;
+  }
+  .audio-badge {
+    position: absolute; bottom: 8px; left: 8px; padding: 2px 6px; border-radius: 4px;
+    background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 0.7rem; font-weight: 700;
+    display: flex; align-items: center; gap: 4px; z-index: 1;
   }
   .status-pending { background: var(--status-pending); color: #fff; }
   .status-downloading { background: var(--status-info); color: #fff; }
