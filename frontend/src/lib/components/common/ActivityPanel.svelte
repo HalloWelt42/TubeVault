@@ -8,6 +8,7 @@
 -->
 <script>
   import { api, createActivitySocket, FE_VERSION } from '../../api/client.js';
+  import BackgroundWork from './BackgroundWork.svelte';
   import { formatDateRelative } from '../../utils/format.js';
   import { feedVersion } from '../../stores/app.js';
   import { toast } from '../../stores/notifications.js';
@@ -735,6 +736,7 @@
     </div>
 
     <div class="ubar-right">
+      <BackgroundWork />
       <span class="ubar-sys"><span class="led led-ok"></span> Frontend {FE_VERSION}</span>
       <span class="ubar-sys"><span class="led" class:led-ok={backendOk} class:led-err={!backendOk}></span> Backend {backendVersion}</span>
       <span class="ubar-sep"></span>

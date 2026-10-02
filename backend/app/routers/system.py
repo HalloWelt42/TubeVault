@@ -364,6 +364,13 @@ async def get_badges():
     }
 
 
+@router.get("/background")
+async def background_work_overview():
+    """Laufende Hintergrundarbeiten mit Stand, Laufzeit und Restdauer."""
+    from app.services import background_work
+    return {"items": await background_work.overview()}
+
+
 @router.get("/shorts")
 async def shorts_overview():
     """Wie viele bestätigte Shorts sind geladen, wie viele Typen noch ungeprüft?"""

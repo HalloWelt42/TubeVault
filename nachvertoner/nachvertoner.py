@@ -302,7 +302,7 @@ def build_proxy(original: Path, proxy: Path) -> None:
     """Originalton plus winziges schwarzes Bild. Der Vertonungsdienst verlangt
     eine Bildspur; das echte Bild würde nur Platz und Rechenzeit kosten."""
     run_ffmpeg(
-        "-i", str(original), "-f", "lavfi", "-i", "color=c=black:s=64x36:r=1",
+        "-i", str(original), "-f", "lavfi", "-i", "color=c=black:s=64x36:r=5",
         "-map", "1:v:0", "-map", "0:a:0", "-shortest",
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "160k", str(proxy))

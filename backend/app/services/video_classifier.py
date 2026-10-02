@@ -100,6 +100,8 @@ async def classify(video_id: str, *, is_live: bool = False, duration: Optional[i
 # ─── Bestand nachprüfen ───────────────────────────────────────────────
 
 _PAUSE_BETWEEN_PROBES_S = 1.5
+# Rechengrösse für die Restdauer-Anzeige (Pause plus Antwortzeit)
+SECONDS_PER_PROBE = _PAUSE_BETWEEN_PROBES_S + 0.5
 _PAUSE_AFTER_TROUBLE_S = 1800
 _TROUBLE_LIMIT = 5
 _IDLE_PAUSE_S = 3600

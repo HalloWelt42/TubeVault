@@ -268,6 +268,7 @@ export const api = {
   // Settings
   getSettings: () => request('/api/settings'),
   getSettingsSchema: () => request('/api/settings/schema'),
+  getBackgroundWork: () => request('/api/system/background'),
   getShortsOverview: () => request('/api/system/shorts'),
   deleteShorts: () => request('/api/system/shorts/delete', { method: 'POST' }),
 
