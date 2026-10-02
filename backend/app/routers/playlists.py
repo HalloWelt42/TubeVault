@@ -36,6 +36,48 @@ class PlaylistReorder(BaseModel):
     video_ids: list[str]
 
 
+class PlaylistFromVideos(BaseModel):
+    name: str
+    video_ids: list[str]
+
+
+class PlaylistFromSeries(BaseModel):
+    key: str
+
+
+@router.get("/series-proposals")
+async def series_proposals(min_episodes: int = Query(3, ge=2, le=50)):
+    """Aus Folgennummern in den Titeln erkannte Serien (je Kanal und Serie)."""
+    from app.services import series_detector
+    found = await series_detector.proposals(min_episodes)
+    return {"series": [
+        {**s.model_dump(exclude={"episodes"}), "episode_count": len(s.episodes),
+         "sample": [e.title for e in s.episodes[:3]]}
+        for s in found
+    ]}
+
+
+@router.post("/from-series")
+async def playlist_from_series(request: PlaylistFromSeries):
+    """Erkannte Serie als Playlist anlegen oder auf Stand bringen."""
+    from app.services import series_detector
+    try:
+        return await series_detector.create_playlist(request.key)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/from-videos")
+async def playlist_from_videos(request: PlaylistFromVideos):
+    """Playlist aus einer Videoliste anlegen (z.B. aus Suchtreffern)."""
+    from app.services import series_detector
+    name = request.name.strip()
+    if not name or not request.video_ids:
+        raise HTTPException(status_code=400, detail="Name und Videos angeben")
+    playlist_id = await series_detector.save_playlist(name, request.video_ids[:2000])
+    return {"playlist_id": playlist_id, "name": name, "video_count": len(set(request.video_ids[:2000]))}
+
+
 @router.get("")
 async def get_playlists():
     """Alle Playlists abrufen (nur global sichtbare)."""

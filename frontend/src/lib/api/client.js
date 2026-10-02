@@ -269,6 +269,9 @@ export const api = {
   getSettings: () => request('/api/settings'),
   getSettingsSchema: () => request('/api/settings/schema'),
   getBackgroundWork: () => request('/api/system/background'),
+  getSeriesProposals: (minEpisodes = 3) => request(`/api/playlists/series-proposals?min_episodes=${minEpisodes}`),
+  createPlaylistFromSeries: (key) => request('/api/playlists/from-series', { method: 'POST', body: JSON.stringify({ key }) }),
+  createPlaylistFromVideos: (name, videoIds) => request('/api/playlists/from-videos', { method: 'POST', body: JSON.stringify({ name, video_ids: videoIds }) }),
   getShortsOverview: () => request('/api/system/shorts'),
   deleteShorts: () => request('/api/system/shorts/delete', { method: 'POST' }),
 

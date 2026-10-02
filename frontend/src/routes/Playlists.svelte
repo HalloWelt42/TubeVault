@@ -6,6 +6,7 @@
 -->
 <script>
   import { api } from '../lib/api/client.js';
+  import SeriesProposals from '../lib/components/common/SeriesProposals.svelte';
   import { route, navigate } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
   import { formatDuration, formatSize, formatDateRelative, formatViews } from '../lib/utils/format.js';
@@ -32,6 +33,7 @@
 
   // Create
   let showCreate = $state(false);
+  let showSeries = $state(false);
   let newName = $state('');
   let newDesc = $state('');
 
@@ -313,8 +315,16 @@
     <!-- ═══ Playlist-Übersicht ═══ -->
     <div class="page-header">
       <h1 class="page-title"><i class="fa-solid fa-list-ul"></i> Playlists</h1>
+      <button class="btn-create" onclick={() => showSeries = !showSeries}
+              title="Nummerierte Folgen in den Titeln finden und als Playlists anlegen">
+        <i class="fa-solid fa-layer-group"></i> Serien erkennen
+      </button>
       <button class="btn-create" onclick={() => showCreate = !showCreate}><i class="fa-solid fa-plus"></i> Neue Playlist</button>
     </div>
+
+    {#if showSeries}
+      <SeriesProposals onchange={loadPlaylists} />
+    {/if}
 
     {#if showCreate}
       <div class="create-form">

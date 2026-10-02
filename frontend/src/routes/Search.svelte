@@ -77,6 +77,29 @@
 
   function onSubmit(e) { e.preventDefault(); runSearch(true); }
 
+  // ─── Lokale Treffer als Playlist speichern ───
+  const PLAYLIST_MAX = 1000;
+  let savingPlaylist = $state(false);
+  let playlistName = $state('');
+  let playlistBusy = $state(false);
+
+  async function saveAsPlaylist() {
+    playlistBusy = true;
+    try {
+      // Alle Treffer holen, nicht nur die gerade angezeigten
+      const ids = [];
+      for (let page = 1; ids.length < Math.min(local.total, PLAYLIST_MAX); page++) {
+        const r = await api.searchLocal(query, { page, per_page: 100 });
+        if (!r.videos?.length) break;
+        ids.push(...r.videos.map(v => v.id));
+      }
+      const result = await api.createPlaylistFromVideos(playlistName.trim(), ids.slice(0, PLAYLIST_MAX));
+      toast.success(`Playlist "${result.name}" mit ${result.video_count} Videos angelegt`);
+      savingPlaylist = false;
+    } catch (e) { toast.error(e.message); }
+    playlistBusy = false;
+  }
+
   async function subscribe(v, e) {
     e.stopPropagation();
     try {
@@ -201,7 +224,23 @@
   <!-- Lokale Ergebnisse -->
   {#if scope !== 'youtube' && local.items.length > 0}
     <section class="section">
-      <h2 class="section-title"><i class="fa-solid fa-photo-film"></i> Lokal ({local.total})</h2>
+      <h2 class="section-title">
+        <i class="fa-solid fa-photo-film"></i> Lokal ({local.total})
+        {#if savingPlaylist}
+          <form class="pl-form" onsubmit={(e) => { e.preventDefault(); saveAsPlaylist(); }}>
+            <input type="text" bind:value={playlistName} placeholder="Name der Playlist" />
+            <button type="submit" class="pl-btn primary" disabled={!playlistName.trim() || playlistBusy}>
+              {#if playlistBusy}<i class="fa-solid fa-spinner fa-spin"></i>{:else}Speichern{/if}
+            </button>
+            <button type="button" class="pl-btn" onclick={() => savingPlaylist = false}>Abbrechen</button>
+          </form>
+        {:else}
+          <button class="pl-btn" onclick={() => { playlistName = query.trim(); savingPlaylist = true; }}
+                  title="Alle {local.total} lokalen Treffer in dieser Reihenfolge als Playlist speichern">
+            <i class="fa-solid fa-list-ul"></i> Treffer als Playlist
+          </button>
+        {/if}
+      </h2>
       <div class="grid">
         {#each local.items as v (v.id)}
           <div class="card-wrap">
@@ -359,6 +398,12 @@
   .badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
   .badge.ok { background: var(--status-success); color: #fff; }
   .badge.archive { background: rgba(0,0,0,0.72); color: #fff; }
+  .pl-form { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; }
+  .pl-form input { padding: 5px 10px; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font: inherit; font-size: 0.8rem; font-weight: 400; }
+  .pl-btn { margin-left: 12px; padding: 5px 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-secondary); font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+  .pl-form .pl-btn { margin-left: 0; }
+  .pl-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent-primary); }
+  .pl-btn.primary { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
   .badge.queue { background: var(--status-warning, #f59e0b); color: #fff; }
 
   .info { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
