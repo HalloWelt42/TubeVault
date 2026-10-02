@@ -267,6 +267,7 @@ export const api = {
 
   // Settings
   getSettings: () => request('/api/settings'),
+  getSettingsSchema: () => request('/api/settings/schema'),
   getSetting: (key) => request(`/api/settings/${encodeURIComponent(key)}`),
   updateSetting: (key, value) => request(`/api/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   resetSettings: () => request('/api/settings/reset', { method: 'POST' }),

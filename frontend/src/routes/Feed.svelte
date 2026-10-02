@@ -250,18 +250,16 @@
     downloading.add(entry.video_id);
     downloading = new Set(downloading);
     try {
-      // Quality: Audio → 'audio_only', sonst Abo-Quality oder weglassen
-      // (Backend nimmt dann Settings-Default statt hardcoded 'best')
+      // Nur senden, was hier ausdrücklich gewählt wurde. Qualität und
+      // Nur-Audio des Kanals löst das Backend auf (Auftrag > Kanal > Einstellungen).
       const payload = {
         url: `https://www.youtube.com/watch?v=${entry.video_id}`,
         itag: isAudioOnly ? null : itag,
         audio_itag: audioItag,
         merge_audio: isAudioOnly ? false : mergeAudio,
-        audio_only: isAudioOnly,
         priority,
       };
-      if (isAudioOnly) payload.quality = 'audio_only';
-      else if (entry.download_quality) payload.quality = entry.download_quality;
+      if (isAudioOnly) payload.audio_only = true;
       await api.addDownload(payload);
       const label = priority >= 10 ? 'Sofort-Download' : 'In Queue gelegt';
       toast.success(`${label}: ${entry.title || entry.video_id}`);

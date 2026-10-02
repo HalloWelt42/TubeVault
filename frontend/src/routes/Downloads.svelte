@@ -73,7 +73,8 @@
   let videoInfo = $state(null);
   let playlistInfo = $state(null);
   let channelInfo = $state(null);
-  let selectedQuality = $state('best');
+  // leer = nichts gewählt: Kanal bzw. Standard-Qualität aus den Einstellungen
+  let selectedQuality = $state('');
   let selectedPriority = $state(0);
   let socket = $state(null);
   let plDownloading = $state(new Set());
@@ -259,8 +260,7 @@
     try {
       await api.addDownload({
         url: urlInput.trim(),
-        quality: selectedQuality,
-        download_thumbnail: true,
+        quality: selectedQuality || undefined,
         priority: selectedPriority,
       });
       toast.success('Download gestartet');
@@ -617,7 +617,7 @@
         {/if}
       </div>
       <div class="resolved-actions">
-        <button class="dbtn primary lg" onclick={startDownload}><i class="fa-solid fa-download"></i> Download starten ({selectedQuality})</button>
+        <button class="dbtn primary lg" onclick={startDownload}><i class="fa-solid fa-download"></i> Download starten ({selectedQuality || 'Standard-Qualität'})</button>
         <button class="dbtn ghost" onclick={() => videoInfo = null}>Abbrechen</button>
       </div>
     </div>

@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -392,33 +392,11 @@ CREATE INDEX IF NOT EXISTS idx_jobs_metadata_video_id ON jobs(type, json_extract
 CREATE INDEX IF NOT EXISTS idx_rss_entries_channel_feed_status ON rss_entries(channel_id, feed_status, published DESC);
 """
 
-DEFAULT_SETTINGS = [
-    ("download.quality", "720p", "Standard Download-Qualität", "download"),
-    ("download.format", "mp4", "Standard Download-Format", "download"),
-    ("download.concurrent", "2", "Gleichzeitige Downloads", "download"),
-    ("download.auto_thumbnail", "true", "Thumbnail automatisch herunterladen", "download"),
-    ("download.auto_subtitle", "false", "Untertitel automatisch herunterladen", "download"),
-    ("download.subtitle_lang", "de,en", "Bevorzugte Untertitel-Sprachen", "download"),
-    ("download.auto_chapters", "true", "Kapitel automatisch speichern", "download"),
-    ("player.volume", "80", "Standard-Lautstärke (0-100)", "player"),
-    ("player.autoplay", "false", "Automatische Wiedergabe", "player"),
-    ("player.speed", "1.0", "Standard-Geschwindigkeit", "player"),
-    ("player.save_position", "true", "Wiedergabeposition automatisch speichern", "player"),
-    ("theme.mode", "dark", "Theme-Modus (dark/light)", "theme"),
-    ("theme.accent", "#6366f1", "Accent-Farbe", "theme"),
-    ("general.videos_per_page", "24", "Videos pro Seite", "general"),
-    ("rss.enabled", "true", "RSS-Feed Polling aktiv", "rss"),
-    ("rss.interval", "1800", "Standard Poll-Intervall in Sekunden", "rss"),
-    ("rss.auto_download", "false", "Neue Videos automatisch herunterladen", "rss"),
-    ("rss.auto_quality", "720p", "Qualität für Auto-Downloads", "rss"),
-    ("rss.auto_dl_daily_limit", "20", "Max Auto-Downloads pro Tag", "rss"),
-    ("rss.max_age_days", "90", "Neue Videos nur wenn juenger als X Tage", "rss"),
-    ("feed.hide_shorts", "false", "Shorts im Feed ausblenden", "feed"),
-    ("feed.auto_classify", "true", "Neue RSS-Videos automatisch als Short erkennen", "feed"),
-    ("feed.auto_refresh", "true", "Kanaele periodisch im Hintergrund re-scannen", "feed"),
-    ("feed.refresh_interval_days", "7", "Re-Scan Intervall in Tagen", "feed"),
-    ("archive.mount_check_interval", "30", "Mount-Prüfung Intervall in Sekunden", "archive"),
-]
+# Standardwerte kommen aus dem Einstellungs-Schema (eine Liste für Datenbank,
+# Prüfung und Oberfläche).
+from app.settings_schema import default_rows as _default_setting_rows, REMOVED_KEYS as _REMOVED_SETTING_KEYS
+
+DEFAULT_SETTINGS = _default_setting_rows()
 
 
 class Database:
@@ -1122,6 +1100,21 @@ class Database:
         if current_version < 33:
             await self._connection.commit()
             logger.info(f"Migration v33: Kanal-Zuordnung, {repaired} Videos ergänzt")
+
+        if current_version < 34:
+            # Einstellungen ohne Wirkung entfernen (siehe settings_schema).
+            for key in _REMOVED_SETTING_KEYS:
+                await self._connection.execute("DELETE FROM settings WHERE key = ?", (key,))
+            # Kanal-Qualität: leer bedeutet ab jetzt "Standard aus den
+            # Einstellungen". Kanäle, deren Wert heute beiden Standards gleicht,
+            # verhalten sich unverändert, folgen künftig aber einer geänderten
+            # Einstellung. Abweichend gesetzte Kanäle behalten ihren Wert.
+            await self._connection.execute(
+                """UPDATE subscriptions SET download_quality = NULL
+                   WHERE download_quality = (SELECT value FROM settings WHERE key = 'rss.auto_quality')
+                     AND download_quality = (SELECT value FROM settings WHERE key = 'download.quality')""")
+            await self._connection.commit()
+            logger.info("Migration v34: wirkungslose Einstellungen entfernt, Kanal-Qualität erbt Standard")
 
         # 4. Indexes NACH Migration (braucht source-Spalte)
         await self._connection.executescript(INDEXES_SQL)

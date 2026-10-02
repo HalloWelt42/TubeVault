@@ -28,12 +28,12 @@ router = APIRouter(prefix="/api/import", tags=["Import"])
 class YTPlaylistImport(BaseModel):
     url: str
     download_all: bool = False
-    quality: Optional[str] = "720p"
+    quality: Optional[str] = None   # leer = Kanal bzw. Einstellungen entscheiden
 
 
 class URLListImport(BaseModel):
     urls: list[str]
-    quality: Optional[str] = "720p"
+    quality: Optional[str] = None   # leer = Kanal bzw. Einstellungen entscheiden
     auto_download: bool = False
 
 
@@ -103,7 +103,7 @@ async def import_youtube_playlist(data: YTPlaylistImport):
 @router.post("/youtube-playlist/download-selected")
 async def download_selected_from_playlist(
     video_ids: list[str],
-    quality: str = "720p",
+    quality: Optional[str] = None,
 ):
     """Ausgewählte Videos aus Playlist-Import herunterladen."""
     from app.services.download_service import download_service

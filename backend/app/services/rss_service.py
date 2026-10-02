@@ -57,8 +57,6 @@ class RSSService:
     def __init__(self):
         self._running = False
         self._polling = False  # Lock: verhindert parallele Tick-Ausführung
-        self._auto_dl_today: int = 0
-        self._auto_dl_date: str = ""
         # Scheduler-Status (für Frontend)
         self._last_checked_channel: str = ""
         self._last_checked_at: str = ""
@@ -545,14 +543,10 @@ class RSSService:
 
     async def _auto_queue_video(self, video_id: str, sub: dict):
         """Video automatisch zur Queue – mit Tageslimit."""
-        # Tageslimit prüfen
-        today = datetime.now().strftime("%Y-%m-%d")
-        if self._auto_dl_date != today:
-            self._auto_dl_date = today
-            self._auto_dl_today = 0
-
+        # Tageslimit prüfen (Zähler liegt in der Datenbank und übersteht Neustarts)
         limit = int(await self._get_setting("rss.auto_dl_daily_limit") or AUTO_DL_DAILY_LIMIT)
-        if self._auto_dl_today >= limit:
+        used = await self._auto_dl_count_today()
+        if used >= limit:
             logger.debug(f"Auto-DL Tageslimit ({limit}) erreicht, {video_id} übersprungen")
             return
 
@@ -584,8 +578,6 @@ class RSSService:
         if was_parked:
             return
 
-        quality = sub.get("download_quality", "720p")
-        audio_only = bool(sub.get("audio_only", False))
         url = f"https://www.youtube.com/watch?v={video_id}"
 
         # Titel aus RSS-Entries holen
@@ -601,10 +593,9 @@ class RSSService:
             description="Auto-Download via RSS",
             metadata={
                 "video_id": video_id, "url": url,
-                "download_options": {
-                    "quality": quality, "format": "mp4",
-                    "download_thumbnail": True, "audio_only": audio_only,
-                },
+                # Keine festen Werte: Qualität, Nur-Audio und Thumbnail löst
+                # download_options beim Start auf (Kanal > Einstellungen).
+                "download_options": {"origin": "auto"},
                 "retry_count": 0, "max_retries": 3,
             },
             priority=5,
@@ -614,17 +605,33 @@ class RSSService:
             (video_id,)
         )
 
-        self._auto_dl_today += 1
-        logger.info(f"Auto-DL queued: {video_id} ({self._auto_dl_today}/{limit} heute)")
+        await self._auto_dl_count_today(add=1)
+        logger.info(f"Auto-DL queued: {video_id} ({used + 1}/{limit} heute)")
+
+    async def _auto_dl_count_today(self, add: int = 0) -> int:
+        """Zahl der heutigen automatischen Downloads (interner Zähler in der
+        settings-Tabelle, Form 'JJJJ-MM-TT:n'). add erhöht den Zähler."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        raw = await db.fetch_val(
+            "SELECT value FROM settings WHERE key = 'rss.auto_dl_counter'") or ""
+        day, _, count = raw.partition(":")
+        used = int(count) if day == today and count.isdigit() else 0
+        if add:
+            used += add
+            await db.execute(
+                """INSERT INTO settings (key, value, description, category)
+                   VALUES ('rss.auto_dl_counter', ?, 'Interner Tageszähler', 'internal')
+                   ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+                (f"{today}:{used}",))
+        return used
 
     # ─── Abo-Management ──────────────────────────────────
 
     async def add_subscription(self, channel_id: str, auto_download: bool = False,
                                quality: str = None) -> dict:
         """Neues Abo hinzufügen. RSS für Info, Avatar per pytubefix (rate-limited)."""
-        # Quality: explizit → Setting → Fallback
-        if not quality:
-            quality = await self._get_setting("rss.auto_quality") or "720p"
+        # quality leer = Kanal erbt die Qualität aus den Einstellungen
+        quality = quality or None
         # Schritt 1: Basisinfo per yt-dlp (RSS liefert 404 seit YouTube-Änderung)
         await rate_limiter.acquire("rss")
         channel_name = channel_id
@@ -859,8 +866,8 @@ class RSSService:
 
         cursor = await db.execute(
             """INSERT OR IGNORE INTO subscriptions
-               (channel_id, channel_name, channel_url, auto_download)
-               VALUES (?, ?, ?, ?)""",
+               (channel_id, channel_name, channel_url, auto_download, download_quality)
+               VALUES (?, ?, ?, ?, NULL)""",
             (channel_id, channel_name, channel_url, auto_download)
         )
 
@@ -959,8 +966,17 @@ class RSSService:
                     "check_interval", "enabled", "drip_enabled", "drip_count",
                     "drip_auto_archive", "suggest_exclude"}
         filtered = {k: v for k, v in updates.items() if k in allowed}
+        # Nur Qualität und Kategorie dürfen geleert werden ("Standard" / "keine")
+        filtered = {k: v for k, v in filtered.items()
+                    if v is not None or k in ("download_quality", "category_id")}
         if not filtered:
             return
+        if filtered.get("download_quality") == "":
+            filtered["download_quality"] = None
+        if filtered.get("download_quality") is not None:
+            from app.settings_schema import VIDEO_QUALITIES
+            if filtered["download_quality"] not in VIDEO_QUALITIES:
+                raise ValueError(f"Unbekannte Qualität: {filtered['download_quality']}")
 
         # Drip aktiviert → erste Ausführungszeit würfeln
         if filtered.get("drip_enabled"):
@@ -1344,7 +1360,7 @@ class RSSService:
             "new_videos": new_videos,
             "total_entries": total_entries,
             "checked_last_hour": checked_1h,
-            "auto_dl_today": self._auto_dl_today,
+            "auto_dl_today": await self._auto_dl_count_today(),
             "auto_dl_limit": AUTO_DL_DAILY_LIMIT,
         }
 
@@ -1399,7 +1415,8 @@ class RSSService:
         max_age = await self._get_setting("rss.max_age_days") or "90"
         interval = await self._get_setting("rss.interval") or "1800"
         rss_enabled = await self._get_setting("rss.enabled") or "true"
-        auto_dl = await self._get_setting("rss.auto_download") or "false"
+        auto_dl_channels = await db.fetch_val(
+            "SELECT COUNT(*) FROM subscriptions WHERE auto_download = 1 AND enabled = 1") or 0
         daily_limit = await self._get_setting("rss.auto_dl_daily_limit") or "20"
 
         # Letzter Cron-Lauf aus Jobs-Tabelle
@@ -1435,8 +1452,11 @@ class RSSService:
             },
             # Auto-Download Status
             "auto_download": {
-                "enabled": auto_dl == "true",
-                "today_count": self._auto_dl_today,
+                # Es gibt keinen globalen Schalter: aktiv ist Auto-Download,
+                # sobald mindestens ein Kanal ihn eingeschaltet hat.
+                "enabled": auto_dl_channels > 0,
+                "channels": auto_dl_channels,
+                "today_count": await self._auto_dl_count_today(),
                 "daily_limit": int(daily_limit),
             },
             # Aktive Einstellungen

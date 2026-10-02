@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/subscriptions", tags=["Abonnements"])
 class SubscriptionCreate(BaseModel):
     channel_id: str  # Kann auch Video-URL oder Kanal-URL sein
     auto_download: bool = False
-    download_quality: str = "720p"
+    download_quality: Optional[str] = None   # leer = Standard aus den Einstellungen
 
 
 class SubscriptionBatchCreate(BaseModel):
@@ -915,7 +915,12 @@ async def get_drip_prognosis():
 @router.put("/{sub_id}")
 async def update_subscription(sub_id: int, updates: SubscriptionUpdate):
     """Abo bearbeiten."""
-    await rss_service.update_subscription(sub_id, updates.model_dump(exclude_none=True))
+    # exclude_unset statt exclude_none: ein ausdrücklich gesendetes null leert
+    # Qualität bzw. Kategorie ("Standard" / "keine").
+    try:
+        await rss_service.update_subscription(sub_id, updates.model_dump(exclude_unset=True))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return {"updated": True}
 
 

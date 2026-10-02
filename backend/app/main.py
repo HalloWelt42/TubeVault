@@ -84,6 +84,22 @@ async def _backfill_banners():
         logger.warning(f"Banner-Backfill Fehler: {e}")
 
 
+# Drip wählt nur Videos, die noch fehlen UND ladbar sind. Ohne die Ausschlüsse
+# griff er jeden Tag dieselben nicht ladbaren Videos (ignoriert, geparkt,
+# fehlgeschlagen, im externen Archiv) und kam nie weiter.
+_DRIP_LOADABLE = """
+    NOT EXISTS (SELECT 1 FROM videos v WHERE v.id = r.video_id AND v.status = 'ready')
+    AND NOT EXISTS (SELECT 1 FROM ignored_videos i WHERE i.video_id = r.video_id)
+    AND NOT EXISTS (SELECT 1 FROM video_archives va WHERE va.video_id = r.video_id)
+    AND NOT EXISTS (
+        SELECT 1 FROM jobs j
+        WHERE j.type = 'download'
+          AND json_extract(j.metadata, '$.video_id') = r.video_id
+          AND j.status IN ('queued', 'active', 'retry_wait', 'parked', 'error'))
+    AND COALESCE(r.video_type, 'video') <> 'live'
+"""
+
+
 async def _drip_cron_loop():
     """Drip-Feed Cron: Prüft alle 15 Min ob Kanäle fällig sind.
     Lädt 2 älteste + 1 neuestes fehlendes Video pro Kanal."""
@@ -92,45 +108,33 @@ async def _drip_cron_loop():
     logger.info("[DRIP-CRON] Drip-Feed-Timer gestartet (alle 15 Min)")
     while True:
         try:
-            # 1) Auto-Archive: unabhängig vom Drip — läuft für ALLE Kanäle mit
-            # drip_auto_archive=1 (auch ohne aktiven Drip). Vorher war das nur
-            # Teil der Drip-Schleife, User konnte das Feature isoliert nie nutzen.
-            aa_rows = await db.fetch_all(
-                """SELECT channel_id FROM subscriptions
-                   WHERE drip_auto_archive = 1 AND enabled = 1"""
-            )
-            for aa in aa_rows:
-                await db.execute(
-                    """UPDATE videos SET is_archived = 1
-                       WHERE channel_id = ? AND status = 'ready'
-                         AND is_archived = 0 AND source = 'youtube'""",
-                    (aa["channel_id"],)
-                )
+            # Auto-Archivieren passiert beim Abschluss jedes Downloads
+            # (download_service). Früher archivierte diese Schleife alle 15 Min
+            # ALLE Videos des Kanals erneut - auch von Hand dearchivierte.
 
-            # 2) Fällige Drip-Kanäle suchen (echter Drip-Download)
+            # Fällige Drip-Kanäle suchen (abgeschaltete Kanäle laden nichts)
             due = await db.fetch_all(
-                """SELECT s.id, s.channel_id, s.channel_name, s.drip_count,
-                          s.drip_auto_archive, s.download_quality, s.audio_only
+                """SELECT s.id, s.channel_id, s.channel_name, s.drip_count
                    FROM subscriptions s
-                   WHERE s.drip_enabled = 1
+                   WHERE s.drip_enabled = 1 AND s.enabled = 1
                      AND s.drip_next_run IS NOT NULL
                      AND s.drip_next_run <= datetime('now')"""
             )
             for sub in due:
                 # (Auto-Archive ist oben in Schritt 1 für alle Kanäle gelaufen.)
                 drip_count = sub["drip_count"] or 3
-                # 2 älteste + 1 neuestes (bei count >= 3)
-                old_count = max(1, drip_count - 1)
+                # Je Lauf genau drip_count Videos: das neueste fehlende plus
+                # die ältesten fehlenden (bei 1 also nur das neueste).
                 new_count = 1
+                old_count = max(0, drip_count - new_count)
 
                 # Älteste fehlende
                 oldest = await db.fetch_all(
-                    """SELECT r.video_id, r.title FROM rss_entries r
-                       WHERE r.channel_id = ?
-                         AND r.video_id NOT IN (SELECT id FROM videos WHERE status = 'ready')
-                       ORDER BY r.published ASC LIMIT ?""",
+                    f"""SELECT r.video_id, r.title FROM rss_entries r
+                       WHERE r.channel_id = ? AND {_DRIP_LOADABLE}
+                       ORDER BY r.published ASC, r.id ASC LIMIT ?""",
                     (sub["channel_id"], old_count)
-                )
+                ) if old_count else []
                 # Neuestes fehlendes (nicht in oldest)
                 old_ids = [o["video_id"] for o in oldest]
                 exclude_clause = ""
@@ -142,10 +146,9 @@ async def _drip_cron_loop():
                 params.append(new_count)
                 newest = await db.fetch_all(
                     f"""SELECT r.video_id, r.title FROM rss_entries r
-                        WHERE r.channel_id = ?
-                          AND r.video_id NOT IN (SELECT id FROM videos WHERE status = 'ready')
+                        WHERE r.channel_id = ? AND {_DRIP_LOADABLE}
                           {exclude_clause}
-                        ORDER BY r.published DESC LIMIT ?""",
+                        ORDER BY r.published DESC, r.id DESC LIMIT ?""",
                     tuple(params)
                 )
 
@@ -165,11 +168,9 @@ async def _drip_cron_loop():
                 for vid in to_download:
                     try:
                         url = f"https://www.youtube.com/watch?v={vid['video_id']}"
-                        await download_service.add_to_queue(
-                            url=url,
-                            quality=sub["download_quality"] or "720p",
-                            audio_only=bool(sub["audio_only"]),
-                        )
+                        # Qualität und Nur-Audio kommen vom Kanal bzw. aus den
+                        # Einstellungen (download_options), nicht von hier.
+                        await download_service.add_to_queue(url=url, origin="auto")
                         queued += 1
                     except Exception as e:
                         logger.warning(f"[DRIP] Queue-Fehler {vid['video_id']}: {e}")

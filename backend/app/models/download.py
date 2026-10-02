@@ -8,12 +8,14 @@ from typing import Optional
 
 
 class DownloadRequest(BaseModel):
+    """Felder mit None bedeuten "nicht gewählt": dann entscheiden Kanal-Vorgabe
+    und Einstellungen (siehe services/download_options.py)."""
     url: str
     quality: Optional[str] = None  # best, 1080p, 720p, 480p, 360p, audio_only
-    format: Optional[str] = None   # mp4, webm
-    audio_only: bool = False       # True → pytubefix get_audio_only() direkt
+    format: Optional[str] = None   # ohne Wirkung, Ergebnis ist immer mp4
+    audio_only: Optional[bool] = None
     merge_audio: bool = True       # Adaptiv-Video + Audio per FFmpeg mergen
-    download_thumbnail: bool = True
+    download_thumbnail: Optional[bool] = None
     download_subtitles: bool = False
     subtitle_lang: str = "de"
     priority: int = 0              # 0=Queue, 10=Sofort
@@ -24,7 +26,7 @@ class DownloadRequest(BaseModel):
 class DownloadBatchRequest(BaseModel):
     urls: list[str]
     quality: Optional[str] = None
-    audio_only: bool = False
+    audio_only: Optional[bool] = None
 
 
 class DownloadResponse(BaseModel):

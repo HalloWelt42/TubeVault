@@ -19,14 +19,29 @@ const DEFAULTS = {
 };
 
 export const settings = writable({...DEFAULTS});
-let _loaded = false;
+let _loading = null;
 
 /**
- * Einstellungen vom Backend laden (einmalig, cached).
- * Wird beim App-Start aufgerufen.
+ * Einstellungen vom Backend laden. Die App wartet beim Start darauf, bevor
+ * sie Seiten zeigt - sonst lesen Seiten beim ersten Aufruf die Ersatzwerte
+ * (Videos pro Seite, Qualität) statt der gespeicherten Einstellungen.
+ * Mehrfache Aufrufe teilen sich denselben Ladevorgang; ein Fehlschlag wird
+ * beim nächsten Aufruf erneut versucht.
  */
-export async function loadSettings() {
-  if (_loaded) return;
+export function loadSettings() {
+  if (!_loading) {
+    _loading = fetchSettings().then(ok => { if (!ok) _loading = null; });
+  }
+  return _loading;
+}
+
+/** Einstellungen erneut laden (nach Zurücksetzen oder Wiederherstellen). */
+export function reloadSettings() {
+  _loading = null;
+  return loadSettings();
+}
+
+async function fetchSettings() {
   try {
     const groups = await api.getSettings();
     const flat = {};
@@ -44,10 +59,11 @@ export async function loadSettings() {
         }
       }
     }
-    settings.update(s => ({ ...s, ...flat }));
-    _loaded = true;
+    settings.set({ ...DEFAULTS, ...flat });
+    return true;
   } catch (e) {
     console.warn('Settings laden fehlgeschlagen:', e);
+    return false;
   }
 }
 

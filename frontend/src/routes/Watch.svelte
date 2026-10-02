@@ -203,8 +203,7 @@
     try {
       await api.addDownload({
         url: `https://www.youtube.com/watch?v=${id}`,
-        quality: video?.download_quality || 'best',
-        audio_only: video?.audio_only || false,
+        // Qualität und Nur-Audio: Kanal bzw. Einstellungen (Backend löst auf)
         itag, audio_itag: audioItag, merge_audio: mergeAudio, priority,
       });
       const label = priority >= 10 ? 'Sofort-Download gestartet' : 'In Queue gelegt';
@@ -328,7 +327,8 @@
       videoEl.currentTime = urlTime;
     } else if (q.active) {
       if (videoEl) videoEl.currentTime = 0;
-    } else if (lastPos > 5 && videoEl && video.duration && lastPos < video.duration - 10) {
+    } else if (getSettingBool('player.save_position', true)
+               && lastPos > 5 && videoEl && video.duration && lastPos < video.duration - 10) {
       videoEl.currentTime = lastPos;
       toast.info(`Fortgesetzt bei ${formatDuration(lastPos)}`);
     }

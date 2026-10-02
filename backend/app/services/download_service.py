@@ -36,6 +36,7 @@ from app.config import (
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.services.job_service import job_service
+from app.services import download_options
 from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
 from app.utils.tag_utils import sanitize_tags
@@ -434,23 +435,15 @@ class DownloadService:
                            download_thumbnail: bool = None, priority: int = 0,
                            itag: int = None, audio_itag: int = None,
                            merge_audio: bool = True,
-                           subtitle_lang: str = None, audio_only: bool = False,
-                           force: bool = False) -> dict:
+                           subtitle_lang: str = None, audio_only: bool = None,
+                           force: bool = False, origin: str = "manual") -> dict:
+        """Download einreihen. Übergeben wird nur, was für diesen Download
+        ausdrücklich gewählt wurde (None = nicht gewählt). Kanal-Vorgaben und
+        Einstellungen löst download_options beim Start des Downloads auf.
+        origin: 'manual' (von Hand) oder 'auto' (Auto-Download, Drip)."""
         video_id = extract_video_id(url)
         if not video_id:
             raise ValueError(f"Ungültige YouTube-URL: {url}")
-
-        # Settings aus DB lesen wenn nicht explizit übergeben
-        if quality is None:
-            quality = await self._get_setting("download.quality", DEFAULT_QUALITY)
-        if format is None:
-            format = await self._get_setting("download.format", DEFAULT_FORMAT)
-        if download_thumbnail is None:
-            download_thumbnail = (await self._get_setting("download.auto_thumbnail", "true")) == "true"
-
-        # Audio-only → quality override
-        if audio_only:
-            quality = "audio_only"
 
         # Duplikat-Check: bereits heruntergeladen?
         existing = await db.fetch_one(
@@ -498,12 +491,13 @@ class DownloadService:
             if row and row["title"]:
                 known_title = row["title"]
 
-        opts = {
-            "quality": quality or DEFAULT_QUALITY, "format": format or DEFAULT_FORMAT,
-            "download_thumbnail": download_thumbnail, "itag": itag, "audio_itag": audio_itag,
-            "merge_audio": merge_audio,
-            "subtitle_lang": subtitle_lang, "audio_only": audio_only,
-        }
+        opts = download_options.explicit(
+            quality=quality, download_thumbnail=download_thumbnail,
+            itag=itag, audio_itag=audio_itag,
+            merge_audio=None if merge_audio else False,
+            subtitle_lang=subtitle_lang, audio_only=audio_only,
+            origin="auto" if origin == "auto" else None,
+        )
         full_url = f"https://www.youtube.com/watch?v={video_id}"
         display_title = known_title[:256] if known_title else video_id
         job = await job_service.create(
@@ -548,13 +542,6 @@ class DownloadService:
             set_retry_hook(self._on_yt_retry)
         except Exception as e:
             logger.warning(f"set_retry_hook fehlgeschlagen: {e}")
-        # Concurrent-Einstellung aus DB lesen
-        try:
-            concurrent = int(await self._get_setting("download.concurrent", str(MAX_CONCURRENT_DOWNLOADS)))
-            self._semaphore = asyncio.Semaphore(max(1, concurrent))
-            logger.info(f"Download Semaphore: {concurrent} gleichzeitig")
-        except (ValueError, TypeError):
-            pass
         # Resume: stale 'active' Download-Jobs zurücksetzen auf 'queued'.
         # Hinweis: job_service._recover_stale_jobs() läuft davor und markiert active als error.
         # Dieser Call fängt den seltenen Fall ab, dass ein Worker-Restart ohne App-Restart passiert.
@@ -870,9 +857,17 @@ class DownloadService:
         meta_raw = json.loads(item.get("metadata") or "{}")
         vid = meta_raw.get("video_id", "")
         url = meta_raw.get("url", "")
-        opts = meta_raw.get("download_options", {})
-        if isinstance(opts, str):
-            opts = json.loads(opts)
+        requested = meta_raw.get("download_options", {})
+        if isinstance(requested, str):
+            requested = json.loads(requested)
+        # Jetzt auflösen (Auftrag > Kanal > Einstellungen): eine geänderte
+        # Einstellung gilt damit auch für Aufträge, die schon warteten.
+        effective = await download_options.effective(vid, requested)
+        opts = effective.model_dump()
+        logger.info(
+            f"[OPTIONEN] {vid}: Qualität {effective.quality} (aus {effective.quality_source}), "
+            f"Thumbnail={'ja' if effective.download_thumbnail else 'nein'}, "
+            f"Untertitel={','.join(effective.subtitle_langs) or 'nein'}")
 
         # Opts für _stage()-Phasen-Wahl verfügbar machen (wird in finally aufgeräumt)
         self._job_opts[job_id] = opts
@@ -973,7 +968,9 @@ class DownloadService:
             #   - unbekannt → neu anlegen
             existing_video = await db.fetch_one(
                 "SELECT id, status, file_path FROM videos WHERE id = ?", (vid,))
-            if existing_video and existing_video["status"] in ("ready", "upgrading", "ghost"):
+            replaces_existing = bool(
+                existing_video and existing_video["status"] in ("ready", "upgrading", "ghost"))
+            if replaces_existing:
                 await db.execute(
                     """UPDATE videos SET
                        title=COALESCE(NULLIF(title,''), ?),
@@ -1015,6 +1012,18 @@ class DownloadService:
                      meta["description"], meta["duration"], meta.get("upload_date"),
                      now, thumb, meta.get("view_count"), tags_json,
                      str(final_path), file_size, source_url, video_type, now, now))
+
+
+            # Kanal mit "automatisch archivieren": erstmals geladene Videos
+            # wandern einmalig beim Abschluss ins Archiv. Wer ein Video später
+            # dearchiviert, behält es in der Bibliothek (auch bei erneutem Laden).
+            if not replaces_existing:
+                await db.execute(
+                    """UPDATE videos SET is_archived = 1
+                       WHERE id = ? AND EXISTS (
+                           SELECT 1 FROM subscriptions s
+                           WHERE s.channel_id = videos.channel_id AND s.drip_auto_archive = 1)""",
+                    (vid,))
 
             try:
                 from app.services import text_export
@@ -1079,10 +1088,8 @@ class DownloadService:
                               f"Fertig: {meta['title'][:50]} ({file_size/1024/1024:.1f} MB)")
 
             # Untertitel im Hintergrund (fire-and-forget) – darf hängen ohne Effekt
-            sub_setting = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.auto_subtitle'")
-            if sub_setting == "true":
-                lang_setting = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.subtitle_lang'")
-                langs = [l.strip() for l in (lang_setting or "de,en").split(",") if l.strip()]
+            langs = opts.get("subtitle_langs") or []
+            if langs:
                 async def _bg_subs(video_id, lang_list):
                     for lang in lang_list:
                         try:
@@ -1541,16 +1548,12 @@ class DownloadService:
                     elif merge:
                         aus = yt.streams.get_audio_only()
             else:
-                vs = self._pick_progressive(yt, quality, fmt)
-                if merge and quality in ("best", "1080p", "1440p", "2160p"):
-                    av = self._pick_adaptive_video(yt, quality)
-                    if av:
-                        p_res = self._res_num(vs)
-                        a_res = self._res_num(av)
-                        if a_res > p_res:
-                            vs = av
-                            aus = yt.streams.get_audio_only()
-                            adaptive = True
+                progressive = self._pick_progressive(yt, quality, fmt)
+                separate = self._pick_adaptive_video(yt, quality) if merge else None
+                vs = self._closest_to_wish(quality, progressive, separate)
+                if vs is not None and vs is separate and vs is not progressive:
+                    aus = yt.streams.get_audio_only()
+                    adaptive = True
                 if not vs:
                     vs = yt.streams.get_highest_resolution()
             if not vs:
@@ -1782,6 +1785,25 @@ class DownloadService:
                 pass
         return out
 
+    def _closest_to_wish(self, quality, progressive, separate):
+        """Zwischen fertigem Stream (Bild+Ton) und getrenntem Videostream den
+        wählen, der der gewünschten Qualität am nächsten kommt, ohne sie zu
+        überschreiten. Früher wurde der getrennte Stream nur ab 1080p geprüft:
+        wer 720p oder 480p einstellte, bekam meist 360p, weil es fertige
+        Streams kaum noch in höherer Auflösung gibt."""
+        candidates = [s for s in (progressive, separate) if s is not None]
+        if not candidates:
+            return None
+        if quality == "best" or not str(quality).rstrip("p").isdigit():
+            # Höchste Auflösung; bei Gleichstand der fertige Stream (kein Merge nötig)
+            return max(candidates, key=lambda s: (self._res_num(s), s is progressive))
+        target = int(str(quality).rstrip("p"))
+        within = [s for s in candidates if 0 < self._res_num(s) <= target]
+        if within:
+            return max(within, key=lambda s: (self._res_num(s), s is progressive))
+        # Alles liegt über dem Wunsch: das Kleinste nehmen
+        return min(candidates, key=lambda s: (self._res_num(s) or 10**6, s is not progressive))
+
     def _pick_progressive(self, yt, quality, fmt):
         if quality == "audio_only":
             return yt.streams.get_audio_only()
@@ -1835,8 +1857,8 @@ class DownloadService:
             below.sort(key=_h, reverse=True)  # höchste unter target
             return below[0]
 
-        # 3) Falls alles über target liegt: höchstes nehmen (Notfall, wird selten passieren)
-        return yt.streams.filter(adaptive=True, type="video").order_by("resolution").desc().first()
+        # 3) Alles liegt über dem Wunsch: das Kleinste nehmen (nie mehr als nötig)
+        return min(all_video, key=lambda s: _h(s) or 10**6)
 
     def _res_num(self, s):
         if not s: return 0

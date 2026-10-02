@@ -67,8 +67,10 @@
     routeDefinitions[$route.page]?.group === 'admin'
   );
 
-  // Einstellungen beim Start laden
-  loadSettings();
+  // Einstellungen beim Start laden; Seiten erscheinen erst danach, damit sie
+  // von Anfang an mit den gespeicherten Werten arbeiten.
+  let settingsReady = $state(false);
+  loadSettings().finally(() => { settingsReady = true; });
   let logVisible = $state(false);
   let offline = $state(false);
 
@@ -99,9 +101,11 @@
     <!-- Admin: komplett eigenes Layout, eigene Menüs, kein ActivityPanel -->
     <AdminLayout>
       {#snippet children()}
-        {#key $route.page + ($route.id || '')}
-          <CurrentPage />
-        {/key}
+        {#if settingsReady}
+          {#key $route.page + ($route.id || '')}
+            <CurrentPage />
+          {/key}
+        {/if}
       {/snippet}
     </AdminLayout>
   {:else}
@@ -110,9 +114,11 @@
       <Sidebar onToggleLog={() => logVisible = !logVisible} logActive={logVisible} />
       <div class="content-area">
         <main class="main-content">
-          {#key $route.page + ($route.id || '')}
-            <CurrentPage />
-          {/key}
+          {#if settingsReady}
+            {#key $route.page + ($route.id || '')}
+              <CurrentPage />
+            {/key}
+          {/if}
         </main>
         <ActivityPanel />
       </div>

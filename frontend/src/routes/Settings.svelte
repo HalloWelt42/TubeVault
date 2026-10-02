@@ -8,7 +8,7 @@
   import { toast } from '../lib/stores/notifications.js';
   import { formatSize } from '../lib/utils/format.js';
   import { theme } from '../lib/stores/theme.js';
-  import { settings as globalSettings } from '../lib/stores/settings.js';
+  import { settings as globalSettings, reloadSettings } from '../lib/stores/settings.js';
   import { onMount } from 'svelte';
   import ApiEndpoints from '../lib/components/settings/ApiEndpoints.svelte';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
@@ -60,31 +60,10 @@
   let activeCategory = $state('scanner');
   let pollTimer = null;
 
-  const SETTING_DEFS = {
-    'rss.enabled': { label: 'Scanner aktiv', desc: 'Prüft automatisch alle abonnierten Kanäle auf neue Videos per RSS-Feed', type: 'toggle', category: 'scanner' },
-    'rss.interval': { label: 'Basis-Prüfintervall', desc: 'Startintervall für neue Abos. Verdoppelt sich bei jedem Poll ohne neue Videos (bis max 7 Tage). Neue Videos setzen auf diesen Wert zurück.', type: 'duration', category: 'scanner', min: 300, max: 86400 },
-    'rss.max_age_days': { label: 'Maximales Video-Alter', desc: 'Videos älter als X Tage werden ignoriert. YouTube-RSS liefert max. 15 Videos – bei inaktiven Kanälen können alle älter sein.', type: 'number', category: 'scanner', min: 7, max: 365, unit: 'Tage' },
-    'feed.hide_shorts': { label: 'Shorts ausblenden', desc: 'Shorts im Feed nicht anzeigen (über Typ-Filter erreichbar)', type: 'toggle', category: 'feed' },
-    'feed.auto_classify': { label: 'Auto-Erkennung (Short/Live)', desc: 'Neue RSS-Videos automatisch als Short oder Livestream klassifizieren', type: 'toggle', category: 'feed' },
-    'feed.auto_refresh': { label: 'Kanal-Rescan im Hintergrund', desc: 'Ältere Kanäle periodisch neu scannen (Metadaten, Avatare)', type: 'toggle', category: 'feed' },
-    'feed.refresh_interval_days': { label: 'Rescan-Intervall', desc: 'Wie oft Kanäle im Hintergrund re-gescannt werden', type: 'number', category: 'feed', min: 1, max: 30, unit: 'Tage' },
-    'rss.auto_download': { label: 'Auto-Download aktiv', desc: 'Neue Videos von Kanälen mit Auto-DL automatisch zur Queue', type: 'toggle', category: 'auto_dl' },
-    'rss.auto_quality': { label: 'Auto-Download Qualität', type: 'select', category: 'auto_dl', options: ['360p','480p','720p','1080p','best'] },
-    'rss.auto_dl_daily_limit': { label: 'Tageslimit', desc: 'Max. Auto-Downloads pro Tag (Schutz vor Massen-Downloads)', type: 'number', category: 'auto_dl', min: 1, max: 200, unit: 'pro Tag' },
-    'download.quality': { label: 'Standard-Qualität', desc: 'Voreinstellung für manuelle Downloads', type: 'select', category: 'download', options: ['360p','480p','720p','1080p','1440p','2160p','best'] },
-    'download.format': { label: 'Container-Format', type: 'select', category: 'download', options: ['mp4','mkv','webm'] },
-    'download.concurrent': { label: 'Gleichzeitige Downloads', desc: 'Neustart nötig bei Änderung (Server-Konfiguration)', type: 'number', category: 'download', min: 1, max: 5 },
-    'download.auto_thumbnail': { label: 'Thumbnail herunterladen', type: 'toggle', category: 'download' },
-    'download.auto_subtitle': { label: 'Untertitel herunterladen', type: 'toggle', category: 'download' },
-    'download.subtitle_lang': { label: 'Untertitel-Sprachen', desc: 'Kommagetrennt, z.B. de,en', type: 'text', category: 'download' },
-    'download.auto_chapters': { label: 'Kapitel speichern', type: 'toggle', category: 'download' },
-    'download.throttle_kbps': { label: 'Throttling (Bandbreiten-Limit)', desc: '0 = unlimitiert. Sonst Bandbreite in KB/s um YouTube-Bot-Erkennung zu entgehen (typisch 500-2000)', type: 'number', category: 'download', min: 0, max: 100000, unit: 'KB/s' },
-    'player.volume': { label: 'Standard-Lautstärke', type: 'number', category: 'player', min: 0, max: 100, unit: '%' },
-    'player.autoplay': { label: 'Autoplay', type: 'toggle', category: 'player' },
-    'player.speed': { label: 'Geschwindigkeit', type: 'select', category: 'player', options: ['0.5','0.75','1.0','1.25','1.5','1.75','2.0'] },
-    'player.save_position': { label: 'Position merken', desc: 'Wiedergabeposition beim Schließen speichern', type: 'toggle', category: 'player' },
-    'general.videos_per_page': { label: 'Videos pro Seite', type: 'number', category: 'general', min: 12, max: 96 },
-  };
+  // Die Regler kommen aus dem Einstellungs-Schema des Backends: dort stehen
+  // Art, Grenzen, Auswahl und Beschreibung - an einer Stelle für Datenbank,
+  // Prüfung und Oberfläche. Kein Regler ohne Wirkung, keiner ohne Schlüssel.
+  let schema = $state([]);
 
   const CATEGORIES = [
     { key: 'scanner', label: 'Scanner-Status', icon: 'fa-satellite-dish', isLive: true },
@@ -109,7 +88,8 @@
   async function load() {
     loading = true;
     try {
-      const [groups, stats] = await Promise.all([api.getSettings(), api.getStats()]);
+      const [groups, stats, defs] = await Promise.all([api.getSettings(), api.getStats(), api.getSettingsSchema()]);
+      schema = defs;
       const flat = {};
       for (const g of groups) for (const s of g.settings) flat[s.key] = s.value;
       settings = flat;
@@ -123,13 +103,18 @@
   }
 
   async function save(key, value) {
+    const before = settings[key];
     settings[key] = String(value);
     try {
-      await api.updateSetting(key, String(value));
-      globalSettings.update(s => ({ ...s, [key]: String(value) }));
+      // Das Backend prüft und liefert den gespeicherten Wert zurück
+      const res = await api.updateSetting(key, String(value));
+      settings[key] = res.value;
+      globalSettings.update(s => ({ ...s, [key]: res.value }));
       toast.success('Gespeichert');
+    } catch (e) {
+      settings[key] = before;   // abgelehnter Wert darf nicht stehen bleiben
+      toast.error(e.message);
     }
-    catch (e) { toast.error(e.message); }
   }
 
   function toggleSetting(key) { save(key, settings[key] === 'true' ? 'false' : 'true'); }
@@ -194,6 +179,7 @@
       await loadBackups();
       // Settings neu laden
       await load();
+      await reloadSettings();
     } catch (e) { toast.error(e.message); }
     restoringBackup = false;
   }
@@ -208,6 +194,7 @@
       toast.success(`Aus Upload wiederhergestellt! Sicherheits-Backup: ${res.safety_backup}`);
       await loadBackups();
       await load();
+      await reloadSettings();
     } catch (err) { toast.error(err.message); }
     restoringBackup = false;
     e.target.value = '';
@@ -216,13 +203,16 @@
 
   async function resetAll() {
     if (!await confirmRef.ask('Einstellungen zurücksetzen?', 'Alle Werte gehen auf Default.', { confirmLabel: 'Zurücksetzen' })) return;
-    try { await api.resetSettings(); toast.success('Zurückgesetzt'); await load(); }
+    try { await api.resetSettings(); toast.success('Zurückgesetzt'); await load(); await reloadSettings(); }
     catch (e) { toast.error(e.message); }
   }
 
   function settingsFor(catKey) {
-    return Object.entries(SETTING_DEFS).filter(([_, d]) => d.category === catKey)
-      .map(([key, def]) => ({ key, ...def, value: settings[key] ?? '' }));
+    return schema.filter(d => d.section === catKey).map(d => ({
+      key: d.key, label: d.label, desc: d.description, type: d.kind,
+      min: d.min, max: d.max, unit: d.unit, options: d.options,
+      value: settings[d.key] ?? d.default,
+    }));
   }
 
   function fmtDur(secs) {
@@ -328,7 +318,7 @@
         <div class="sub-section">
           <h4><i class="fa-solid fa-robot"></i> Auto-Download</h4>
           <div class="stat-pills">
-            <span class="pill ok">Aktiv</span>
+            <span class="pill ok">Aktiv für {scheduler.auto_download.channels} {scheduler.auto_download.channels === 1 ? 'Kanal' : 'Kanäle'}</span>
             <span class="pill">{scheduler.auto_download.today_count} / {scheduler.auto_download.daily_limit} heute</span>
           </div>
         </div>

@@ -167,9 +167,8 @@
     downloading = { ...downloading };
     try {
       await api.addDownload({
+        // Qualität und Nur-Audio: Kanal bzw. Einstellungen (Backend löst auf)
         url: `https://www.youtube.com/watch?v=${video.video_id}`,
-        quality: channel?.download_quality || 'best',
-        audio_only: channel?.audio_only || false,
       });
       toast.success(`"${video.title?.substring(0, 40)}…" zur Queue`);
     } catch (e) { toast.error(e.message); }
@@ -332,7 +331,7 @@
         .map(vid => `https://www.youtube.com/watch?v=${vid}`)
         .slice(0, slotsLeft);
 
-      const res = await api.addBatchDownload({ urls, audio_only: channel?.audio_only || false });
+      const res = await api.addBatchDownload({ urls });
       const queued = (res.results || []).filter(r => r.status !== 'error').length;
       const errors = (res.results || []).filter(r => r.status === 'error').length;
 
@@ -366,7 +365,7 @@
         return;
       }
       const urls = res.video_ids.map(id => `https://www.youtube.com/watch?v=${id}`);
-      const result = await api.addBatchDownload({ urls, audio_only: channel?.audio_only || false });
+      const result = await api.addBatchDownload({ urls });
       const queued = result.results?.filter(r => r.status === 'queued').length || urls.length;
       missingCount = Math.max(0, res.total_missing - queued);
       const typeLabel = videoType === 'short' ? 'Shorts' : videoType === 'live' ? 'Live' : 'Videos';
@@ -575,7 +574,7 @@
       {:else if channel.last_scanned}
         <span class="scan-hint">Letzter Scan: {formatDateRelative(channel.last_scanned)}</span>
       {/if}
-      {#if channel.download_quality && channel.download_quality !== '720p'}
+      {#if channel.download_quality}
         <span class="quality-tag">Qualität: {channel.download_quality}</span>
       {/if}
       {#if channel.audio_only}

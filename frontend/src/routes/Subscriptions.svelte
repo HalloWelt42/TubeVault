@@ -23,7 +23,8 @@
   let channelInput = $state('');
   let batchInput = $state('');
   let autoDownload = $state(false);
-  let defaultQuality = $state('720p');
+  // leer = Kanal erbt die Qualität aus den Einstellungen
+  let defaultQuality = $state('');
   let loading = $state(false);
   let importing = $state(false);
   let filterMode = $state('all');
@@ -148,7 +149,7 @@
       await api.addSubscription({
         channel_id: isUrl ? input : cid,
         auto_download: autoDownload,
-        download_quality: defaultQuality,
+        download_quality: defaultQuality || null,
       });
       toast.success('Abo hinzugefügt – Avatar wird geladen…');
       channelInput = '';
@@ -178,10 +179,11 @@
   }
 
   async function updateQuality(sub, quality) {
-    await api.updateSubscription(sub.id, { download_quality: quality });
+    const value = quality || null;   // leer = Standard aus den Einstellungen
+    await api.updateSubscription(sub.id, { download_quality: value });
     const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], download_quality: quality }; subs = [...subs]; }
-    toast.info(`${sub.channel_name}: Qualität: ${quality}`);
+    if (i >= 0) { subs[i] = { ...subs[i], download_quality: value }; subs = [...subs]; }
+    toast.info(`${sub.channel_name}: Qualität: ${value || 'Standard aus den Einstellungen'}`);
   }
 
   async function toggleAudioOnly(sub) {
@@ -469,6 +471,7 @@
       <div class="import-actions">
         <label class="check"><input type="checkbox" bind:checked={autoDownload}/> Auto-Download</label>
         <select class="quality-select" bind:value={defaultQuality}>
+          <option value="">Standard (Einstellungen)</option>
           {#each VIDEO_QUALITIES as q}
             <option value={q.value}>{q.label}</option>
           {/each}
@@ -582,8 +585,10 @@
       {#if sub.auto_download}
         <div class="card-settings">
           {#if !sub.audio_only}
-            <select class="quality-select" value={sub.download_quality || '720p'}
+            <select class="quality-select" value={sub.download_quality || ''}
+                    title="Qualität für Downloads dieses Kanals"
                     onchange={(e) => updateQuality(sub, e.target.value)}>
+              <option value="">Standard (Einstellungen)</option>
               {#each VIDEO_QUALITIES as q}
                 <option value={q.value}>{q.label}</option>
               {/each}
