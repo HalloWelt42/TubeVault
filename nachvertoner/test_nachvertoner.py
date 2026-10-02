@@ -103,7 +103,7 @@ def make(tmp_path):
         stage = Stage(clip, job_states, **kwargs)
         settings = nv.Settings(
             tubevault_url="http://pi", dub_url="http://dub", worker_name="testmac",
-            work_dir=tmp_path / "arbeit", default_source_language="en",
+            work_dir=tmp_path / "arbeit",
             poll_seconds=0, progress_seconds=0)
         worker = nv.Nachvertoner(settings)
         worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(stage.pi))
@@ -229,3 +229,15 @@ def test_ohne_untertitel_wird_der_grund_gemeldet(make):
     assert worker.step() is True
     assert "source_segments" not in stage.created_payload["payload"]
     assert any("Die Quelle hat keine Untertitel" in (p.get("note") or "") for p in stage.progress)
+
+
+def test_unbekannte_sprache_erkennt_der_dienst(make):
+    """Kennt weder TubeVault noch ein Transkript die Sprache, rät der
+    Nachvertoner nicht, sondern lässt den Dienst sie erkennen; das Ergebnis
+    meldet sie als Kürzel an TubeVault zurück."""
+    done = {"status": "done", "result": {"video_id": "f-ergebnis", "coverage_failed": 0,
+                                         "source_language": "german"}}
+    worker, stage = make([done], source_language=None)
+    assert worker.step() is True
+    assert stage.created_payload["payload"]["source_language"] == "auto"
+    assert b'name="source_language"\r\n\r\nde' in stage.result_upload

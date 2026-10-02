@@ -50,6 +50,7 @@ log = logging.getLogger("nachvertoner")
 
 # Sprachkürzel von TubeVault → Sprachnamen des Vertonungsdienstes
 LANGUAGE_NAMES = {"en": "english", "de": "german", "fr": "french", "es": "spanish", "it": "italian"}
+LANGUAGE_CODES = {name: code for code, name in LANGUAGE_NAMES.items()}
 PHASE_LABELS = {
     "audio": "Ton auslesen", "transcribe": "Transkribieren", "speakers": "Sprecher erkennen",
     "translate": "Übersetzen", "voices": "Stimme vorbereiten", "speak": "Sprechen", "mux": "Zusammenfügen",
@@ -71,7 +72,6 @@ class Settings:
     dub_url: str
     worker_name: str
     work_dir: Path
-    default_source_language: str
     poll_seconds: int
     progress_seconds: int
 
@@ -88,7 +88,6 @@ class Settings:
             dub_url=raw["vertonungsdienst"]["url"].rstrip("/"),
             worker_name=raw.get("name") or socket.gethostname().split(".")[0],
             work_dir=work_dir,
-            default_source_language=raw["vertonungsdienst"].get("quellsprache", "en"),
             poll_seconds=int(raw.get("abfrage_sekunden", 60)),
             progress_seconds=int(raw.get("fortschritt_sekunden", 15)),
         )
@@ -215,8 +214,10 @@ class Nachvertoner:
             # Untertitel der Quelle ersparen dem Dienst das Transkribieren und
             # sagen zugleich, in welcher Sprache das Original gesprochen ist
             transcript = self.source_transcript(claimed, request_id)
-            source = (job.get("source_language") or (transcript or {}).get("language")
-                      or self.s.default_source_language).lower()
+            # Sprache des Originals: vom Auftrag, sonst vom Transkript, sonst
+            # erkennt der Dienst sie selbst ("auto"). Raten wäre falsch: ein
+            # deutsches Video als Englisch transkribiert ergibt Unsinn.
+            source = (job.get("source_language") or (transcript or {}).get("language") or "auto").lower()
             target = job["target_language"].lower()
             # source == target ist gewollt: neu sprechen mit anderer Stimme.
             # Der Dienst übersetzt dann nicht.
@@ -236,7 +237,7 @@ class Nachvertoner:
             original.unlink(missing_ok=True)
 
             payload = {
-                "source_language": LANGUAGE_NAMES.get(source, source),
+                "source_language": LANGUAGE_NAMES.get(source, source),   # "auto" bleibt "auto"
                 "target_language": LANGUAGE_NAMES.get(target, target),
                 "mode": "fixed", "voice_id": voice_id,
                 "num_speakers": 1,   # eine Stimme, keine Aufteilung nach Sprechern
@@ -265,6 +266,9 @@ class Nachvertoner:
             track = folder / f"{target}.m4a"
             run_ffmpeg("-i", str(dubbed), "-vn", "-c:a", "copy", str(track))
 
+            if source == "auto":
+                # Der Dienst hat die Sprache erkannt; TubeVault bekommt das Kürzel
+                source = LANGUAGE_CODES.get(str(result.get("source_language") or "").lower(), "")
             with track.open("rb") as fh:
                 done = self.pi.post(
                     claimed["result_url"], files={"file": (track.name, fh, "audio/mp4")},
