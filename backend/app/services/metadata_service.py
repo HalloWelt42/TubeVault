@@ -170,8 +170,8 @@ class MetadataService:
         offset = (page - 1) * per_page
         rows = await db.fetch_all(
             f"""SELECT v.*,
-                       (SELECT GROUP_CONCAT(a.language) FROM audio_tracks a
-                        WHERE a.video_id = v.id) AS extra_audio
+                       (SELECT GROUP_CONCAT(CASE WHEN a.origin = 'revoice' THEN 'neu' ELSE a.language END)
+                        FROM audio_tracks a WHERE a.video_id = v.id) AS extra_audio
                 FROM videos v {where}
                 ORDER BY {order_by}
                 LIMIT ? OFFSET ?""",
@@ -190,7 +190,9 @@ class MetadataService:
 
     @staticmethod
     def _with_extra_audio(video: dict) -> dict:
-        """Sprachkürzel der zusätzlichen Tonspuren als Liste (leer = nur Original)."""
+        """Zusätzliche Tonspuren als Liste (leer = nur Original): Sprachkürzel
+        einer Übersetzung ("de") oder "neu" für eine in der Originalsprache neu
+        gesprochene Spur."""
         video["extra_audio"] = [code for code in (video.get("extra_audio") or "").split(",") if code]
         return video
 

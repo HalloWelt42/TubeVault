@@ -207,4 +207,9 @@ async def test_gleiche_sprache_heisst_neu_gesprochen(client, videos, tmp_path):
             f"/api/dubbing/requests/{job['id']}/result",
             files={"file": ("de.m4a", fh, "audio/mp4")}, data={"source_language": "de"})
     assert r.status_code == 200, r.text
-    assert r.json()["track"]["label"] == "Deutsch (neu gesprochen)"
+    track = r.json()["track"]
+    assert track["label"] == "Deutsch (neu gesprochen)" and track["origin"] == "revoice"
+    # In der Videoliste unterscheidbar von einer Übersetzung nach Deutsch
+    from app.services.metadata_service import metadata_service
+    listed = {v["id"]: v["extra_audio"] for v in (await metadata_service.get_videos())["videos"]}
+    assert listed["de1"] == ["neu"]

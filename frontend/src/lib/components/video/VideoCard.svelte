@@ -78,8 +78,18 @@
       <span class="type-badge type-live"><i class="fa-solid fa-tower-broadcast"></i> Live</span>
     {/if}
     {#if video.extra_audio?.length}
-      <span class="audio-badge" title="Zusätzliche Tonspur: {video.extra_audio.join(', ').toUpperCase()} - in der Wiedergabe umschaltbar">
-        <i class="fa-solid fa-language"></i> {video.extra_audio.join(' ').toUpperCase()}
+      <span class="audio-badges">
+      {#each video.extra_audio as track}
+        {#if track === 'neu'}
+          <span class="audio-badge" title="In der Originalsprache mit anderer Stimme neu gesprochen - in der Wiedergabe umschaltbar">
+            <i class="fa-solid fa-microphone-lines"></i> neu gesprochen
+          </span>
+        {:else}
+          <span class="audio-badge" title="Übersetzte Tonspur ({track.toUpperCase()}) - in der Wiedergabe umschaltbar">
+            <i class="fa-solid fa-language"></i> {track.toUpperCase()}
+          </span>
+        {/if}
+      {/each}
       </span>
     {/if}
     <!-- Like/Dislike Thumbnail-Bar (Variante E) -->
@@ -154,8 +164,9 @@
     font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
     z-index: 1;
   }
+  .audio-badges { position: absolute; bottom: 8px; left: 8px; display: flex; gap: 4px; z-index: 1; }
   .audio-badge {
-    position: absolute; bottom: 8px; left: 8px; padding: 2px 6px; border-radius: 4px;
+    padding: 2px 6px; border-radius: 4px;
     background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 0.7rem; font-weight: 700;
     display: flex; align-items: center; gap: 4px; z-index: 1;
   }

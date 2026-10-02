@@ -25,6 +25,10 @@ from app.database import db
 
 logger = logging.getLogger(__name__)
 
+# Herkunft einer Tonspur
+ORIGIN_DUB = "dub"            # in eine andere Sprache übersetzt und gesprochen
+ORIGIN_REVOICE = "revoice"    # in der Originalsprache mit anderer Stimme neu gesprochen
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS audio_tracks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
