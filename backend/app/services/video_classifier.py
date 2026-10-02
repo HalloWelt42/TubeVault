@@ -127,19 +127,30 @@ async def settle_without_probe() -> int:
     return changed + cursor.rowcount
 
 
+# Was der Hintergrundlauf nachfragt: alle geladenen Videos und die Feed-Einträge,
+# die der Nutzer noch vor sich hat (aktiv oder "später", nicht älter als das
+# eingestellte Höchstalter). Der übrige Feed-Katalog (zehntausende alte
+# Einträge) wird geprüft, sobald ein Eintrag geladen oder der Kanal neu
+# gescannt wird - so bleibt die Zahl der Nachfragen bei der Quelle klein.
+_VIDEOS_TODO = (
+    f"COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live' "
+    "AND length(id) = 11")
+_FEED_TODO = (
+    f"COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live' "
+    "AND COALESCE(feed_status, 'active') IN ('active', 'later') "
+    "AND published >= date('now', '-' || COALESCE("
+    "(SELECT value FROM settings WHERE key = 'rss.max_age_days'), '90') || ' days')")
+
+
 async def _next_unverified() -> Optional[str]:
     """Nächste ungeprüfte ID: zuerst geladene Videos, dann Feed-Einträge."""
     row = await db.fetch_one(
-        f"""SELECT id FROM videos
-            WHERE COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live'
-              AND length(id) = 11
+        f"""SELECT id FROM videos WHERE {_VIDEOS_TODO}
             ORDER BY (video_type = 'short') DESC, created_at DESC LIMIT 1""")
     if row:
         return row["id"]
     row = await db.fetch_one(
-        f"""SELECT video_id FROM rss_entries
-            WHERE COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live'
-            ORDER BY published DESC LIMIT 1""")
+        f"SELECT video_id FROM rss_entries WHERE {_FEED_TODO} ORDER BY published DESC LIMIT 1")
     return row["video_id"] if row else None
 
 
@@ -215,12 +226,9 @@ async def set_manual(video_ids: list[str], video_type: str) -> int:
 
 
 async def pending() -> int:
-    videos = await db.fetch_val(
-        f"SELECT COUNT(*) FROM videos WHERE COALESCE(type_verified, 0) = {UNVERIFIED} "
-        "AND COALESCE(video_type, 'video') <> 'live' AND length(id) = 11") or 0
-    entries = await db.fetch_val(
-        f"SELECT COUNT(*) FROM rss_entries WHERE COALESCE(type_verified, 0) = {UNVERIFIED} "
-        "AND COALESCE(video_type, 'video') <> 'live'") or 0
+    """Wie viele Einträge der Hintergrundlauf noch bei der Quelle nachfragt."""
+    videos = await db.fetch_val(f"SELECT COUNT(*) FROM videos WHERE {_VIDEOS_TODO}") or 0
+    entries = await db.fetch_val(f"SELECT COUNT(*) FROM rss_entries WHERE {_FEED_TODO}") or 0
     return videos + entries
 
 
