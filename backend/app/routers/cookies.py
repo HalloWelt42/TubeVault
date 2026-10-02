@@ -9,9 +9,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from app.config import CONFIG_DIR
+
 router = APIRouter(prefix="/api/cookies", tags=["Cookies"])
 
-COOKIES_PATH = Path("/app/config/cookies.txt")
+COOKIES_PATH = CONFIG_DIR / "cookies.txt"
 
 
 def _status() -> dict:

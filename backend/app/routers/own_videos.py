@@ -997,7 +997,8 @@ async def delete_folder(session_id: int = Query(...), folder: str = Query(...)):
         )
 
     # Ordner entfernen wenn leer
-    scan_dir = Path("/app/data/scan")
+    from app.config import SCAN_DIR
+    scan_dir = SCAN_DIR
     folder_path = scan_dir / folder
     try:
         if folder_path.exists():

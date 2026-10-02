@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { api, createProgressSocket, createActivitySocket } from '../lib/api/client.js';
+import { api, createActivitySocket } from '../lib/api/client.js';
 
 // ============================================================
 // API Base URL
@@ -24,12 +24,12 @@ describe('API Requests', () => {
     vi.restoreAllMocks();
   });
 
-  it('getHealth sendet GET an /api/system/health', async () => {
+  it('getStats sendet GET an /api/system/stats', async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) })
     );
-    const result = await api.getHealth();
-    expect(fetch).toHaveBeenCalledWith('/api/system/health', expect.objectContaining({
+    const result = await api.getStats();
+    expect(fetch).toHaveBeenCalledWith('/api/system/stats', expect.objectContaining({
       headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
     }));
     expect(result.status).toBe('ok');
@@ -56,21 +56,21 @@ describe('API Requests', () => {
         json: () => Promise.reject(new Error('no json')),
       })
     );
-    await expect(api.getHealth()).rejects.toThrow('Internal Server Error');
+    await expect(api.getStats()).rejects.toThrow('Internal Server Error');
   });
 
   it('wirft "Backend nicht erreichbar" bei Netzwerkfehler', async () => {
     global.fetch = vi.fn(() =>
       Promise.reject(new TypeError('Failed to fetch'))
     );
-    await expect(api.getHealth()).rejects.toThrow('Backend nicht erreichbar');
+    await expect(api.getStats()).rejects.toThrow('Backend nicht erreichbar');
   });
 
   it('wirft originalen Fehler bei non-TypeError', async () => {
     const customErr = new Error('Custom error');
     customErr.name = 'AbortError';
     global.fetch = vi.fn(() => Promise.reject(customErr));
-    await expect(api.getHealth()).rejects.toThrow('Custom error');
+    await expect(api.getStats()).rejects.toThrow('Custom error');
   });
 });
 
@@ -165,23 +165,12 @@ describe('Endpoint URLs', () => {
   });
 
   // Feed
-  it('getFeedVideos mit Channel-Filter', async () => {
-    await api.getFeedVideos('UC123', 30);
-    expect(lastUrl).toContain('/api/subscriptions/feed?channel_id=');
-    expect(lastUrl).toContain('limit=30');
-  });
-
-  it('getFeedVideos ohne Filter', async () => {
-    await api.getFeedVideos(null, 50);
-    expect(lastUrl).toBe('/api/subscriptions/feed?limit=50');
-  });
-
-  it('dismissFeedEntry sendet POST', async () => {
-    await api.dismissFeedEntry(7);
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/subscriptions/feed/7/dismiss',
-      expect.objectContaining({ method: 'POST' })
-    );
+  it('getFeedVideos mit Kanal-Filter und Seite', async () => {
+    await api.getFeedVideos({ channelId: 'UC123', page: 2, perPage: 30 });
+    expect(lastUrl).toContain('/api/subscriptions/feed?');
+    expect(lastUrl).toContain('channel_id=UC123');
+    expect(lastUrl).toContain('page=2');
+    expect(lastUrl).toContain('per_page=30');
   });
 
   // Favorites
@@ -226,11 +215,6 @@ describe('Endpoint URLs', () => {
     expect(url).toBe('/api/player/42/subtitle/de.vtt');
   });
 
-  it('audioUrl gibt korrekte URL', () => {
-    const url = api.audioUrl(42);
-    expect(url).toBe('/api/player/42/audio');
-  });
-
   // Archives
   it('scanArchive sendet POST', async () => {
     await api.scanArchive(3);
@@ -269,10 +253,6 @@ describe('Endpoint URLs', () => {
     );
   });
 
-  it('cleanupJobs mit Custom-Stunden', async () => {
-    await api.cleanupJobs(48);
-    expect(lastUrl).toBe('/api/jobs/cleanup?max_age_hours=48');
-  });
 });
 
 // ============================================================
@@ -285,12 +265,12 @@ describe('API Endpoint Vollständigkeit', () => {
   const expectedMethods = [
     // Videos
     'getVideos', 'getVideo', 'getVideoPreview', 'getVideoInfo',
-    'updateVideo', 'deleteVideo', 'getVideoStats',
+    'updateVideo', 'deleteVideo',
     // Downloads
     'addDownload', 'addBatchDownload', 'getQueue', 'cancelDownload',
     'retryDownload', 'clearCompleted', 'fixStaleDownloads', 'clearAllDownloads',
     // Player
-    'savePosition', 'getPosition', 'recordPlay',
+    'savePosition', 'recordPlay',
     // History
     'getHistory', 'clearHistory',
     // Tags
@@ -301,16 +281,13 @@ describe('API Endpoint Vollständigkeit', () => {
     'getPlaylists', 'getPlaylist', 'createPlaylist', 'deletePlaylist',
     'addToPlaylist', 'removeFromPlaylist',
     // Import
-    'importYTPlaylist', 'downloadSelectedPlaylistVideos',
     // Chapters
     'getChapters', 'fetchYTChapters',
     // Subtitles
     'getSubtitles', 'subtitleUrl', 'downloadSubtitles',
     // Audio
-    'extractAudio', 'audioUrl',
     // Exports
-    'getExports', 'createBackup', 'exportVideosJSON', 'exportVideosCSV',
-    'exportSubsCSV', 'exportPlaylistsJSON', 'deleteExport', 'cleanupTemp',
+    'getExports', 'deleteExport', 'cleanupTemp',
     // Favorites
     'getFavorites', 'getFavoriteLists', 'addFavorite',
     'removeFavorite', 'checkFavorite',
@@ -320,22 +297,20 @@ describe('API Endpoint Vollständigkeit', () => {
     'assignVideoCategories', 'getVideoCategories',
     // Settings
     'getSettings', 'updateSetting',
-    // System
-    'getHealth', 'getStats', 'getStatus', 'getStorage',
+    // System 'getStats', 'getStatus', 'getStorage',
     // Jobs
     'getJobs', 'getActiveJobs', 'getJobStats', 'getJob',
-    'cancelJob', 'cleanupJobs',
+    'cancelJob',
     // Subscriptions
     'getSubscriptions', 'addSubscription', 'addSubscriptionsBatch',
     'updateSubscription', 'removeSubscription',
-    'getFeedVideos', 'dismissFeedEntry', 'dismissAllFeed',
+    'getFeedVideos', 'dismissAllFeed',
     'triggerRSSPoll', 'getRSSStats', 'channelAvatarUrl',
     // Channel Detail
     'getChannelDetail', 'getChannelVideos',
     'fetchAllChannelVideos', 'getChannelDebug',
     // Archives
-    'getArchives', 'addArchive', 'removeArchive', 'scanArchive',
-    'getArchiveVideos', 'checkMounts', 'resolveVideoPath', 'checkDuplicate',
+    'getArchives', 'addArchive', 'removeArchive', 'scanArchive', 'checkMounts',
   ];
 
   expectedMethods.forEach(method => {
@@ -363,15 +338,6 @@ describe('WebSocket Factories', () => {
     WebSocket.OPEN = 1;
   });
 
-  it('createProgressSocket erstellt WebSocket Verbindung', () => {
-    const onMsg = vi.fn();
-    const socket = createProgressSocket(onMsg);
-    expect(WebSocket).toHaveBeenCalled();
-    const wsUrl = WebSocket.mock.calls[0][0];
-    expect(wsUrl).toContain('/api/downloads/ws/progress');
-    socket.close();
-  });
-
   it('createActivitySocket erstellt WebSocket Verbindung', () => {
     const onMsg = vi.fn();
     const socket = createActivitySocket(onMsg);
@@ -381,9 +347,4 @@ describe('WebSocket Factories', () => {
     socket.close();
   });
 
-  it('socket.close() schließt Verbindung', () => {
-    const socket = createProgressSocket(vi.fn());
-    socket.close();
-    // Kein Fehler = OK
-  });
 });

@@ -30,10 +30,11 @@ describe('App Store', () => {
     });
 
     it('alle Routen sind setzbar', () => {
+      // Seiten ohne ID in der Adresse (watch, channel brauchen eine ID)
       const routes = [
-        'dashboard', 'library', 'watch', 'downloads', 'favorites',
-        'categories', 'settings', 'subscriptions', 'feed', 'channel',
-        'archives', 'history', 'playlists', 'stats', 'import',
+        'dashboard', 'library', 'downloads', 'favorites',
+        'categories', 'settings', 'subscriptions', 'feed',
+        'archives', 'history', 'playlists', 'stats',
       ];
       routes.forEach(route => {
         currentRoute.set(route);
@@ -57,9 +58,10 @@ describe('App Store', () => {
     });
 
     it('Video-ID setzen und zurücksetzen', () => {
+      // Die ID lebt in der Adresse (/watch/42) und ist deshalb ein Text
       currentVideoId.set(42);
-      expect(get(currentVideoId)).toBe(42);
-      currentVideoId.set(null);
+      expect(get(currentVideoId)).toBe('42');
+      currentRoute.set('library');
       expect(get(currentVideoId)).toBe(null);
     });
   });

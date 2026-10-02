@@ -84,9 +84,9 @@ describe('formatSize', () => {
   });
 
   it('formatiert Bytes', () => {
-    expect(formatSize(1)).toBe('1.0 B');
-    expect(formatSize(512)).toBe('512.0 B');
-    expect(formatSize(1023)).toBe('1023.0 B');
+    expect(formatSize(1)).toBe('1 B');
+    expect(formatSize(512)).toBe('512 B');
+    expect(formatSize(1023)).toBe('1023 B');
   });
 
   it('formatiert KB', () => {

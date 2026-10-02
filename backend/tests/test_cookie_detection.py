@@ -1,8 +1,10 @@
 """
 Cookie-Detection Tests.
 
-ytdlp_adapter._cookiefile() liest /app/config/cookies.txt wenn vorhanden
-und > 0 Bytes. Tests nutzen die conftest-Env-Variable TUBEVAULT_CONFIG_DIR.
+ytdlp_adapter._cookiefile() liest cookies.txt aus dem Konfigurationsordner
+(CONFIG_DIR), wenn vorhanden und > 0 Bytes. Die Tests arbeiten im
+Test-Konfigurationsordner aus conftest (TUBEVAULT_CONFIG_DIR) und fassen nie
+eine echte Cookie-Datei an.
 """
 import os
 from pathlib import Path
@@ -12,11 +14,10 @@ import pytest
 
 @pytest.fixture
 def cookies_path():
-    """Pfad zur cookies.txt aus Test-Config-Dir."""
-    # conftest setzt TUBEVAULT_CONFIG_DIR auf tmp dir
-    # _cookiefile() hardcodet aber /app/config/cookies.txt – wir müssen
-    # deshalb diesen Pfad mocken.
-    return Path("/app/config/cookies.txt")
+    """Pfad zur cookies.txt im Test-Konfigurationsordner."""
+    from app.config import CONFIG_DIR
+    assert "tubevault-tests-" in str(CONFIG_DIR), "Tests dürfen nur im Test-Ordner arbeiten"
+    return CONFIG_DIR / "cookies.txt"
 
 
 def test_no_cookies_file_returns_none(cookies_path):

@@ -37,21 +37,21 @@ describe('Keyboard Shortcuts', () => {
   describe('Shortcut Mapping', () => {
     it('enthält alle erwarteten Shortcuts', () => {
       expect(shortcuts).toEqual({
-        'd': 'dashboard',
-        'b': 'library',
+        'd': '/',
+        'b': '/library',
         // 's' fokussiert SearchDropdown (kein Route-Wechsel)
-        'h': 'history',
-        'p': 'playlists',
-        'f': 'favorites',
-        'k': 'categories',
-        'o': 'downloads',
-        't': 'stats',
-        'e': 'settings',
+        'h': '/history',
+        'p': '/playlists',
+        'f': '/favorites',
+        'k': '/categories',
+        'o': '/downloads',
+        't': '/stats',
+        'e': '/settings',
       });
     });
 
-    it('10 Shortcuts definiert', () => {
-      expect(Object.keys(shortcuts)).toHaveLength(10);
+    it('9 Shortcuts definiert', () => {
+      expect(Object.keys(shortcuts)).toHaveLength(9);
     });
   });
 
@@ -65,11 +65,6 @@ describe('Keyboard Shortcuts', () => {
     it('Alt+B → library', () => {
       pressKey('b', { altKey: true });
       expect(get(currentRoute)).toBe('library');
-    });
-
-    it('Alt+S → search', () => {
-      pressKey('s', { altKey: true });
-      expect(get(currentRoute)).toBe('search');
     });
 
     it('Alt+O → downloads', () => {

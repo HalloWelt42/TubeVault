@@ -22,6 +22,8 @@ Object.defineProperty(window, 'location', {
     port: '8032',
     href: 'http://localhost:8032/',
     origin: 'http://localhost:8032',
+    pathname: '/',
+    search: '',
   },
   writable: true,
 });

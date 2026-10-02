@@ -1,0 +1,26 @@
+#!/bin/bash
+# TubeVault pre-push hook
+# Vor jedem Push: Versionen stimmig, Backend-Tests, Frontend-Tests und Build.
+# Was hier scheitert, soll nicht auf dem Pi landen.
+
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+RED='\033[0;31m'
+NC='\033[0m'
+fail() { echo -e "${RED}❌ Push abgelehnt: $1${NC}"; exit 1; }
+
+scripts/check-version.sh > /dev/null || fail "Versionen laufen auseinander"
+
+if [ ! -x backend/.venv/bin/python ]; then
+  fail "Testumgebung fehlt. Einmalig anlegen: make -C backend venv"
+fi
+(cd backend && .venv/bin/python -m pytest tests/ -q) || fail "Backend-Tests"
+
+if [ ! -d frontend/node_modules ]; then
+  fail "Frontend-Pakete fehlen. Einmalig: npm --prefix frontend install"
+fi
+npm --prefix frontend test --silent || fail "Frontend-Tests"
+npm --prefix frontend run build --silent || fail "Frontend-Build"
+
+exit 0

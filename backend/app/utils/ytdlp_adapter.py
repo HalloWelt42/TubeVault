@@ -156,16 +156,21 @@ def _strategy_for_call(label: str = "") -> tuple[list[str], str]:
 #                        Eskalation eingesetzt – bei BOT-DETECTION oder
 #                        AGE-GATE im Retry. So brennen wir den Account
 #                        nicht in jedem Request.
-def _cookiefile() -> str | None:
-    """Anonyme Cookies. Default-Pfad."""
-    p = "/app/config/cookies.txt"
+def _config_file(name: str) -> str | None:
+    """Pfad einer nicht leeren Datei im Konfigurationsordner (CONFIG_DIR)."""
+    from app.config import CONFIG_DIR
+    p = str(CONFIG_DIR / name)
     return p if _os.path.isfile(p) and _os.path.getsize(p) > 0 else None
+
+
+def _cookiefile() -> str | None:
+    """Anonyme Cookies."""
+    return _config_file("cookies.txt")
 
 
 def _login_cookiefile() -> str | None:
     """Login-Cookies. Optional, wird nur bei Härtefällen eingesetzt."""
-    p = "/app/config/cookies-login.txt"
-    return p if _os.path.isfile(p) and _os.path.getsize(p) > 0 else None
+    return _config_file("cookies-login.txt")
 
 
 # Einmal beim Import loggen: ist POT-Provider erreichbar? sind Cookies da?
