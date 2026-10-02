@@ -62,7 +62,7 @@ async def test_speichern_prueft_grenzen(client, test_db):
 async def test_speichern_prueft_auswahl_und_schalter(client):
     assert (await client.put("/api/settings/download.quality", json={"value": "777p"})).status_code == 422
     assert (await client.put("/api/settings/download.quality", json={"value": "240p"})).status_code == 200
-    assert (await client.put("/api/settings/player.autoplay", json={"value": "vielleicht"})).status_code == 422
+    assert (await client.put("/api/settings/rss.enabled", json={"value": "vielleicht"})).status_code == 422
     assert (await client.put("/api/settings/download.subtitle_lang", json={"value": "DE, en"})).json()["value"] == "de,en"
 
 
@@ -88,6 +88,6 @@ async def test_schema_endpunkt(client):
 
 
 async def test_zuruecksetzen(client, test_db):
-    await client.put("/api/settings/player.volume", json={"value": "10"})
+    await client.put("/api/settings/general.videos_per_page", json={"value": "48"})
     await client.post("/api/settings/reset")
-    assert await test_db.fetch_val("SELECT value FROM settings WHERE key='player.volume'") == "80"
+    assert await test_db.fetch_val("SELECT value FROM settings WHERE key='general.videos_per_page'") == "24"

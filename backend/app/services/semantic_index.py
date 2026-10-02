@@ -8,7 +8,7 @@ inhaltlich verwandte Videos - auch wenn kein Wort übereinstimmt ("Brot
 backen" findet "Sauerteig ansetzen").
 
 Die Vektoren rechnet ein lokaler KI-Dienst mit OpenAI-kompatibler
-Schnittstelle (Einstellungen ai.url, ai.embedding_model). TubeVault
+Schnittstelle (Einstellung ai.url, Modell EMBEDDING_MODEL). TubeVault
 speichert sie und vergleicht selbst. Ist der Dienst aus oder nicht
 erreichbar, arbeitet die Suche unverändert als reine Wortsuche - nichts
 hängt davon ab.
@@ -66,15 +66,18 @@ _QUERY_TIMEOUT_S = 4            # die Suche wartet nicht lange auf die KI
 _AVAILABILITY_TTL_S = 60
 _IDLE_PAUSE_S = 300
 # Welche Videos gelten als inhaltlich verwandt? Zwei Bedingungen, beide nötig:
-#   1. Mindest-Ähnlichkeit (Einstellung ai.min_similarity). An echten Titeln
-#      gemessen (bge-m3): passende Treffer ab etwa 0,50, Zufallstreffer bei
-#      sinnlosen Anfragen bis etwa 0,48.
+#   1. Mindest-Ähnlichkeit MIN_SIMILARITY. An echten Titeln gemessen (bge-m3):
+#      passende Treffer ab etwa 0,50, Zufallstreffer bei sinnlosen Anfragen
+#      bis etwa 0,48.
 #   2. Das Video ragt aus der Masse heraus: mindestens MIN_Z
 #      Standardabweichungen über dem Durchschnitt aller Videos. Das fängt
 #      Anfragen ab, zu denen alles ein wenig passt.
 # Höchstens TOP_K Treffer.
 TOP_K = 80
+MIN_SIMILARITY = 0.5
 MIN_Z = 2.5
+# Modell des KI-Dienstes für die Einbettungen (mehrsprachig)
+EMBEDDING_MODEL = "text-embedding-bge-m3"
 SMALL_COLLECTION = 200   # darunter sagt die Streuung wenig
 
 _available: tuple[float, bool] = (0.0, False)
@@ -99,8 +102,7 @@ async def config() -> Optional[tuple[str, str]]:
     if (await _setting("ai.enabled")) != "true":
         return None
     url = (await _setting("ai.url")).strip().rstrip("/")
-    model = (await _setting("ai.embedding_model")).strip()
-    return (url, model) if url and model else None
+    return (url, EMBEDDING_MODEL) if url else None
 
 
 async def _embed(texts: list[str], url: str, model: str, timeout: float) -> list[list[float]]:
@@ -276,11 +278,7 @@ async def search(query: str) -> Optional[list[tuple[str, float]]]:
     scores = matrix @ q
     # In kleinen Beständen sagt die Streuung wenig; dort genügt "über dem Durchschnitt".
     z = MIN_Z if len(ids) >= SMALL_COLLECTION else 0.0
-    try:
-        min_similarity = float(await _setting("ai.min_similarity"))
-    except ValueError:
-        min_similarity = 0.5
-    floor = max(min_similarity, float(scores.mean()) + z * float(scores.std()))
+    floor = max(MIN_SIMILARITY, float(scores.mean()) + z * float(scores.std()))
     top = np.argsort(-scores)[:TOP_K]
     return [(ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 

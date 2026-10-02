@@ -57,7 +57,6 @@
   let restoringBackup = $state(false);
   let confirmRestore = $state(null);
 
-  let activeCategory = $state('scanner');
   let pollTimer = null;
 
   // Die Regler kommen aus dem Einstellungs-Schema des Backends: dort stehen
@@ -65,17 +64,6 @@
   // Prüfung und Oberfläche. Kein Regler ohne Wirkung, keiner ohne Schlüssel.
   let schema = $state([]);
 
-  const CATEGORIES = [
-    { key: 'scanner', label: 'Scanner-Status', icon: 'fa-satellite-dish', isLive: true },
-    { key: 'feed', label: 'Feed', icon: 'fa-rss' },
-    { key: 'auto_dl', label: 'Auto-Download', icon: 'fa-robot' },
-    { key: 'download', label: 'Downloads', icon: 'fa-download' },
-    { key: 'player', label: 'Player', icon: 'fa-play' },
-    { key: 'general', label: 'Allgemein', icon: 'fa-gear' },
-    { key: 'extensions', label: 'Erweiterungen', icon: 'fa-puzzle-piece' },
-    { key: 'api', label: 'Dienste & APIs', icon: 'fa-plug' },
-    { key: 'system', label: 'System', icon: 'fa-server' },
-  ];
 
   onMount(() => {
     load();
@@ -274,21 +262,30 @@
     <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Lade…</div>
   {:else}
 
-  <div class="cat-tabs">
-    {#each CATEGORIES as cat}
-      <button class="cat-tab" class:active={activeCategory === cat.key} onclick={() => activeCategory = cat.key}>
-        <i class="fa-solid {cat.icon}"></i> {cat.label}
-        {#if cat.isLive && scheduler?.running}<span class="live-dot"></span>{/if}
-      </button>
+  <div class="setting-card">
+    <div class="card-header"><i class="fa-solid fa-satellite-dish"></i><h3>Kanäle und Downloads</h3></div>
+    {#each settingsFor('channels') as item}
+      {@render settingRow(item)}
     {/each}
+    {#if shorts && shorts.confirmed_shorts > 0}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label" title="Gelöscht werden nur Videos, die die Quelle als Short bestätigt hat.{shorts.unverified > 0 ? ` ${shorts.unverified} Einträge werden noch geprüft und bleiben unangetastet.` : ''}">
+            Shorts im Bestand: {shorts.confirmed_shorts} ({formatSize(shorts.confirmed_bytes)}) <i class="fa-solid fa-circle-info row-info"></i>
+          </span>
+        </div>
+        <button class="action-btn danger" onclick={removeShorts} disabled={deletingShorts}>
+          <i class="fa-regular fa-trash-can"></i> {deletingShorts ? 'Wird gelöscht…' : 'Löschen'}
+        </button>
+      </div>
+    {/if}
   </div>
 
-  <!-- ═══ SCANNER LIVE STATUS ═══ -->
-  {#if activeCategory === 'scanner'}
-    <div class="setting-card">
+    <details class="setting-card fold">
+      <summary><i class="fa-solid fa-satellite-dish"></i> Stand der Kanalprüfung</summary>
       <div class="card-header">
         <i class="fa-solid fa-satellite-dish"></i>
-        <h3>RSS-Scanner</h3>
+        <h3>Kanalprüfung</h3>
         {#if scheduler?.running}
           <span class="status-pill active"><i class="fa-solid fa-clock"></i> Zeitgesteuert</span>
         {:else}
@@ -403,19 +400,40 @@
       {:else}
         <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Lade…</div>
       {/if}
+    </details>
+
+  <div class="setting-card">
+    <div class="card-header"><i class="fa-solid fa-display"></i><h3>Ansicht</h3></div>
+    {#each settingsFor('view') as item}
+      {@render settingRow(item)}
+    {/each}
+    <div class="setting-row">
+      <div class="setting-info"><span class="setting-label">Erscheinungsbild</span></div>
+      <div class="theme-toggle">
+        <button class="theme-btn" class:active={$theme === 'dark'} onclick={() => theme.set('dark')}><i class="fa-solid fa-moon"></i> Dunkel</button>
+        <button class="theme-btn" class:active={$theme === 'light'} onclick={() => theme.set('light')}><i class="fa-solid fa-sun"></i> Hell</button>
+      </div>
     </div>
+  </div>
 
-    <div class="setting-card">
-      <div class="card-header"><i class="fa-solid fa-sliders"></i><h3>Scanner-Einstellungen</h3></div>
-      {#each settingsFor('scanner') as item}
-        {@render settingRow(item)}
-      {/each}
-    </div>
+  <div class="setting-card">
+    <div class="card-header"><i class="fa-solid fa-puzzle-piece"></i><h3>Erweiterungen</h3></div>
+    {#each settingsFor('extensions') as item}
+      {@render settingRow(item)}
+    {/each}
+    {#if semantic?.enabled}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Stand der Bedeutungssuche</span>
+        </div>
+        <span class="action-hint">
+          KI-Dienst {semantic.available ? 'erreichbar' : 'nicht erreichbar - die Suche arbeitet als reine Wortsuche'} ·
+          {semantic.indexed.toLocaleString('de-DE')} Videos eingebettet{#if semantic.pending > 0}, {semantic.pending.toLocaleString('de-DE')} warten{/if}
+        </span>
+      </div>
+    {/if}
+  </div>
 
-  {:else if activeCategory === 'api'}
-    <ApiEndpoints />
-
-  {:else if activeCategory === 'system'}
     {#if systemStats}
     <div class="setting-card">
       <div class="card-header"><i class="fa-solid fa-server"></i><h3>System</h3></div>
@@ -436,13 +454,6 @@
       </div>
     </div>
     {/if}
-    <div class="setting-card">
-      <div class="card-header"><i class="fa-solid fa-palette"></i><h3>Erscheinungsbild</h3></div>
-      <div class="theme-toggle">
-        <button class="theme-btn" class:active={$theme === 'dark'} onclick={() => theme.set('dark')}><i class="fa-solid fa-moon"></i> Dunkel</button>
-        <button class="theme-btn" class:active={$theme === 'light'} onclick={() => theme.set('light')}><i class="fa-solid fa-sun"></i> Hell</button>
-      </div>
-    </div>
     <div class="setting-card">
       <div class="card-header"><i class="fa-solid fa-cookie-bite"></i><h3>YouTube Cookies (optional)</h3></div>
       <p class="card-desc">
@@ -478,8 +489,8 @@
       {/if}
     </div>
 
-    <div class="setting-card">
-      <div class="card-header"><i class="fa-solid fa-wrench"></i><h3>Wartung</h3></div>
+    <details class="setting-card fold">
+      <summary><i class="fa-solid fa-wrench"></i> Wartung</summary>
       <div class="action-row">
         <button class="action-btn accent" onclick={runFullCleanup} disabled={runningFullCleanup}>
           <i class="fa-solid {runningFullCleanup ? 'fa-spinner fa-spin' : 'fa-broom'}"></i>
@@ -503,11 +514,11 @@
           </div>
         </div>
       {/if}
-    </div>
 
-    <!-- Backup & Restore -->
-    <div class="setting-card">
-      <div class="card-header"><i class="fa-solid fa-box-archive"></i><h3>Backup & Restore</h3></div>
+    </details>
+
+    <details class="setting-card fold">
+      <summary><i class="fa-solid fa-box-archive"></i> Sicherung und Wiederherstellung</summary>
 
       <!-- Stats -->
       {#if backupStats}
@@ -572,7 +583,7 @@
       {:else}
         <p class="no-backups">Noch keine Backups vorhanden</p>
       {/if}
-    </div>
+    </details>
 
     <div class="setting-card danger-card">
       <div class="card-header"><i class="fa-solid fa-triangle-exclamation"></i><h3>Gefahrenzone</h3></div>
@@ -582,57 +593,18 @@
       </div>
     </div>
 
-  {:else}
-    {#each CATEGORIES.filter(c => c.key === activeCategory && !c.isLive && c.key !== 'system') as cat}
-      <div class="setting-card">
-        <div class="card-header"><i class="fa-solid {cat.icon}"></i><h3>{cat.label}</h3></div>
-        {#each settingsFor(cat.key) as item}
-          {@render settingRow(item)}
-        {/each}
-      </div>
-      {#if cat.key === 'extensions' && semantic?.enabled}
-        <div class="setting-card">
-          <div class="card-header"><i class="fa-solid fa-wand-magic-sparkles"></i><h3>Stand der Bedeutungssuche</h3></div>
-          <div class="action-row">
-            <span class="status-pill" class:active={semantic.available}>
-              <i class="fa-solid {semantic.available ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
-              KI-Dienst {semantic.available ? 'erreichbar' : 'nicht erreichbar'}
-            </span>
-            <span class="action-hint">
-              {semantic.indexed.toLocaleString('de-DE')} Videos eingebettet{#if semantic.pending > 0}, {semantic.pending.toLocaleString('de-DE')} warten{/if}
-              (Modell {semantic.model}).
-              {#if !semantic.available}Die Suche arbeitet solange als reine Wortsuche.{/if}
-            </span>
-          </div>
-        </div>
-      {/if}
-      {#if cat.key === 'feed' && shorts}
-        <div class="setting-card">
-          <div class="card-header"><i class="fa-solid fa-bolt"></i><h3>Shorts im Bestand</h3></div>
-          <div class="action-row">
-            <button class="action-btn danger" onclick={removeShorts} disabled={deletingShorts || shorts.confirmed_shorts === 0}>
-              <i class="fa-regular fa-trash-can"></i>
-              {deletingShorts ? 'Wird gelöscht…' : `${shorts.confirmed_shorts} bestätigte Shorts löschen`}
-            </button>
-            <span class="action-hint">
-              {shorts.confirmed_shorts} geladene Videos führt die Quelle als Short ({formatSize(shorts.confirmed_bytes)}).
-              {#if shorts.unverified > 0}
-                {shorts.unverified} Einträge werden im Hintergrund noch geprüft; sie bleiben bis dahin unangetastet.
-              {/if}
-            </span>
-          </div>
-        </div>
-      {/if}
-    {/each}
-  {/if}
+
+    <details class="setting-card fold">
+      <summary><i class="fa-solid fa-plug"></i> Dienste und Schnittstellen</summary>
+      <ApiEndpoints />
+    </details>
   {/if}
 </div>
 
 {#snippet settingRow(item)}
   <div class="setting-row">
-    <div class="setting-info">
-      <span class="setting-label">{item.label}</span>
-      {#if item.desc}<span class="setting-desc">{item.desc}</span>{/if}
+    <div class="setting-info" title={item.desc || ''}>
+      <span class="setting-label">{item.label}{#if item.desc} <i class="fa-solid fa-circle-info row-info"></i>{/if}</span>
     </div>
     <div class="setting-control">
       {#if item.type === 'toggle'}
@@ -661,18 +633,19 @@
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .settings-page { padding: 24px; max-width: none; }
+  .settings-page { padding: 20px 24px; max-width: 980px; }
   .page-title { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0 0 20px; display: flex; align-items: center; gap: 10px; }
   .page-title i { color: var(--accent-primary); font-size: 1.2rem; }
   .loading { text-align: center; padding: 48px; color: var(--text-tertiary); }
-  .cat-tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
-  .cat-tab { display: flex; align-items: center; gap: 6px; padding: 7px 14px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); font-size: 0.78rem; cursor: pointer; transition: all 0.15s; }
-  .cat-tab:hover { border-color: var(--accent-primary); color: var(--text-primary); }
-  .cat-tab.active { border-color: var(--accent-primary); background: var(--accent-muted); color: var(--accent-primary); font-weight: 600; }
-  .cat-tab i { font-size: 0.8rem; }
-  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; animation: pulse-dot 2s ease-in-out infinite; }
   @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-  .setting-card { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .setting-card { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
+  .fold > summary { cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 10px; list-style: none; }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::after { content: '▾'; font-size: 0.9rem; margin-left: auto; color: var(--text-tertiary); transition: transform 0.15s; }
+  .fold[open] > summary::after { transform: rotate(180deg); }
+  .fold[open] > summary { margin-bottom: 12px; }
+  .fold > summary i { color: var(--accent-primary); width: 20px; text-align: center; }
+  .row-info { font-size: 0.68rem; color: var(--text-tertiary); margin-left: 4px; }
   .danger-card { border-color: #ef444466; }
 
   /* Backup */
@@ -694,9 +667,9 @@
   .backup-btn.danger { color: var(--status-error); border-color: var(--status-error); }
   .backup-btn.danger:hover { background: var(--status-error); color: #fff; }
   .no-backups { font-size: 0.78rem; color: var(--text-tertiary); margin: 8px 0 0 0; }
-  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-primary); }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border-primary); }
   .card-header i { color: var(--accent-primary); font-size: 1rem; width: 20px; text-align: center; }
-  .card-header h3 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--text-primary); flex: 1; }
+  .card-header h3 { margin: 0; font-size: 0.88rem; font-weight: 600; color: var(--text-primary); flex: 1; }
   .status-pill { display: flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
   .status-pill.active { background: #22c55e20; color: #22c55e; }
   .status-pill.inactive { background: #ef444420; color: #ef4444; }
@@ -730,11 +703,10 @@
   .up-meta { font-size: 0.72rem; color: var(--text-tertiary); }
   .up-err { display: block; font-size: 0.68rem; color: #ef4444; margin-top: 3px; font-family: monospace; word-break: break-all; }
   .text-err { color: #ef4444; }
-  .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border-primary); }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 5px 0; border-bottom: 1px solid var(--border-primary); min-height: 38px; }
   .setting-row:last-of-type { border-bottom: none; }
   .setting-info { flex: 1; min-width: 0; }
   .setting-label { display: block; font-size: 0.88rem; color: var(--text-primary); font-weight: 500; }
-  .setting-desc { display: block; font-size: 0.75rem; color: var(--text-tertiary); margin-top: 2px; line-height: 1.4; }
   .setting-control { flex-shrink: 0; }
   .toggle { position: relative; width: 44px; height: 24px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 12px; cursor: pointer; transition: all 0.2s; padding: 0; }
   .toggle.on { background: var(--accent-primary); border-color: var(--accent-primary); }
@@ -769,7 +741,6 @@
   .sys-label { color: var(--text-secondary); }
   .sys-value { color: var(--text-primary); font-weight: 500; font-family: monospace; }
   @media (max-width: 600px) {
-    .cat-tabs { overflow-x: auto; flex-wrap: nowrap; }
     .setting-row { flex-direction: column; align-items: flex-start; gap: 8px; }
     .live-grid { grid-template-columns: 1fr; }
     .sys-grid { grid-template-columns: 1fr; }

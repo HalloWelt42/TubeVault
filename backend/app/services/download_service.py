@@ -1068,8 +1068,7 @@ class DownloadService:
             )
 
             # Kapitel speichern (pytubefix chapters) – NACH video INSERT
-            auto_chapters = await db.fetch_val("SELECT value FROM settings WHERE key = 'download.auto_chapters'")
-            if auto_chapters != "false" and meta.get("chapters"):
+            if meta.get("chapters"):
                 for ch in meta["chapters"]:
                     await db.execute(
                         """INSERT OR IGNORE INTO chapters (video_id, title, start_time, end_time, source)

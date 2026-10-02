@@ -18,7 +18,6 @@ CH = "UCkanal0000000000000001"
 @pytest.fixture
 async def channel(test_db, set_setting):
     await set_setting("download.quality", "1080p")
-    await set_setting("rss.auto_quality", "480p")
 
     async def _make(quality=None, audio_only=0):
         await test_db.execute(
@@ -36,7 +35,8 @@ async def test_standard_fuer_handstart(channel):
 
 async def test_standard_fuer_automatik(channel):
     eff = await download_options.effective(VID, {"origin": "auto"})
-    assert (eff.quality, eff.quality_source) == ("480p", "standard")
+    # Automatische Downloads haben keine eigene Qualität mehr
+    assert (eff.quality, eff.quality_source) == ("1080p", "standard")
 
 
 async def test_kanal_schlaegt_standard(channel):
@@ -49,7 +49,7 @@ async def test_kanal_schlaegt_standard(channel):
 async def test_kanal_ohne_qualitaet_erbt(channel):
     await channel(quality=None)
     assert (await download_options.effective(VID, {})).quality == "1080p"
-    assert (await download_options.effective(VID, {"origin": "auto"})).quality == "480p"
+    assert (await download_options.effective(VID, {"origin": "auto"})).quality == "1080p"
 
 
 async def test_auftrag_schlaegt_kanal(channel):
@@ -71,11 +71,10 @@ async def test_nur_audio_ausdruecklich_abgewaehlt(channel):
 
 
 async def test_thumbnail_und_untertitel_aus_einstellungen(channel, set_setting):
-    await set_setting("download.auto_thumbnail", "false")
     await set_setting("download.auto_subtitle", "true")
     await set_setting("download.subtitle_lang", "de, en")
     eff = await download_options.effective(VID, {})
-    assert eff.download_thumbnail is False
+    assert eff.download_thumbnail is True      # Vorschaubild gehört immer dazu
     assert eff.subtitle_langs == ["de", "en"]
 
     eff = await download_options.effective(VID, {"download_thumbnail": True, "subtitle_lang": "fr"})

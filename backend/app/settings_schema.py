@@ -12,7 +12,8 @@ Regeln:
   - Was hier steht, hat einen Verbraucher im Code. Kein Eintrag ohne Wirkung.
   - Standardwerte, Grenzen und Auswahllisten stehen nur hier; Datenbank
     (DEFAULT_SETTINGS), Prüfung beim Speichern und Oberfläche leiten sich ab.
-  - section = Reiter der Einstellungsseite; None = wird an anderer Stelle
+  - section = Block der Einstellungsseite (channels, view, extensions);
+    None = wird an anderer Stelle
     bedient (z.B. Drosselung auf der Jobs-Seite), aber hier geprüft.
 """
 from typing import Literal, Optional
@@ -43,69 +44,52 @@ class SettingDef(BaseModel):
 
 SETTINGS: list[SettingDef] = [
     # ── Scanner ───────────────────────────────────────────────────────
-    SettingDef(key="rss.enabled", default="true", kind="toggle", category="rss", section="scanner",
+    SettingDef(key="rss.enabled", default="true", kind="toggle", category="rss", section="channels",
                label="Scanner aktiv",
                description="Prüft automatisch alle abonnierten Kanäle auf neue Videos."),
-    SettingDef(key="rss.interval", default="1800", kind="duration", category="rss", section="scanner",
+    SettingDef(key="rss.interval", default="1800", kind="duration", category="rss", section="channels",
                min=300, max=86400, label="Basis-Prüfintervall",
                description="Startintervall für neue Abos. Verdoppelt sich bei jeder Prüfung ohne neue "
                            "Videos bis zum längsten Prüfintervall. Neue Videos setzen auf diesen Wert "
                            "zurück."),
     SettingDef(key="rss.max_interval", default="86400", kind="duration", category="rss",
-               section="scanner", min=1800, max=604800, label="Längstes Prüfintervall",
+               section="channels", min=1800, max=604800, label="Längstes Prüfintervall",
                description="So lange bleibt ein ruhiger Kanal höchstens ungeprüft. Ein neues Video "
                            "erscheint spätestens nach dieser Zeit im Feed."),
-    SettingDef(key="rss.max_age_days", default="90", kind="number", category="rss", section="scanner",
+    SettingDef(key="rss.max_age_days", default="90", kind="number", category="rss", section="channels",
                min=7, max=365, unit="Tage", label="Maximales Video-Alter",
                description="Bei der Prüfung auf neue Videos werden ältere Einträge übergangen."),
     # ── Feed ──────────────────────────────────────────────────────────
-    SettingDef(key="shorts.exclude", default="false", kind="toggle", category="feed", section="feed",
+    SettingDef(key="shorts.exclude", default="false", kind="toggle", category="feed", section="channels",
                label="Shorts ausschließen",
                description="Shorts erscheinen nirgends (Feed, Bibliothek, Archiv, Suche) und werden "
                            "nicht automatisch geladen. Was ein Short ist, bestätigt die Quelle - "
                            "die Dauer allein entscheidet nicht."),
     # ── Auto-Download ─────────────────────────────────────────────────
-    SettingDef(key="rss.auto_quality", default="720p", kind="select", category="rss", section="auto_dl",
-               options=VIDEO_QUALITIES, label="Qualität für automatische Downloads",
-               description="Gilt für Auto-Download und Drip bei Kanälen ohne eigene Qualität."),
     SettingDef(key="rss.auto_dl_daily_limit", default="20", kind="number", category="rss",
-               section="auto_dl", min=1, max=200, unit="pro Tag", label="Tageslimit",
+               section="channels", min=1, max=200, unit="pro Tag", label="Tageslimit",
                description="Höchstzahl automatischer Downloads pro Tag (Schutz vor Massen-Downloads)."),
     # ── Downloads ─────────────────────────────────────────────────────
     SettingDef(key="download.quality", default="720p", kind="select", category="download",
-               section="download", options=VIDEO_QUALITIES, label="Standard-Qualität",
-               description="Für von Hand gestartete Downloads, wenn weder der Auftrag noch der Kanal "
-                           "eine Qualität vorgibt."),
-    SettingDef(key="download.auto_thumbnail", default="true", kind="toggle", category="download",
-               section="download", label="Thumbnail herunterladen"),
+               section="channels", options=VIDEO_QUALITIES, label="Standard-Qualität",
+               description="Gilt für alle Downloads, wenn weder der Auftrag noch der Kanal eine "
+                           "Qualität vorgibt."),
     SettingDef(key="download.auto_subtitle", default="false", kind="toggle", category="download",
-               section="download", label="Untertitel herunterladen"),
+               section="channels", label="Untertitel herunterladen"),
     SettingDef(key="download.subtitle_lang", default="de,en", kind="text", category="download",
-               section="download", label="Untertitel-Sprachen",
+               section="channels", label="Untertitel-Sprachen",
                description="Kommagetrennt, z.B. de,en. Alle genannten Sprachen werden geladen."),
-    SettingDef(key="download.auto_chapters", default="true", kind="toggle", category="download",
-               section="download", label="Kapitel speichern"),
     SettingDef(key="download.throttle_kbps", default="0", kind="number", category="download",
-               section="download", min=0, max=100000, unit="KB/s", label="Bandbreiten-Limit",
+               section="channels", min=0, max=100000, unit="KB/s", label="Bandbreiten-Limit",
                description="0 = unbegrenzt. Wirkt nicht, solange auf der Jobs-Seite die Drosselung "
                            "in Echtzeit eingeschaltet ist."),
     SettingDef(key="download.throttle_realtime", default="false", kind="toggle", category="download",
                label="Drosselung in Echtzeit"),
     SettingDef(key="download.cooldown_base_s", default="30", kind="number", category="download",
                min=5, max=3600, unit="s", label="Pause zwischen Downloads"),
-    # ── Player ────────────────────────────────────────────────────────
-    SettingDef(key="player.volume", default="80", kind="number", category="player", section="player",
-               min=0, max=100, unit="%", label="Standard-Lautstärke"),
-    SettingDef(key="player.autoplay", default="false", kind="toggle", category="player",
-               section="player", label="Autoplay"),
-    SettingDef(key="player.speed", default="1.0", kind="select", category="player", section="player",
-               options=["0.5", "0.75", "1.0", "1.25", "1.5", "1.75", "2.0"], label="Geschwindigkeit"),
-    SettingDef(key="player.save_position", default="true", kind="toggle", category="player",
-               section="player", label="Position merken",
-               description="Wiedergabeposition speichern und beim nächsten Öffnen dort fortsetzen."),
     # ── Allgemein ─────────────────────────────────────────────────────
     SettingDef(key="general.videos_per_page", default="24", kind="number", category="general",
-               section="general", min=12, max=96, label="Videos pro Seite",
+               section="view", min=12, max=96, label="Videos pro Seite",
                description="So viele Videos lädt eine Liste je Schritt nach."),
     # ── Erweiterungen ─────────────────────────────────────────────────
     SettingDef(key="dub.enabled", default="false", kind="toggle", category="dub",
@@ -121,13 +105,6 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="ai.url", default="", kind="text", category="ai", section="extensions",
                label="Adresse des KI-Dienstes",
                description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.178.20:1234/v1"),
-    SettingDef(key="ai.embedding_model", default="text-embedding-bge-m3", kind="text", category="ai",
-               section="extensions", label="Modell für Einbettungen"),
-    SettingDef(key="ai.min_similarity", default="0.5", kind="number", category="ai",
-               section="extensions", min=0.2, max=0.9, step=0.01,
-               label="Mindest-Ähnlichkeit der Bedeutungssuche",
-               description="Ab welcher Ähnlichkeit ein Video als inhaltlich verwandt gilt. Niedriger "
-                           "findet mehr, aber auch Unpassendes; höher ist strenger."),
     # ── System ────────────────────────────────────────────────────────
     SettingDef(key="archive.mount_check_interval", default="30", kind="number", category="archive",
                min=5, max=3600, unit="s", label="Prüfintervall für externe Archive"),
@@ -152,6 +129,15 @@ REMOVED_KEYS = [
     "dub.voice",                   # Stimme und Sprache wählt man je Video
     "dub.target_language",
     "dub.subtitles",
+    "rss.auto_quality",            # es gilt die Standard-Qualität bzw. die des Kanals
+    "download.auto_thumbnail",     # Vorschaubild und Kapitel werden immer gespeichert
+    "download.auto_chapters",
+    "player.volume",               # der Player merkt sich die letzte Lautstärke
+    "player.autoplay",
+    "player.speed",
+    "player.save_position",        # die Position wird immer gemerkt
+    "ai.embedding_model",          # fest (semantic_index.EMBEDDING_MODEL)
+    "ai.min_similarity",
 ]
 
 

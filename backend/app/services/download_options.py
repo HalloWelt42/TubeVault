@@ -91,13 +91,12 @@ async def effective(video_id: str, requested: dict | None) -> EffectiveOptions:
     elif channel.get("download_quality"):
         quality, source = channel["download_quality"], "kanal"
     else:
-        key = "rss.auto_quality" if origin == "auto" else "download.quality"
-        quality, source = await _setting(key), "standard"
+        quality, source = await _setting("download.quality"), "standard"
 
     if requested.get("download_thumbnail") is not None:
         download_thumbnail = bool(requested["download_thumbnail"])
     else:
-        download_thumbnail = (await _setting("download.auto_thumbnail")) == "true"
+        download_thumbnail = True
 
     if requested.get("subtitle_lang"):
         subtitle_langs = [requested["subtitle_lang"]]

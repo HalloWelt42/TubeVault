@@ -5,6 +5,7 @@
   import { settings } from '../lib/stores/settings.js';
   import { dubbingEnabled } from '../lib/utils/dubbingActions.js';
   import DubDialog from '../lib/components/watch/DubDialog.svelte';
+  import { keepVolume } from '../lib/utils/playerVolume.js';
   let dubRef;
   let confirmRef;
   import { route, navigate, updateParams } from '../lib/router/router.js';
@@ -319,11 +320,7 @@
     if (!video || positionRestored) return;
     positionRestored = true;
 
-    // Player-Einstellungen anwenden
-    if (videoEl) {
-      videoEl.volume = getSettingNum('player.volume', 80) / 100;
-      videoEl.playbackRate = getSettingNum('player.speed', 1.0);
-    }
+    if (videoEl) keepVolume(videoEl);
 
     const lastPos = video.last_position || 0;
     const q = $playlistQueue;
@@ -334,20 +331,17 @@
       videoEl.currentTime = urlTime;
     } else if (q.active) {
       if (videoEl) videoEl.currentTime = 0;
-    } else if (getSettingBool('player.save_position', true)
-               && lastPos > 5 && videoEl && video.duration && lastPos < video.duration - 10) {
+    } else if (lastPos > 5 && videoEl && video.duration && lastPos < video.duration - 10) {
       videoEl.currentTime = lastPos;
       toast.info(`Fortgesetzt bei ${formatDuration(lastPos)}`);
     }
 
-    // Autoplay: immer wenn Playlist-Queue aktiv, sonst nach Einstellung
-    if ((q.active || getSettingBool('player.autoplay')) && videoEl) {
+    // In einer laufenden Playlist geht es von selbst weiter
+    if (q.active && videoEl) {
       videoEl.play().catch(() => {});
     }
 
-    if (getSettingBool('player.save_position', true)) {
-      startPositionSaving();
-    }
+    startPositionSaving();
   }
 
   function startPositionSaving() {
@@ -361,7 +355,6 @@
 
   async function saveCurrentPosition() {
     if (!videoEl || !video) return;
-    if (!getSettingBool('player.save_position', true)) return;
     const pos = videoEl.currentTime;
     if (pos < 2) return;
     try { await api.savePosition(video.id, pos); } catch {}

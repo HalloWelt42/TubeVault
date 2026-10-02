@@ -1,12 +1,12 @@
 <!--
   Wiedergabe: Player oben, darunter das Nötigste (Titel, Kanal, Favorit,
-  Kapitel, Beschreibung). Die Position wird gemerkt und fortgesetzt, wenn die
-  Einstellung "Position merken" eingeschaltet ist.
+  Kapitel, Beschreibung). Die Position wird gemerkt und fortgesetzt.
+  Im Querformat füllt ein laufendes Video den ganzen Bildschirm.
 -->
 <script>
+  import { keepVolume } from '../../lib/utils/playerVolume.js';
   import { api } from '../../lib/api/client.js';
   import { formatDuration, formatDateRelative } from '../../lib/utils/format.js';
-  import { getSettingBool, getSettingNum } from '../../lib/stores/settings.js';
   import { back } from '../router.js';
   import { say } from '../notice.js';
   import HoldButton from '../parts/HoldButton.svelte';
@@ -33,7 +33,6 @@
   let playRecorded = false;
   let saveTimer = null;
 
-  const remember = () => getSettingBool('player.save_position', true);
   let isLongDescription = $derived(
     (video?.description || '').length > LONG_DESCRIPTION_CHARS
     || (video?.description || '').split('\n').length > 4
@@ -55,21 +54,46 @@
   }
 
   function onLoadedMetadata() {
-    player.volume = getSettingNum('player.volume', 80) / 100;
-    player.playbackRate = getSettingNum('player.speed', 1.0);
+    keepVolume(player);
     const pos = video.last_position || 0;
-    if (remember() && pos > RESUME_MIN_S && pos < (player.duration || 0) - RESUME_END_GAP_S) {
+    if (pos > RESUME_MIN_S && pos < (player.duration || 0) - RESUME_END_GAP_S) {
       player.currentTime = pos;
       say('Fortgesetzt bei ' + formatDuration(pos));
     }
   }
 
   function savePosition() {
-    if (!player || !remember() || player.currentTime < 1) return;
+    if (!player || player.currentTime < 1) return;
     api.savePosition(id, player.currentTime).catch(() => {});
   }
 
+  // Querformat: läuft das Video, füllt es den Bildschirm - und bleibt so, bis
+  // das Gerät wieder hochkant gehalten wird (auch während einer Pause).
+  const landscapeQuery = window.matchMedia('(orientation: landscape)');
+  let playing = $state(false);
+  let filled = $state(false);
+
+  function updateFill() {
+    if (!landscapeQuery.matches) {
+      filled = false;
+      if (player?.webkitDisplayingFullscreen) player.webkitExitFullscreen();
+      return;
+    }
+    if (!playing || filled) return;
+    filled = true;
+    // Echtes Vollbild, wo das Gerät es ohne Tipp erlaubt; sonst füllt das
+    // Video per Layout den Bildschirm (Klasse "fill").
+    try { player?.webkitEnterFullscreen?.(); } catch { /* nur mit Tipp erlaubt */ }
+  }
+
+  $effect(() => {
+    landscapeQuery.addEventListener('change', updateFill);
+    return () => landscapeQuery.removeEventListener('change', updateFill);
+  });
+
   function onPlay() {
+    playing = true;
+    updateFill();
     if (!playRecorded) {
       playRecorded = true;
       api.recordPlay(id, player.currentTime).catch(() => {});
@@ -79,6 +103,7 @@
   }
 
   function onPause() {
+    playing = false;
     clearInterval(saveTimer);
     savePosition();
   }
@@ -149,7 +174,7 @@
       </div>
     {:else}
       <!-- svelte-ignore a11y_media_has_caption -->
-      <video class="stage" bind:this={player} src={api.streamUrl(id)} poster={api.thumbnailUrl(id)}
+      <video class="stage" class:fill={filled} bind:this={player} src={api.streamUrl(id)} poster={api.thumbnailUrl(id)}
              controls playsinline preload="metadata"
              onloadedmetadata={onLoadedMetadata} onplay={onPlay} onpause={onPause} onended={onPause}></video>
     {/if}
@@ -217,6 +242,10 @@
   .bar { padding: var(--m-safe-top) 4px 0; }
   .back { width: 52px; height: 48px; font-size: 1.15rem; color: var(--m-text); }
   .stage { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; max-height: 62dvh; }
+  .stage.fill {
+    position: fixed; inset: 0; z-index: 1000; width: 100vw; height: 100dvh;
+    max-height: none; aspect-ratio: auto; object-fit: contain;
+  }
   .poster img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .tracks { display: flex; gap: 3px; margin: 12px 16px 0; padding: 3px; background: var(--m-surface-2); border-radius: var(--m-radius); }
   .tracks button { flex: 1; min-height: 44px; border-radius: 9px; color: var(--m-dim); font-weight: 600; }

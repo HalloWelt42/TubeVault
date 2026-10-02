@@ -9,10 +9,6 @@ import { api } from '../api/client.js';
 
 // Default-Werte (Fallback wenn API nicht erreichbar)
 const DEFAULTS = {
-  'player.volume': '80',
-  'player.autoplay': 'false',
-  'player.speed': '1.0',
-  'player.save_position': 'true',
   'general.videos_per_page': '24',
   'download.quality': '720p',
   'download.format': 'mp4',

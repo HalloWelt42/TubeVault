@@ -14,10 +14,8 @@ class SettingsKeys:
     DOWNLOAD_QUALITY = "download.quality"
     DOWNLOAD_FORMAT = "download.format"
     DOWNLOAD_CONCURRENT = "download.concurrent"
-    DOWNLOAD_AUTO_THUMBNAIL = "download.auto_thumbnail"
     DOWNLOAD_AUTO_SUBTITLE = "download.auto_subtitle"
     DOWNLOAD_SUBTITLE_LANG = "download.subtitle_lang"
-    DOWNLOAD_AUTO_CHAPTERS = "download.auto_chapters"
 
     # ── Cooldown + Throttle (Live-Einstellungen) ──────────
     DOWNLOAD_COOLDOWN_BASE_S = "download.cooldown_base_s"

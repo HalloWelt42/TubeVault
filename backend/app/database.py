@@ -1103,11 +1103,6 @@ class Database:
             await self._connection.commit()
             logger.info(f"Migration v33: Kanal-Zuordnung, {repaired} Videos ergänzt")
 
-        # Einstellungen ohne Wirkung entfernen (siehe settings_schema) - bei
-        # jedem Start, damit auch später gestrichene verschwinden.
-        for key in _REMOVED_SETTING_KEYS:
-            await self._connection.execute("DELETE FROM settings WHERE key = ?", (key,))
-
         if current_version < 34:
             # Kanal-Qualität: leer bedeutet ab jetzt "Standard aus den
             # Einstellungen". Kanäle, deren Wert heute beiden Standards gleicht,
@@ -1140,6 +1135,11 @@ class Database:
                     raise
             await self._connection.commit()
             logger.info("Migration v40: rss_entries.auto_pending")
+
+        # Einstellungen ohne Wirkung entfernen (siehe settings_schema) - bei
+        # jedem Start, damit auch später gestrichene verschwinden.
+        for key in _REMOVED_SETTING_KEYS:
+            await self._connection.execute("DELETE FROM settings WHERE key = ?", (key,))
 
         if current_version < 39:
             # Der Selbsttest des Backends zeigte auf eine Adresse, die es nicht
