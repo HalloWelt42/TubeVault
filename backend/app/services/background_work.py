@@ -88,7 +88,24 @@ async def _dubbing() -> Optional[WorkItem]:
                     progress=row["progress"] or 0, since=row["claimed_at"], waiting=waiting)
 
 
-SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [_dubbing, _search_index, _type_check]
+async def _semantic_index() -> Optional[WorkItem]:
+    from app.services import semantic_index
+    if not await semantic_index.config():
+        return None
+    remaining = await semantic_index.pending()
+    if remaining < 50:
+        _forget("semantic_index")
+        return None
+    done, total, since = _countdown("semantic_index", remaining)
+    reachable = await semantic_index.available()
+    return WorkItem(
+        key="semantic_index", label="Bedeutungssuche: Videos werden eingebettet",
+        detail=None if reachable else "Wartet auf den KI-Dienst (nicht erreichbar).",
+        done=done, total=total, progress=done / total if total else None, since=since)
+
+
+SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
+    _dubbing, _search_index, _semantic_index, _type_check]
 
 
 async def overview() -> list[WorkItem]:

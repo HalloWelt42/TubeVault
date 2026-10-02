@@ -56,9 +56,11 @@
 
   // Lokale Treffer (Bibliothek UND Archiv) über denselben Loader, mit Gesamtzahl
   const LOCAL_PER_PAGE = 12;
+  let localSemantic = $state(false);   // Bedeutungssuche war an dieser Trefferliste beteiligt
   const local = createListLoader(async (page) => {
     if (scope === 'youtube' || !query.trim()) return { items: [], total: 0 };
     const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE });
+    if (page === 1) localSemantic = !!r.semantic;
     return { items: r.videos || [], total: r.total || 0 };
   });
 
@@ -226,6 +228,11 @@
     <section class="section">
       <h2 class="section-title">
         <i class="fa-solid fa-photo-film"></i> Lokal ({local.total})
+        {#if localSemantic}
+          <span class="semantic-note" title="Zusätzlich zur Wortsuche wurden inhaltlich verwandte Videos gesucht (lokale KI)">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> mit Bedeutungssuche
+          </span>
+        {/if}
         {#if savingPlaylist}
           <form class="pl-form" onsubmit={(e) => { e.preventDefault(); saveAsPlaylist(); }}>
             <input type="text" bind:value={playlistName} placeholder="Name der Playlist" />
@@ -251,6 +258,9 @@
                 <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" />
                 {#if v.duration}<span class="duration">{formatDuration(v.duration)}</span>{/if}
                 {#if v.is_archived}<span class="badge archive"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
+                {#if v.match === 'bedeutung'}
+                  <span class="badge meaning" title="Kein Suchwort im Text - inhaltlich verwandt">sinngemäß</span>
+                {/if}
                 <HoverActionOverlay>
                   <HoverActionBtn variant="success" onclick={() => openVideo(v.id)} title="Abspielen">
                     <i class="fa-solid fa-play"></i>
@@ -398,6 +408,8 @@
   .badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
   .badge.ok { background: var(--status-success); color: #fff; }
   .badge.archive { background: rgba(0,0,0,0.72); color: #fff; }
+  .badge.meaning { left: auto; right: 8px; background: var(--accent-primary); color: #fff; text-transform: none; }
+  .semantic-note { margin-left: 10px; font-size: 0.74rem; font-weight: 600; color: var(--accent-primary); }
   .pl-form { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; }
   .pl-form input { padding: 5px 10px; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font: inherit; font-size: 0.8rem; font-weight: 400; }
   .pl-btn { margin-left: 12px; padding: 5px 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-secondary); font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }

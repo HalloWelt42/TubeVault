@@ -1157,6 +1157,10 @@ class Database:
             await self._connection.commit()
             logger.info("Migration v37: Typ-Prüfung (type_verified)")
 
+        # Bedeutungssuche (optionale Erweiterung): Vektoren und Warteliste
+        from app.services import semantic_index
+        await semantic_index.install_schema(self._connection)
+
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing
         await self._connection.executescript(audio_tracks.SCHEMA_SQL)

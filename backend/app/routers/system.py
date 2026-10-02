@@ -371,6 +371,13 @@ async def background_work_overview():
     return {"items": await background_work.overview()}
 
 
+@router.get("/semantic")
+async def semantic_overview():
+    """Stand der Bedeutungssuche: eingeschaltet, erreichbar, wie viele Videos eingebettet."""
+    from app.services import semantic_index
+    return await semantic_index.overview()
+
+
 @router.get("/shorts")
 async def shorts_overview():
     """Wie viele bestätigte Shorts sind geladen, wie viele Typen noch ungeprüft?"""

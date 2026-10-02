@@ -273,6 +273,7 @@ export const api = {
   createPlaylistFromSeries: (key) => request('/api/playlists/from-series', { method: 'POST', body: JSON.stringify({ key }) }),
   createPlaylistFromVideos: (name, videoIds) => request('/api/playlists/from-videos', { method: 'POST', body: JSON.stringify({ name, video_ids: videoIds }) }),
   getShortsOverview: () => request('/api/system/shorts'),
+  getSemanticOverview: () => request('/api/system/semantic'),
   deleteShorts: () => request('/api/system/shorts/delete', { method: 'POST' }),
 
   // Tonspuren und Nachvertonung

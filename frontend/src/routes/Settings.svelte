@@ -83,6 +83,7 @@
     loadBackups();
     loadCookiesStatus();
     loadShorts();
+    loadSemantic();
     pollTimer = setInterval(loadScheduler, 5000);
     return () => clearInterval(pollTimer);
   });
@@ -112,6 +113,7 @@
       const res = await api.updateSetting(key, String(value));
       settings[key] = res.value;
       globalSettings.update(s => ({ ...s, [key]: res.value }));
+      if (key.startsWith('ai.')) loadSemantic();
       toast.success('Gespeichert');
     } catch (e) {
       settings[key] = before;   // abgelehnter Wert darf nicht stehen bleiben
@@ -205,6 +207,11 @@
 
   // Shorts im Bestand (Reiter Feed)
   let shorts = $state(null);
+  let semantic = $state(null);
+
+  async function loadSemantic() {
+    try { semantic = await api.getSemanticOverview(); } catch { semantic = null; }
+  }
   let deletingShorts = $state(false);
 
   async function loadShorts() {
@@ -583,6 +590,22 @@
           {@render settingRow(item)}
         {/each}
       </div>
+      {#if cat.key === 'extensions' && semantic?.enabled}
+        <div class="setting-card">
+          <div class="card-header"><i class="fa-solid fa-wand-magic-sparkles"></i><h3>Stand der Bedeutungssuche</h3></div>
+          <div class="action-row">
+            <span class="status-pill" class:active={semantic.available}>
+              <i class="fa-solid {semantic.available ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
+              KI-Dienst {semantic.available ? 'erreichbar' : 'nicht erreichbar'}
+            </span>
+            <span class="action-hint">
+              {semantic.indexed.toLocaleString('de-DE')} Videos eingebettet{#if semantic.pending > 0}, {semantic.pending.toLocaleString('de-DE')} warten{/if}
+              (Modell {semantic.model}).
+              {#if !semantic.available}Die Suche arbeitet solange als reine Wortsuche.{/if}
+            </span>
+          </div>
+        </div>
+      {/if}
       {#if cat.key === 'feed' && shorts}
         <div class="setting-card">
           <div class="card-header"><i class="fa-solid fa-bolt"></i><h3>Shorts im Bestand</h3></div>

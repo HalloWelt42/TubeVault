@@ -80,6 +80,9 @@ async def reset_settings():
 
 async def _notify_services(key: str) -> None:
     """Dienste, die einen Wert zwischengespeichert halten, neu lesen lassen."""
+    if key.startswith("ai."):
+        from app.services import semantic_index
+        semantic_index.reset_availability()
     if key == "download.cooldown_base_s":
         from app.services.download_service import download_service
         await download_service.reload_cooldown_base()

@@ -114,6 +114,16 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="dub.voice", default="Zeit Stimme", kind="text", category="dub",
                section="extensions", label="Stimme der Nachvertonung",
                description="Name der Stimme, mit der der Nachvertoner spricht."),
+    SettingDef(key="ai.enabled", default="false", kind="toggle", category="ai",
+               section="extensions", label="Bedeutungssuche mit lokaler KI",
+               description="Die Suche findet zusätzlich inhaltlich Verwandtes, auch ohne Wortgleichheit. "
+                           "Die Vektoren rechnet ein lokaler KI-Dienst; ist er nicht erreichbar, arbeitet "
+                           "die Suche als reine Wortsuche weiter."),
+    SettingDef(key="ai.url", default="", kind="text", category="ai", section="extensions",
+               label="Adresse des KI-Dienstes",
+               description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.178.20:1234/v1"),
+    SettingDef(key="ai.embedding_model", default="text-embedding-bge-m3", kind="text", category="ai",
+               section="extensions", label="Modell für Einbettungen"),
     # ── System ────────────────────────────────────────────────────────
     SettingDef(key="archive.mount_check_interval", default="30", kind="number", category="archive",
                min=5, max=3600, unit="s", label="Prüfintervall für externe Archive"),
@@ -173,6 +183,10 @@ def validate(key: str, raw) -> str:
         return value
 
     # text
+    if key == "ai.url":
+        if value and not value.startswith(("http://", "https://")):
+            raise ValueError(f"{definition.label}: Adresse muss mit http:// oder https:// beginnen")
+        return value.rstrip("/")
     if key == "download.subtitle_lang":
         langs = [part.strip().lower() for part in value.split(",") if part.strip()]
         if not langs or not all(part.replace("-", "").isalnum() and len(part) <= 10 for part in langs):

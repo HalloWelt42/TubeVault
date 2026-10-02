@@ -75,6 +75,9 @@ _BM25_WEIGHTS = "10.0, 5.0, 1.0, 3.0, 2.0"
 # Vor jeder Suche höchstens so viele wartende Videos nachziehen (Antwortzeit)
 _FLUSH_BEFORE_SEARCH = 300
 _COMMIT_EVERY = 200
+# Hybride Suche: so viele Worttreffer gehen höchstens in die Verschmelzung ein
+_HYBRID_KEYWORD_CAP = 3000
+_RRF_K = 60
 
 _lock = asyncio.Lock()
 
@@ -305,14 +308,46 @@ async def search_videos(
     from_where = f"""FROM videos v LEFT JOIN hits h ON h.video_id = v.id
                      WHERE {' AND '.join(conditions)}"""
     base_params = [*hits_params, *params]
-
-    total = await db.fetch_val(f"{cte} SELECT COUNT(*) {from_where}", base_params) or 0
+    keyword_order = "ORDER BY (h.score IS NULL), h.score, v.upload_date DESC, v.id"
     offset = (page - 1) * per_page
-    rows = await db.fetch_all(
-        f"""{cte} SELECT v.* {from_where}
-            ORDER BY (h.score IS NULL), h.score, v.upload_date DESC, v.id
-            LIMIT ? OFFSET ?""",
-        [*base_params, per_page, offset])
+
+    # Bedeutungssuche (optionale Erweiterung): None = steht nicht zur Verfügung
+    from app.services import semantic_index
+    semantic = await semantic_index.search(query)
+    match_kind: dict[str, str] = {}
+
+    if not semantic:   # nicht verfügbar oder nichts Verwandtes: reine Wortsuche
+        total = await db.fetch_val(f"{cte} SELECT COUNT(*) {from_where}", base_params) or 0
+        rows = await db.fetch_all(
+            f"{cte} SELECT v.* {from_where} {keyword_order} LIMIT ? OFFSET ?",
+            [*base_params, per_page, offset])
+    else:
+        # Hybrid: Wort- und Bedeutungstreffer zu EINER Rangfolge verschmelzen.
+        # Was beide finden, steht vorn; Bedeutungstreffer müssen dieselben
+        # Filter bestehen (Archiv, Bereich, Shorts) wie Worttreffer.
+        keyword_ids = [r["id"] for r in await db.fetch_all(
+            f"{cte} SELECT v.id {from_where} {keyword_order} LIMIT ?", [*base_params, _HYBRID_KEYWORD_CAP])]
+        candidate_ids = [video_id for video_id, _ in semantic]
+        placeholders = ",".join("?" * len(candidate_ids))
+        filter_conditions = [c for i, c in enumerate(conditions) if i != 1]   # ohne die Wort-Bedingung
+        filter_params = params[len(infix_params) + 1:]
+        allowed = {r["id"] for r in await db.fetch_all(
+            f"SELECT v.id FROM videos v WHERE v.id IN ({placeholders}) AND {' AND '.join(filter_conditions)}",
+            [*candidate_ids, *filter_params])}
+        semantic_ids = [video_id for video_id in candidate_ids if video_id in allowed]
+
+        ranked = fuse_rankings(keyword_ids, semantic_ids)
+        keyword_set, semantic_set = set(keyword_ids), set(semantic_ids)
+        match_kind = {vid: ("beides" if vid in keyword_set and vid in semantic_set
+                            else "wort" if vid in keyword_set else "bedeutung") for vid in ranked}
+        total = len(ranked)
+        page_ids = ranked[offset:offset + per_page]
+        rows = []
+        if page_ids:
+            marks = ",".join("?" * len(page_ids))
+            found = {r["id"]: r for r in await db.fetch_all(
+                f"SELECT * FROM videos WHERE id IN ({marks})", page_ids)}
+            rows = [found[vid] for vid in page_ids if vid in found]
 
     videos = []
     for row in rows:
@@ -320,13 +355,27 @@ async def search_videos(
         video["tags"] = _parse_tags(video.get("tags"))
         video.pop("ai_summary", None)
         video.pop("ai_tags", None)
+        if match_kind:
+            video["match"] = match_kind.get(video["id"], "wort")
         videos.append(video)
 
     return {
         "query": query, "videos": videos, "total": total,
+        "semantic": semantic is not None,
         "page": page, "per_page": per_page,
         "total_pages": max(1, (total + per_page - 1) // per_page),
     }
+
+
+def fuse_rankings(*rankings: list[str]) -> list[str]:
+    """Mehrere Ranglisten zu einer verschmelzen (Reciprocal Rank Fusion):
+    jeder Treffer bekommt je Liste 1 / (K + Platz); die Summe entscheidet.
+    Wer in mehreren Listen weit oben steht, gewinnt."""
+    scores: dict[str, float] = {}
+    for ranking in rankings:
+        for place, video_id in enumerate(ranking, start=1):
+            scores[video_id] = scores.get(video_id, 0.0) + 1.0 / (_RRF_K + place)
+    return sorted(scores, key=lambda video_id: -scores[video_id])
 
 
 def _parse_tags(raw) -> list:

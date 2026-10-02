@@ -333,6 +333,9 @@ async def lifespan(app: FastAPI):
     from app.services import search_index
     task_manager.register("type_check", "Video-Typen bei der Quelle prüfen",
                           video_classifier.verify_backlog, auto_restart=True, essential=False)
+    from app.services import semantic_index
+    task_manager.register("semantic_index", "Bedeutungssuche: Videos einbetten",
+                          semantic_index.background_index, auto_restart=True, essential=False)
     task_manager.register("search_index", "Suchindex nachziehen",
                           search_index.background_catch_up, auto_restart=False, essential=False)
     await task_manager.start_all()

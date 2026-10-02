@@ -535,6 +535,7 @@
                   <span class="sd-channel">
                     {v.channel_name || 'Unbekannt'}
                     {#if v.is_archived}<span class="sd-archived"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
+                    {#if v.match === 'bedeutung'}<span class="sd-archived" title="Inhaltlich verwandt, kein Suchwort im Text"><i class="fa-solid fa-wand-magic-sparkles"></i> sinngemäß</span>{/if}
                   </span>
                 </div>
                 <div class="sd-acts">
