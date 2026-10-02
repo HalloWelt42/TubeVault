@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -699,7 +699,7 @@ class Database:
             # Standard-Endpunkte einfügen
             default_endpoints = [
                 ("ryd_api", "Return YouTube Dislike", "https://returnyoutubedislikeapi.com", "external", "/votes?videoId=dQw4w9WgXcQ", "Like/Dislike-Daten für Videos", 1),
-                ("backend_api", "TubeVault Backend", "http://localhost:8031", "internal", "/api/system/info", "Eigenes Backend (FastAPI)", 0),
+                ("backend_api", "TubeVault Backend", "http://localhost:8031", "internal", "/api/system/health", "Eigenes Backend (FastAPI)", 0),
                 ("youtube_rss", "YouTube RSS", "https://www.youtube.com", "external", "/feeds/videos.xml?channel_id=UC_x5XG1OV2P6uZZ5FSM9Ttw", "YouTube RSS-Feeds für Abos", 2),
                 ("lrclib_api", "LRCLIB", "https://lrclib.net/api", "external", "/search?q=test", "Lyrics-Datenbank (Synced + Plain)", 3),
                 ("sponsorblock_api", "SponsorBlock", "https://sponsor.ajay.app", "external", "/api/skipSegments?videoID=dQw4w9WgXcQ&categories=[%22sponsor%22]", "Werbung/Sponsor-Segmente in Videos", 4),
@@ -1125,6 +1125,14 @@ class Database:
                     raise
             await self._connection.commit()
             logger.info("Migration v35: videos.language")
+
+        if current_version < 39:
+            # Der Selbsttest des Backends zeigte auf eine Adresse, die es nicht
+            # gibt, und stand deshalb dauerhaft auf Fehler.
+            await self._connection.execute(
+                "UPDATE api_endpoints SET test_path = '/api/system/health', last_status = NULL "
+                "WHERE name = 'backend_api' AND test_path = '/api/system/info'")
+            await self._connection.commit()
 
         if current_version < 38:
             # "Shorts im Feed ausblenden" wird zu "Shorts ausschliessen" (überall)
