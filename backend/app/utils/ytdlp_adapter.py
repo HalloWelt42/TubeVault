@@ -1113,7 +1113,18 @@ class YoutubeAdapter:
 
     @property
     def author(self) -> str:
-        return self._ensure().get("uploader") or self._ensure().get("channel") or ""
+        # "channel" vor "uploader": dieselbe Reihenfolge wie beim Kanal-Abruf,
+        # damit Video und Abo denselben Namen tragen.
+        info = self._ensure()
+        name = info.get("channel") or info.get("uploader") or ""
+        if not name:
+            # Manche Abruf-Varianten liefern keinen Namen. Kein Fehler - die
+            # Kanal-Zuordnung (channel_identity) füllt ihn aus dem Abo nach -,
+            # aber sichtbar machen, wie oft das passiert.
+            logger.warning(
+                f"[META] {self.video_id}: Quelle liefert keinen Kanalnamen "
+                f"(channel_id={info.get('channel_id') or '-'})")
+        return name
 
     @property
     def channel_id(self) -> str:

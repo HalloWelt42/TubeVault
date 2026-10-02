@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1113,6 +1113,15 @@ class Database:
         if current_version < 32:
             await self._connection.commit()
             logger.info("Migration v32: Suchindex neu angelegt, Videos werden nachgezogen")
+
+        # v33: Kanalname am Video per Trigger erzwingen, Bestand auffüllen
+        # (siehe channel_identity). Füllt nur Leeres, überschreibt nichts.
+        from app.services import channel_identity
+        repaired = await channel_identity.install(
+            self._connection, repair=current_version < 33)
+        if current_version < 33:
+            await self._connection.commit()
+            logger.info(f"Migration v33: Kanal-Zuordnung, {repaired} Videos ergänzt")
 
         # 4. Indexes NACH Migration (braucht source-Spalte)
         await self._connection.executescript(INDEXES_SQL)

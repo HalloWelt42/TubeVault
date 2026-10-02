@@ -77,11 +77,17 @@ async def get_all_tags(
 
 @router.get("/channels")
 async def get_video_channels():
-    """Alle Kanaele mit Video-Anzahl (fuer Filter-Dropdown)."""
+    """Alle Kanäle mit Video-Anzahl (für Filter-Dropdown). Der Name kommt
+    bevorzugt aus dem Abo, damit ein Kanal immer gleich heisst."""
     rows = await db.fetch_all(
-        """SELECT channel_id, channel_name, COUNT(*) as count
-           FROM videos WHERE status = 'ready' AND channel_id IS NOT NULL
-           GROUP BY channel_id ORDER BY channel_name COLLATE NOCASE ASC"""
+        """SELECT v.channel_id,
+                  COALESCE(NULLIF(s.channel_name, ''), MAX(NULLIF(v.channel_name, ''))) AS channel_name,
+                  COUNT(*) AS count
+           FROM videos v
+           LEFT JOIN subscriptions s ON s.channel_id = v.channel_id
+           WHERE v.status = 'ready' AND COALESCE(v.channel_id, '') <> ''
+           GROUP BY v.channel_id
+           ORDER BY 2 COLLATE NOCASE ASC"""
     )
     return [dict(r) for r in rows]
 
