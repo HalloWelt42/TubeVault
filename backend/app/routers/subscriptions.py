@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 from app.config import AVATARS_DIR, RSS_THUMBS_DIR
 from app.database import db
-from app.services.rss_service import rss_service
+from app.services import channel_reference, loadable
+from app.services.rss_service import rss_service, ChannelNotFound
 from app.routers.jobs import activity_ws
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Abonnements"])
@@ -62,41 +63,16 @@ async def get_subscriptions(
 
 @router.post("")
 async def add_subscription(sub: SubscriptionCreate):
-    """Neues Abo hinzufügen. Akzeptiert Channel-ID, Kanal-URL oder Video-URL."""
-    channel_id = sub.channel_id.strip()
-
-    # Video-URL erkennen und zu Channel-ID auflösen
-    if "youtu.be/" in channel_id or "youtube.com/watch" in channel_id or "youtube.com/shorts" in channel_id:
-        try:
-            from app.utils.pytube_client import make_youtube
-            yt = make_youtube(channel_id if channel_id.startswith("http") else f"https://{channel_id}")
-            channel_id = yt.channel_id
-            if not channel_id:
-                raise ValueError("Keine Channel-ID gefunden")
-            logger.info(f"Video-URL aufgelöst → Channel: {channel_id}")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Konnte Channel nicht aus Video-URL ermitteln: {e}")
-
-    # Kanal-URL zu Channel-ID
-    elif "youtube.com/channel/" in channel_id:
-        channel_id = channel_id.split("youtube.com/channel/")[-1].split("/")[0].split("?")[0]
-    elif "youtube.com/@" in channel_id:
-        # Handle-URL → per pytubefix auflösen
-        try:
-            from app.utils.pytube_client import make_channel
-            ch = make_channel(channel_id if channel_id.startswith("http") else f"https://{channel_id}")
-            channel_id = ch.channel_id
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Konnte Channel nicht auflösen: {e}")
-
+    """Neues Abo hinzufügen. Akzeptiert Kanal-ID, Kanal-Adresse, Handle oder
+    die Adresse eines Videos."""
     try:
-        result = await rss_service.add_subscription(
+        channel_id = await channel_reference.resolve(sub.channel_id)
+        return await rss_service.add_subscription(
             channel_id=channel_id,
             auto_download=sub.auto_download,
             quality=sub.download_quality,
         )
-        return result
-    except Exception as e:
+    except (channel_reference.UnresolvableChannel, ChannelNotFound) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -263,11 +239,11 @@ async def _get_channel_videos_impl(
 
     # Sort-Mapping
     sort_map = {
-        "newest": "re.published DESC",
-        "oldest": "re.published ASC",
+        "newest": "re.published IS NULL, re.published DESC",
+        "oldest": "re.published IS NULL, re.published ASC",
         "popular": "COALESCE(v.view_count, re.views, 0) DESC",
         "longest": "COALESCE(v.duration, re.duration, 0) DESC",
-        "shortest": "COALESCE(v.duration, re.duration, 0) ASC",
+        "shortest": "COALESCE(v.duration, re.duration) IS NULL, COALESCE(v.duration, re.duration) ASC",
     }
     order_by = sort_map.get(sort, "re.published DESC")
 
@@ -291,7 +267,7 @@ async def _get_channel_videos_impl(
             "oldest": "v.upload_date ASC",
             "popular": "COALESCE(v.view_count, 0) DESC",
             "longest": "COALESCE(v.duration, 0) DESC",
-            "shortest": "COALESCE(v.duration, 0) ASC",
+            "shortest": "v.duration IS NULL, v.duration ASC",
         }
         dl_order = dl_sort_map.get(sort, "v.upload_date DESC")
 
@@ -429,20 +405,22 @@ async def _get_channel_videos_impl(
                 videos.append(dict(r))
 
         # Sortierung
-        def sort_key(v):
-            if sort == "popular":
-                return v.get("view_count") or 0
-            elif sort == "longest":
-                return v.get("duration") or 0
-            elif sort == "shortest":
-                return -(v.get("duration") or 999999)
-            elif sort == "oldest":
-                return v.get("published") or v.get("upload_date") or ""
-            else:  # newest
-                return v.get("published") or v.get("upload_date") or ""
+        # Sortierung. Fehlt der Wert (Dauer, Datum), steht das Video in jeder
+        # Richtung am Ende; bei Gleichstand entscheidet die Video-ID, damit
+        # das Nachladen keine Einträge doppelt oder gar nicht zeigt.
+        field = {"popular": "view_count", "longest": "duration", "shortest": "duration"}.get(sort)
+        descending = sort not in ("oldest", "shortest")
 
-        reverse = sort not in ("oldest", "shortest")
-        videos.sort(key=sort_key, reverse=reverse)
+        def sort_value(v):
+            if field:
+                return v.get(field)
+            return v.get("published") or v.get("upload_date")
+
+        videos.sort(key=lambda v: v["video_id"])
+        with_value = [v for v in videos if sort_value(v)]
+        without_value = [v for v in videos if not sort_value(v)]
+        with_value.sort(key=sort_value, reverse=descending)
+        videos = with_value + without_value
 
         total = len(videos)
         videos = videos[offset:offset + per_page]
@@ -507,6 +485,10 @@ async def fetch_channel_videos(channel_id: str, background_tasks: BackgroundTask
             logger.info(f"Kanal-Scan {channel_id}: {result}")
         except Exception as e:
             logger.error(f"Kanal-Scan {channel_id} fehlgeschlagen: {e}")
+            # Scheitert der Scan vor dem Start, bliebe der Job sonst ewig wartend
+            job = await _js.get(job_id)
+            if job and job["status"] in ("queued", "active"):
+                await _js.fail(job_id, str(e)[:300])
 
     background_tasks.add_task(_run_scan)
     return {"status": "started", "channel_id": channel_id, "job_id": job_id}
@@ -529,39 +511,28 @@ async def get_missing_videos(
     limit: int = Query(50, ge=1, le=200),
     video_type: str = Query("all"),
 ):
-    """Nicht heruntergeladene, nicht in Queue befindliche Video-IDs eines Kanals.
-    Sortiert nach published DESC (neueste zuerst)."""
+    """Die neuesten noch ladbaren Videos eines Kanals. Was ladbar ist,
+    bestimmt services/loadable - dieselbe Auswahl wie Drip und Auto-Download
+    (nicht ignoriert, nicht geparkt oder fehlgeschlagen, kein Livestream)."""
     type_filter = ""
     type_params = []
     if video_type == "video":
-        type_filter = "AND (re.video_type = 'video' OR re.video_type IS NULL)"
-    elif video_type in ("short", "live"):
-        type_filter = "AND re.video_type = ?"
+        type_filter = "AND COALESCE(r.video_type, 'video') = 'video'"
+    elif video_type == "short":
+        type_filter = "AND r.video_type = ?"
         type_params = [video_type]
+    elif video_type == "live":
+        return {"video_ids": [], "count": 0, "total_missing": 0}
 
+    where = f"r.channel_id = ? AND {await loadable.clause()} {type_filter}"
     rows = await db.fetch_all(
-        f"""SELECT re.video_id
-           FROM rss_entries re
-           LEFT JOIN videos v ON re.video_id = v.id AND v.status = 'ready'
-           WHERE re.channel_id = ?
-             AND v.id IS NULL
-             AND COALESCE(re.feed_status, 'active') IN ('active', 'later')
-             {type_filter}
-             AND re.video_id NOT IN (
-                 SELECT json_extract(j.metadata, '$.video_id')
-                 FROM jobs j
-                 WHERE j.type = 'download' AND j.status IN ('queued', 'active')
-                 AND json_extract(j.metadata, '$.video_id') IS NOT NULL
-             )
-           ORDER BY re.published DESC
-           LIMIT ?""",
+        f"""SELECT r.video_id FROM rss_entries r
+            WHERE {where}
+            ORDER BY r.published IS NULL, r.published DESC, r.id DESC
+            LIMIT ?""",
         (channel_id, *type_params, limit))
     total_missing = await db.fetch_val(
-        f"""SELECT COUNT(*) FROM rss_entries re
-           LEFT JOIN videos v ON re.video_id = v.id AND v.status = 'ready'
-           WHERE re.channel_id = ? AND v.id IS NULL
-             AND COALESCE(re.feed_status, 'active') IN ('active', 'later')
-             {type_filter}""",
+        f"SELECT COUNT(*) FROM rss_entries r WHERE {where}",
         (channel_id, *type_params)) or 0
     return {
         "video_ids": [r["video_id"] for r in rows],
@@ -874,10 +845,9 @@ async def get_drip_prognosis():
 
     # Aktive Drip-Kanäle
     drip_channels = await db.fetch_all(
-        """SELECT s.id, s.channel_name, s.drip_count,
+        f"""SELECT s.id, s.channel_name, s.drip_count,
                   (SELECT COUNT(*) FROM rss_entries r
-                   WHERE r.channel_id = s.channel_id
-                   AND r.video_id NOT IN (SELECT id FROM videos WHERE status='ready')
+                   WHERE r.channel_id = s.channel_id AND {await loadable.clause()}
                   ) as missing
            FROM subscriptions s WHERE s.drip_enabled = 1""")
 
@@ -936,8 +906,6 @@ async def remove_subscription(sub_id: int, delete_videos: bool = False):
         raise HTTPException(status_code=404, detail="Abo nicht gefunden")
     return result
 
-    return {"deleted": True}
-
 
 @router.get("/{sub_id}/drip-status")
 async def get_drip_status(sub_id: int):
@@ -948,12 +916,7 @@ async def get_drip_status(sub_id: int):
            FROM subscriptions WHERE id = ?""", (sub_id,))
     if not sub:
         raise HTTPException(status_code=404, detail="Kanal nicht gefunden")
-    missing = await db.fetch_val(
-        """SELECT COUNT(*) FROM rss_entries r
-           WHERE r.channel_id = ?
-             AND r.video_id NOT IN (SELECT id FROM videos WHERE status = 'ready')""",
-        (sub["channel_id"],))
-    return {**dict(sub), "missing_count": missing or 0}
+    return {**dict(sub), "missing_count": await loadable.count(sub["channel_id"])}
 
 
 @router.post("/{sub_id}/reset-suggest-overrides")
@@ -973,26 +936,26 @@ async def reset_suggest_overrides(sub_id: int):
 
 # --- Aktionen ---
 
+async def _base_interval() -> int:
+    return int((await db.fetch_val("SELECT value FROM settings WHERE key = 'rss.interval'")) or 1800)
+
+
 @router.post("/reset-errors")
 async def reset_all_errors():
-    """Alle Fehler-Abos zurücksetzen: error_count=0, enabled=1, normales Intervall."""
-    default_interval = 3600
-    result = await db.execute(
-        """UPDATE subscriptions SET error_count = 0, last_error = NULL,
-           enabled = 1, check_interval = ?
-           WHERE error_count > 0 OR enabled = 0""",
-        (default_interval,))
-    count = result.rowcount if hasattr(result, 'rowcount') else 0
-    # Fallback: manuell zählen
-    if count == 0:
-        count = await db.fetch_val(
-            "SELECT changes()") or 0
-    return {"reset": count, "message": f"{count} Abos zurückgesetzt"}
+    """Fehler aller Kanäle löschen und sie wieder im Basis-Intervall prüfen.
+    Von Hand abgeschaltete Kanäle bleiben abgeschaltet."""
+    cursor = await db.execute(
+        """UPDATE subscriptions SET error_count = 0, last_error = NULL, check_interval = ?
+           WHERE error_count > 0""",
+        (await _base_interval(),))
+    count = cursor.rowcount or 0
+    return {"reset": count, "message": f"{count} Kanäle zurückgesetzt"}
 
 
 @router.post("/channel/{channel_id}/reset-error")
 async def reset_channel_error(channel_id: str):
-    """Einzelnen Kanal entsperren und Fehler zurücksetzen."""
+    """Fehler eines Kanals löschen. Ein wegen Fehlern stillgelegter Kanal wird
+    dabei wieder eingeschaltet - das ist hier ausdrücklich gewollt."""
     sub = await db.fetch_one(
         "SELECT id, channel_name, error_count, enabled FROM subscriptions WHERE channel_id = ?",
         (channel_id,))
@@ -1000,10 +963,24 @@ async def reset_channel_error(channel_id: str):
         raise HTTPException(status_code=404, detail="Kanal nicht gefunden")
     await db.execute(
         """UPDATE subscriptions SET error_count = 0, last_error = NULL,
-           enabled = 1, check_interval = 3600 WHERE channel_id = ?""",
-        (channel_id,))
+           enabled = 1, check_interval = ? WHERE channel_id = ?""",
+        (await _base_interval(), channel_id))
     return {"status": "ok", "channel": sub["channel_name"],
             "was_disabled": not sub["enabled"], "was_errors": sub["error_count"]}
+
+
+@router.post("/{sub_id}/check")
+async def check_channel_now(sub_id: int):
+    """Einen Kanal sofort auf neue Videos prüfen."""
+    try:
+        result = await rss_service.check_channel_now(sub_id)
+    except ChannelNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Prüfung fehlgeschlagen: {str(e)[:200]}")
+    if result["new_videos"] > 0:
+        await activity_ws.broadcast({"type": "feed_updated", "new_videos": result["new_videos"]})
+    return result
 
 
 @router.post("/tick")
@@ -1035,25 +1012,15 @@ async def cron_poll_legacy(max_feeds: int = 20):
 
 @router.post("/poll-now")
 async def trigger_poll():
-    """Manueller RSS-Check (alle Feeds, unabhängig vom Intervall)."""
-    result = await rss_service.trigger_poll_now()
-
-    if result.get("new_videos", 0) > 0:
-        await activity_ws.broadcast({
-            "type": "feed_updated",
-            "new_videos": result["new_videos"],
-        })
-
-    return result
+    """Alle aktiven Kanäle sofort prüfen (unabhängig vom Intervall). Läuft im
+    Hintergrund als Job; neue Videos meldet der Lauf selbst."""
+    return await rss_service.trigger_poll_now()
 
 
 @router.post("/interval/reset-all")
 async def reset_all_intervals():
     """Alle Kanal-Intervalle auf Basis-Wert zurücksetzen."""
-    default_interval = int(
-        (await db.fetch_val("SELECT value FROM settings WHERE key = 'rss.interval'"))
-        or 1800
-    )
+    default_interval = await _base_interval()
     await db.execute(
         "UPDATE subscriptions SET check_interval = ? WHERE enabled = 1",
         (default_interval,)
@@ -1065,10 +1032,7 @@ async def reset_all_intervals():
 @router.post("/{sub_id}/interval/halve")
 async def halve_interval(sub_id: int):
     """Prüfintervall eines Kanals halbieren."""
-    default_interval = int(
-        (await db.fetch_val("SELECT value FROM settings WHERE key = 'rss.interval'"))
-        or 1800
-    )
+    default_interval = await _base_interval()
     sub = await db.fetch_one("SELECT check_interval FROM subscriptions WHERE id = ?", (sub_id,))
     if not sub:
         raise HTTPException(status_code=404, detail="Kanal nicht gefunden")
@@ -1081,10 +1045,7 @@ async def halve_interval(sub_id: int):
 @router.post("/{sub_id}/interval/reset")
 async def reset_interval(sub_id: int):
     """Prüfintervall eines Kanals auf Basis-Wert zurücksetzen."""
-    default_interval = int(
-        (await db.fetch_val("SELECT value FROM settings WHERE key = 'rss.interval'"))
-        or 1800
-    )
+    default_interval = await _base_interval()
     sub = await db.fetch_one("SELECT check_interval FROM subscriptions WHERE id = ?", (sub_id,))
     if not sub:
         raise HTTPException(status_code=404, detail="Kanal nicht gefunden")

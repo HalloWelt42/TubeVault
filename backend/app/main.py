@@ -25,7 +25,7 @@ from app.services.download_service import download_service
 from app.services.job_service import job_service
 from app.services.rss_service import rss_service
 from app.services.task_manager import task_manager
-from app.services import video_classifier
+from app.services import loadable as loadable_entries, video_classifier
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
@@ -85,22 +85,6 @@ async def _backfill_banners():
         logger.warning(f"Banner-Backfill Fehler: {e}")
 
 
-# Drip wählt nur Videos, die noch fehlen UND ladbar sind. Ohne die Ausschlüsse
-# griff er jeden Tag dieselben nicht ladbaren Videos (ignoriert, geparkt,
-# fehlgeschlagen, im externen Archiv) und kam nie weiter.
-_DRIP_LOADABLE = """
-    NOT EXISTS (SELECT 1 FROM videos v WHERE v.id = r.video_id AND v.status = 'ready')
-    AND NOT EXISTS (SELECT 1 FROM ignored_videos i WHERE i.video_id = r.video_id)
-    AND NOT EXISTS (SELECT 1 FROM video_archives va WHERE va.video_id = r.video_id)
-    AND NOT EXISTS (
-        SELECT 1 FROM jobs j
-        WHERE j.type = 'download'
-          AND json_extract(j.metadata, '$.video_id') = r.video_id
-          AND j.status IN ('queued', 'active', 'retry_wait', 'parked', 'error'))
-    AND COALESCE(r.video_type, 'video') <> 'live'
-"""
-
-
 async def _drip_cron_loop():
     """Drip-Feed Cron: Prüft alle 15 Min ob Kanäle fällig sind.
     Lädt 2 älteste + 1 neuestes fehlendes Video pro Kanal."""
@@ -123,7 +107,7 @@ async def _drip_cron_loop():
             )
             for sub in due:
                 # (Auto-Archive ist oben in Schritt 1 für alle Kanäle gelaufen.)
-                loadable = _DRIP_LOADABLE + await video_classifier.without_shorts("r")
+                loadable = await loadable_entries.clause()
                 drip_count = sub["drip_count"] or 3
                 # Je Lauf genau drip_count Videos: das neueste fehlende plus
                 # die ältesten fehlenden (bei 1 also nur das neueste).

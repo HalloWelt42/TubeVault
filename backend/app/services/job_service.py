@@ -26,6 +26,7 @@ nicht mehr direkt in die jobs-Tabelle schreiben muss. Zentraler Status-Writer.
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, Callable
 
@@ -247,16 +248,18 @@ class JobService:
 
     async def start(self, job_id: int, exclusive: bool = True) -> dict:
         """Job als aktiv markieren.
-        exclusive=True: wartet bis keine anderen Jobs aktiv sind + Semaphore.
-        Download-Jobs sollten exclusive=False nutzen (eigene Queue)."""
-        if exclusive:
-            # Warten bis kein anderer Job aktiv ist
-            await self.wait_for_idle(exclude_job_id=job_id, label=f"job#{job_id}")
-            if self._semaphore:
-                logger.info(f"Job #{job_id}: wartet auf Ausführungsslot…")
-                await self._semaphore.acquire()
-                self._sem_held_by.add(job_id)
-                logger.info(f"Job #{job_id}: Slot erhalten, starte")
+        exclusive=True: Hintergrundläufe (Scan, Prüfung, Import) schließen sich
+        gegenseitig aus und warten auf ihren Platz. Auf Downloads wird nicht
+        gewartet - die haben ihre eigene Warteschlange und laufen daneben.
+        Wird der Job abgebrochen, während er wartet, startet er nicht."""
+        if exclusive and self._semaphore:
+            logger.info(f"Job #{job_id}: wartet auf Ausführungsslot…")
+            await self._semaphore.acquire()
+            self._sem_held_by.add(job_id)
+            if job_id in self._cancelled:
+                self._release_semaphore(job_id)
+                return await self.get(job_id)
+            logger.info(f"Job #{job_id}: Slot erhalten, starte")
 
         now = now_sqlite()
         await db.execute(
@@ -266,6 +269,23 @@ class JobService:
         job = await self.get(job_id)
         await self.notify(job)
         return job
+
+    @asynccontextmanager
+    async def guard(self, job_id: int):
+        """Laufzeit eines Jobs absichern: Endet der Block mit einem Fehler,
+        wird der Job als fehlgeschlagen beendet und sein Platz frei. Ohne das
+        bliebe ein abgestürzter Lauf für immer "aktiv" und sperrte alle
+        folgenden."""
+        try:
+            yield
+        except asyncio.CancelledError:
+            await self.cancel(job_id)
+            raise
+        except Exception as e:
+            await self.fail(job_id, str(e)[:500])
+            raise
+        finally:
+            self._release_semaphore(job_id)
 
     def _release_semaphore(self, job_id: int):
         """Semaphore freigeben wenn dieser Job sie hält."""

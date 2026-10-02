@@ -74,7 +74,7 @@
     try {
       await api.updateVideoSuggest(vid, next);
       video.suggest_override = next === 'reset' ? null : next;
-      videos = [...videos]; // Reaktivität
+      list.items = [...list.items]; // Reaktivität
     } catch (e) { toast.error('Fehler: ' + e.message); }
   }
 
@@ -106,45 +106,53 @@
     } catch (e) { toast.error(e.message); return { items: [], total: 0 }; }
   });
 
+  let scanJobId = $state(null);
+  let scanLabel = $state('');
+
   async function scanChannel() {
     const cid = $route.id;
     if (!cid || scanning) return;
     scanning = true;
+    scanLabel = 'Wartet auf freien Platz…';
     try {
-      await api.fetchAllChannelVideos(cid);
-      toast.success('Kanal-Scan gestartet – Fortschritt in der Aktivitätenleiste');
-      pollScanStatus(cid);
+      const started = await api.fetchAllChannelVideos(cid);
+      scanJobId = started.job_id;
+      followScan(cid, started.job_id);
     } catch (e) {
       toast.error(e.message);
       scanning = false;
     }
   }
 
-  function pollScanStatus(cid) {
-    let attempts = 0;
+  async function cancelScan() {
+    if (!scanJobId) return;
+    try {
+      await api.cancelJob(scanJobId);
+      scanLabel = 'Wird abgebrochen…';
+    } catch (e) { toast.error(e.message); }
+  }
+
+  // Den Scan am Job verfolgen: nur der Job weiß, ob er fertig, gestört oder
+  // abgebrochen ist. Die Seite bleibt dabei bedienbar.
+  function followScan(cid, jobId) {
     const iv = setInterval(async () => {
-      attempts++;
-      try {
-        const detail = await api.getChannelDetail(cid);
-        if (detail.last_scanned && detail.last_scanned !== channel?.last_scanned) {
-          clearInterval(iv);
-          scanning = false;
-          channel = detail;
-          await list.load(true);
-          const tc = detail.type_counts || {};
-          const parts = [];
-          if (tc.video) parts.push(`${tc.video} Videos`);
-          if (tc.short) parts.push(`${tc.short} Shorts`);
-          if (tc.live) parts.push(`${tc.live} Live`);
-          toast.success(`Scan abgeschlossen – ${parts.join(', ') || (detail.rss_entry_count || 0) + ' Einträge'}`);
-        }
-      } catch {}
-      if (attempts > 60) {
-        clearInterval(iv);
-        scanning = false;
-        toast.info('Scan läuft noch im Hintergrund');
+      let job;
+      try { job = await api.getJob(jobId); } catch { return; }
+      if ($route.id !== cid) { clearInterval(iv); scanning = false; return; }
+      if (['queued', 'active'].includes(job.status)) {
+        scanLabel = job.status === 'queued' ? 'Wartet auf freien Platz…' : (job.description || 'Scanne…');
+        return;
       }
-    }, 5000);
+      clearInterval(iv);
+      scanning = false;
+      scanJobId = null;
+      try { channel = await api.getChannelDetail(cid); } catch {}
+      await list.load(true);
+      loadMissingCount();
+      if (job.status === 'done') toast.success(`Scan abgeschlossen – ${job.result || ''}`);
+      else if (job.status === 'cancelled') toast.info(job.result || 'Scan abgebrochen');
+      else toast.error(job.error_message || 'Scan fehlgeschlagen');
+    }, 2000);
   }
 
   async function loadDebug() {
@@ -556,7 +564,12 @@
           <i class="fa-solid fa-satellite-dish"></i> Kanal scannen
         {/if}
       </button>
-      {#if channel.needs_scan}
+      {#if scanning}
+        <span class="scan-hint">{scanLabel}</span>
+        <button class="btn-scan-cancel" onclick={cancelScan} title="Scan abbrechen - bereits Gefundenes bleibt erhalten">
+          <i class="fa-solid fa-stop"></i> Abbrechen
+        </button>
+      {:else if channel.needs_scan}
         <span class="scan-hint">Noch nicht gescannt – klicke um alle Inhalte zu laden</span>
       {:else if channel.last_scanned}
         <span class="scan-hint">Letzter Scan: {formatDateRelative(channel.last_scanned)}</span>
@@ -1221,6 +1234,11 @@
   .btn-scan:hover:not(:disabled) { opacity: 0.9; }
   .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; }
   .scan-hint { font-size: 0.78rem; color: var(--text-tertiary); }
+  .btn-scan-cancel {
+    padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-primary);
+    background: var(--bg-tertiary); color: var(--text-secondary); font-size: 0.76rem; cursor: pointer;
+  }
+  .btn-scan-cancel:hover { color: var(--status-error); border-color: var(--status-error); }
 
   .error-banner {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;

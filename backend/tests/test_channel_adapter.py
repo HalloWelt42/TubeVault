@@ -50,28 +50,59 @@ def test_url_generator_exists_and_is_generator():
     assert inspect.isgeneratorfunction(ChannelAdapter.url_generator)
 
 
-def test_url_generator_handles_extract_failure_gracefully(monkeypatch):
-    """Wenn yt-dlp scheitert (z.B. kein Shorts-Tab) → leerer Generator,
-    KEIN Crash (channel_scanner würde sonst die Phase verlieren)."""
-    from app.utils import ytdlp_adapter as mod
+class FakeListing:
+    """Ersetzt yt_dlp.YoutubeDL für Listen-Abrufe: liefert vorbereitete
+    Antworten und merkt sich, womit und wie oft gefragt wurde."""
 
-    def boom(*a, **k):
-        raise RuntimeError("This channel does not have a Shorts tab")
+    def __init__(self, monkeypatch, info=None, error=None):
+        from app.utils import ytdlp_adapter as mod
+        self.info, self.error = info, error
+        self.calls, self.opts, self.consumed = [], None, 0
+        listing = self
 
-    monkeypatch.setattr(mod, "_ydl_extract", boom)
+        class FakeYDL:
+            def __init__(self, opts):
+                listing.opts = opts
+
+            def extract_info(self, url, download=False, process=True):
+                listing.calls.append((url, process))
+                if listing.error:
+                    raise listing.error
+                info = dict(listing.info)
+                info["entries"] = listing._entries(info.get("entries") or [])
+                return info
+
+        monkeypatch.setattr(mod.yt_dlp, "YoutubeDL", FakeYDL)
+        monkeypatch.setattr(mod, "_LISTING_RETRY_PAUSE_S", 0)
+
+    def _entries(self, entries):
+        for entry in entries:
+            self.consumed += 1
+            yield entry
+
+
+def test_url_generator_missing_tab_is_empty(monkeypatch):
+    """Hat der Kanal den Reiter nicht (z.B. keine Shorts) → leere Liste."""
+    FakeListing(monkeypatch, error=RuntimeError("This channel does not have a Shorts tab"))
     ch = ChannelAdapter("https://www.youtube.com/@test")
     ch.html_url = ch.shorts_url
-    result = list(ch.url_generator())
-    assert result == []
+    assert list(ch.url_generator()) == []
+
+
+def test_url_generator_real_failure_is_not_an_empty_channel(monkeypatch):
+    """Eine Störung darf nicht wie ein leerer Kanal aussehen - sonst gilt
+    ein gescheiterter Scan als erfolgreich."""
+    listing = FakeListing(monkeypatch, error=RuntimeError("HTTP Error 429: Too Many Requests"))
+    ch = ChannelAdapter("https://www.youtube.com/@test")
+    with pytest.raises(RuntimeError, match="429"):
+        list(ch.url_generator())
+    assert len(listing.calls) == 2   # ein Wiederholungsversuch
 
 
 def test_url_generator_yields_channel_video_items(monkeypatch):
-    """Flat-Entries werden zu ChannelVideoItem mit den Feldern, die
-    channel_scanner._extract liest (video_id, title, length, views,
-    thumbnail_url, publish_date)."""
-    from app.utils import ytdlp_adapter as mod
-
-    fake_info = {
+    """Flat-Entries werden zu ChannelVideoItem mit den Feldern, die der
+    Scanner liest (video_id, title, length, views, thumbnail_url, publish_date)."""
+    FakeListing(monkeypatch, info={
         "channel": "TestChan",
         "channel_id": "UCtest",
         "entries": [
@@ -80,8 +111,7 @@ def test_url_generator_yields_channel_video_items(monkeypatch):
             {"id": "vid2bbbbbbb", "title": "Zweites", "duration": 60},
             None,  # muss übersprungen werden
         ],
-    }
-    monkeypatch.setattr(mod, "_ydl_extract", lambda *a, **k: fake_info)
+    })
     ch = ChannelAdapter("https://www.youtube.com/@test")
     ch.html_url = ch.videos_url
     items = list(ch.url_generator())
@@ -94,24 +124,57 @@ def test_url_generator_yields_channel_video_items(monkeypatch):
     assert items[1].video_id == "vid2bbbbbbb"
 
 
-def test_url_generator_uses_web_client_and_desktop_ua(monkeypatch):
-    """Channel-Tabs müssen mit festem web-Client + Desktop-UA laufen –
-    sonst 'Unable to recognize tab page' + 4 sinnlose Retries."""
-    from app.utils import ytdlp_adapter as mod
-    captured = {}
-
-    def spy(url, extra_opts=None, force_clients=None, desktop_ua_only=False):
-        captured["force_clients"] = force_clients
-        captured["desktop_ua_only"] = desktop_ua_only
-        captured["extract_flat"] = (extra_opts or {}).get("extract_flat")
-        return {"channel": "C", "channel_id": "UCx", "entries": []}
-
-    monkeypatch.setattr(mod, "_ydl_extract", spy)
+def test_listing_uses_web_client_and_desktop_ua(monkeypatch):
+    """Kanal-Reiter müssen mit festem web-Client + Desktop-UA laufen –
+    sonst 'Unable to recognize tab page'. Gelesen wird träge (process=False)."""
+    listing = FakeListing(monkeypatch, info={"channel": "C", "channel_id": "UCx", "entries": []})
     ch = ChannelAdapter("https://www.youtube.com/@x")
     list(ch.url_generator())
-    assert captured["force_clients"] == ["web"]
-    assert captured["desktop_ua_only"] is True
-    assert captured["extract_flat"] == "in_playlist"
+    assert listing.opts["extractor_args"]["youtube"]["player_client"] == ["web"]
+    ua = listing.opts["http_headers"]["User-Agent"]
+    assert "Mobile" not in ua and "iPhone" not in ua and "Android" not in ua
+    assert listing.opts["extract_flat"] == "in_playlist"
+    assert listing.calls == [("https://www.youtube.com/@x/videos", False)]
+
+
+def test_channel_head_does_not_read_the_list(monkeypatch):
+    """Name, Bild, Abonnenten: ein Abruf, kein einziger Listeneintrag."""
+    listing = FakeListing(monkeypatch, info={
+        "channel": "Werkbank", "channel_id": "UCx", "channel_follower_count": 1234,
+        "tags": ["löten", "holz"], "description": "Text",
+        "uploader_url": "https://www.youtube.com/@werkbank",
+        "thumbnails": [
+            {"url": "klein", "width": 88, "height": 88},
+            {"url": "avatar", "id": "avatar_uncropped"},
+            {"url": "banner-schmal", "width": 1060, "height": 175},
+            {"url": "banner-breit", "width": 2560, "height": 424},
+            {"url": "banner-roh", "id": "banner_uncropped"},
+        ],
+        "entries": [{"id": f"v{n:010d}"} for n in range(500)],
+    })
+    ch = ChannelAdapter("https://www.youtube.com/channel/UCx")
+    assert ch.channel_name == "Werkbank"
+    assert ch.channel_id == "UCx"
+    assert ch.subscriber_count == 1234
+    assert ch.tags == ["löten", "holz"]
+    assert ch.thumbnail_url == "avatar"
+    assert ch.banner_url == "banner-breit"
+    assert ch.vanity_url == "https://www.youtube.com/@werkbank"
+    assert len(listing.calls) == 1
+    assert listing.consumed == 0
+
+
+def test_videos_stop_at_max_videos(monkeypatch):
+    """Die Prüfung liest nur die neuesten Einträge - der Rest wird nie geholt."""
+    listing = FakeListing(monkeypatch, info={
+        "channel": "C", "channel_id": "UCx",
+        "entries": [{"id": f"v{n:010d}"} for n in range(500)],
+    })
+    ch = ChannelAdapter("https://www.youtube.com/channel/UCx", max_videos=15)
+    assert len(list(ch.videos)) == 15
+    assert listing.consumed <= 16
+    assert ch.channel_name == "C"
+    assert len(listing.calls) == 1   # Name stammt aus dem Kopf der Liste
 
 
 def test_desktop_ua_pool_has_no_mobile():
@@ -151,8 +214,7 @@ def test_force_clients_sets_web_and_desktop_ua(monkeypatch):
 def test_url_generator_resolves_nested_playlist(monkeypatch):
     """Manche Channel-Tabs liefern verschachtelte Sub-Playlists –
     die müssen aufgelöst werden, sonst fehlen Videos."""
-    from app.utils import ytdlp_adapter as mod
-    fake = {
+    FakeListing(monkeypatch, info={
         "channel": "C", "channel_id": "UCx",
         "entries": [
             {"_type": "playlist", "entries": [
@@ -161,8 +223,17 @@ def test_url_generator_resolves_nested_playlist(monkeypatch):
             ]},
             {"id": "flat3cccccc", "title": "F3"},
         ],
-    }
-    monkeypatch.setattr(mod, "_ydl_extract", lambda *a, **k: fake)
+    })
     ch = ChannelAdapter("https://www.youtube.com/@x")
     ids = [v.video_id for v in ch.url_generator()]
     assert ids == ["nested1aaaa", "nested2bbbb", "flat3cccccc"]
+
+
+def test_item_date_falls_back_to_approximate_timestamp():
+    """Die Liste kennt kein upload_date; das ungefähre Datum der Quelle
+    (Zeitstempel) wird genauso geschrieben."""
+    from app.utils.ytdlp_adapter import ChannelVideoItem
+    assert ChannelVideoItem({"id": "a", "timestamp": 1790121600}).publish_date == "20260923"
+    assert ChannelVideoItem({"id": "a", "upload_date": "20250101",
+                             "timestamp": 1790121600}).publish_date == "20250101"
+    assert ChannelVideoItem({"id": "a"}).publish_date is None

@@ -439,6 +439,7 @@ export const api = {
       method: 'POST', body: JSON.stringify({ from, to, channel_id: channelId || undefined }),
     }),
   triggerRSSPoll: () => request('/api/subscriptions/poll-now', { method: 'POST' }),
+  checkChannelNow: (id) => request(`/api/subscriptions/${id}/check`, { method: 'POST' }),
   resetAllIntervals: () => request('/api/subscriptions/interval/reset-all', { method: 'POST' }),
   halveInterval: (id) => request(`/api/subscriptions/${id}/interval/halve`, { method: 'POST' }),
   resetInterval: (id) => request(`/api/subscriptions/${id}/interval/reset`, { method: 'POST' }),

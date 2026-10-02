@@ -18,8 +18,7 @@ import asyncio
 import json
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
@@ -29,9 +28,13 @@ from app.config import AVATARS_DIR, BANNERS_DIR, RSS_THUMBS_DIR
 from app.utils.file_utils import now_sqlite, past_sqlite
 from app.database import db
 from app.services.job_service import job_service
-from app.services import video_classifier
+from app.services import loadable, video_classifier
 from app.services.rate_limiter import rate_limiter
-from app.services.channel_scanner import fetch_all_channel_videos as _scan_channel
+from app.services.channel_scanner import (
+    fetch_all_channel_videos as _scan_channel,
+    published_from_upload_date,
+    refresh_type_counts,
+)
 
 # YouTube RSS Feed URLs
 # Undokumentierte Playlist-Prefixe für typ-getrennte Feeds:
@@ -51,13 +54,43 @@ _executor = ThreadPoolExecutor(max_workers=2)
 # Auto-Download: max pro Tag
 AUTO_DL_DAILY_LIMIT = 20
 
+# So viele der neuesten Einträge liest eine Prüfung je Kanal
+POLL_DEPTH = 15
+
+# Störungen, die nicht am einzelnen Kanal liegen (Netz weg, Quelle sperrt).
+# Sie brechen den Durchlauf ab, statt jeden Kanal einzeln zu bestrafen.
+_GLOBAL_ERROR_MARKERS = (
+    "sign in to confirm", "429", "too many requests", "timed out", "timeout",
+    "name resolution", "nodename nor servname", "connection refused",
+    "network is unreachable", "connection reset", "unable to download webpage",
+)
+# So viele Kanäle in Folge ohne einen Erfolg dazwischen gelten als Störung
+GLOBAL_FAILURE_STREAK = 3
+# Pause nach einer Störung: 10 Minuten, je weitere Störung doppelt, höchstens 2 Stunden
+DISTURBANCE_PAUSE_S = 600
+DISTURBANCE_PAUSE_MAX_S = 7200
+
+
+def is_global_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(marker in message for marker in _GLOBAL_ERROR_MARKERS)
+
+
+def _utc_iso_now() -> str:
+    """Jetzt in der Schreibweise von rss_entries.published."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+class ChannelNotFound(ValueError):
+    """Die Quelle kennt den Kanal nicht oder gibt keine Auskunft."""
+
 
 class RSSService:
     """YouTube RSS Feed Manager – produktionsreif."""
 
     def __init__(self):
         self._running = False
-        self._polling = False  # Lock: verhindert parallele Tick-Ausführung
+        self._polling = False  # Lock: verhindert parallele Prüfläufe
         # Scheduler-Status (für Frontend)
         self._last_checked_channel: str = ""
         self._last_checked_at: str = ""
@@ -66,6 +99,13 @@ class RSSService:
         self._feed_log_count: int = 0
         self._feed_log_suppressed: int = 0
         self._feeds_pending: int = 0
+        # Letzter Anstoß, auch wenn er nichts geprüft hat (sichtbar im Status)
+        self._last_tick: dict = {}
+        self._ticks_skipped: int = 0
+        # Störung der Quelle: bis wann pausiert wird und die wievielte in Folge
+        self._disturbed_until: Optional[datetime] = None
+        self._disturbance_count: int = 0
+        self._disturbance_reason: str = ""
 
     # ─── Worker Lifecycle ─────────────────────────────────
 
@@ -79,222 +119,242 @@ class RSSService:
         self._running = False
         logger.info("RSS Service gestoppt")
 
-    # ─── Tick-basiertes Feed-Polling ───────────────────────
+    # ─── Prüfplanung ───────────────────────────────────────
     #
-    # System-Cron ruft alle 5 Min /api/subscriptions/tick auf.
-    # Backend entscheidet anhand check_interval pro Feed ob gepollt wird.
+    # Alle 5 Minuten kommt ein Anstoß (main.py). Geprüft werden die Kanäle,
+    # deren Intervall abgelaufen ist. Ohne neue Videos verdoppelt sich das
+    # Intervall eines Kanals bis zur einstellbaren Obergrenze, neue Videos
+    # setzen es auf den Basiswert zurück.
     #
 
+    def _note_tick(self, result: dict) -> dict:
+        """Ausgang des Anstoßes festhalten - auch übersprungene sind sichtbar."""
+        status = result.get("status", "")
+        self._ticks_skipped = self._ticks_skipped + 1 if status == "skipped" else 0
+        self._last_tick = {
+            "at": now_sqlite(),
+            "status": status,
+            "message": result.get("message", ""),
+            "skipped_in_a_row": self._ticks_skipped,
+        }
+        return result
+
+    async def _intervals(self) -> tuple[int, int]:
+        """(Basis-Intervall, längstes Intervall) in Sekunden."""
+        base = int(await self._get_setting("rss.interval") or 1800)
+        longest = int(await self._get_setting("rss.max_interval") or 86400)
+        return base, max(base, longest)
+
+    def _disturbance_pause_left(self) -> int:
+        """Sekunden, die die Prüfung wegen einer Störung noch pausiert."""
+        if not self._disturbed_until:
+            return 0
+        return max(0, int((self._disturbed_until - datetime.now()).total_seconds()))
+
+    def _note_disturbance(self, reason: str):
+        self._disturbance_count += 1
+        pause = min(DISTURBANCE_PAUSE_S * 2 ** (self._disturbance_count - 1),
+                    DISTURBANCE_PAUSE_MAX_S)
+        self._disturbed_until = datetime.now() + timedelta(seconds=pause)
+        self._disturbance_reason = reason[:300]
+        logger.warning(f"[PRÜFUNG] Quelle gestört, Pause {pause // 60} Min: {reason[:160]}")
+
+    def _clear_disturbance(self):
+        self._disturbed_until = None
+        self._disturbance_count = 0
+        self._disturbance_reason = ""
+
     async def tick(self, max_feeds: int = 20) -> dict:
-        """Vom System-Cron aufgerufen: Fällige Feeds prüfen.
-        
-        Cron = dummer Anstoß (alle 5 Min). Backend entscheidet intern
-        anhand von check_interval pro Feed ob gepollt wird.
-        
-        Returns: Zusammenfassung des Durchlaufs + next_due_in_seconds.
-        """
-        # Parallele Ausführung verhindern
+        """Fällige Kanäle prüfen. Liefert immer einen Ausgang mit Begründung."""
         if self._polling:
             logger.info("[TICK] Übersprungen – vorheriger Durchlauf läuft noch")
-            return {"status": "skipped", "message": "Vorheriger Durchlauf läuft noch"}
-        
+            return self._note_tick(
+                {"status": "skipped", "message": "Vorheriger Durchlauf läuft noch"})
+
         self._polling = True
         try:
-            return await self._do_tick(max_feeds)
+            return self._note_tick(await self._do_tick(max_feeds))
         finally:
             self._polling = False
 
+    _DUE_SQL = """enabled = 1
+               AND (last_checked IS NULL
+                    OR last_checked < datetime('now', '-' || check_interval || ' seconds'))"""
+
     async def _do_tick(self, max_feeds: int = 20) -> dict:
         """Eigentliche Tick-Logik (durch Lock geschützt)."""
-        # Log-Drossel pro Zyklus zurücksetzen
-        self._feed_log_count = 0
-        self._feed_log_suppressed = 0
         enabled = await self._get_setting("rss.enabled")
         if enabled != "true":
-            return {"status": "disabled", "message": "RSS-Polling deaktiviert (rss.enabled=false)"}
+            return {"status": "disabled", "message": "Scanner ist in den Einstellungen abgeschaltet"}
 
-        # Warten bis kein schwerer SYSTEM-Job aktiv ist
-        # RSS + Downloads + Avatars laufen parallel, nur Channel-Scans/Cleanup blockieren
-        idle = await job_service.wait_for_idle(
-            label="rss_tick",
-            exclude_types=["download", "rss_cycle", "avatar_fetch"],
-            timeout=30,
-        )
-        if not idle:
-            return {"status": "skipped", "message": "System-Job aktiv (Scan/Cleanup) – RSS wartet"}
+        pause_left = self._disturbance_pause_left()
+        if pause_left:
+            return {"status": "skipped",
+                    "message": f"Quelle gestört - nächster Versuch in {pause_left // 60 + 1} Min "
+                               f"({self._disturbance_reason[:120]})"}
 
-        # Fällige Feeds holen
-        subs = await db.fetch_all(
-            """SELECT * FROM subscriptions
-               WHERE enabled = 1
-               AND (last_checked IS NULL
-                    OR last_checked < datetime('now', '-' || check_interval || ' seconds'))
+        # Scan, Import und Prüfung schließen sich aus. Statt auf einen langen
+        # Scan zu warten, setzt die Prüfung aus und kommt in 5 Minuten wieder.
+        if job_service.is_exclusive_running():
+            return {"status": "skipped",
+                    "message": "Ein anderer Hintergrundlauf ist aktiv (z.B. Kanal-Scan)"}
+
+        base_interval, longest_interval = await self._intervals()
+        # Obergrenze durchsetzen (auch nachträglich gesenkte)
+        await db.execute(
+            "UPDATE subscriptions SET check_interval = ? WHERE check_interval > ?",
+            (longest_interval, longest_interval))
+
+        await self.queue_pending_auto_downloads()
+
+        subs = [dict(s) for s in await db.fetch_all(
+            f"""SELECT * FROM subscriptions WHERE {self._DUE_SQL}
                ORDER BY last_checked ASC NULLS FIRST, error_count ASC
                LIMIT ?""",
             (max_feeds,)
-        )
-
-        if not subs:
-            # Nichts fällig — nächsten fälligen Feed berechnen
-            self._feeds_pending = 0
-            next_due = await self._next_due_seconds()
-            return {
-                "status": "idle",
-                "message": "Keine fälligen Feeds",
-                "checked": 0,
-                "new_videos": 0,
-                "next_due_in_seconds": next_due,
-            }
-
-        subs = [dict(s) for s in subs]
-        total_pending = await db.fetch_val(
-            """SELECT COUNT(*) FROM subscriptions WHERE enabled = 1
-               AND (last_checked IS NULL
-                    OR last_checked < datetime('now', '-' || check_interval || ' seconds'))"""
-        ) or 0
+        )]
+        total_pending = await self._pending_count()
         self._feeds_pending = total_pending
 
-        # Job erstellen (sichtbar im Frontend) – RSS hat höhere Priorität als Downloads
+        if not subs:
+            return {
+                "status": "idle",
+                "message": "Keine fälligen Kanäle",
+                "checked": 0,
+                "new_videos": 0,
+                "next_due_in_seconds": await self._next_due_seconds(),
+            }
+
         job = await job_service.create(
             job_type="rss_cycle",
-            title=f"RSS-Tick ({len(subs)}/{total_pending} fällig)",
-            description=f"Tick: {len(subs)} Feeds werden geprüft",
+            title=f"Kanalprüfung ({len(subs)} von {total_pending} fälligen)",
+            description=f"{len(subs)} Kanäle werden geprüft",
             metadata={"trigger": "tick", "batch_size": len(subs), "total_pending": total_pending},
             priority=8,
         )
         await job_service.start(job["id"])
+        async with job_service.guard(job["id"]):
+            outcome = await self._check_feeds(job["id"], subs, adaptive=True)
+            await job_service.complete(job["id"], outcome["message"])
+        logger.info(f"Kanalprüfung: {outcome['message']}")
 
-        total_new = 0
-        errors = 0
-        default_interval = int(await self._get_setting("rss.interval") or 1800)
-        max_interval = 604800  # 7 Tage
+        remaining = await self._pending_count()
+        self._feeds_pending = remaining
+        return {
+            "status": "disturbed" if outcome["disturbed"] else "completed",
+            "checked": outcome["checked"],
+            "new_videos": outcome["new_videos"],
+            "errors": outcome["errors"],
+            "remaining_pending": remaining,
+            "next_due_in_seconds": await self._next_due_seconds(),
+            "message": outcome["message"],
+        }
+
+    async def _pending_count(self) -> int:
+        return await db.fetch_val(
+            f"SELECT COUNT(*) FROM subscriptions WHERE {self._DUE_SQL}") or 0
+
+    async def _check_feeds(self, job_id: int, subs: list[dict], adaptive: bool) -> dict:
+        """Kanäle der Reihe nach prüfen.
+
+        adaptive=True (automatische Prüfung): ohne neue Videos wächst das
+        Intervall des Kanals. Bei einer Prüfung von Hand bleibt es stehen.
+
+        Fehler eines einzelnen Kanals bestrafen nur diesen Kanal. Fällt die
+        Quelle insgesamt aus, bricht der Durchlauf ab und kein Kanal wird
+        bestraft - sonst stünden nach einer Netzstörung hunderte Kanäle mit
+        Fehlerzähler und verlängertem Intervall da.
+        """
+        self._feed_log_count = 0
+        self._feed_log_suppressed = 0
+        base_interval, longest_interval = await self._intervals()
+        total_new = checked = errors = 0
+        disturbed = False
+        # Fehlschläge in Folge: erst bestrafen, wenn ein Erfolg zeigt, dass
+        # die Quelle erreichbar ist und es am Kanal liegt
+        streak: list[tuple[dict, Exception]] = []
 
         for i, sub in enumerate(subs):
+            if job_service.is_cancelled(job_id):
+                break
             try:
                 await rate_limiter.acquire("rss")
                 new_count = await self._poll_single_feed(sub)
-                total_new += new_count
-                rate_limiter.success("rss")
-
-                # Scheduler-State aktualisieren
-                self._last_checked_channel = sub.get("channel_name") or sub["channel_id"]
-                self._last_checked_at = now_sqlite()
-                self._feeds_checked_cycle += 1
-
-                # ─── Adaptives Interval ───
-                current_interval = sub.get("check_interval", default_interval)
-                if sub.get("error_count", 0) > 0:
-                    # Fehler-Serie beendet → Error-Count reset, Interval beibehalten
-                    await db.execute(
-                        "UPDATE subscriptions SET error_count = 0, last_error = NULL WHERE id = ?",
-                        (sub["id"],)
-                    )
-
-                if new_count > 0:
-                    # Neue Videos → zurück auf Basis-Interval
-                    await db.execute(
-                        "UPDATE subscriptions SET check_interval = ? WHERE id = ?",
-                        (default_interval, sub["id"])
-                    )
-                    if current_interval > default_interval:
-                        logger.info(
-                            f"[ADAPTIVE] {sub.get('channel_name', sub['channel_id'])}: "
-                            f"{new_count} neue Videos → Interval {current_interval//60}min → {default_interval//60}min"
-                        )
-                else:
-                    # Keine neuen Videos → Interval verdoppeln (max 7 Tage)
-                    new_interval = min(current_interval * 2, max_interval)
-                    if new_interval != current_interval:
-                        await db.execute(
-                            "UPDATE subscriptions SET check_interval = ? WHERE id = ?",
-                            (new_interval, sub["id"])
-                        )
-                        logger.debug(
-                            f"[ADAPTIVE] {sub.get('channel_name', sub['channel_id'])}: "
-                            f"Keine neuen Videos → Interval {current_interval//60}min → {new_interval//60}min"
-                        )
-
             except Exception as e:
-                errors += 1
                 rate_limiter.error("rss", str(e)[:200])
-                error_count = sub.get("error_count", 0) + 1
-                error_msg = str(e)[:500]
+                logger.warning(f"Kanalprüfung Fehler {sub['channel_id']}: {e}")
+                streak.append((sub, e))
+                if is_global_error(e) or len(streak) >= GLOBAL_FAILURE_STREAK:
+                    disturbed = True
+                    self._note_disturbance(str(e))
+                    break
+                continue
 
-                # 404 = Kanal evtl. gelöscht/umgezogen → starkes Backoff, aber NICHT deaktivieren
-                is_404 = "404" in error_msg
-                if is_404:
-                    new_interval = min(86400, 21600 * error_count)  # 6h, 12h, 24h max
-                    await db.execute(
-                        """UPDATE subscriptions SET
-                           error_count = ?, last_error = ?, check_interval = ?,
-                           last_checked = ?
-                           WHERE id = ?""",
-                        (error_count,
-                         f"[404] Feed nicht erreichbar ({error_count}x) – nächster Versuch in {new_interval//3600}h",
-                         new_interval, now_sqlite(), sub["id"])
-                    )
-                    logger.warning(
-                        f"RSS 404: {sub.get('channel_name', sub['channel_id'])} "
-                        f"– Versuch {error_count}, nächstes Check in {new_interval//3600}h"
-                    )
-                else:
-                    new_interval = min(sub.get("check_interval", 1800) * 2, 86400)
-                    # WICHTIG: last_checked hier AUCH setzen, damit der Kanal nicht
-                    # beim nächsten Tick erneut sofort fällig ist → Endlos-Retry-Loop.
-                    # Der erhöhte check_interval wirkt nur in Kombination mit last_checked.
-                    await db.execute(
-                        """UPDATE subscriptions SET
-                           error_count = ?, last_error = ?, check_interval = ?,
-                           last_checked = ?
-                           WHERE id = ?""",
-                        (error_count, error_msg, new_interval, now_sqlite(), sub["id"])
-                    )
-                logger.warning(f"RSS Cron-Feed Fehler {sub['channel_id']}: {e}")
+            rate_limiter.success("rss")
+            self._clear_disturbance()
+            for failed_sub, error in streak:
+                await self._penalize(failed_sub, error, longest_interval)
+            errors += len(streak)
+            streak = []
 
-            # Fortschritt
+            checked += 1
+            total_new += new_count
+            self._last_checked_channel = sub.get("channel_name") or sub["channel_id"]
+            self._last_checked_at = now_sqlite()
+            self._feeds_checked_cycle += 1
+            await self._reward(sub, new_count, base_interval, longest_interval, adaptive)
+
             if (i + 1) % 5 == 0 or i == len(subs) - 1:
-                try:
-                    await job_service.progress(
-                        job["id"],
-                        (i + 1) / len(subs),
-                        f"{i + 1}/{len(subs)} Feeds, {total_new} neu, {errors} Fehler"
-                    )
-                except Exception:
-                    pass
+                await job_service.progress(
+                    job_id, (i + 1) / len(subs),
+                    f"{i + 1}/{len(subs)} Kanäle, {total_new} neue Videos, {errors} Fehler")
 
-        # Log-Drossel: unterdrückte "neue Videos"-Zeilen als Summe nachtragen
+        if not disturbed:
+            for failed_sub, error in streak:
+                await self._penalize(failed_sub, error, longest_interval)
+            errors += len(streak)
+
         if self._feed_log_suppressed > 0:
             logger.info(f"Feed: +{self._feed_log_suppressed} weitere Kanäle mit neuen Videos (Log gedrosselt)")
 
-        # Job abschließen
-        result_msg = f"{total_new} neue Videos, {len(subs)} Feeds geprüft, {errors} Fehler"
-        await job_service.complete(job["id"], result_msg)
-        logger.info(f"RSS Tick: {result_msg} (noch {total_pending - len(subs)} fällig)")
+        message = f"{total_new} neue Videos, {checked} Kanäle geprüft, {errors} Fehler"
+        if disturbed:
+            message += (f" - abgebrochen: Quelle gestört ({self._disturbance_reason[:120]}), "
+                        f"Pause {self._disturbance_pause_left() // 60 + 1} Min")
+        return {"checked": checked, "new_videos": total_new, "errors": errors,
+                "disturbed": disturbed, "message": message}
 
-        # Verbleibende fällige Feeds + nächster fälliger
-        remaining = await db.fetch_val(
-            """SELECT COUNT(*) FROM subscriptions WHERE enabled = 1
-               AND (last_checked IS NULL
-                    OR last_checked < datetime('now', '-' || check_interval || ' seconds'))"""
-        ) or 0
-        self._feeds_pending = remaining
+    async def _reward(self, sub: dict, new_count: int, base_interval: int,
+                      longest_interval: int, adaptive: bool):
+        """Erfolgreiche Prüfung: Fehler löschen, Intervall anpassen."""
+        current = sub.get("check_interval") or base_interval
+        if new_count > 0:
+            interval = base_interval
+        elif adaptive:
+            interval = min(current * 2, longest_interval)
+        else:
+            interval = current
+        await db.execute(
+            "UPDATE subscriptions SET error_count = 0, last_error = NULL, check_interval = ? "
+            "WHERE id = ?",
+            (interval, sub["id"]))
 
-        total_enabled = await db.fetch_val(
-            "SELECT COUNT(*) FROM subscriptions WHERE enabled = 1"
-        ) or 0
-        skipped = total_enabled - len(subs)
-        next_due = await self._next_due_seconds()
-
-        return {
-            "status": "completed",
-            "checked": len(subs),
-            "skipped": max(0, skipped),
-            "new_videos": total_new,
-            "errors": errors,
-            "remaining_pending": remaining,
-            "next_due_in_seconds": next_due,
-            "message": result_msg,
-        }
+    async def _penalize(self, sub: dict, error: Exception, longest_interval: int):
+        """Fehlgeschlagene Prüfung eines Kanals: Fehler merken, seltener prüfen.
+        last_checked wird gesetzt, sonst wäre der Kanal sofort wieder fällig."""
+        error_count = (sub.get("error_count") or 0) + 1
+        message = str(error)[:500]
+        if "404" in message:
+            # Kanal evtl. gelöscht oder umgezogen: stark bremsen, nicht abschalten
+            interval = min(86400, 21600 * error_count)
+            message = (f"[404] Kanal nicht erreichbar ({error_count}x) - "
+                       f"nächster Versuch in {interval // 3600} h")
+        else:
+            interval = min((sub.get("check_interval") or 1800) * 2, longest_interval)
+        await db.execute(
+            """UPDATE subscriptions SET error_count = ?, last_error = ?, check_interval = ?,
+               last_checked = ? WHERE id = ?""",
+            (error_count, message, interval, now_sqlite(), sub["id"]))
 
     # ─── Einzelner Feed ──────────────────────────────────
 
@@ -317,14 +377,61 @@ class RSSService:
         )
         return 0 if has_unchecked else None
 
-    async def _poll_single_feed(self, sub: dict) -> int:
-        """Einzelnen Kanal prüfen, neue Videos speichern.
+    async def check_channel_now(self, sub_id: int) -> dict:
+        """Einen Kanal sofort prüfen (von Hand). Das Intervall wächst dabei nicht."""
+        sub = await db.fetch_one("SELECT * FROM subscriptions WHERE id = ?", (sub_id,))
+        if not sub:
+            raise ChannelNotFound("Kanal nicht gefunden")
+        sub = dict(sub)
+        base_interval, longest_interval = await self._intervals()
+        try:
+            await rate_limiter.acquire("rss")
+            new_count = await self._poll_single_feed(sub)
+        except Exception as e:
+            rate_limiter.error("rss", str(e)[:200])
+            if not is_global_error(e):
+                await self._penalize(sub, e, longest_interval)
+            raise
+        rate_limiter.success("rss")
+        await self._reward(sub, new_count, base_interval, longest_interval, adaptive=False)
+        return {"channel_id": sub["channel_id"], "new_videos": new_count}
 
-        Seit v1.6: RSS (feeds/videos.xml) liefert bei YouTube oft HTTP 404.
-        Stattdessen yt-dlp `Channel.videos` (flat) → neueste N Videos.
-        Shorts werden anhand duration ≤ 60s erkannt; Live-Videos landen in
-        der Video-Kategorie (flat-mode liefert kein zuverlässiges is_live).
-        """
+    async def _fetch_latest(self, channel_id: str) -> tuple[str, list]:
+        """Die neuesten Einträge eines Kanals (im Thread). Hat der Kanal keinen
+        Videos-Reiter, kommen Shorts oder Livestreams."""
+        from app.utils.pytube_client import make_channel
+
+        def _fetch_tab(subpath: str):
+            ch = make_channel(
+                f"https://www.youtube.com/channel/{channel_id}{subpath}",
+                max_videos=POLL_DEPTH,
+            )
+            # Erst die Liste, dann der Name: so genügt ein Abruf
+            videos = list(ch.videos)
+            return ch.channel_name, videos
+
+        def _fetch():
+            try:
+                return _fetch_tab("/videos")
+            except Exception as e:
+                msg = str(e).lower()
+                if "does not have a videos tab" not in msg and "no videos" not in msg:
+                    raise
+            for sub_tab in ("/shorts", "/streams"):
+                ch = make_channel(
+                    f"https://www.youtube.com/channel/{channel_id}", max_videos=POLL_DEPTH)
+                ch.html_url = ch.shorts_url if sub_tab == "/shorts" else ch.live_url
+                videos = list(ch.url_generator())
+                if videos:
+                    return ch.channel_name, videos
+            return "", []
+
+        return await asyncio.get_event_loop().run_in_executor(None, _fetch)
+
+    async def _poll_single_feed(self, sub: dict) -> int:
+        """Einen Kanal prüfen und neue Einträge speichern. Liefert deren Zahl.
+        Bekannte Einträge kosten nichts: Typ-Bestimmung, Vorschaubild und
+        Auto-Download laufen nur für neue."""
         channel_id = sub["channel_id"]
 
         # Ungültige channel_ids überspringen (z.B. URLs statt IDs)
@@ -336,127 +443,82 @@ class RSSService:
             )
             return 0
 
-        from app.utils.pytube_client import make_channel
-        max_new = int(await self._get_setting("rss.max_videos_per_poll") or 15)
+        channel_name, videos = await self._fetch_latest(channel_id)
+        fetched_ids = [v.video_id for v in videos if v.video_id]
 
-        loop = asyncio.get_event_loop()
-
-        def _fetch_tab(subpath: str):
-            ch = make_channel(
-                f"https://www.youtube.com/channel/{channel_id}{subpath}",
-                max_videos=max_new,
-            )
-            return ch.channel_name, list(ch.videos)
-
-        def _fetch():
-            # Primär /videos. Wenn der Kanal nur Shorts/Live hat, existiert der
-            # Tab nicht (yt-dlp: "does not have a videos tab") → Fallback.
-            try:
-                return _fetch_tab("/videos")
-            except Exception as e:
-                msg = str(e).lower()
-                if "does not have a videos tab" not in msg and "no videos" not in msg:
-                    raise
-                # Fallback-Reihenfolge: shorts → streams → root (/)
-                for sub_tab in ("/shorts", "/streams", ""):
-                    try:
-                        name, vids = _fetch_tab(sub_tab)
-                        if vids or sub_tab == "":
-                            return name, vids
-                    except Exception:
-                        continue
-                # Alles leer: als erfolgreicher Poll ohne neue Videos zurückgeben
-                return channel_id, []
-
-        channel_name, videos = await loop.run_in_executor(None, _fetch)
-
-        # Typed-Feeds (best-effort): getrennte Video-ID-Sets für Shorts + Live/Upcoming.
-        # Live/Upcoming werden NICHT auto-gequeued (sonst "live event will begin"-Flut);
-        # sobald so ein Stream endet und im /videos-Tab auftaucht, wird er unten
-        # zurück auf 'video' gestuft + eingereiht. Bei Feed-Fehler = leere Sets →
-        # Fallback auf altes (gedeckeltes) Verhalten, nichts geht verloren.
-        short_ids, live_ids = await self._fetch_typed_video_ids(channel_id)
-
-        # Kanalname updaten wenn nötig
         if channel_name and (not sub.get("channel_name") or sub["channel_name"] == sub["channel_id"]):
             await db.execute(
                 "UPDATE subscriptions SET channel_name = ? WHERE id = ?",
                 (channel_name, sub["id"])
             )
 
-        now = now_sqlite()
+        known: set[str] = set()
+        if fetched_ids:
+            placeholders = ",".join("?" * len(fetched_ids))
+            known = {row["video_id"] for row in await db.fetch_all(
+                f"SELECT video_id FROM rss_entries WHERE channel_id = ? "
+                f"AND video_id IN ({placeholders})",
+                (channel_id, *fetched_ids))}
+        fresh = [v for v in videos if v.video_id and v.video_id not in known]
+
+        # Listen der Quelle für Shorts und Livestreams (UUSH / UULV). Nur nötig,
+        # wenn es Neues einzuordnen oder einen beendeten Livestream gibt.
+        short_ids: set = set()
+        live_ids: set = set()
+        has_live = fetched_ids and await db.fetch_val(
+            "SELECT 1 FROM rss_entries WHERE channel_id = ? AND video_type = 'live' LIMIT 1",
+            (channel_id,))
+        if fresh or has_live:
+            short_ids, live_ids = await self._fetch_typed_video_ids(channel_id)
+
         max_age = int(await self._get_setting("rss.max_age_days") or 90)
         cutoff = past_sqlite(days=max_age)
+        shorts_excluded = await video_classifier.shorts_excluded()
 
         new_count = 0
-        latest_published = ""
-        fetched_ids = []
-        for v in videos:
+        for v in fresh:
             video_id = v.video_id
-            if not video_id:
-                continue
-
-            title = v.title or ""
-            thumb_url = v.thumbnail_url
-
-            # yt-dlp liefert upload_date als "YYYYMMDD" (manchmal None bei flat-mode)
-            raw_date = v.publish_date
-            if raw_date and len(raw_date) == 8 and raw_date.isdigit():
-                published = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}T00:00:00+00:00"
-            else:
-                # Kein Datum bekannt → jetzt (UNIQUE constraint verhindert Duplikate)
-                published = now
-
+            # Ohne Datum der Quelle gilt der Zeitpunkt des Fundes
+            published = published_from_upload_date(v.publish_date) or _utc_iso_now()
             if published < cutoff:
                 continue
 
-            # Video-Typ: Livestreams und Shorts aus den Listen der Quelle
-            # (UULV / UUSH). Steht ein kurzes Video in keiner der Listen,
-            # fragt der video_classifier die Quelle - geraten wird nicht.
-            duration = v.length or 0
+            # Video-Typ: Livestreams und Shorts aus den Listen der Quelle.
+            # Steht ein kurzes Video in keiner der Listen, fragt der
+            # video_classifier die Quelle - geraten wird nicht.
             if video_id in live_ids:
                 video_type, type_verified = "live", video_classifier.VERIFIED
             elif video_id in short_ids:
                 video_type, type_verified = "short", video_classifier.VERIFIED
             else:
-                typed = await video_classifier.classify(video_id, duration=duration or None)
+                typed = await video_classifier.classify(video_id, duration=(v.length or None))
                 video_type = typed.video_type
                 type_verified = video_classifier.VERIFIED if typed.verified else video_classifier.UNVERIFIED
 
-            fetched_ids.append(video_id)
+            cursor = await db.execute(
+                """INSERT OR IGNORE INTO rss_entries
+                   (video_id, channel_id, title, published, thumbnail_url, duration, views,
+                    video_type, type_verified)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (video_id, channel_id, v.title or "", published, v.thumbnail_url,
+                 v.length or None, v.views or None, video_type, type_verified)
+            )
+            if cursor.rowcount == 0:
+                continue
+            new_count += 1
 
-            try:
-                await db.execute(
-                    """INSERT INTO rss_entries
-                       (video_id, channel_id, title, published, thumbnail_url, video_type, type_verified)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (video_id, channel_id, title, published, thumb_url, video_type, type_verified)
-                )
-                new_count += 1
+            if v.thumbnail_url:
+                await self._cache_rss_thumbnail(video_id, v.thumbnail_url)
 
-                if thumb_url:
-                    try:
-                        await self._cache_rss_thumbnail(video_id, thumb_url)
-                    except Exception:
-                        pass
+            # Livestreams nicht automatisch laden (noch nicht zu Ende),
+            # Shorts nur, solange sie nicht ausgeschlossen sind.
+            skip_short = video_type == "short" and shorts_excluded
+            if sub.get("auto_download") and video_type != "live" and not skip_short:
+                await self._auto_queue_video(video_id, sub)
 
-                # Live/Upcoming NICHT auto-queuen (würde nur "live event will begin"
-                # erzeugen). Shorts nur, solange sie nicht ausgeschlossen sind.
-                skip_short = video_type == "short" and await video_classifier.shorts_excluded()
-                if sub.get("auto_download") and video_type != "live" and not skip_short:
-                    await self._auto_queue_video(video_id, sub)
-
-            except Exception:
-                pass  # UNIQUE constraint = bereits bekannt
-
-            if published > latest_published:
-                latest_published = published
-
-        # Ended-Livestreams zurückführen: 'live'-Einträge, die jetzt im /videos-Tab
-        # auftauchen und NICHT mehr im Live-Feed sind → sie sind zu regulären VODs
-        # geworden. Auf 'video' umstufen und (falls Auto-DL) einreihen. Positive
-        # Evidenz (im Uploads-Tab) statt bloßer Abwesenheit → robust bei Feed-Fehlern.
-        if fetched_ids:
+        # Beendete Livestreams: 'live'-Einträge, die jetzt in der Videoliste
+        # stehen und nicht mehr in der Livestream-Liste, sind reguläre Videos.
+        if has_live:
             placeholders = ",".join("?" * len(fetched_ids))
             ended = await db.fetch_all(
                 f"SELECT video_id FROM rss_entries WHERE channel_id = ? "
@@ -464,33 +526,25 @@ class RSSService:
                 (channel_id, *fetched_ids),
             )
             for row in ended:
-                vid2 = row["video_id"]
-                if vid2 in live_ids:
-                    continue  # noch live/upcoming – nicht anfassen
+                if row["video_id"] in live_ids:
+                    continue  # steht weiter in der Livestream-Liste
                 await db.execute(
                     "UPDATE rss_entries SET video_type = 'video' WHERE video_id = ?",
-                    (vid2,),
+                    (row["video_id"],),
                 )
                 if sub.get("auto_download"):
-                    await self._auto_queue_video(vid2, sub)
-                logger.info(f"[RSS] Ex-Livestream {vid2} → VOD (video), Kanal {channel_id}")
+                    await self._auto_queue_video(row["video_id"], sub)
+                logger.info(f"[RSS] Ex-Livestream {row['video_id']} → Video, Kanal {channel_id}")
 
-        # Subscription aktualisieren
         await db.execute(
-            """UPDATE subscriptions SET
-               last_checked = ?,
-               video_count = (SELECT COUNT(*) FROM rss_entries WHERE channel_id = ?)
+            """UPDATE subscriptions SET last_checked = ?,
+               last_video_date = COALESCE(
+                   (SELECT MAX(published) FROM rss_entries WHERE channel_id = ?), last_video_date)
                WHERE id = ?""",
-            (now, channel_id, sub["id"])
+            (now_sqlite(), channel_id, sub["id"])
         )
-
-        if latest_published:
-            await db.execute(
-                "UPDATE subscriptions SET last_video_date = ? WHERE id = ?",
-                (latest_published, sub["id"])
-            )
-
         if new_count > 0:
+            await refresh_type_counts(channel_id)
             # Log-Drossel: nur die ersten 3 Kanäle pro Zyklus einzeln loggen,
             # der Rest wird gezählt und am Zyklus-Ende als Summe geloggt.
             self._feed_log_count += 1
@@ -547,58 +601,33 @@ class RSSService:
 
     # ─── Auto-Download (limitiert) ───────────────────────
 
-    async def _auto_queue_video(self, video_id: str, sub: dict):
-        """Video automatisch zur Queue – mit Tageslimit."""
-        # Tageslimit prüfen (Zähler liegt in der Datenbank und übersteht Neustarts)
+    async def _auto_queue_video(self, video_id: str, sub: dict) -> bool:
+        """Video automatisch einreihen. Ist das Tageslimit erreicht, wird es
+        vorgemerkt und an einem der nächsten Tage nachgeholt - es geht nicht
+        verloren."""
+        if not await loadable.is_loadable(video_id):
+            # Schon da, ignoriert, in der Warteschlange oder fehlgeschlagen
+            await db.execute(
+                "UPDATE rss_entries SET auto_pending = 0 WHERE video_id = ?", (video_id,))
+            return False
+
         limit = int(await self._get_setting("rss.auto_dl_daily_limit") or AUTO_DL_DAILY_LIMIT)
         used = await self._auto_dl_count_today()
         if used >= limit:
-            logger.debug(f"Auto-DL Tageslimit ({limit}) erreicht, {video_id} übersprungen")
-            return
+            await db.execute(
+                "UPDATE rss_entries SET auto_pending = 1 WHERE video_id = ?", (video_id,))
+            logger.debug(f"Auto-DL Tageslimit ({limit}) erreicht, {video_id} vorgemerkt")
+            return False
 
-        # Ignoriert? (manuell gelöscht, Members-Only, etc.) – NIE wieder queuen
-        ignored = await db.fetch_one(
-            "SELECT reason FROM ignored_videos WHERE video_id = ?", (video_id,)
-        )
-        if ignored:
-            logger.debug(f"Auto-DL skipped {video_id}: ignoriert ({ignored['reason']})")
-            return
-
-        # Duplikat-Checks
-        existing = await db.fetch_one("SELECT id FROM videos WHERE id = ?", (video_id,))
-        if existing:
-            return
-
-        in_queue = await db.fetch_one(
-            "SELECT id FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ? AND status IN ('queued', 'active', 'retry_wait', 'parked')",
-            (video_id,)
-        )
-        if in_queue:
-            return
-
-        # Bereits fehlgeschlagen? Nicht erneut versuchen (manueller Unpark nötig)
-        was_parked = await db.fetch_one(
-            "SELECT id FROM jobs WHERE type='download' AND json_extract(metadata, '$.video_id') = ? AND status = 'error'",
-            (video_id,)
-        )
-        if was_parked:
-            return
-
-        url = f"https://www.youtube.com/watch?v={video_id}"
-
-        # Titel aus RSS-Entries holen
         rss_title = await db.fetch_val(
             "SELECT title FROM rss_entries WHERE video_id = ?", (video_id,))
-        display_title = rss_title[:256] if rss_title else video_id
-
-        # Download über job_service erstellen (nicht download_queue)
-        from app.services.job_service import job_service
         await job_service.create(
             job_type="download",
-            title=display_title,
-            description="Auto-Download via RSS",
+            title=rss_title[:256] if rss_title else video_id,
+            description="Auto-Download",
             metadata={
-                "video_id": video_id, "url": url,
+                "video_id": video_id,
+                "url": f"https://www.youtube.com/watch?v={video_id}",
                 # Keine festen Werte: Qualität, Nur-Audio und Thumbnail löst
                 # download_options beim Start auf (Kanal > Einstellungen).
                 "download_options": {"origin": "auto"},
@@ -607,12 +636,34 @@ class RSSService:
             priority=5,
         )
         await db.execute(
-            "UPDATE rss_entries SET status = 'queued', auto_queued = 1 WHERE video_id = ?",
+            "UPDATE rss_entries SET status = 'queued', auto_queued = 1, auto_pending = 0 "
+            "WHERE video_id = ?",
             (video_id,)
         )
-
         await self._auto_dl_count_today(add=1)
         logger.info(f"Auto-DL queued: {video_id} ({used + 1}/{limit} heute)")
+        return True
+
+    async def queue_pending_auto_downloads(self) -> int:
+        """Am Tageslimit vorgemerkte Videos nachholen, älteste zuerst. Kanäle,
+        deren Auto-Download inzwischen abgeschaltet ist, verlieren die Vormerkung."""
+        await db.execute(
+            """UPDATE rss_entries SET auto_pending = 0
+               WHERE auto_pending = 1 AND channel_id NOT IN (
+                   SELECT channel_id FROM subscriptions WHERE auto_download = 1 AND enabled = 1)""")
+        limit = int(await self._get_setting("rss.auto_dl_daily_limit") or AUTO_DL_DAILY_LIMIT)
+        free = limit - await self._auto_dl_count_today()
+        if free <= 0:
+            return 0
+        pending = await db.fetch_all(
+            """SELECT video_id, channel_id FROM rss_entries
+               WHERE auto_pending = 1 ORDER BY published ASC, id ASC LIMIT ?""",
+            (free,))
+        queued = 0
+        for row in pending:
+            if await self._auto_queue_video(row["video_id"], {"channel_id": row["channel_id"]}):
+                queued += 1
+        return queued
 
     async def _auto_dl_count_today(self, add: int = 0) -> int:
         """Zahl der heutigen automatischen Downloads (interner Zähler in der
@@ -635,70 +686,70 @@ class RSSService:
 
     async def add_subscription(self, channel_id: str, auto_download: bool = False,
                                quality: str = None) -> dict:
-        """Neues Abo hinzufügen. RSS für Info, Avatar per pytubefix (rate-limited)."""
+        """Neues Abo hinzufügen. Kennt die Quelle den Kanal nicht, entsteht
+        kein Abo (ChannelNotFound) - sonst lägen Einträge ohne Namen herum,
+        die bei jeder Prüfung scheitern."""
+        existing = await db.fetch_one(
+            "SELECT * FROM subscriptions WHERE channel_id = ?", (channel_id,))
+        if existing:
+            return {**dict(existing), "already_subscribed": True}
+
         # quality leer = Kanal erbt die Qualität aus den Einstellungen
         quality = quality or None
-        # Schritt 1: Basisinfo per yt-dlp (RSS liefert 404 seit YouTube-Änderung)
-        await rate_limiter.acquire("rss")
-        channel_name = channel_id
         channel_url = f"https://www.youtube.com/channel/{channel_id}"
+        await rate_limiter.acquire("rss")
         try:
             from app.utils.pytube_client import make_channel
-            loop = asyncio.get_event_loop()
 
             def _fetch_meta():
-                ch = make_channel(
-                    f"https://www.youtube.com/channel/{channel_id}",
-                    max_videos=1,
-                )
+                ch = make_channel(channel_url)
                 return ch.channel_name, ch.vanity_url or channel_url
 
-            channel_name, channel_url = await loop.run_in_executor(None, _fetch_meta)
+            channel_name, channel_url = await asyncio.get_event_loop().run_in_executor(
+                None, _fetch_meta)
             rate_limiter.success("rss")
         except Exception as e:
             rate_limiter.error("rss", str(e)[:200])
-            logger.warning(f"Kanal-Info Fehler für {channel_id}: {e}")
+            raise ChannelNotFound(
+                f"Kanal {channel_id} ist bei der Quelle nicht abrufbar: {str(e)[:200]}") from e
+        if not channel_name:
+            raise ChannelNotFound(f"Kanal {channel_id} ist bei der Quelle nicht bekannt")
 
-        # Schritt 2: Avatar per pytubefix (rate-limited!)
-        avatar_path = None
-        try:
-            await rate_limiter.acquire("avatar")
-            avatar_path = await self._fetch_channel_avatar(channel_id)
-            if avatar_path:
-                rate_limiter.success("avatar")
-            else:
-                rate_limiter.error("avatar", str(e)[:200])
-        except Exception as e:
-            rate_limiter.error("avatar", str(e)[:200])
-            logger.warning(f"Avatar-Fetch Fehler für {channel_id}: {e}")
-
-        # Schritt 3: In DB speichern (check_interval aus Einstellung)
         default_interval = int(await self._get_setting("rss.interval") or 1800)
         cursor = await db.execute(
             """INSERT OR IGNORE INTO subscriptions
-               (channel_id, channel_name, channel_url, avatar_path, auto_download, download_quality, check_interval)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (channel_id, channel_name, channel_url, avatar_path, auto_download, quality, default_interval)
+               (channel_id, channel_name, channel_url, auto_download, download_quality, check_interval)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (channel_id, channel_name, channel_url, auto_download, quality, default_interval)
         )
+        sub = dict(await db.fetch_one(
+            "SELECT * FROM subscriptions WHERE channel_id = ?", (channel_id,)))
+        if cursor.rowcount:
+            logger.info(f"Abo: {channel_name} ({channel_id})")
+            # Kanalbild und erste Prüfung im Hintergrund - das Hinzufügen wartet nicht
+            asyncio.create_task(self._finish_new_subscription(sub))
+        return sub
 
-        if cursor.rowcount == 0:
-            if avatar_path:
-                await db.execute(
-                    "UPDATE subscriptions SET avatar_path = ? WHERE channel_id = ? AND avatar_path IS NULL",
-                    (avatar_path, channel_id)
-                )
-            row = await db.fetch_one("SELECT * FROM subscriptions WHERE channel_id = ?", (channel_id,))
-            return dict(row) if row else {}
+    async def _finish_new_subscription(self, sub: dict):
+        """Nach dem Hinzufügen: Kanalbild holen, dann die erste Prüfung."""
+        try:
+            await self._load_avatar(sub["channel_id"])
+            await self._safe_poll(sub)
+        except Exception as e:
+            logger.warning(f"Nachbereitung des Abos {sub['channel_id']} fehlgeschlagen: {e}")
 
-        sub_id = cursor.lastrowid
-        logger.info(f"Abo: {channel_name} ({channel_id}), Avatar: {'OK' if avatar_path else '-'}")
-
-        # Sofort ersten Feed-Check
-        sub = await db.fetch_one("SELECT * FROM subscriptions WHERE id = ?", (sub_id,))
-        if sub:
-            asyncio.create_task(self._safe_poll(dict(sub)))
-
-        return dict(sub) if sub else {"id": sub_id, "channel_id": channel_id}
+    async def _load_avatar(self, channel_id: str) -> bool:
+        """Kanalbild holen und am Abo vermerken. Liefert, ob es geklappt hat."""
+        await rate_limiter.acquire("avatar")
+        avatar_path = await self._fetch_channel_avatar(channel_id)
+        if not avatar_path:
+            rate_limiter.error("avatar", "kein Kanalbild erhalten")
+            return False
+        rate_limiter.success("avatar")
+        await db.execute(
+            "UPDATE subscriptions SET avatar_path = ? WHERE channel_id = ?",
+            (avatar_path, channel_id))
+        return True
 
     async def _safe_poll(self, sub: dict):
         """Poll mit Error-Handling (für create_task)."""
@@ -706,7 +757,7 @@ class RSSService:
             await rate_limiter.acquire("rss")
             await self._poll_single_feed(sub)
         except Exception as e:
-            logger.debug(f"Initial poll skip: {e}")
+            logger.warning(f"Erste Prüfung von {sub.get('channel_id')} fehlgeschlagen: {e}")
 
     async def _cache_rss_thumbnail(self, video_id: str, thumb_url: str) -> Optional[str]:
         """RSS-Thumbnail lokal cachen. Gibt lokalen Pfad zurück oder None."""
@@ -757,18 +808,7 @@ class RSSService:
         def _fetch():
             from app.utils.pytube_client import make_channel
             ch = make_channel(f"https://www.youtube.com/channel/{channel_id}")
-            thumb_url = getattr(ch, 'thumbnail_url', None)
-            if not thumb_url:
-                try:
-                    for thumb in ch.initial_data.get('metadata', {}).get(
-                        'channelMetadataRenderer', {}
-                    ).get('avatar', {}).get('thumbnails', []):
-                        thumb_url = thumb.get('url')
-                        if thumb_url:
-                            break
-                except Exception:
-                    pass
-            return thumb_url, getattr(ch, 'channel_name', None)
+            return ch.thumbnail_url, ch.channel_name
 
         try:
             thumb_url, ch_name = await loop.run_in_executor(_executor, _fetch)
@@ -799,51 +839,51 @@ class RSSService:
 
     async def add_subscriptions_batch(self, channel_ids: list[str],
                                       auto_download: bool = False) -> dict:
-        """Batch-Import: nur RSS für Namen, Avatare DANACH einzeln im Hintergrund."""
+        """Batch-Import: nur Namen holen, Kanalbilder danach einzeln im Hintergrund."""
+        channel_ids = [cid.strip() for cid in channel_ids]
         job = await job_service.create(
             job_type="import",
             title=f"Abo-Import ({len(channel_ids)} Kanäle)",
-            description="Importiere Kanal-Abonnements per RSS",
+            description="Importiere Kanal-Abonnements",
         )
         await job_service.start(job["id"])
 
         added = 0
         skipped = 0
         new_ids = []
-
-        for i, cid in enumerate(channel_ids):
-            cid = cid.strip()
-            if not cid or len(cid) < 10:
-                skipped += 1
-                continue
-
-            try:
-                await rate_limiter.acquire("rss")
-                result = await self._add_subscription_fast(cid, auto_download=auto_download)
-                if result.get("new"):
-                    added += 1
-                    new_ids.append(cid)
-                    rate_limiter.success("rss")
-                else:
+        async with job_service.guard(job["id"]):
+            for i, cid in enumerate(channel_ids):
+                if job_service.is_cancelled(job["id"]):
+                    break
+                if not (cid.startswith("UC") and len(cid) == 24):
                     skipped += 1
-            except Exception as e:
-                rate_limiter.error("rss", str(e)[:200])
-                logger.warning(f"Abo-Import Fehler für {cid}: {e}")
-                skipped += 1
+                    continue
+                try:
+                    await rate_limiter.acquire("rss")
+                    result = await self._add_subscription_fast(cid, auto_download=auto_download)
+                    rate_limiter.success("rss")
+                    if result.get("new"):
+                        added += 1
+                        new_ids.append(cid)
+                    else:
+                        skipped += 1
+                except Exception as e:
+                    rate_limiter.error("rss", str(e)[:200])
+                    logger.warning(f"Abo-Import Fehler für {cid}: {e}")
+                    skipped += 1
 
-            if i % 10 == 0:
-                await job_service.progress(
-                    job["id"],
-                    (i + 1) / len(channel_ids),
-                    f"{added} hinzugefügt, {skipped} übersprungen"
-                )
+                if i % 10 == 0:
+                    await job_service.progress(
+                        job["id"],
+                        (i + 1) / len(channel_ids),
+                        f"{added} hinzugefügt, {skipped} übersprungen"
+                    )
 
-        await job_service.complete(
-            job["id"],
-            f"{added} Abos importiert, {skipped} übersprungen"
-        )
+            if not job_service.is_cancelled(job["id"]):
+                await job_service.complete(
+                    job["id"], f"{added} Abos importiert, {skipped} übersprungen")
 
-        # Avatare nachträglich im Hintergrund (rate-limited, resume-fähig)
+        # Kanalbilder nachträglich im Hintergrund (rate-limited, resume-fähig)
         if new_ids:
             asyncio.create_task(self._fetch_avatars_background(new_ids))
 
@@ -860,11 +900,8 @@ class RSSService:
             loop = asyncio.get_event_loop()
 
             def _fetch_name():
-                ch = make_channel(
-                    f"https://www.youtube.com/channel/{channel_id}",
-                    max_videos=1,
-                )
-                return ch.channel_name, ch.vanity_url or channel_url
+                ch = make_channel(f"https://www.youtube.com/channel/{channel_id}")
+                return ch.channel_name or channel_id, ch.vanity_url or channel_url
 
             channel_name, channel_url = await loop.run_in_executor(None, _fetch_name)
         except Exception:
@@ -882,55 +919,39 @@ class RSSService:
     # ─── Avatar Background-Fetch (resume-fähig) ─────────
 
     async def _fetch_avatars_background(self, channel_ids: list[str]):
-        """Avatare im Hintergrund laden – rate-limited, resume-fähig."""
+        """Kanalbilder im Hintergrund laden – rate-limited, resume-fähig."""
         job = await job_service.create(
             job_type="avatar_fetch",
-            title=f"Avatare laden ({len(channel_ids)} Kanäle)",
-            description="Lade Kanal-Avatare per pytubefix (rate-limited)",
+            title=f"Kanalbilder laden ({len(channel_ids)} Kanäle)",
+            description="Lade Kanalbilder",
             metadata={"channel_ids": channel_ids, "completed_index": 0},
         )
-        await job_service.start(job["id"])
+        await job_service.start(job["id"], exclusive=False)
 
         loaded = 0
-        for i, cid in enumerate(channel_ids):
-            # Prüfen ob Avatar schon existiert
-            existing = await db.fetch_one(
-                "SELECT avatar_path FROM subscriptions WHERE channel_id = ? AND avatar_path IS NOT NULL",
-                (cid,)
-            )
-            if existing and existing["avatar_path"]:
-                loaded += 1
-                continue
-
-            try:
-                await rate_limiter.acquire("avatar")
-                avatar_path = await self._fetch_channel_avatar(cid)
-                if avatar_path:
-                    await db.execute(
-                        "UPDATE subscriptions SET avatar_path = ? WHERE channel_id = ?",
-                        (avatar_path, cid)
-                    )
-                    loaded += 1
-                    rate_limiter.success("avatar")
-                else:
+        async with job_service.guard(job["id"]):
+            for i, cid in enumerate(channel_ids):
+                if job_service.is_cancelled(job["id"]):
+                    return
+                has_avatar = await db.fetch_val(
+                    "SELECT 1 FROM subscriptions WHERE channel_id = ? AND avatar_path IS NOT NULL",
+                    (cid,))
+                try:
+                    if has_avatar or await self._load_avatar(cid):
+                        loaded += 1
+                except Exception as e:
                     rate_limiter.error("avatar", str(e)[:200])
-            except Exception as e:
-                rate_limiter.error("avatar", str(e)[:200])
-                logger.debug(f"Avatar skip {cid}: {e}")
+                    logger.debug(f"Avatar skip {cid}: {e}")
 
-            # Resume-Info speichern
-            if i % 5 == 0:
-                await job_service.progress(
-                    job["id"],
-                    (i + 1) / len(channel_ids),
-                    f"{loaded}/{i + 1} Avatare geladen"
-                )
-                await db.execute(
-                    "UPDATE jobs SET metadata = ? WHERE id = ?",
-                    (json.dumps({"channel_ids": channel_ids, "completed_index": i + 1}), job["id"])
-                )
+                # Stand merken, damit ein Neustart hier weitermacht
+                if i % 5 == 0:
+                    await job_service.progress(
+                        job["id"], (i + 1) / len(channel_ids),
+                        f"{loaded}/{i + 1} Kanalbilder geladen",
+                        metadata={"completed_index": i + 1})
 
-        await job_service.complete(job["id"], f"{loaded} von {len(channel_ids)} Avatare geladen")
+            await job_service.complete(
+                job["id"], f"{loaded} von {len(channel_ids)} Kanalbildern geladen")
 
     async def resume_avatar_jobs(self):
         """Beim Start: abgebrochene Avatar-Jobs fortsetzen."""
@@ -950,9 +971,12 @@ class RSSService:
                     job["id"], completed / len(channel_ids),
                     f"Fortgesetzt bei {completed}/{len(channel_ids)}"
                 )
+                # Der Rest läuft als neuer Job; der alte ist damit erledigt
+                await job_service.complete(
+                    job["id"], f"Nach Neustart fortgesetzt ({len(remaining)} verbleibend)")
                 asyncio.create_task(self._fetch_avatars_background(remaining))
             else:
-                await job_service.complete(job["id"], "Fortgesetzt: alle Avatare geladen")
+                await job_service.complete(job["id"], "Alle Kanalbilder geladen")
 
     # ─── Kanal komplett laden → channel_scanner.py ─────────────
 
@@ -1012,15 +1036,36 @@ class RSSService:
     async def get_subscriptions(self, page: int = 1, per_page: int = 50) -> dict:
         total = await db.fetch_val("SELECT COUNT(*) FROM subscriptions")
         offset = (page - 1) * per_page
+        # Zähler je Kanal in einem Durchgang je Tabelle (statt vier Unterabfragen
+        # je Kanal - bei hunderten Kanälen dauerte die Liste sonst Sekunden).
+        # Ausgeschlossene Shorts zählen nirgends mit.
         rows = await db.fetch_all(
-            """SELECT s.*,
-               (SELECT COUNT(*) FROM rss_entries WHERE channel_id = s.channel_id AND status = 'new' AND COALESCE(feed_status, 'active') = 'active') as new_videos,
-               (SELECT COUNT(*) FROM rss_entries WHERE channel_id = s.channel_id) as rss_count,
-               (SELECT COUNT(*) FROM videos WHERE channel_id = s.channel_id AND status = 'ready') as downloaded_count,
-               (SELECT COUNT(*) FROM jobs j INNER JOIN rss_entries r2 ON json_extract(j.metadata, '$.video_id') = r2.video_id
-                   WHERE j.type = 'download' AND j.status = 'parked' AND r2.channel_id = s.channel_id) as problem_count
+            f"""WITH feed AS (
+                   SELECT r.channel_id,
+                          COUNT(*) AS rss_count,
+                          SUM(r.status = 'new' AND COALESCE(r.feed_status, 'active') = 'active') AS new_videos
+                   FROM rss_entries r WHERE 1=1{await video_classifier.without_shorts("r")}
+                   GROUP BY r.channel_id),
+                 loaded AS (
+                   SELECT v.channel_id, COUNT(*) AS downloaded_count
+                   FROM videos v WHERE v.status = 'ready'{await video_classifier.without_shorts("v")}
+                   GROUP BY v.channel_id),
+                 problems AS (
+                   SELECT r.channel_id, COUNT(*) AS problem_count
+                   FROM jobs j
+                   JOIN rss_entries r ON r.video_id = json_extract(j.metadata, '$.video_id')
+                   WHERE j.type = 'download' AND j.status = 'parked'
+                   GROUP BY r.channel_id)
+               SELECT s.*,
+                      COALESCE(feed.new_videos, 0) AS new_videos,
+                      COALESCE(feed.rss_count, 0) AS rss_count,
+                      COALESCE(loaded.downloaded_count, 0) AS downloaded_count,
+                      COALESCE(problems.problem_count, 0) AS problem_count
                FROM subscriptions s
-               ORDER BY s.channel_name ASC
+               LEFT JOIN feed ON feed.channel_id = s.channel_id
+               LEFT JOIN loaded ON loaded.channel_id = s.channel_id
+               LEFT JOIN problems ON problems.channel_id = s.channel_id
+               ORDER BY s.channel_name COLLATE NOCASE ASC, s.id
                LIMIT ? OFFSET ?""",
             (per_page, offset)
         )
@@ -1275,86 +1320,45 @@ class RSSService:
         )
 
     async def trigger_poll_now(self) -> dict:
-        """Sofortigen RSS-Check für ALLE aktiven Feeds (manuell, ignoriert Intervalle)."""
+        """Alle aktiven Kanäle sofort prüfen (von Hand, unabhängig vom Intervall).
+        Läuft schon eine Prüfung, startet keine zweite daneben."""
+        if self._polling:
+            return {"triggered": False, "feed_count": 0,
+                    "message": "Es läuft bereits eine Prüfung"}
         subs = await db.fetch_all(
             """SELECT * FROM subscriptions WHERE enabled = 1
                ORDER BY last_checked ASC NULLS FIRST"""
         )
-        if subs:
-            asyncio.create_task(self._process_batch_now([dict(s) for s in subs]))
-            return {"triggered": True, "feed_count": len(subs)}
-        return {"triggered": False, "feed_count": 0}
+        if not subs:
+            return {"triggered": False, "feed_count": 0, "message": "Keine aktiven Kanäle"}
+        self._polling = True
+        asyncio.create_task(self._process_batch_now([dict(s) for s in subs]))
+        return {"triggered": True, "feed_count": len(subs)}
 
     async def _process_batch_now(self, subs: list[dict]):
-        """Manueller Batch-Check mit Job-Sichtbarkeit."""
-        job = await job_service.create(
-            job_type="rss_cycle",
-            title=f"RSS-Check ({len(subs)} Feeds)",
-            description="Manuell ausgelöster RSS-Check",
-            priority=8,
-        )
-        await job_service.start(job["id"])
-
-        total_new = 0
-        for i, sub in enumerate(subs):
-            try:
-                await rate_limiter.acquire("rss")
-                new_count = await self._poll_single_feed(sub)
-                total_new += new_count
-                rate_limiter.success("rss")
-            except Exception as e:
-                rate_limiter.error("rss", str(e)[:200])
-                logger.error(f"RSS Feed Fehler {sub['channel_id']}: {e}")
-
-            await job_service.progress(
-                job["id"],
-                (i + 1) / len(subs),
-                f"{i + 1}/{len(subs)} Feeds, {total_new} neue Videos"
+        """Von Hand ausgelöste Prüfung aller Kanäle, sichtbar als Job."""
+        try:
+            self._clear_disturbance()
+            job = await job_service.create(
+                job_type="rss_cycle",
+                title=f"Kanalprüfung von Hand ({len(subs)} Kanäle)",
+                description="Alle aktiven Kanäle werden geprüft",
+                metadata={"trigger": "manual", "batch_size": len(subs)},
+                priority=8,
             )
-
-        await job_service.complete(
-            job["id"],
-            f"{total_new} neue Videos in {len(subs)} Feeds gefunden"
-        )
-
-    async def background_refresh(self):
-        """Periodischer leichter Re-Scan fuer Kanaele die laenger nicht gescannt wurden.
-        Wird vom Scheduler aufgerufen wenn feed.auto_refresh aktiviert ist.
-        """
-        enabled = await self._get_setting("feed.auto_refresh")
-        if enabled != "true":
-            return {"skipped": True, "reason": "auto_refresh deaktiviert"}
-
-        interval_days = int(await self._get_setting("feed.refresh_interval_days") or 7)
-        cutoff = past_sqlite(days=interval_days)
-
-        # Kanaele die laenger als X Tage nicht gescannt wurden
-        stale_subs = await db.fetch_all(
-            """SELECT channel_id, channel_name FROM subscriptions
-               WHERE enabled = 1 AND (last_scanned IS NULL OR last_scanned < ?)
-               ORDER BY last_scanned ASC NULLS FIRST
-               LIMIT 3""",
-            (cutoff,)
-        )
-
-        if not stale_subs:
-            return {"refreshed": 0, "reason": "Alle Kanaele aktuell"}
-
-        refreshed = 0
-        for sub in stale_subs:
-            try:
-                ch_id = sub["channel_id"]
-                ch_name = sub["channel_name"] or ch_id
-                logger.info(f"Background-Refresh: {ch_name}")
-                # Vollstaendigen Channel-Scan als Job starten
-                await self.scan_channel(ch_id, ch_name)
-                refreshed += 1
-                # Pause zwischen Scans gegen Rate-Limiting
-                await asyncio.sleep(5)
-            except Exception as e:
-                logger.warning(f"Background-Refresh fehlgeschlagen fuer {sub['channel_id']}: {e}")
-
-        return {"refreshed": refreshed, "total_stale": len(stale_subs)}
+            await job_service.start(job["id"])
+            async with job_service.guard(job["id"]):
+                outcome = await self._check_feeds(job["id"], subs, adaptive=False)
+                if not job_service.is_cancelled(job["id"]):
+                    await job_service.complete(job["id"], outcome["message"])
+            if outcome["new_videos"] > 0:
+                from app.routers.jobs import activity_ws
+                await activity_ws.broadcast(
+                    {"type": "feed_updated", "new_videos": outcome["new_videos"]})
+        except Exception as e:
+            logger.error(f"Kanalprüfung von Hand fehlgeschlagen: {e}", exc_info=True)
+        finally:
+            self._polling = False
 
     async def get_stats(self) -> dict:
         total_subs = await db.fetch_val("SELECT COUNT(*) FROM subscriptions") or 0
@@ -1375,7 +1379,10 @@ class RSSService:
             "total_entries": total_entries,
             "checked_last_hour": checked_1h,
             "auto_dl_today": await self._auto_dl_count_today(),
-            "auto_dl_limit": AUTO_DL_DAILY_LIMIT,
+            "auto_dl_limit": int(await self._get_setting("rss.auto_dl_daily_limit")
+                                 or AUTO_DL_DAILY_LIMIT),
+            "auto_dl_pending": await db.fetch_val(
+                "SELECT COUNT(*) FROM rss_entries WHERE auto_pending = 1") or 0,
         }
 
     async def get_scheduler_status(self) -> dict:
@@ -1389,12 +1396,7 @@ class RSSService:
         disabled = total - enabled
 
         # Fällige Feeds
-        pending = await db.fetch_val(
-            """SELECT COUNT(*) FROM subscriptions
-               WHERE enabled = 1
-               AND (last_checked IS NULL
-                    OR last_checked < datetime('now', '-' || check_interval || ' seconds'))"""
-        ) or 0
+        pending = await self._pending_count()
 
         # RSS Entries Statistik
         total_entries = await db.fetch_val("SELECT COUNT(*) FROM rss_entries") or 0
@@ -1448,6 +1450,13 @@ class RSSService:
             "last_checked_at": self._last_checked_at,
             "feeds_pending": pending,
             "feeds_checked_total": self._feeds_checked_cycle,
+            "polling": self._polling,
+            "last_tick": self._last_tick or None,
+            "disturbance": {
+                "active": self._disturbance_pause_left() > 0,
+                "pause_seconds_left": self._disturbance_pause_left(),
+                "reason": self._disturbance_reason,
+            },
             "last_cron_job": dict(last_cron_job) if last_cron_job else None,
             # Abo-Statistiken
             "subscriptions": {
@@ -1472,11 +1481,14 @@ class RSSService:
                 "channels": auto_dl_channels,
                 "today_count": await self._auto_dl_count_today(),
                 "daily_limit": int(daily_limit),
+                "pending": await db.fetch_val(
+                    "SELECT COUNT(*) FROM rss_entries WHERE auto_pending = 1") or 0,
             },
             # Aktive Einstellungen
             "active_settings": {
                 "max_age_days": int(max_age),
                 "default_interval": int(interval),
+                "max_interval": (await self._intervals())[1],
                 "rss_enabled": rss_enabled == "true",
             },
             # Check-Intervall Verteilung

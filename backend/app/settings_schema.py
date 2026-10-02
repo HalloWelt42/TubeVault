@@ -49,7 +49,12 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="rss.interval", default="1800", kind="duration", category="rss", section="scanner",
                min=300, max=86400, label="Basis-Prüfintervall",
                description="Startintervall für neue Abos. Verdoppelt sich bei jeder Prüfung ohne neue "
-                           "Videos (bis höchstens 7 Tage). Neue Videos setzen auf diesen Wert zurück."),
+                           "Videos bis zum längsten Prüfintervall. Neue Videos setzen auf diesen Wert "
+                           "zurück."),
+    SettingDef(key="rss.max_interval", default="86400", kind="duration", category="rss",
+               section="scanner", min=1800, max=604800, label="Längstes Prüfintervall",
+               description="So lange bleibt ein ruhiger Kanal höchstens ungeprüft. Ein neues Video "
+                           "erscheint spätestens nach dieser Zeit im Feed."),
     SettingDef(key="rss.max_age_days", default="90", kind="number", category="rss", section="scanner",
                min=7, max=365, unit="Tage", label="Maximales Video-Alter",
                description="Bei der Prüfung auf neue Videos werden ältere Einträge übergangen."),

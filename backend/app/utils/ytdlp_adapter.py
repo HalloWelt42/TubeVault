@@ -14,6 +14,7 @@ Nicht abgedeckt (bewusst nicht als Adapter):
 """
 from __future__ import annotations
 
+import itertools
 import logging
 import re
 from functools import cached_property
@@ -1383,6 +1384,14 @@ def _extract_video_id(url: str) -> Optional[str]:
 #  CHANNEL / PLAYLIST-VIDEO-ITEMS
 # ═══════════════════════════════════════════════════════════════════
 
+def _date_from_timestamp(timestamp) -> Optional[str]:
+    """Zeitstempel der Quelle als "JJJJMMTT" (wie upload_date)."""
+    if not timestamp:
+        return None
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(int(timestamp), timezone.utc).strftime("%Y%m%d")
+
+
 class ChannelVideoItem:
     """Leichtgewichtiger Video-Eintrag aus einer Channel/Playlist-Liste (flat)."""
 
@@ -1400,7 +1409,7 @@ class ChannelVideoItem:
         self.thumbnail_url = (thumbs[-1].get("url") if thumbs else None) or (
             f"https://i.ytimg.com/vi/{self.video_id}/hqdefault.jpg" if self.video_id else ""
         )
-        self.publish_date = entry.get("upload_date")
+        self.publish_date = entry.get("upload_date") or _date_from_timestamp(entry.get("timestamp"))
         self.watch_url = entry.get("url") or entry.get("webpage_url") or (
             f"https://www.youtube.com/watch?v={self.video_id}" if self.video_id else ""
         )
@@ -1410,13 +1419,74 @@ class ChannelVideoItem:
 #  CHANNEL
 # ═══════════════════════════════════════════════════════════════════
 
+class ChannelTabMissing(Exception):
+    """Der Kanal hat diesen Reiter nicht (z.B. keine Shorts, keine Livestreams)."""
+
+
+_TAB_MISSING_MARKERS = ("does not have a", "no videos")
+_LISTING_RETRY_PAUSE_S = 3
+
+
+def _is_tab_missing(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(marker in message for marker in _TAB_MISSING_MARKERS)
+
+
+def _flatten_entries(entries) -> Iterator[dict]:
+    """Verschachtelte Listen auflösen: ein Kanal-Reiter kann Unterlisten liefern."""
+    for entry in entries:
+        if not entry:
+            continue
+        if entry.get("_type") == "playlist" and entry.get("entries"):
+            yield from _flatten_entries(entry["entries"])
+        else:
+            yield entry
+
+
+def _open_listing(url: str) -> tuple[dict, Iterator[dict]]:
+    """Kanal-Reiter träge öffnen: Kopfdaten sofort, Einträge seitenweise erst
+    beim Durchlaufen. Wer nur den Kopf braucht, löst keinen Listenabruf aus;
+    wer abbricht, spart die restlichen Seiten.
+
+    Fester web-Client und Desktop-Kennung: nur damit liest die Quelle
+    Kanal-Reiter zuverlässig. Fehlt der Reiter, kommt ChannelTabMissing;
+    jeder andere Fehler wird durchgereicht - eine Störung ist kein leerer Kanal.
+    """
+    label = url[-32:]
+    last_error: Optional[Exception] = None
+    for attempt in range(2):
+        opts = _build_ydl_opts(label=label)
+        opts["extractor_args"]["youtube"]["player_client"] = ["web"]
+        opts["http_headers"]["User-Agent"] = _pick_desktop_user_agent()
+        opts["extract_flat"] = "in_playlist"
+        # Ungefähres Datum je Eintrag ("vor 3 Wochen" → Zeitstempel): ohne das
+        # kennt die Liste gar kein Datum und Sortieren nach Alter wäre geraten
+        opts["extractor_args"]["youtubetab"] = {"approximate_date": [""]}
+        try:
+            info = yt_dlp.YoutubeDL(opts).extract_info(url, download=False, process=False)
+            if not info:
+                raise RuntimeError(f"Keine Antwort für {label}")
+            return info, _flatten_entries(info.get("entries") or [])
+        except Exception as e:
+            if _is_tab_missing(e):
+                raise ChannelTabMissing(str(e)[:200]) from e
+            last_error = e
+            logger.warning(f"[LISTE] {label} Versuch {attempt + 1}/2: {str(e)[:160]}")
+            if attempt == 0:
+                import time as _t
+                _t.sleep(_LISTING_RETRY_PAUSE_S)
+    raise last_error
+
+
 class ChannelAdapter:
-    """pytubefix.Channel-kompatibel. Lazy; Videos als Generator."""
+    """pytubefix.Channel-kompatibel. Grunddaten und Videoliste sind getrennt:
+    Name, Bild, Abonnenten kosten einen leichten Abruf, die Liste wird nur
+    geholt, wenn sie jemand durchläuft."""
 
     def __init__(self, url: str, *, max_videos: Optional[int] = None, **_kwargs):
         self.channel_url = url
         self._max_videos = max_videos
-        self._meta: Optional[dict] = None
+        self._head: Optional[dict] = None
         # pytubefix-kompatibel: html_url wird vom channel_scanner gesetzt
         # (ch.html_url = ch.videos_url / .shorts_url / .live_url), dann
         # iteriert er ch.url_generator(). Default = Videos-Tab.
@@ -1447,90 +1517,98 @@ class ChannelAdapter:
         # YouTube-Tab heißt /streams (pytubefix nennt es live)
         return self._base_url + "/streams"
 
-    def url_generator(self):
-        """pytubefix-kompatibel: iteriert ALLE Videos des aktuell via
-        html_url gewählten Tabs. yt-dlp paginiert YouTube-Continuations
-        automatisch durch – damit kommt der KOMPLETTE Kanal, nicht nur
-        die erste Seite. extract_flat hält die Einträge leicht (kein
-        volles Video-Objekt → kein OOM wie beim pytubefix-Caching)."""
-        tab_url = self.html_url or self.videos_url
-        opts = {"extract_flat": "in_playlist"}
-        if self._max_videos:
-            opts["playlistend"] = self._max_videos
-        try:
-            # Channel-Tabs: fester web-Client + Desktop-UA. youtube:tab
-            # parst damit zuverlässig (Mobile-UA/exotische Clients bringen
-            # nur "Unable to recognize tab page" + 4 Fehlversuche).
-            info = _ydl_extract(
-                tab_url, extra_opts=opts,
-                force_clients=["web"], desktop_ua_only=True,
-            )
-        except Exception as e:
-            # Kanal hat diesen Tab evtl. nicht (keine Shorts/Live) → leer
-            logger.info(f"ChannelAdapter.url_generator({tab_url}): {str(e)[:140]}")
-            return
+    def _items(self, tab_url: str) -> Iterator[ChannelVideoItem]:
+        """Einträge eines Reiters, träge und auf max_videos begrenzt."""
+        head, entries = _open_listing(tab_url)
+        if self._head is None:
+            self._head = head
         fallback = {
-            "channel": info.get("channel") or info.get("uploader"),
-            "channel_id": info.get("channel_id"),
+            "channel": head.get("channel") or head.get("uploader"),
+            "channel_id": head.get("channel_id"),
         }
-        entries = info.get("entries") or []
-        # Verschachtelung auflösen: Channel-Tab kann eine Liste von
-        # Sub-Playlists liefern (z.B. "Videos"-Playlist als ein entry)
-        for e in entries:
-            if not e:
-                continue
-            if e.get("_type") == "playlist" and e.get("entries"):
-                for sub in e["entries"]:
-                    if sub:
-                        yield ChannelVideoItem(sub, fallback_channel=fallback)
-            else:
-                yield ChannelVideoItem(e, fallback_channel=fallback)
+        if self._max_videos:
+            entries = itertools.islice(entries, self._max_videos)
+        for entry in entries:
+            yield ChannelVideoItem(entry, fallback_channel=fallback)
 
-    def _ensure_meta(self) -> dict:
-        if self._meta is None:
-            # Light-Abruf: nur Channel-Grunddaten + flat Video-Liste
-            opts = {"extract_flat": "in_playlist"}
-            if self._max_videos:
-                opts["playlistend"] = self._max_videos
-            self._meta = _ydl_extract(
-                _channel_videos_url(self.channel_url), extra_opts=opts
-            )
-        return self._meta
+    def url_generator(self):
+        """pytubefix-kompatibel: alle Videos des via html_url gewählten Reiters.
+        Ein fehlender Reiter ergibt eine leere Liste, jede andere Störung
+        einen Fehler - der Aufrufer muss beides unterscheiden können."""
+        tab_url = self.html_url or self.videos_url
+        try:
+            yield from self._items(tab_url)
+        except ChannelTabMissing as e:
+            logger.info(f"ChannelAdapter.url_generator({tab_url}): {e}")
+
+    def _info(self) -> dict:
+        """Grunddaten des Kanals. Wurde schon eine Liste geöffnet, stammen sie
+        von dort; sonst ein leichter Abruf ohne Liste."""
+        if self._head is None:
+            try:
+                self._head, _ = _open_listing(_channel_videos_url(self.channel_url))
+            except ChannelTabMissing:
+                # Kanal ohne Videos-Reiter (nur Shorts oder Livestreams)
+                self._head, _ = _open_listing(self._base_url)
+        return self._head
 
     @property
     def channel_id(self) -> str:
-        return self._ensure_meta().get("channel_id") or ""
+        return self._info().get("channel_id") or ""
 
     @property
     def channel_name(self) -> str:
-        return (
-            self._ensure_meta().get("channel")
-            or self._ensure_meta().get("uploader")
-            or self._ensure_meta().get("title")
-            or ""
-        )
+        info = self._info()
+        return info.get("channel") or info.get("uploader") or info.get("title") or ""
 
     @property
     def vanity_url(self) -> Optional[str]:
-        return self._ensure_meta().get("uploader_url")
+        return self._info().get("uploader_url")
 
     @property
     def thumbnail_url(self) -> str:
-        thumbs = self._ensure_meta().get("thumbnails") or []
-        return thumbs[-1]["url"] if thumbs else ""
+        """Kanalbild: das unbeschnittene Original, sonst das größte quadratische."""
+        thumbs = self._info().get("thumbnails") or []
+        for thumb in thumbs:
+            if thumb.get("id") == "avatar_uncropped":
+                return thumb.get("url") or ""
+        square = [t for t in thumbs if t.get("width") and t.get("width") == t.get("height")]
+        if square:
+            return max(square, key=lambda t: t["width"]).get("url") or ""
+        return ""
+
+    @property
+    def banner_url(self) -> str:
+        """Kanalbanner: das breiteste zugeschnittene Bild."""
+        thumbs = self._info().get("thumbnails") or []
+        wide = [t for t in thumbs
+                if t.get("width") and t.get("height") and t["width"] > 2 * t["height"]]
+        if wide:
+            return max(wide, key=lambda t: t["width"]).get("url") or ""
+        for thumb in thumbs:
+            if thumb.get("id") == "banner_uncropped":
+                return thumb.get("url") or ""
+        return ""
+
+    @property
+    def subscriber_count(self) -> Optional[int]:
+        return self._info().get("channel_follower_count")
+
+    @property
+    def tags(self) -> list[str]:
+        return [str(tag) for tag in (self._info().get("tags") or [])]
 
     @property
     def description(self) -> str:
-        return self._ensure_meta().get("description") or ""
+        return self._info().get("description") or ""
 
     @property
     def videos(self) -> Iterator[ChannelVideoItem]:
-        meta = self._ensure_meta()
-        fallback = {"channel": meta.get("channel"), "channel_id": meta.get("channel_id")}
-        for e in (meta.get("entries") or []):
-            if not e:
-                continue
-            yield ChannelVideoItem(e, fallback_channel=fallback)
+        """Videos-Reiter. Fehlt er, kommt der Fehler der Quelle durch."""
+        try:
+            yield from self._items(_channel_videos_url(self.channel_url))
+        except ChannelTabMissing as e:
+            raise RuntimeError(str(e)) from e
 
     @property
     def video_urls(self) -> list[str]:

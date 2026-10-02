@@ -33,6 +33,8 @@
   let filterMode = $state('all');
   let searchQuery = $state('');
   let prognosis = $state(null);
+  let scheduler = $state(null);
+  let checking = $state({});   // Abo-ID -> Einzelprüfung läuft
   // Problem-Videos-Sektion: pro Abo-ID: { open: bool, loading: bool, videos: [...] }
   let problemState = $state({});
 
@@ -129,41 +131,54 @@
       subs = result.subscriptions || [];
       total = result.total || 0;
       rssStats = await api.getRSSStats();
+      scheduler = await api.getSchedulerStatus();
     } catch (e) { toast.error(e.message); }
   }
 
-  function extractChannelId(input) {
-    input = input.trim();
-    if (!input) return '';
-    const m = input.match(/channel\/([a-zA-Z0-9_-]+)/);
-    if (m) return m[1];
-    if (input.startsWith('UC') && input.length >= 20) return input;
-    return input;
-  }
+  // Stand der automatischen Prüfung in einem Satz
+  let schedulerLine = $derived.by(() => {
+    if (!scheduler) return '';
+    if (!scheduler.rss_enabled) return 'Die automatische Prüfung ist in den Einstellungen abgeschaltet.';
+    if (scheduler.disturbance?.active) {
+      const minutes = Math.ceil(scheduler.disturbance.pause_seconds_left / 60);
+      return `Quelle gestört – die Prüfung pausiert noch ${minutes} Min. (${scheduler.disturbance.reason})`;
+    }
+    if (scheduler.polling) return 'Eine Prüfung läuft gerade.';
+    const parts = [`${scheduler.feeds_pending} Kanäle sind fällig`];
+    if (scheduler.last_tick?.status === 'skipped') parts.push(`letzter Anstoß ausgesetzt: ${scheduler.last_tick.message}`);
+    if (scheduler.auto_download?.pending > 0) {
+      parts.push(`${scheduler.auto_download.pending} Videos für Auto-Download vorgemerkt (Tageslimit ${scheduler.auto_download.daily_limit})`);
+    }
+    return parts.join(' · ') + '.';
+  });
+  let baseInterval = $derived(scheduler?.active_settings?.default_interval || 1800);
 
   async function addSingle() {
-    if (!channelInput.trim()) return;
+    const input = channelInput.trim();
+    if (!input) return;
     loading = true;
     try {
-      const input = channelInput.trim();
-      // Backend löst Video-URLs, Kanal-URLs und IDs auf
-      const cid = extractChannelId(input);
-      const isUrl = input.includes('youtu.be/') || input.includes('youtube.com/watch') || input.includes('youtube.com/shorts') || input.includes('youtube.com/@');
-      await api.addSubscription({
-        channel_id: isUrl ? input : cid,
+      // Der Server löst Kanal-ID, Kanal-Adresse, Handle und Video-Adresse auf
+      const added = await api.addSubscription({
+        channel_id: input,
         auto_download: autoDownload,
         download_quality: defaultQuality || null,
       });
-      toast.success('Abo hinzugefügt – Avatar wird geladen…');
+      if (added.already_subscribed) toast.info(`"${added.channel_name}" ist bereits abonniert`);
+      else toast.success(`"${added.channel_name}" hinzugefügt – Kanalbild und erste Prüfung laufen`);
       channelInput = '';
-      setTimeout(loadSubs, 3000);
+      await loadSubs();
+      setTimeout(loadSubs, 8000);   // Kanalbild und erste Videos nachziehen
     } catch (e) { toast.error(e.message); }
     finally { loading = false; }
   }
 
   async function addBatch() {
-    const ids = batchInput.split('\n').map(l => extractChannelId(l)).filter(l => l);
-    if (!ids.length) return;
+    // Je Zeile eine Kanal-ID, auch aus einer Kanal-Adresse herausgelesen
+    const ids = batchInput.split('\n')
+      .map(line => (line.match(/UC[0-9A-Za-z_-]{22}/) || [])[0])
+      .filter(Boolean);
+    if (!ids.length) { toast.error('Keine Kanal-ID gefunden (beginnt mit UC, 24 Zeichen)'); return; }
     importing = true;
     try {
       const result = await api.addSubscriptionsBatch({ channel_ids: ids, auto_download: autoDownload });
@@ -175,63 +190,71 @@
     finally { importing = false; }
   }
 
-  async function toggleAutoDownload(sub) {
-    await api.updateSubscription(sub.id, { auto_download: !sub.auto_download });
+  // Eine Einstellung am Kanal ändern. Scheitert das Speichern, bleibt die
+  // Anzeige beim alten Wert und der Nutzer erfährt den Grund.
+  async function patchSub(sub, changes, message = '') {
+    try {
+      await api.updateSubscription(sub.id, changes);
+    } catch (e) {
+      toast.error(`${sub.channel_name}: ${e.message}`);
+      return false;
+    }
     const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], auto_download: !sub.auto_download }; subs = [...subs]; }
+    if (i >= 0) { subs[i] = { ...subs[i], ...changes }; subs = [...subs]; }
+    if (message) toast.info(`${sub.channel_name}: ${message}`);
+    return true;
   }
 
-  async function updateQuality(sub, quality) {
+  const toggleAutoDownload = (sub) => patchSub(sub, { auto_download: !sub.auto_download });
+  const toggleEnabled = (sub) => patchSub(sub, { enabled: !sub.enabled });
+
+  function updateQuality(sub, quality) {
     const value = quality || null;   // leer = Standard aus den Einstellungen
-    await api.updateSubscription(sub.id, { download_quality: value });
-    const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], download_quality: value }; subs = [...subs]; }
-    toast.info(`${sub.channel_name}: Qualität: ${value || 'Standard aus den Einstellungen'}`);
+    return patchSub(sub, { download_quality: value },
+      `Qualität: ${value || 'Standard aus den Einstellungen'}`);
   }
 
-  async function toggleAudioOnly(sub) {
+  function toggleAudioOnly(sub) {
     const val = !sub.audio_only;
-    await api.updateSubscription(sub.id, { audio_only: val });
-    const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], audio_only: val }; subs = [...subs]; }
-    toast.info(`${sub.channel_name}: ${val ? 'Nur Audio' : 'Video + Audio'}`);
-  }
-
-  async function toggleEnabled(sub) {
-    await api.updateSubscription(sub.id, { enabled: !sub.enabled });
-    const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], enabled: !sub.enabled }; subs = [...subs]; }
+    return patchSub(sub, { audio_only: val }, val ? 'Nur Audio' : 'Video + Audio');
   }
 
   async function toggleDrip(sub) {
     const val = !sub.drip_enabled;
-    await api.updateSubscription(sub.id, { drip_enabled: val });
-    const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) {
-      subs[i] = { ...subs[i], drip_enabled: val, drip_completed_at: val ? null : subs[i].drip_completed_at };
-      subs = [...subs];
-    }
-    toast.info(`${sub.channel_name}: +${sub.drip_count||3}/day ${val ? 'aktiviert' : 'deaktiviert'}`);
+    const ok = await patchSub(sub, { drip_enabled: val },
+      `+${sub.drip_count || 3} pro Tag ${val ? 'aktiviert' : 'deaktiviert'}`);
+    if (ok) loadSubs();   // nächster Lauf und Abschluss-Stand kommen vom Server
   }
 
-  async function toggleDripArchive(sub) {
+  function toggleDripArchive(sub) {
     const val = !sub.drip_auto_archive;
-    await api.updateSubscription(sub.id, { drip_auto_archive: val });
-    const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], drip_auto_archive: val }; subs = [...subs]; }
-    toast.info(`${sub.channel_name}: Auto-Archiv ${val ? 'an' : 'aus'}`);
+    return patchSub(sub, { drip_auto_archive: val }, `Auto-Archiv ${val ? 'an' : 'aus'}`);
   }
 
   async function toggleSuggestExclude(sub) {
     const val = !sub.suggest_exclude;
-    // Wenn Einschluss: Overrides zurücksetzen
-    if (!val) {
-      try { await api.request(`/api/subscriptions/${sub.id}/reset-suggest-overrides`, { method: 'POST' }); } catch {}
+    const ok = await patchSub(sub, { suggest_exclude: val },
+      val ? 'Aus Vorschlägen ausgeschlossen' : 'In Vorschlägen eingeschlossen');
+    // Beim Einschließen gelten die Ausnahmen einzelner Videos nicht mehr
+    if (ok && !val) {
+      try { await api.resetSuggestOverrides(sub.id); } catch (e) { toast.error(e.message); }
     }
-    await api.updateSubscription(sub.id, { suggest_exclude: val });
-    const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], suggest_exclude: val }; subs = [...subs]; }
-    toast.info(`${sub.channel_name}: ${val ? 'Aus Vorschlägen ausgeschlossen' : 'In Vorschlägen eingeschlossen'}`);
+  }
+
+  async function checkNow(sub) {
+    if (checking[sub.id]) return;
+    checking[sub.id] = true;
+    try {
+      const result = await api.checkChannelNow(sub.id);
+      toast.success(result.new_videos > 0
+        ? `${sub.channel_name}: ${result.new_videos} neue Videos`
+        : `${sub.channel_name}: nichts Neues`);
+    } catch (e) {
+      toast.error(`${sub.channel_name}: ${e.message}`);
+    } finally {
+      checking[sub.id] = false;
+      loadSubs();
+    }
   }
 
   /**
@@ -308,34 +331,41 @@
   }
 
   async function pollNow() {
-    const result = await api.triggerRSSPoll();
-    toast.success(`RSS-Check gestartet (${result.feed_count} Feeds)`);
+    try {
+      const result = await api.triggerRSSPoll();
+      if (result.triggered) {
+        toast.success(`Prüfung aller ${result.feed_count} Kanäle gestartet – Fortschritt in der Aktivitätenleiste`);
+      } else {
+        toast.info(result.message || 'Keine Prüfung gestartet');
+      }
+      loadSubs();
+    } catch (e) { toast.error(e.message); }
   }
 
   async function resetAllIntervals() {
-    const result = await api.resetAllIntervals();
-    toast.success(`${result.reset} Kanäle auf ${fmtInterval(result.interval)} zurückgesetzt`);
-    loadSubs();
+    try {
+      const result = await api.resetAllIntervals();
+      toast.success(`${result.reset} Kanäle auf ${fmtInterval(result.interval)} zurückgesetzt`);
+      loadSubs();
+    } catch (e) { toast.error(e.message); }
   }
 
-  async function halveInterval(sub) {
-    const result = await api.halveInterval(sub.id);
-    const idx = subs.findIndex(s => s.id === sub.id);
-    if (idx >= 0) { subs[idx] = { ...subs[idx], check_interval: result.new_interval }; subs = [...subs]; }
-    toast.info(`${sub.channel_name}: ${fmtInterval(result.old_interval)} → ${fmtInterval(result.new_interval)}`);
+  // Antwort einer Intervall-Änderung in die Liste übernehmen
+  async function applyInterval(sub, call) {
+    try {
+      const result = await call(sub.id);
+      const idx = subs.findIndex(s => s.id === sub.id);
+      if (idx >= 0) { subs[idx] = { ...subs[idx], check_interval: result.new_interval }; subs = [...subs]; }
+      toast.info(`${sub.channel_name}: Prüfintervall ${fmtInterval(result.old_interval)} → ${fmtInterval(result.new_interval)}`);
+    } catch (e) { toast.error(`${sub.channel_name}: ${e.message}`); }
   }
-
-  async function resetInterval(sub) {
-    const result = await api.resetInterval(sub.id);
-    const idx = subs.findIndex(s => s.id === sub.id);
-    if (idx >= 0) { subs[idx] = { ...subs[idx], check_interval: result.new_interval }; subs = [...subs]; }
-    toast.info(`${sub.channel_name}: Reset auf ${fmtInterval(result.new_interval)}`);
-  }
+  const halveInterval = (sub) => applyInterval(sub, api.halveInterval);
+  const resetInterval = (sub) => applyInterval(sub, api.resetInterval);
 
   async function resetAllErrors() {
     try {
       const res = await api.resetAllErrors();
-      toast.success(`${res.reset} Abos entsperrt`);
+      toast.success(`Fehler von ${res.reset} Kanälen zurückgesetzt`);
       await loadSubs();
     } catch (e) { toast.error(e.message); }
   }
@@ -406,7 +436,8 @@
       <button class="btn-ghost" onclick={resetAllIntervals} title="Alle Intervalle zurücksetzen">
         <i class="fa-solid fa-clock-rotate-left"></i> Prüfzeiten zurücksetzen
       </button>
-      <button class="btn-primary" onclick={pollNow}><i class="fa-solid fa-rotate-right"></i> Jetzt prüfen</button>
+      <button class="btn-primary" onclick={pollNow} disabled={scheduler?.polling}
+              title="Alle aktiven Kanäle sofort auf neue Videos prüfen"><i class="fa-solid fa-rotate-right"></i> Alle jetzt prüfen</button>
     </div>
   </div>
 
@@ -441,13 +472,13 @@
     {#if neverScannedCount > 0}
       <button class="filter-chip" class:active={filterMode==='never-scanned'}
               onclick={()=>filterMode='never-scanned'}
-              title="Kanäle ohne vollständigen Scan oder zu wenige Videos">
-        <strong>{neverScannedCount}</strong> 🔍 Nie gescannt
+              title="Kanäle ohne vollständigen Kanal-Scan oder mit zu wenigen Videos für eine Wertung">
+        <strong>{neverScannedCount}</strong> 🔍 Ohne Kanal-Scan
       </button>
     {/if}
     {#if uncheckedCount > 0}
       <button class="filter-chip warn" class:active={filterMode==='unchecked'} onclick={()=>filterMode='unchecked'}>
-        <strong>{uncheckedCount}</strong> Ungeprüft
+        <strong>{uncheckedCount}</strong> Noch nie geprüft
       </button>
     {/if}
     {#if disabledCount > 0}
@@ -455,9 +486,10 @@
         <strong>{disabledCount}</strong> Deaktiviert
       </button>
     {/if}
-    {#if subs.filter(s => s.error_count > 0 || !s.enabled).length > 0}
-      <button class="filter-chip reset-chip" onclick={resetAllErrors} title="Alle Fehler + Deaktivierungen zurücksetzen">
-        <i class="fa-solid fa-lock-open"></i> Alle entsperren
+    {#if subs.some(s => s.error_count > 0)}
+      <button class="filter-chip reset-chip" onclick={resetAllErrors}
+              title="Fehlerzähler löschen und die Kanäle wieder im Basis-Intervall prüfen. Abgeschaltete Kanäle bleiben abgeschaltet.">
+        <i class="fa-solid fa-rotate-left"></i> Fehler zurücksetzen
       </button>
     {/if}
     <button class="filter-chip highlight" onclick={()=>navigate('/feed')}>
@@ -468,11 +500,9 @@
   <!-- Info-Zeile: Scanner-Status -->
   <div class="info-bar">
     <span><i class="fa-solid fa-circle-info"></i>
-      {subs.length} von {total} Kanälen geladen.
+      {schedulerLine}
       {#if uncheckedCount > 0}
-        {uncheckedCount} Kanäle warten noch auf den ersten Scan – der Scheduler arbeitet diese automatisch ab.
-      {:else}
-        Alle Kanäle wurden mindestens einmal geprüft.
+        {uncheckedCount} Kanäle warten noch auf ihre erste Prüfung.
       {/if}
     </span>
   </div>
@@ -490,7 +520,7 @@
     <div class="divider"></div>
     <div class="import-row">
       <h3>Batch Import</h3>
-      <p class="hint">FreeTube: Einstellungen : Daten : Abonnements exportieren : Channel-IDs hier einfügen</p>
+      <p class="hint">Je Zeile eine Kanal-ID (beginnt mit UC) oder eine Kanal-Adresse, die sie enthält.</p>
       <textarea class="textarea" placeholder="Eine Kanal-ID oder URL pro Zeile…" bind:value={batchInput} rows="5"></textarea>
       <div class="import-actions">
         <label class="check"><input type="checkbox" bind:checked={autoDownload}/> Auto-Download</label>
@@ -563,11 +593,11 @@
           <span class="card-name" title={sub.channel_name||sub.channel_id}>{sub.channel_name||sub.channel_id}</span>
           <span class="card-sub">
             {#if !sub.last_checked}
-              <span class="status-badge unchecked"><i class="fa-solid fa-clock"></i> Noch nicht gescannt</span>
-            {:else if sub.video_count > 0}
-              {sub.video_count} Videos · {formatDateRelative(sub.last_checked)} · <span class="card-interval" title="Prüfintervall (adaptiv)"><i class="fa-solid fa-rotate"></i> {fmtInterval(sub.check_interval)}</span>
+              <span class="status-badge unchecked"><i class="fa-solid fa-clock"></i> Noch nie geprüft</span>
             {:else}
-              Keine Videos im Zeitfenster · {formatDateRelative(sub.last_checked)} · <span class="card-interval" title="Prüfintervall (adaptiv)"><i class="fa-solid fa-rotate"></i> {fmtInterval(sub.check_interval)}</span>
+              {sub.rss_count > 0 ? `${sub.rss_count} bekannt` : 'Keine Videos bekannt'} ·
+              <span title="Zuletzt auf neue Videos geprüft">geprüft {formatDateRelative(sub.last_checked)}</span> ·
+              <span class="card-interval" title="Prüfintervall: wächst ohne neue Videos, ein neues Video setzt es zurück"><i class="fa-solid fa-rotate"></i> {fmtInterval(sub.check_interval)}</span>
             {/if}
           </span>
           {#if sub.error_count > 0}
@@ -589,7 +619,7 @@
         <button class="tag" class:tag-on={sub.auto_download} onclick={()=>toggleAutoDownload(sub)} title="Auto-Download"><i class="fa-solid fa-download"></i> Auto</button>
         <button class="tag" class:tag-on={sub.drip_enabled} class:tag-done={!!sub.drip_completed_at}
                 onclick={()=>toggleDrip(sub)} title={dripTooltip(sub)}>
-          {#if sub.drip_completed_at}<i class="fa-solid fa-check"></i> Fertig{:else}<i class="fa-solid fa-hourglass-half"></i> +{sub.drip_count||3}/day{/if}
+          {#if sub.drip_completed_at}<i class="fa-solid fa-check"></i> Fertig{:else}<i class="fa-solid fa-hourglass-half"></i> +{sub.drip_count||3}/Tag{/if}
         </button>
         {#if sub.drip_enabled}
         <button class="tag" class:tag-on={sub.drip_auto_archive}
@@ -599,10 +629,15 @@
                 onclick={()=>toggleSuggestExclude(sub)} title={sub.suggest_exclude ? 'Aus Vorschlägen ausgeschlossen – Klick zum Einschließen' : 'In Vorschlägen – Klick zum Ausschließen'}>
           <i class="fa-solid fa-dice" class:strikethrough={sub.suggest_exclude}></i>
         </button>
-        <button class="tag" class:tag-on={sub.enabled} onclick={()=>toggleEnabled(sub)}>{sub.enabled?'An':'Aus'}</button>
-        {#if sub.check_interval > 1800}
-          <button class="tag tag-interval" onclick={(e)=>{e.stopPropagation();halveInterval(sub)}} title="Intervall halbieren ({fmtInterval(sub.check_interval)} → {fmtInterval(Math.max(1800, Math.floor(sub.check_interval/2)))})">½</button>
-          <button class="tag tag-interval" onclick={(e)=>{e.stopPropagation();resetInterval(sub)}} title="Intervall zurücksetzen auf Basis"><i class="fa-solid fa-clock-rotate-left"></i></button>
+        <button class="tag" class:tag-on={sub.enabled} onclick={()=>toggleEnabled(sub)}
+                title={sub.enabled ? 'Kanal wird geprüft – Klick schaltet ihn ab' : 'Kanal ist abgeschaltet (keine Prüfung, kein Download) – Klick schaltet ihn ein'}>{sub.enabled?'An':'Aus'}</button>
+        <button class="tag tag-interval" onclick={() => checkNow(sub)} disabled={checking[sub.id]}
+                title="Diesen Kanal jetzt auf neue Videos prüfen">
+          <i class="fa-solid fa-rotate-right" class:fa-spin={checking[sub.id]}></i>
+        </button>
+        {#if sub.check_interval > baseInterval}
+          <button class="tag tag-interval" onclick={() => halveInterval(sub)} title="Prüfintervall halbieren ({fmtInterval(sub.check_interval)} → {fmtInterval(Math.max(baseInterval, Math.floor(sub.check_interval/2)))})">½</button>
+          <button class="tag tag-interval" onclick={() => resetInterval(sub)} title="Prüfintervall auf den Basiswert ({fmtInterval(baseInterval)}) zurücksetzen"><i class="fa-solid fa-clock-rotate-left"></i></button>
         {/if}
         <button class="tag tag-del" title="Entfernen" onclick={()=>removeSub(sub)}><i class="fa-solid fa-xmark"></i></button>
       </div>
@@ -693,10 +728,16 @@
   </div>
   {:else}
   <div class="empty">
-    <i class="fa-solid fa-user-plus" style="font-size:3.5rem; color:var(--text-tertiary)"></i>
-    <h3>Noch keine Abonnements</h3>
-    <p>Füge YouTube-Kanäle hinzu, um per RSS neue Videos zu erkennen.</p>
-    <button class="btn-primary" onclick={()=>showImport=true}>Kanäle hinzufügen</button>
+    {#if subs.length > 0}
+      <i class="fa-solid fa-filter" style="font-size:3.5rem; color:var(--text-tertiary)"></i>
+      <h3>Kein Kanal passt zu dieser Auswahl</h3>
+      <button class="btn-primary" onclick={()=>{filterMode='all';searchQuery='';}}>Alle Kanäle zeigen</button>
+    {:else}
+      <i class="fa-solid fa-user-plus" style="font-size:3.5rem; color:var(--text-tertiary)"></i>
+      <h3>Noch keine Kanäle</h3>
+      <p>Füge Kanäle hinzu, um neue Videos automatisch zu erkennen.</p>
+      <button class="btn-primary" onclick={()=>showImport=true}>Kanäle hinzufügen</button>
+    {/if}
   </div>
   {/if}
 </div>

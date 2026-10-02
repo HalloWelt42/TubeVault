@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -279,6 +279,7 @@ CREATE TABLE IF NOT EXISTS rss_entries (
     keywords TEXT DEFAULT '[]',
     status TEXT DEFAULT 'new',
     auto_queued BOOLEAN DEFAULT 0,
+    auto_pending INTEGER DEFAULT 0,
     dismissed BOOLEAN DEFAULT 0,
     feed_status TEXT DEFAULT 'active',
     created_at TEXT DEFAULT (datetime('now')),
@@ -369,6 +370,7 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_enabled ON subscriptions(enabled);
 CREATE INDEX IF NOT EXISTS idx_rss_entries_status ON rss_entries(status);
 CREATE INDEX IF NOT EXISTS idx_rss_entries_channel ON rss_entries(channel_id);
 CREATE INDEX IF NOT EXISTS idx_rss_entries_type ON rss_entries(video_type);
+CREATE INDEX IF NOT EXISTS idx_rss_entries_auto_pending ON rss_entries(auto_pending) WHERE auto_pending = 1;
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs(type);
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at);
@@ -1125,6 +1127,17 @@ class Database:
                     raise
             await self._connection.commit()
             logger.info("Migration v35: videos.language")
+
+        if current_version < 40:
+            # Auto-Download: am Tageslimit vorgemerkte Videos (werden nachgeholt)
+            try:
+                await self._connection.execute(
+                    "ALTER TABLE rss_entries ADD COLUMN auto_pending INTEGER DEFAULT 0")
+            except Exception as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
+            await self._connection.commit()
+            logger.info("Migration v40: rss_entries.auto_pending")
 
         if current_version < 39:
             # Der Selbsttest des Backends zeigte auf eine Adresse, die es nicht
