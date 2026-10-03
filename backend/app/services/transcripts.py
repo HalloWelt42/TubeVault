@@ -72,15 +72,17 @@ CHUNK_CHARS = 700
 # Nach einer längeren Sprechpause beginnt ein neuer Abschnitt - sonst läge
 # die Sprungmarke weit vor der Textstelle
 CHUNK_MAX_GAP_SECONDS = 20
-# Pause zwischen zwei Abrufen bei der Quelle. Die Quelle drosselt Untertitel
+# Pause zwischen zwei Abrufen bei der Quelle. Bewusst lang: jeder Abruf zählt
+# bei der Quelle mit, und zu viele bringen ihr die Sperre "kein Automat?" ein,
+# die dann auch die Downloads trifft. Die Quelle drosselt Untertitel
 # streng und ohne festen Wert, deshalb passt sich der Abstand an: nach jeder
 # Bremsung wird er verdoppelt, nach einer Reihe geglückter Abrufe wieder
 # langsam kürzer.
-SECONDS_PER_FETCH = 20
-MAX_SECONDS_PER_FETCH = 600
+SECONDS_PER_FETCH = 120
+MAX_SECONDS_PER_FETCH = 1800
 SPEED_UP_AFTER = 20          # geglückte Abrufe in Folge, bis der Abstand sinkt
 # Pause, wenn die Quelle bremst oder nicht erreichbar ist
-BACKOFF_SECONDS = 1800
+BACKOFF_SECONDS = 3600
 # Fehlgeschlagene Abrufe frühestens nach so vielen Tagen erneut versuchen
 RETRY_ERROR_DAYS = 7
 _BLOCK_MARKERS = ("429", "too many requests", "sign in to confirm", "timed out", "timeout",

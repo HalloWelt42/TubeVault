@@ -58,11 +58,16 @@ class FakeListing:
         from app.utils import ytdlp_adapter as mod
         self.info, self.error = info, error
         self.calls, self.opts, self.consumed = [], None, 0
+        self.opened = self.closed = 0
         listing = self
 
         class FakeYDL:
             def __init__(self, opts):
                 listing.opts = opts
+                listing.opened += 1
+
+            def close(self):
+                listing.closed += 1
 
             def extract_info(self, url, download=False, process=True):
                 listing.calls.append((url, process))
@@ -237,3 +242,25 @@ def test_item_date_falls_back_to_approximate_timestamp():
     assert ChannelVideoItem({"id": "a", "upload_date": "20250101",
                              "timestamp": 1790121600}).publish_date == "20250101"
     assert ChannelVideoItem({"id": "a"}).publish_date is None
+
+
+def test_every_listing_is_closed(monkeypatch):
+    """Jeder geöffnete Reiter wird wieder geschlossen - nach vollem Durchlauf,
+    bei Begrenzung, bei vorzeitigem Ende, beim Abruf nur der Grunddaten und
+    im Fehlerfall. Ein offen gelassener Reiter hält eine Verbindung; nach
+    einigen tausend Kanalprüfungen nahm der Server keine Anfragen mehr an."""
+    listing = FakeListing(monkeypatch, info={
+        "channel": "C", "channel_id": "UCx", "entries": [{"id": f"v{n:010d}"} for n in range(50)]})
+
+    list(ChannelAdapter("https://www.youtube.com/channel/UCx").url_generator())          # voll
+    list(ChannelAdapter("https://www.youtube.com/channel/UCx", max_videos=5).videos)     # begrenzt
+    ChannelAdapter("https://www.youtube.com/channel/UCx").channel_name                   # nur Kopf
+    early = ChannelAdapter("https://www.youtube.com/channel/UCx").url_generator()        # abgebrochen
+    next(early)
+    early.close()
+    assert listing.opened == 4 and listing.closed == 4
+
+    broken = FakeListing(monkeypatch, error=RuntimeError("HTTP Error 429"))
+    with pytest.raises(RuntimeError):
+        list(ChannelAdapter("https://www.youtube.com/@x").url_generator())
+    assert broken.opened == 2 and broken.closed == 2     # beide Versuche

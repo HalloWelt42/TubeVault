@@ -1484,10 +1484,35 @@ def _flatten_entries(entries) -> Iterator[dict]:
             yield entry
 
 
-def _open_listing(url: str) -> tuple[dict, Iterator[dict]]:
+class Listing:
+    """Geöffneter Kanal-Reiter: Kopfdaten (head) und träge Einträge (entries).
+    Hält die Verbindung zur Quelle offen, bis er geschlossen wird - deshalb
+    immer mit "with" benutzen. Ein nicht geschlossener Reiter lässt eine
+    Verbindung offen; nach einigen tausend Kanalprüfungen nimmt der Server
+    dann keine Anfragen mehr an (zu viele offene Dateien)."""
+
+    def __init__(self, session, info: dict):
+        self._session = session
+        self.head = info
+        self.entries: Iterator[dict] = _flatten_entries(info.get("entries") or [])
+
+    def close(self) -> None:
+        if self._session is not None:
+            self._session.close()
+            self._session = None
+
+    def __enter__(self) -> "Listing":
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
+
+
+def _open_listing(url: str) -> Listing:
     """Kanal-Reiter träge öffnen: Kopfdaten sofort, Einträge seitenweise erst
     beim Durchlaufen. Wer nur den Kopf braucht, löst keinen Listenabruf aus;
-    wer abbricht, spart die restlichen Seiten.
+    wer abbricht, spart die restlichen Seiten. Der Aufrufer schließt den
+    Reiter (with).
 
     Fester web-Client und Desktop-Kennung: nur damit liest die Quelle
     Kanal-Reiter zuverlässig. Fehlt der Reiter, kommt ChannelTabMissing;
@@ -1503,12 +1528,14 @@ def _open_listing(url: str) -> tuple[dict, Iterator[dict]]:
         # Ungefähres Datum je Eintrag ("vor 3 Wochen" → Zeitstempel): ohne das
         # kennt die Liste gar kein Datum und Sortieren nach Alter wäre geraten
         opts["extractor_args"]["youtubetab"] = {"approximate_date": [""]}
+        session = yt_dlp.YoutubeDL(opts)
         try:
-            info = yt_dlp.YoutubeDL(opts).extract_info(url, download=False, process=False)
+            info = session.extract_info(url, download=False, process=False)
             if not info:
                 raise RuntimeError(f"Keine Antwort für {label}")
-            return info, _flatten_entries(info.get("entries") or [])
+            return Listing(session, info)
         except Exception as e:
+            session.close()
             if _is_tab_missing(e):
                 raise ChannelTabMissing(str(e)[:200]) from e
             last_error = e
@@ -1560,17 +1587,21 @@ class ChannelAdapter:
 
     def _items(self, tab_url: str) -> Iterator[ChannelVideoItem]:
         """Einträge eines Reiters, träge und auf max_videos begrenzt."""
-        head, entries = _open_listing(tab_url)
-        if self._head is None:
-            self._head = head
-        fallback = {
-            "channel": head.get("channel") or head.get("uploader"),
-            "channel_id": head.get("channel_id"),
-        }
-        if self._max_videos:
-            entries = itertools.islice(entries, self._max_videos)
-        for entry in entries:
-            yield ChannelVideoItem(entry, fallback_channel=fallback)
+        # with: die Verbindung wird geschlossen, auch wenn der Aufrufer früher
+        # aufhört (Abbruch, Begrenzung) oder ein Fehler auftritt
+        with _open_listing(tab_url) as listing:
+            head = listing.head
+            if self._head is None:
+                self._head = {key: value for key, value in head.items() if key != "entries"}
+            fallback = {
+                "channel": head.get("channel") or head.get("uploader"),
+                "channel_id": head.get("channel_id"),
+            }
+            entries = listing.entries
+            if self._max_videos:
+                entries = itertools.islice(entries, self._max_videos)
+            for entry in entries:
+                yield ChannelVideoItem(entry, fallback_channel=fallback)
 
     def url_generator(self):
         """pytubefix-kompatibel: alle Videos des via html_url gewählten Reiters.
@@ -1587,10 +1618,12 @@ class ChannelAdapter:
         von dort; sonst ein leichter Abruf ohne Liste."""
         if self._head is None:
             try:
-                self._head, _ = _open_listing(_channel_videos_url(self.channel_url))
+                listing = _open_listing(_channel_videos_url(self.channel_url))
             except ChannelTabMissing:
                 # Kanal ohne Videos-Reiter (nur Shorts oder Livestreams)
-                self._head, _ = _open_listing(self._base_url)
+                listing = _open_listing(self._base_url)
+            with listing:
+                self._head = {key: value for key, value in listing.head.items() if key != "entries"}
         return self._head
 
     @property
