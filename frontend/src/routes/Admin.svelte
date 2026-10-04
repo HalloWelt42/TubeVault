@@ -8,6 +8,13 @@
 
   const cards = [
     {
+      title: 'Aufräumen',
+      desc: 'Shorts, alle Videos eines Kanals oder große, lange nicht gesehene Videos mit Vorschaubild sichten, mehrere auswählen und restlos löschen.',
+      icon: 'fa-solid fa-broom',
+      path: '/admin/cleanup',
+      ready: true,
+    },
+    {
       title: 'Textexport',
       desc: 'Beschreibungen, Kapitel, Tags aus der DB in Dateien auslagern. DB wird Referenz-Index, Dateien bleiben als dauerhaftes Backup erhalten.',
       icon: 'fa-solid fa-file-lines',
@@ -20,27 +27,6 @@
       icon: 'fa-solid fa-life-ring',
       path: '/admin/rebuild',
       ready: true,
-    },
-    {
-      title: 'DB-Inspektor',
-      desc: 'Rohe DB-Abfragen, Schema-Version, Tabellengrößen. (geplant)',
-      icon: 'fa-solid fa-database',
-      path: null,
-      ready: false,
-    },
-    {
-      title: 'Job-Monitor',
-      desc: 'Laufende Hintergrund-Jobs, Queue-Tiefe, Retry-Verlauf. (geplant)',
-      icon: 'fa-solid fa-list-check',
-      path: null,
-      ready: false,
-    },
-    {
-      title: 'Dateisystem',
-      desc: 'Video-Files, Thumbnails, Waisen, Speicherplatz pro Kanal. (geplant)',
-      icon: 'fa-solid fa-folder-tree',
-      path: null,
-      ready: false,
     },
   ];
 </script>
@@ -66,11 +52,7 @@
           <h3>{card.title}</h3>
           <p>{card.desc}</p>
         </div>
-        {#if !card.ready}
-          <span class="card-coming">bald</span>
-        {:else}
-          <i class="fa-solid fa-arrow-right card-arrow"></i>
-        {/if}
+        <i class="fa-solid fa-arrow-right card-arrow"></i>
       </button>
     {/each}
   </div>
@@ -113,9 +95,4 @@
   .card-body p { margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45; }
 
   .card-arrow { color: var(--text-tertiary); align-self: center; }
-  .card-coming {
-    font-size: 0.7rem; color: var(--text-tertiary);
-    padding: 3px 8px; border-radius: 5px;
-    background: var(--bg-tertiary); align-self: flex-start;
-  }
 </style>

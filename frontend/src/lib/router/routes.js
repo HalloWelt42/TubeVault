@@ -232,6 +232,16 @@ export const routeDefinitions = {
     description: 'Texte aus DB in Dateien exportieren',
     fullsize: true,
   },
+  'admin-cleanup': {
+    path: '/admin/cleanup',
+    label: 'Aufräumen',
+    icon: 'fa-solid fa-broom',
+    group: 'admin',
+    hasId: false,
+    queryParams: ['sicht', 'kanal'],
+    description: 'Shorts, Kanäle, große Videos sichten und restlos löschen',
+    fullsize: true,
+  },
   'admin-rebuild': {
     path: '/admin/rebuild',
     label: 'Wiederaufbau',

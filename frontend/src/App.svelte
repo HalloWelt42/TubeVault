@@ -32,6 +32,7 @@
   import Admin from './routes/Admin.svelte';
   import AdminTexts from './routes/AdminTexts.svelte';
   import AdminRebuild from './routes/AdminRebuild.svelte';
+  import AdminCleanup from './routes/AdminCleanup.svelte';
   import Dubbing from './routes/Dubbing.svelte';
 
   /** Route-Key → Svelte-Komponente */
@@ -58,6 +59,7 @@
     admin: Admin,
     'admin-texts': AdminTexts,
     'admin-rebuild': AdminRebuild,
+    'admin-cleanup': AdminCleanup,
   };
 
   import { onConnectionChange } from './lib/api/client.js';

@@ -94,6 +94,12 @@ export const api = {
   archiveVideo: (id) => request(`/api/videos/${id}/archive`, { method: 'POST' }),
   unarchiveVideo: (id) => request(`/api/videos/${id}/unarchive`, { method: 'POST' }),
   archiveBatch: (videoIds, unarchive = false) => request(`/api/videos/archive/batch?unarchive=${unarchive}`, { method: 'POST', body: JSON.stringify(videoIds) }),
+  cleanupVideos: (view, { channelId = null, offset = 0, limit = 60 } = {}) =>
+    request(`/api/admin/cleanup/videos?view=${view}&offset=${offset}&limit=${limit}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
+  cleanupIds: (view, channelId = null) =>
+    request(`/api/admin/cleanup/ids?view=${view}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
+  cleanupChannels: () => request('/api/admin/cleanup/channels'),
+  cleanupDelete: (videoIds) => request('/api/admin/cleanup/delete', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
   setTypeBatch: (videoIds, videoType) => request('/api/videos/type/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, video_type: videoType }) }),
 
   // Downloads
