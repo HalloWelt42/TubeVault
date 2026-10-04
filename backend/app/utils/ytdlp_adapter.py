@@ -254,6 +254,9 @@ def _build_ydl_opts(label: str = "", *, for_download: bool = False,
     }
     if not for_download:
         opts["skip_download"] = True
+    # Netzweg zur Quelle (IPv4/IPv6), siehe utils/source_net
+    from app.utils import source_net
+    opts.update(source_net.ydl_options())
     cf = _login_cookiefile() if use_login_cookies else _cookiefile()
     if use_login_cookies and not cf:
         # Fallback: wenn Login-Cookies fehlen, wenigstens anon nehmen

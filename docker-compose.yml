@@ -43,7 +43,16 @@ services:
       - TUBEVAULT_CONFIG_DIR=/app/config
       - MAX_CONCURRENT_DOWNLOADS=1
       - DEFAULT_QUALITY=720p
+      # Abrufe bei der Quelle über IPv6: die IPv4-Adresse des Anschlusses wird
+      # für Untertitel abgewiesen (429), über IPv6 kommt derselbe Abruf durch.
+      # 6 = IPv6, 4 = IPv4, leer = das Betriebssystem entscheidet.
+      - TUBEVAULT_SOURCE_IP=${TUBEVAULT_SOURCE_IP:-6}
     restart: unless-stopped
+    # Grenze offener Dateien/Verbindungen deutlich über dem Standard (1024)
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8031/api/system/health"]
       interval: 30s
@@ -104,3 +113,6 @@ networks:
   tubevault-net:
     name: tubevault-net
     driver: bridge
+    # IPv6 für den Weg zur Quelle (siehe TUBEVAULT_SOURCE_IP); Docker vergibt
+    # ein lokales IPv6-Netz und leitet über die IPv6-Adresse des Pi nach außen.
+    enable_ipv6: true

@@ -27,6 +27,8 @@ import logging
 from typing import Literal, Optional
 
 import httpx
+
+from app.utils import source_net
 from pydantic import BaseModel
 
 from app.database import db
@@ -59,7 +61,7 @@ async def probe_short(video_id: str, client: Optional[httpx.AsyncClient] = None)
     if not is_youtube_id(video_id):
         return False
     own = client is None
-    client = client or httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S, follow_redirects=False)
+    client = client or source_net.async_client(timeout=_PROBE_TIMEOUT_S, follow_redirects=False)
     try:
         response = await client.head(SHORT_URL.format(video_id=video_id), headers=_PROBE_HEADERS)
     except httpx.HTTPError as e:
@@ -242,7 +244,7 @@ async def verify_backlog() -> None:
     if settled:
         logger.info(f"[TYP] {settled} Einträge ohne Nachfrage eingeordnet (zu lang für ein Short)")
     trouble = 0
-    async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S, follow_redirects=False) as client:
+    async with source_net.async_client(timeout=_PROBE_TIMEOUT_S, follow_redirects=False) as client:
         while True:
             video_id = await _next_unverified()
             if not video_id:

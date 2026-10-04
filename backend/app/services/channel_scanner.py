@@ -17,6 +17,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
+from app.utils import source_net
+
 from app.database import db
 from app.services.job_service import job_service
 from app.utils.file_utils import now_sqlite
@@ -139,7 +141,7 @@ async def _cache_banner(channel_id: str, banner_url: str) -> str:
     from app.config import BANNERS_DIR
     try:
         BANNERS_DIR.mkdir(parents=True, exist_ok=True)
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with source_net.async_client(timeout=15) as client:
             resp = await client.get(banner_url)
         if resp.status_code == 200 and len(resp.content) > 1000:
             (BANNERS_DIR / f"{channel_id}.jpg").write_bytes(resp.content)

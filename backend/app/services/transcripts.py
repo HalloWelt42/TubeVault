@@ -162,7 +162,9 @@ def _download_caption(video_id: str, preferred_language: str | None):
     choice = make_youtube(f"https://www.youtube.com/watch?v={video_id}").caption_choice(preferred_language)
     if not choice:
         return None, None
-    response = httpx.get(choice.url, timeout=30)
+    from app.utils import source_net
+    with source_net.client(timeout=30) as http:
+        response = http.get(choice.url)
     response.raise_for_status()
     return choice, response.text
 

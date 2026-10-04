@@ -26,6 +26,7 @@ import httpx
 
 from app.config import AVATARS_DIR, BANNERS_DIR, RSS_THUMBS_DIR
 from app.utils.file_utils import now_sqlite, past_sqlite
+from app.utils import source_net
 from app.database import db
 from app.services.job_service import job_service
 from app.services import feed_scope, loadable, video_classifier
@@ -577,7 +578,7 @@ class RSSService:
             playlist_id = self._channel_to_playlist_id(channel_id, prefix)
             url = YT_RSS_TYPED_URL.format(playlist_id=playlist_id)
             try:
-                async with httpx.AsyncClient(timeout=10) as client:
+                async with source_net.async_client(timeout=10) as client:
                     resp = await client.get(url)
                     if resp.status_code != 200:
                         return set()
@@ -768,7 +769,7 @@ class RSSService:
             dest = RSS_THUMBS_DIR / f"{video_id}.jpg"
             if dest.exists() and dest.stat().st_size > 0:
                 return str(dest)
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with source_net.async_client(timeout=10) as client:
                 resp = await client.get(thumb_url)
                 if resp.status_code == 200 and len(resp.content) > 500:
                     dest.write_bytes(resp.content)
@@ -819,7 +820,7 @@ class RSSService:
             AVATARS_DIR.mkdir(parents=True, exist_ok=True)
             avatar_file = AVATARS_DIR / f"{channel_id}.jpg"
 
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with source_net.async_client(timeout=15) as client:
                 resp = await client.get(thumb_url)
                 resp.raise_for_status()
                 avatar_file.write_bytes(resp.content)

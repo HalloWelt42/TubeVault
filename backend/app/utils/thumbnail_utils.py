@@ -49,10 +49,11 @@ async def download_yt_thumbnail(
     qualities = qualities or YT_THUMB_QUALITIES
 
     import httpx
+    from app.utils import source_net
     for quality in qualities:
         url = f"https://i.ytimg.com/vi/{video_id}/{quality}.jpg"
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with source_net.async_client(timeout=10) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200 and len(resp.content) > min_size:
                     dest.write_bytes(resp.content)

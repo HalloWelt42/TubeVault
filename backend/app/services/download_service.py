@@ -1886,7 +1886,8 @@ class DownloadService:
         tdir.mkdir(parents=True, exist_ok=True)
         try:
             await rate_limiter.acquire("thumbnail")
-            async with httpx.AsyncClient() as c:
+            from app.utils import source_net
+            async with source_net.async_client() as c:
                 r = await c.get(url, follow_redirects=True, timeout=15)
                 r.raise_for_status()
                 tp.write_bytes(r.content)
