@@ -193,3 +193,9 @@ async def test_untertitel_liste_nennt_die_herkunft(async_client_factory, stock, 
               (await client.get("/api/player/vidkochen1/subtitles")).json()["subtitles"]}
     assert listed["ki.de"] == ("ai", "Deutsch - KI-Transkript")
     assert listed["a.en"][0] == "auto" and listed["de"][0] == "manual"
+
+
+async def test_musik_kommt_nicht_zur_ki(stock):
+    await stock.execute("UPDATE videos SET is_music = 1 WHERE id = 'vidkochen1'")
+    await transcripts.enqueue_ai("vidkochen1")
+    assert await transcripts.claim_ai("mac") is None

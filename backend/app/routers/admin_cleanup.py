@@ -41,6 +41,13 @@ async def cleanup_channels():
     return await cleanup.channels()
 
 
+@router.get("/exempt-channels")
+async def cleanup_exempt_channels():
+    """Kanäle, die nie Shorts führen (Entscheidung des Nutzers)."""
+    from app.services import video_classifier
+    return await video_classifier.exempt_channels()
+
+
 @router.post("/delete", response_model=cleanup.DeleteResult)
 async def cleanup_delete(request: DeleteRequest):
     return await cleanup.delete(request.video_ids)

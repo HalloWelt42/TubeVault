@@ -11,9 +11,15 @@ Short geführte Zwei-Stunden-Videos und als Video geführte Shorts.
 
 Regeln:
   1. Livestream: sagt die Quelle selbst (läuft gerade / war ein Livestream).
-  2. Short: die Quelle führt das Video unter ihrer Shorts-Adresse. Diese
-     Auskunft ist eindeutig - Antwort 200 heisst Short, eine Umleitung auf
-     die normale Adresse heisst kein Short.
+  2. Short: die Quelle führt das Video unter ihrer Shorts-Adresse oder in
+     ihrem Shorts-Reiter. Das allein genügt aber nicht: die Quelle zeigt auch
+     alte, kurze, quadratische Videos von 2010 im Shorts-Player und hat sie
+     nachträglich in den Shorts-Reiter einsortiert. Deshalb gilt zusätzlich
+     (als Datenbankregel, für jeden Schreibweg, siehe SHORT_RULES_SQL):
+       - Was vor dem Start von Shorts hochgeladen wurde (SHORTS_START), ist
+         kein Short - es kann nicht als Short gemacht worden sein.
+       - Kanäle in short_exempt_channels führen nie Shorts (Entscheidung des
+         Nutzers, z.B. Kanäle mit kurzen, aber vollwertigen Videos).
   3. Was länger ist als ein Short je sein kann, ist ohne Nachfrage kein Short.
   4. Ist die Quelle nicht erreichbar, bleibt der Typ "ungeprüft" und wird
      später nachgeholt. Geraten wird nicht.
@@ -40,6 +46,94 @@ VideoType = Literal["video", "short", "live"]
 UNVERIFIED, VERIFIED, MANUAL = 0, 1, 2
 
 SHORT_URL = "https://www.youtube.com/shorts/{video_id}"
+# Start von Shorts (erste Veröffentlichung, 14.09.2020). Ältere Uploads
+# wurden nicht als Short hochgeladen.
+SHORTS_START = "2020-09-14"
+
+# Die Regel greift beim Schreiben, egal von wo (Prüfung, Kanal-Scan, Feed,
+# Download). Ein vom Nutzer gesetzter Typ (type_verified 2) bleibt unberührt;
+# fehlt das Datum, greift der Stichtag nicht (es wird nicht geraten).
+_NOT_A_SHORT_VIDEO = f"""
+    COALESCE(new.type_verified, 0) != 2 AND (
+        (new.upload_date IS NOT NULL AND substr(new.upload_date, 1, 10) < '{SHORTS_START}')
+        OR new.channel_id IN (SELECT channel_id FROM short_exempt_channels))"""
+_NOT_A_SHORT_ENTRY = f"""
+    COALESCE(new.type_verified, 0) != 2 AND (
+        (new.published IS NOT NULL AND substr(new.published, 1, 10) < '{SHORTS_START}')
+        OR new.channel_id IN (SELECT channel_id FROM short_exempt_channels))"""
+SHORT_RULES_SQL = f"""
+CREATE TABLE IF NOT EXISTS short_exempt_channels (
+    channel_id TEXT PRIMARY KEY,
+    channel_name TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TRIGGER IF NOT EXISTS trg_short_rule_video_insert AFTER INSERT ON videos
+WHEN new.video_type = 'short' AND {_NOT_A_SHORT_VIDEO}
+BEGIN UPDATE videos SET video_type = 'video' WHERE id = new.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_short_rule_video_update
+AFTER UPDATE OF video_type, upload_date, channel_id ON videos
+WHEN new.video_type = 'short' AND {_NOT_A_SHORT_VIDEO}
+BEGIN UPDATE videos SET video_type = 'video' WHERE id = new.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_short_rule_entry_insert AFTER INSERT ON rss_entries
+WHEN new.video_type = 'short' AND {_NOT_A_SHORT_ENTRY}
+BEGIN UPDATE rss_entries SET video_type = 'video' WHERE id = new.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_short_rule_entry_update
+AFTER UPDATE OF video_type, published, channel_id ON rss_entries
+WHEN new.video_type = 'short' AND {_NOT_A_SHORT_ENTRY}
+BEGIN UPDATE rss_entries SET video_type = 'video' WHERE id = new.id; END;
+"""
+
+
+async def install_rules(connection) -> None:
+    """Regeltabelle und Trigger anlegen und den Bestand einmal danach richten."""
+    await connection.executescript(SHORT_RULES_SQL)
+    await connection.execute(
+        f"""UPDATE videos SET video_type = 'video'
+            WHERE video_type = 'short' AND COALESCE(type_verified, 0) != 2 AND (
+                (upload_date IS NOT NULL AND substr(upload_date, 1, 10) < '{SHORTS_START}')
+                OR channel_id IN (SELECT channel_id FROM short_exempt_channels))""")
+    await connection.execute(
+        f"""UPDATE rss_entries SET video_type = 'video'
+            WHERE video_type = 'short' AND COALESCE(type_verified, 0) != 2 AND (
+                (published IS NOT NULL AND substr(published, 1, 10) < '{SHORTS_START}')
+                OR channel_id IN (SELECT channel_id FROM short_exempt_channels))""")
+    await connection.commit()
+
+
+async def exempt_channels() -> list[dict]:
+    rows = await db.fetch_all(
+        "SELECT channel_id, channel_name, created_at FROM short_exempt_channels ORDER BY channel_name")
+    return [dict(r) for r in rows]
+
+
+async def is_channel_exempt(channel_id: str) -> bool:
+    return bool(await db.fetch_val(
+        "SELECT 1 FROM short_exempt_channels WHERE channel_id = ?", (channel_id,)))
+
+
+async def set_channel_exempt(channel_id: str, exempt: bool, channel_name: Optional[str] = None) -> int:
+    """Kanal als "führt nie Shorts" markieren oder die Markierung aufheben.
+    Beim Markieren werden seine Shorts sofort zu Videos (außer von Hand
+    gesetzte); beim Aufheben bleibt alles, wie es ist - nichts wird
+    nachträglich wieder zum Short. Liefert die Zahl umgestellter Videos."""
+    if not exempt:
+        await db.execute("DELETE FROM short_exempt_channels WHERE channel_id = ?", (channel_id,))
+        return 0
+    name = channel_name or await db.fetch_val(
+        "SELECT channel_name FROM videos WHERE channel_id = ? AND channel_name IS NOT NULL LIMIT 1",
+        (channel_id,))
+    await db.execute(
+        "INSERT OR IGNORE INTO short_exempt_channels (channel_id, channel_name) VALUES (?, ?)",
+        (channel_id, name))
+    cursor = await db.execute(
+        """UPDATE videos SET video_type = 'video'
+           WHERE channel_id = ? AND video_type = 'short' AND COALESCE(type_verified, 0) != 2""",
+        (channel_id,))
+    await db.execute(
+        """UPDATE rss_entries SET video_type = 'video'
+           WHERE channel_id = ? AND video_type = 'short' AND COALESCE(type_verified, 0) != 2""",
+        (channel_id,))
+    return cursor.rowcount or 0
 # Shorts sind höchstens drei Minuten lang; kleine Reserve für Rundungen
 SHORT_MAX_SECONDS = 185
 _PROBE_TIMEOUT_S = 10

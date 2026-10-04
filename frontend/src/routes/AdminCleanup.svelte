@@ -17,7 +17,7 @@
 
   const VIEWS = [
     { id: 'shorts', label: 'Shorts', icon: 'fa-solid fa-mobile-screen',
-      hint: 'Alle als Short geführten Videos. Falsch eingeordnete mit "Kein Short" umstellen - sie verschwinden sofort aus dieser Liste.' },
+      hint: 'Alle als Short geführten Videos (ab dem Start von Shorts im September 2020). Falsch eingeordnete mit "Kein Short" umstellen; "Kanal schützen" nimmt alle Videos eines Kanals dauerhaft aus den Shorts. Beides verschwindet sofort aus dieser Liste.' },
     { id: 'channel', label: 'Nach Kanal', icon: 'fa-solid fa-tv',
       hint: 'Alle geladenen Videos eines Kanals.' },
     { id: 'big', label: 'Groß und selten gesehen', icon: 'fa-solid fa-hard-drive',
@@ -32,6 +32,41 @@
   let channelList = $state([]);
   let channelFilter = $state('');
   let totalBytes = $state(0);
+
+  let exempt = $state([]);           // Kanäle, die nie Shorts führen
+
+  async function loadExempt() {
+    try { exempt = await api.cleanupExemptChannels(); } catch { exempt = []; }
+  }
+
+  // Ganzer Kanal führt nie Shorts: alle seine Kacheln verschwinden
+  async function protectChannel(video) {
+    const name = video.channel_name || video.channel_id;
+    const ok = await confirmRef.ask(
+      `"${name}" schützen?`,
+      'Videos dieses Kanals gelten künftig nie als Short - auch neue nicht. Sie verschwinden aus dieser Liste, aus dem Shorts-Ausschluss und lassen sich hier nicht mehr als Short löschen.',
+      { confirmLabel: 'Kanal schützen', danger: false });
+    if (!ok) return;
+    try {
+      const result = await api.setShortExempt(video.channel_id, true);
+      const gone = list.items.filter(v => v.channel_id === video.channel_id);
+      list.items = list.items.filter(v => v.channel_id !== video.channel_id);
+      list.total = Math.max(0, list.total - result.changed);
+      totalBytes = Math.max(0, totalBytes - gone.reduce((sum, v) => sum + (v.file_size || 0), 0));
+      selected = new Set([...selected].filter(id => !gone.some(v => v.id === id)));
+      allSelected = false;
+      toast.success(`"${name}" geschützt, ${result.changed} Videos umgestellt`);
+      loadExempt();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  async function unprotectChannel(channel) {
+    try {
+      await api.setShortExempt(channel.channel_id, false);
+      toast.info(`Schutz für "${channel.channel_name || channel.channel_id}" aufgehoben (bestehende Videos bleiben Videos)`);
+      loadExempt();
+    } catch (e) { toast.error(e.message); }
+  }
 
   let selected = $state(new Set());
   let allSelected = $state(false);     // ganze Sicht über alle Seiten ausgewählt
@@ -164,7 +199,7 @@
     try { channelList = await api.cleanupChannels(); } catch { channelList = []; }
   }
 
-  $effect(() => { loadChannels(); list.load(true); });
+  $effect(() => { loadChannels(); loadExempt(); list.load(true); });
 </script>
 
 <div class="cleanup">
@@ -180,6 +215,17 @@
   </header>
 
   <p class="hint">{currentView.hint}</p>
+
+  {#if view === 'shorts' && exempt.length > 0}
+    <div class="exempt">
+      <span class="exempt-label"><i class="fa-solid fa-shield-halved"></i> Geschützte Kanäle (nie Shorts):</span>
+      {#each exempt as channel (channel.channel_id)}
+        <span class="exempt-chip">{channel.channel_name || channel.channel_id}
+          <button title="Schutz aufheben" onclick={() => unprotectChannel(channel)}><i class="fa-solid fa-xmark"></i></button>
+        </span>
+      {/each}
+    </div>
+  {/if}
 
   {#if view === 'channel'}
     <div class="channel-pick">
@@ -241,6 +287,10 @@
           {#if view === 'shorts'}
             <div class="tile-actions">
               {#if !video.type_verified}<span class="unsure" title="Von der Quelle noch nicht bestätigt">ungeprüft</span>{/if}
+              <button class="not-short push" onclick={(e) => { e.stopPropagation(); protectChannel(video); }}
+                      title="Alle Videos dieses Kanals dauerhaft nie als Short führen">
+                <i class="fa-solid fa-shield-halved"></i> Kanal schützen
+              </button>
               <button class="not-short" onclick={(e) => { e.stopPropagation(); notAShort(video); }}
                       title="Ist kein Short: als normales Video führen und aus dieser Liste nehmen">
                 <i class="fa-solid fa-rotate-left"></i> Kein Short
@@ -309,9 +359,15 @@
   .info { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .title { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { font-size: 0.72rem; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tile-actions { display: flex; align-items: center; gap: 6px; padding: 0 10px 9px; margin-top: auto; }
+  .tile-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 10px 9px; margin-top: auto; }
   .unsure { font-size: 0.68rem; color: var(--status-warning); font-weight: 600; }
-  .not-short { margin-left: auto; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border-primary); background: var(--bg-tertiary);
+  .exempt { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -4px 0 12px; font-size: 0.78rem; }
+  .exempt-label { color: var(--text-secondary); font-weight: 600; }
+  .exempt-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px;
+                 background: color-mix(in srgb, var(--status-success) 14%, transparent); color: var(--status-success); }
+  .exempt-chip button { border: none; background: none; color: inherit; cursor: pointer; padding: 0 4px; }
+  .not-short.push { margin-left: auto; }
+  .not-short { padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border-primary); background: var(--bg-tertiary);
                color: var(--text-secondary); font-size: 0.72rem; font-weight: 600; cursor: pointer; display: inline-flex; gap: 5px; align-items: center; }
   .not-short:hover { color: var(--status-success); border-color: var(--status-success); }
 </style>

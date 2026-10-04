@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import AVATARS_DIR, RSS_THUMBS_DIR
 from app.database import db
-from app.services import channel_reference, feed_scope, loadable
+from app.services import channel_reference, feed_scope, loadable, video_classifier
 from app.services.rss_service import rss_service, ChannelNotFound
 from app.routers.jobs import activity_ws
 
@@ -103,6 +103,7 @@ async def get_channel_detail(channel_id: str):
         )
         return {
             "channel_id": channel_id,
+            "short_exempt": await video_classifier.is_channel_exempt(channel_id),
             "channel_name": first_video["channel_name"] if first_video else channel_id,
             "channel_url": f"https://www.youtube.com/channel/{channel_id}",
             "subscribed": False,
@@ -171,6 +172,7 @@ async def get_channel_detail(channel_id: str):
 
     result = dict(sub)
     result["subscribed"] = True
+    result["short_exempt"] = await video_classifier.is_channel_exempt(channel_id)
     result["rss_entry_count"] = rss_count
     result["new_video_count"] = new_count
     result["downloaded_count"] = downloaded_count
@@ -491,6 +493,18 @@ async def fetch_channel_videos(channel_id: str, background_tasks: BackgroundTask
 
     background_tasks.add_task(_run_scan)
     return {"status": "started", "channel_id": channel_id, "job_id": job_id}
+
+
+class ShortExemptRequest(BaseModel):
+    exempt: bool
+
+
+@router.put("/channel/{channel_id}/short-exempt")
+async def set_short_exempt(channel_id: str, request: ShortExemptRequest):
+    """Kanal führt nie Shorts (oder wieder normal einordnen). Beim Einschalten
+    werden seine Shorts sofort zu Videos; beim Ausschalten bleibt alles."""
+    changed = await video_classifier.set_channel_exempt(channel_id, request.exempt)
+    return {"channel_id": channel_id, "short_exempt": request.exempt, "changed": changed}
 
 
 @router.get("/channel/{channel_id}/problem-videos")

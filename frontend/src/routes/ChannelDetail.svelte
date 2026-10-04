@@ -124,6 +124,17 @@
     }
   }
 
+  async function toggleShortExempt() {
+    const exempt = !channel.short_exempt;
+    try {
+      const result = await api.setShortExempt(channel.channel_id, exempt);
+      channel = { ...channel, short_exempt: exempt };
+      toast.success(exempt ? `Kanal geschützt: nie Shorts (${result.changed} Videos umgestellt)`
+                           : 'Schutz aufgehoben; bestehende Videos bleiben Videos');
+      await list.load(true);
+    } catch (e) { toast.error(e.message); }
+  }
+
   async function cancelScan() {
     if (!scanJobId) return;
     try {
@@ -574,6 +585,12 @@
       {:else if channel.last_scanned}
         <span class="scan-hint">Letzter Scan: {formatDateRelative(channel.last_scanned)}</span>
       {/if}
+      <button class="short-exempt" class:on={channel.short_exempt} onclick={toggleShortExempt}
+              title={channel.short_exempt
+                ? 'Videos dieses Kanals gelten nie als Short. Klick hebt den Schutz auf (bestehende Videos bleiben Videos).'
+                : 'Videos dieses Kanals nie als Short führen - z.B. kurze, aber vollwertige Videos.'}>
+        <i class="fa-solid fa-shield-halved"></i> {channel.short_exempt ? 'Nie Shorts' : 'Shorts normal'}
+      </button>
       {#if channel.download_quality}
         <span class="quality-tag">Qualität: {channel.download_quality}</span>
       {/if}
@@ -1234,6 +1251,9 @@
   .btn-scan:hover:not(:disabled) { opacity: 0.9; }
   .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; }
   .scan-hint { font-size: 0.78rem; color: var(--text-tertiary); }
+  .short-exempt { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-primary); background: var(--bg-tertiary);
+                  color: var(--text-secondary); font-size: 0.76rem; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+  .short-exempt.on { color: var(--status-success); border-color: var(--status-success); }
   .btn-scan-cancel {
     padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-primary);
     background: var(--bg-tertiary); color: var(--text-secondary); font-size: 0.76rem; cursor: pointer;

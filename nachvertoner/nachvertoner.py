@@ -167,11 +167,20 @@ class Nachvertoner:
     def claim(self) -> dict | None:
         return self.pi.post("/api/dubbing/claim", json={"worker": self.s.worker_name}, timeout=30).json()
 
-    def report(self, request_id: int, progress: float | None, note: str | None) -> None:
-        r = self.pi.post(f"/api/dubbing/requests/{request_id}/progress",
-                         json={"progress": progress, "note": note}, timeout=30)
+    def heartbeat(self, url: str, payload: dict) -> None:
+        """Lebenszeichen an TubeVault. 409 heißt: Auftrag zurückgezogen -
+        abbrechen. Ist TubeVault kurz nicht erreichbar (Neustart), läuft die
+        Arbeit weiter; das nächste Lebenszeichen kommt ja gleich."""
+        try:
+            r = self.pi.post(url, json=payload, timeout=30)
+        except httpx.HTTPError as e:
+            log.info("TubeVault gerade nicht erreichbar (%s) - Arbeit läuft weiter", e.__class__.__name__)
+            return
         if r.status_code == 409:
             raise Abbruch()
+
+    def report(self, request_id: int, progress: float | None, note: str | None) -> None:
+        self.heartbeat(f"/api/dubbing/requests/{request_id}/progress", {"progress": progress, "note": note})
 
     def fail(self, request_id: int, note: str, skipped: bool = False) -> None:
         self.pi.post(f"/api/dubbing/requests/{request_id}/fail",
@@ -327,9 +336,7 @@ class Nachvertoner:
         log.info("KI-Transkript: %s", title)
 
         def note(text: str) -> None:
-            r = self.pi.post(claimed["progress_url"], json={"note": text}, timeout=30)
-            if r.status_code == 409:
-                raise Abbruch()
+            self.heartbeat(claimed["progress_url"], {"note": text})
 
         try:
             note("Ton laden")

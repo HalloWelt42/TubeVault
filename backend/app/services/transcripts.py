@@ -397,6 +397,7 @@ async def claim_ai(worker: str) -> Optional[AiJob]:
     row = await db.fetch_one(
         """SELECT a.video_id FROM ai_transcriptions a JOIN videos v ON v.id = a.video_id
            WHERE a.status = 'queued' AND v.status = 'ready'
+             AND COALESCE(v.is_music, 0) = 0      -- Musik: kaum Sprache, nur Rechenzeit
            ORDER BY v.download_date DESC, a.video_id LIMIT 1""")
     if not row:
         return None

@@ -99,6 +99,9 @@ export const api = {
   cleanupIds: (view, channelId = null) =>
     request(`/api/admin/cleanup/ids?view=${view}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
   cleanupChannels: () => request('/api/admin/cleanup/channels'),
+  cleanupExemptChannels: () => request('/api/admin/cleanup/exempt-channels'),
+  setShortExempt: (channelId, exempt) =>
+    request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/short-exempt`, { method: 'PUT', body: JSON.stringify({ exempt }) }),
   cleanupDelete: (videoIds) => request('/api/admin/cleanup/delete', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
   setTypeBatch: (videoIds, videoType) => request('/api/videos/type/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, video_type: videoType }) }),
 

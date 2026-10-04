@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 40
+SCHEMA_VERSION = 41
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1171,6 +1171,13 @@ class Database:
                         raise
             await self._connection.commit()
             logger.info("Migration v37: Typ-Prüfung (type_verified)")
+
+        # Short-Regel (braucht type_verified, deshalb nach v37): Stichtag und Kanal-Ausnahmen (Trigger bei jedem Start
+        # sicherstellen; den Bestand richtet die Regel beim ersten Mal)
+        from app.services import video_classifier as _video_classifier
+        await _video_classifier.install_rules(self._connection)
+        if current_version < 41:
+            logger.info("Migration v41: Short-Regel (Stichtag 14.09.2020, Kanal-Ausnahmen)")
 
         # Bedeutungssuche (optionale Erweiterung): Vektoren und Warteliste
         from app.services import semantic_index, transcripts

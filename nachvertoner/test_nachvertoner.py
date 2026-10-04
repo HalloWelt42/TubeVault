@@ -292,3 +292,21 @@ def test_ki_transkript_wenn_nichts_zu_vertonen(make, tmp_path):
     assert created["type"] == "transcribe" and created["payload"]["language"] == "auto"
     assert delivered == {"language": "de", "segments": [{"start": 0.0, "end": 2.5, "text": "Guten Tag."}]}
     assert not (tmp_path / "arbeit" / "ki_ohneuntert1").exists()
+
+
+def test_kurzer_ausfall_von_tubevault_bricht_nichts_ab(make):
+    """Während TubeVault neu startet, scheitern Lebenszeichen - die Arbeit
+    läuft weiter, statt stundenlange Vertonung zu verwerfen."""
+    worker, stage = make([{"status": "running", "progress": 0.5, "phase": "speak"}, DONE])
+    original = stage.pi
+    outage = {"left": 2}
+
+    def flaky(request):
+        if request.url.path.endswith("/progress") and outage["left"] > 0:
+            outage["left"] -= 1
+            raise httpx.ConnectError("Neustart")
+        return original(request)
+    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(flaky))
+
+    assert worker.step() is True
+    assert stage.failed is None and stage.result_upload
