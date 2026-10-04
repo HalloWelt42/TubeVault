@@ -199,12 +199,25 @@ async def list_subtitles(video_id: str):
     if not sdir.exists():
         return {"subtitles": []}
 
+    from app.services import audio_tracks, transcripts
+
+    def describe(code: str) -> tuple[str, str]:
+        """Art und lesbarer Name aus dem Dateinamen: "de" vom Autor,
+        "a.de" automatisch erzeugt, "ki.de" KI-Transkript."""
+        for prefix, kind in (("ki.", "ai"), ("a.", "auto")):
+            if code.startswith(prefix):
+                language = code[len(prefix):]
+                return kind, f"{audio_tracks.language_name(language)} - {transcripts.KIND_LABELS[kind]}"
+        return "manual", f"{audio_tracks.language_name(code)} - {transcripts.KIND_LABELS['manual']}"
+
     subs = []
     for f in sorted(sdir.iterdir()):
         if f.suffix in (".vtt", ".srt"):
+            kind, name = describe(f.stem)
             subs.append({
                 "code": f.stem,
-                "name": f.stem,
+                "name": name,
+                "kind": kind,
                 "path": f"/{video_id}/subtitle/{f.name}",
                 "size": f.stat().st_size,
             })

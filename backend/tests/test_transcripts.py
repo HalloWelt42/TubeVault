@@ -145,3 +145,51 @@ async def test_transkript_fuer_nachvertonung(stock, monkeypatch, tmp_path):
     monkeypatch.setattr(transcripts, "_download_caption", broken)
     await stock.execute("INSERT INTO videos (id, title, status, source) VALUES ('gebremst01', 'x', 'ready', 'youtube')")
     assert "429" in (await transcripts.for_dubbing("gebremst01", "any")).reason
+
+
+# ─── KI-Transkripte ───────────────────────────────────────────────────
+
+async def test_ki_transkript_fuer_videos_ohne_untertitel(stock, monkeypatch, tmp_path):
+    """Ohne Untertitel der Quelle kommt ein Video auf die KI-Warteliste; das
+    abgelieferte Transkript ist durchsuchbar und überall als KI-Transkript
+    gekennzeichnet (Datei "ki.<sprache>.vtt", Art "ai")."""
+    monkeypatch.setattr(transcripts, "SUBTITLES_DIR", tmp_path)
+    monkeypatch.setattr(transcripts, "_download_caption", lambda video_id, language: (None, None))
+
+    assert (await transcripts.fetch("vidkochen1")).status == "none"
+    job = await transcripts.claim_ai("mac")
+    assert job.video_id == "vidkochen1" and job.language is None
+    assert await transcripts.claim_ai("mac") is None             # nur einmal vergeben
+    assert await transcripts.heartbeat_ai("vidkochen1", "Transkribieren")
+
+    result = transcripts.AiResult(language="de", segments=[
+        Segment(start=0, end=3, text="Zuerst kommt das Salz."),
+        Segment(start=3, end=6, text="Dann der Pfeffer."),
+    ])
+    assert await transcripts.finish_ai("vidkochen1", result) == 1
+    vtt = (tmp_path / "vidkochen1" / "ki.de.vtt").read_text(encoding="utf-8")
+    assert vtt.startswith("WEBVTT") and "KI-Transkript" in vtt and "00:00:03.000" in vtt
+    assert await stock.fetch_val("SELECT language FROM videos WHERE id = 'vidkochen1'") == "de"
+
+    found = (await search_index.search_videos("Pfeffer"))["videos"]
+    assert found[0]["id"] == "vidkochen1" and found[0]["passage"]["kind"] == "ai"
+    assert (await transcripts.ai_counts())["done"] == 1
+
+    # Verspätetes Abliefern zu einem nicht mehr laufenden Auftrag wird abgelehnt
+    with pytest.raises(ValueError):
+        await transcripts.finish_ai("vidkochen1", result)
+
+
+async def test_untertitel_liste_nennt_die_herkunft(async_client_factory, stock, monkeypatch, tmp_path):
+    from app import config
+    monkeypatch.setattr(config, "SUBTITLES_DIR", tmp_path)
+    from app.routers import player
+    client = await async_client_factory(player.router)
+    folder = tmp_path / "vidkochen1"
+    folder.mkdir()
+    for name in ("de.vtt", "a.en.vtt", "ki.de.vtt"):
+        (folder / name).write_text("WEBVTT\n", encoding="utf-8")
+    listed = {s["code"]: (s["kind"], s["name"]) for s in
+              (await client.get("/api/player/vidkochen1/subtitles")).json()["subtitles"]}
+    assert listed["ki.de"] == ("ai", "Deutsch - KI-Transkript")
+    assert listed["a.en"][0] == "auto" and listed["de"][0] == "manual"

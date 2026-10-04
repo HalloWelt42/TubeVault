@@ -79,7 +79,11 @@
         <span class="sub-flag">{sub.code.includes('de') ? '🇩🇪' : sub.code.includes('en') ? '🇬🇧' : sub.code.includes('fr') ? '🇫🇷' : sub.code.includes('es') ? '🇪🇸' : '🌐'}</span>
         <span class="sub-name">
           {sub.name}
-          {#if sub.code.startsWith('a.')}<span class="sub-auto">(auto)</span>{/if}
+          {#if sub.kind === 'ai'}
+            <span class="sub-ai" title="Per Spracherkennung aus dem Ton erstellt, nicht vom Autor - kann Hörfehler enthalten">
+              <i class="fa-solid fa-robot"></i> KI
+            </span>
+          {/if}
         </span>
         <span class="sub-size">{formatSize(sub.size)}</span>
         {#if activeSub === sub.code}
@@ -97,6 +101,8 @@
 
 <style>
   .tab-empty { text-align: center; padding: 20px; color: var(--text-tertiary); }
+  .sub-ai { margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem; font-weight: 700;
+            background: color-mix(in srgb, var(--status-warning) 18%, transparent); color: var(--status-warning); }
   .tab-empty p { margin-bottom: 12px; }
   .dl-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .sub-list { display: flex; flex-direction: column; gap: 4px; }

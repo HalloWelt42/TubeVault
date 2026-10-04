@@ -15,12 +15,18 @@ Tabellen:
 
 Der Bestand wird im Hintergrund abgearbeitet, bewusst langsam: jeder Abruf
 ist eine Anfrage an die Quelle, und die sperrt bei zu vielen.
+
+KI-Transkripte: Hat die Quelle für ein Video keine Untertitel, kommt es auf
+die Warteliste ai_transcriptions. Der Nachvertoner auf dem leistungsfähigen
+Rechner holt sich von dort Aufträge, sobald er nichts zu vertonen hat, lässt
+den Ton per Spracherkennung abschreiben und liefert die Sätze zurück. Solche
+Transkripte tragen die Art "ai" und sind überall als KI-Transkript
+gekennzeichnet - sie stammen nicht vom Autor und können Hörfehler enthalten.
 """
 import asyncio
 import logging
 from typing import Literal, Optional
 
-import httpx
 from pydantic import BaseModel
 
 from app.config import SUBTITLES_DIR
@@ -35,7 +41,7 @@ CREATE TABLE IF NOT EXISTS transcripts (
     video_id TEXT PRIMARY KEY,
     status TEXT NOT NULL,            -- ok | none (keine Untertitel) | error
     language TEXT,
-    kind TEXT,                       -- manual | auto
+    kind TEXT,                       -- manual | auto | ai
     note TEXT,
     fetched_at TEXT DEFAULT (datetime('now'))
 );
@@ -63,8 +69,31 @@ CREATE TRIGGER IF NOT EXISTS trg_transcript_video_delete AFTER DELETE ON videos
 BEGIN
     DELETE FROM transcript_chunks WHERE video_id = old.id;
     DELETE FROM transcripts WHERE video_id = old.id;
+    DELETE FROM ai_transcriptions WHERE video_id = old.id;
 END;
+-- Warteliste für KI-Transkripte (Videos ohne Untertitel der Quelle)
+CREATE TABLE IF NOT EXISTS ai_transcriptions (
+    video_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'queued',   -- queued | working | done | error
+    worker TEXT,
+    note TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    claimed_at TEXT,
+    heartbeat_at TEXT,
+    finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_transcriptions_status ON ai_transcriptions(status, created_at);
 """
+
+# Woher ein Transkript stammt - so steht es überall in der Oberfläche
+KIND_LABELS = {
+    "manual": "Untertitel vom Autor",
+    "auto": "Untertitel der Quelle (automatisch erzeugt)",
+    "ai": "KI-Transkript",
+}
+_FILE_PREFIX = {"manual": "", "auto": "a.", "ai": "ki."}
+# Ohne Lebenszeichen gilt ein abgeholter KI-Auftrag nach dieser Zeit als verwaist
+AI_STALE_AFTER_MINUTES = 30
 
 # Ein Abschnitt fasst Sätze zusammen, bis er etwa so lang ist: lang genug für
 # einen Gedanken, kurz genug, um beim Sprung an der richtigen Stelle zu landen
@@ -97,6 +126,7 @@ class Passage(BaseModel):
     video_id: str
     start: float
     text: str
+    kind: Optional[str] = None        # Herkunft des Transkripts (manual | auto | ai)
 
 
 class FetchResult(BaseModel):
@@ -109,6 +139,10 @@ class FetchResult(BaseModel):
 
 async def install_schema(connection) -> None:
     await connection.executescript(SCHEMA_SQL)
+    # Videos, für die die Quelle schon "keine Untertitel" gemeldet hat
+    await connection.execute(
+        """INSERT OR IGNORE INTO ai_transcriptions (video_id)
+           SELECT video_id FROM transcripts WHERE status = 'none'""")
     await connection.commit()
 
 
@@ -170,15 +204,15 @@ def _download_caption(video_id: str, preferred_language: str | None):
 
 
 def _subtitle_file(video_id: str, language: str, kind: str):
-    """Ablageort der Untertitel: automatisch erzeugte tragen die Kennung "a."."""
-    code = language if kind == "manual" else f"a.{language}"
-    return SUBTITLES_DIR / video_id / f"{code}.vtt"
+    """Ablageort der Untertitel: automatisch erzeugte tragen die Kennung "a.",
+    KI-Transkripte "ki." - so bleibt die Herkunft auch an der Datei sichtbar."""
+    return SUBTITLES_DIR / video_id / f"{_FILE_PREFIX.get(kind, 'a.')}{language}.vtt"
 
 
 class DubTranscript(BaseModel):
     """Transkript für die Nachvertonung: Sätze mit Zeitangabe."""
     language: str
-    kind: str                          # manual | auto
+    kind: str                          # manual | auto | ai
     segments: list[Segment]
 
 
@@ -212,7 +246,7 @@ async def for_dubbing(video_id: str, use: str) -> DubTranscriptAnswer:
         row = await state()
     if not row or row["status"] != "ok":
         return missing("Die Quelle hat keine Untertitel in der Originalsprache")
-    if row["kind"] == "auto" and use == "manual":
+    if row["kind"] != "manual" and use == "manual":
         return missing("Es gibt nur automatisch erzeugte Untertitel; gewünscht waren vom Autor erstellte")
     segments = subtitle_segments.segments_from_file(_subtitle_file(video_id, row["language"], row["kind"]))
     if not segments:
@@ -228,6 +262,7 @@ async def fetch(video_id: str) -> FetchResult:
     choice, text = await asyncio.to_thread(_download_caption, video_id, language)
     if not choice:
         await _mark(video_id, "none")
+        await enqueue_ai(video_id)       # Ersatz: KI-Transkript vom Ton
         return FetchResult(status="none")
 
     # Die Untertitel auch für Wiedergabe und Nachvertonung ablegen
@@ -328,14 +363,111 @@ async def background_fetch() -> None:
         await asyncio.sleep(pause)
 
 
+# ─── KI-Transkripte ───────────────────────────────────────────────────
+
+class AiJob(BaseModel):
+    """Ein KI-Transkript-Auftrag für den Nachvertoner."""
+    video_id: str
+    title: Optional[str] = None
+    duration: Optional[int] = None
+    language: Optional[str] = None     # Sprache des Videos, falls bekannt (sonst erkennen)
+
+
+class AiResult(BaseModel):
+    language: str                      # Kürzel der erkannten Sprache, z.B. "de"
+    segments: list[Segment]
+
+
+async def enqueue_ai(video_id: str) -> None:
+    await db.execute("INSERT OR IGNORE INTO ai_transcriptions (video_id) VALUES (?)", (video_id,))
+
+
+async def _release_stale_ai() -> None:
+    await db.execute(
+        f"""UPDATE ai_transcriptions
+            SET status = 'queued', worker = NULL, claimed_at = NULL,
+                note = 'Bearbeiter hat sich nicht mehr gemeldet - erneut in der Warteliste'
+            WHERE status = 'working'
+              AND COALESCE(heartbeat_at, claimed_at) < datetime('now', '-{AI_STALE_AFTER_MINUTES} minutes')""")
+
+
+async def claim_ai(worker: str) -> Optional[AiJob]:
+    """Den nächsten KI-Auftrag reservieren: zuletzt geladene Videos zuerst."""
+    await _release_stale_ai()
+    row = await db.fetch_one(
+        """SELECT a.video_id FROM ai_transcriptions a JOIN videos v ON v.id = a.video_id
+           WHERE a.status = 'queued' AND v.status = 'ready'
+           ORDER BY v.download_date DESC, a.video_id LIMIT 1""")
+    if not row:
+        return None
+    cursor = await db.execute(
+        """UPDATE ai_transcriptions SET status = 'working', worker = ?, note = NULL,
+               claimed_at = datetime('now'), heartbeat_at = datetime('now')
+           WHERE video_id = ? AND status = 'queued'""", (worker, row["video_id"]))
+    if cursor.rowcount != 1:
+        return None
+    video = await db.fetch_one(
+        "SELECT id, title, duration, language FROM videos WHERE id = ?", (row["video_id"],))
+    return AiJob(video_id=video["id"], title=video["title"], duration=video["duration"],
+                 language=(video["language"] or None))
+
+
+async def heartbeat_ai(video_id: str, note: Optional[str] = None) -> bool:
+    cursor = await db.execute(
+        """UPDATE ai_transcriptions SET heartbeat_at = datetime('now'), note = COALESCE(?, note)
+           WHERE video_id = ? AND status = 'working'""", (note, video_id))
+    return cursor.rowcount == 1
+
+
+async def finish_ai(video_id: str, result: AiResult) -> int:
+    """KI-Transkript übernehmen: Abschnitte für die Suche, Untertitel-Datei
+    "ki.<sprache>.vtt" für die Wiedergabe. Ein Transkript der Quelle, das
+    inzwischen eingetroffen ist, wird nicht überschrieben."""
+    job = await db.fetch_one("SELECT status FROM ai_transcriptions WHERE video_id = ?", (video_id,))
+    if not job or job["status"] != "working":
+        raise ValueError("Auftrag ist nicht in Arbeit")
+    existing = await db.fetch_one("SELECT status, kind FROM transcripts WHERE video_id = ?", (video_id,))
+    language = result.language.strip().lower()[:8]
+    sentences = [s for s in result.segments if s.text.strip() and s.end > s.start]
+    if not existing or existing["status"] != "ok" or existing["kind"] == "ai":
+        path = _subtitle_file(video_id, language, "ai")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(subtitle_segments.to_vtt(
+            sentences, note="KI-Transkript (Spracherkennung, nicht vom Autor)"), encoding="utf-8")
+        count = await store(video_id, language, "ai", sentences)
+        await db.execute(
+            "UPDATE videos SET language = ? WHERE id = ? AND COALESCE(language, '') = ''",
+            (language, video_id))
+    else:
+        count = 0
+    await db.execute(
+        """UPDATE ai_transcriptions SET status = 'done', finished_at = datetime('now'), note = ?
+           WHERE video_id = ?""", (f"{len(sentences)} Sätze, {language}", video_id))
+    return count
+
+
+async def fail_ai(video_id: str, note: str) -> None:
+    await db.execute(
+        """UPDATE ai_transcriptions SET status = 'error', finished_at = datetime('now'), note = ?
+           WHERE video_id = ? AND status = 'working'""", (note[:500], video_id))
+
+
+async def ai_counts() -> dict[str, int]:
+    rows = await db.fetch_all("SELECT status, COUNT(*) AS n FROM ai_transcriptions GROUP BY status")
+    result = {"queued": 0, "working": 0, "done": 0, "error": 0}
+    result.update({row["status"]: row["n"] for row in rows})
+    return result
+
+
 # ─── Suchen ───────────────────────────────────────────────────────────
 
 async def keyword_passages(match: str, limit: int = 400) -> list[Passage]:
     """Abschnitte, in denen die Suchwörter vorkommen, beste zuerst.
     match ist ein fertiger Volltext-Ausdruck (search_index.build_match)."""
     rows = await db.fetch_all(
-        """SELECT c.id AS chunk_id, c.video_id, c.start, c.text
+        """SELECT c.id AS chunk_id, c.video_id, c.start, c.text, t.kind
            FROM transcript_fts f JOIN transcript_chunks c ON c.id = f.rowid
+           LEFT JOIN transcripts t ON t.video_id = c.video_id
            WHERE transcript_fts MATCH ? ORDER BY bm25(transcript_fts) LIMIT ?""",
         (match, limit))
     return [Passage(**dict(row)) for row in rows]
@@ -346,6 +478,8 @@ async def passages_by_id(chunk_ids: list[int]) -> dict[int, Passage]:
         return {}
     marks = ",".join("?" * len(chunk_ids))
     rows = await db.fetch_all(
-        f"SELECT id AS chunk_id, video_id, start, text FROM transcript_chunks WHERE id IN ({marks})",
+        f"""SELECT c.id AS chunk_id, c.video_id, c.start, c.text, t.kind
+            FROM transcript_chunks c LEFT JOIN transcripts t ON t.video_id = c.video_id
+            WHERE c.id IN ({marks})""",
         chunk_ids)
     return {row["chunk_id"]: Passage(**dict(row)) for row in rows}

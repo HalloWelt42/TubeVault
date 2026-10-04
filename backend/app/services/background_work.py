@@ -119,6 +119,19 @@ async def _transcripts() -> Optional[WorkItem]:
         eta_seconds=int(remaining * transcripts.seconds_per_fetch()))
 
 
+async def _ai_transcripts() -> Optional[WorkItem]:
+    from app.services import transcripts
+    row = await db.fetch_one(
+        """SELECT a.note, a.claimed_at, a.worker, v.title FROM ai_transcriptions a
+           LEFT JOIN videos v ON v.id = a.video_id WHERE a.status = 'working' LIMIT 1""")
+    counts = await transcripts.ai_counts()
+    if not row:
+        return None   # wartende ohne Bearbeiter: kein laufender Vorgang
+    return WorkItem(key="ai_transcripts", label=f"KI-Transkript: {(row['title'] or 'Video')[:60]}",
+                    detail=" · ".join(filter(None, [row["note"], row["worker"]])) or None,
+                    since=row["claimed_at"], waiting=counts["queued"])
+
+
 async def _passage_index() -> Optional[WorkItem]:
     from app.services import semantic_index
     cfg = await semantic_index.config()
@@ -137,7 +150,7 @@ async def _passage_index() -> Optional[WorkItem]:
 
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _search_index, _semantic_index, _passage_index, _transcripts, _type_check]
+    _dubbing, _ai_transcripts, _search_index, _semantic_index, _passage_index, _transcripts, _type_check]
 
 
 async def overview() -> list[WorkItem]:

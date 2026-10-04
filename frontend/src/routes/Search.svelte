@@ -276,6 +276,9 @@
               <button class="passage" onclick={() => navigate(`/watch/${v.id}?t=${v.passage.start}`)}
                       title="Im Video gesagt - an diese Stelle springen">
                 <span class="passage-time"><i class="fa-solid fa-play"></i> {formatDuration(v.passage.start)}</span>
+                {#if v.passage.kind === 'ai'}
+                  <span class="passage-ai" title="Textstelle aus einem KI-Transkript (Spracherkennung, nicht vom Autor)"><i class="fa-solid fa-robot"></i> KI</span>
+                {/if}
                 <span class="passage-text">{v.passage.text}</span>
               </button>
             {/if}
@@ -422,6 +425,8 @@
     font: inherit; font-size: 0.74rem; line-height: 1.35; text-align: left; cursor: pointer;
   }
   .passage:hover { color: var(--text-primary); }
+  .passage-ai { flex-shrink: 0; padding: 0 5px; border-radius: 4px; font-weight: 700; font-size: 0.66rem;
+                background: color-mix(in srgb, var(--status-warning) 18%, transparent); color: var(--status-warning); }
   .passage-time { flex-shrink: 0; font-weight: 600; color: var(--accent-primary); white-space: nowrap; }
   .passage-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .semantic-note { margin-left: 10px; font-size: 0.74rem; font-weight: 600; color: var(--accent-primary); }

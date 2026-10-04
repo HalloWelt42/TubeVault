@@ -167,7 +167,8 @@
           <button class="stl-tab" class:active={activeSub === sub.code} onclick={() => loadCues(sub)}>
             {sub.code.includes('de') ? '🇩🇪' : sub.code.includes('en') ? '🇬🇧' : '🌐'}
             {sub.name || sub.code}
-            {#if sub.code.startsWith('a.')}<span class="auto-tag">auto</span>{/if}
+            {#if sub.kind === 'ai'}<span class="auto-tag" title="Per Spracherkennung erstellt, nicht vom Autor">KI</span>
+            {:else if sub.kind === 'auto'}<span class="auto-tag">auto</span>{/if}
           </button>
         {/each}
         <button class="stl-tab stl-add" onclick={() => download('all')} title="Weitere laden">

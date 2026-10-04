@@ -33,6 +33,7 @@ nachvertoner.beispiel.toml).
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import shutil
 import socket
@@ -144,9 +145,9 @@ class Nachvertoner:
             raise RuntimeError(f"Stimme '{name}' gibt es im Vertonungsdienst nicht (vorhanden: {known})")
         return match["id"]
 
-    def upload(self, path: Path) -> str:
+    def upload(self, path: Path, mime: str = "video/mp4") -> str:
         with path.open("rb") as fh:
-            r = self.dub.post("/api/files/upload", files={"files": (path.name, fh, "video/mp4")})
+            r = self.dub.post("/api/files/upload", files={"files": (path.name, fh, mime)})
         body = r.json()
         if r.status_code == 409:   # inhaltsgleiche Datei liegt schon dort
             return body["detail"]["existing_file"]["id"]
@@ -306,6 +307,90 @@ class Nachvertoner:
             self.report(request_id, 0.08 + 0.87 * float(state.get("progress") or 0), label)
             time.sleep(self.s.progress_seconds)
 
+    # ─── KI-Transkript ───────────────────────────────────────────────
+    #
+    # Videos ohne Untertitel der Quelle: TubeVault führt sie auf einer eigenen
+    # Warteliste. Abgeholt wird nur, wenn nichts zu vertonen ist - Vertonungen
+    # sind ausdrückliche Wünsche, Transkripte füllen die Suche im Hintergrund.
+
+    def claim_transcript(self) -> dict | None:
+        return self.pi.post("/api/transcripts/ai/claim",
+                            json={"worker": self.s.worker_name}, timeout=30).json()
+
+    def process_transcript(self, claimed: dict) -> None:
+        job = claimed["request"]
+        video_id = job["video_id"]
+        title = job.get("title") or video_id
+        folder = self.s.work_dir / f"ki_{video_id}"
+        folder.mkdir(parents=True, exist_ok=True)
+        source_id = dub_job_id = None
+        log.info("KI-Transkript: %s", title)
+
+        def note(text: str) -> None:
+            r = self.pi.post(claimed["progress_url"], json={"note": text}, timeout=30)
+            if r.status_code == 409:
+                raise Abbruch()
+
+        try:
+            note("Ton laden")
+            original = folder / "original.mp4"
+            with self.pi.stream("GET", claimed["media_url"]) as r:
+                r.raise_for_status()
+                with original.open("wb") as fh:
+                    for chunk in r.iter_bytes(1024 * 1024):
+                        fh.write(chunk)
+            # Nur der Ton geht zum Dienst, klein als Mono mit 16 kHz
+            audio = folder / f"tubevault_{video_id}.wav"
+            run_ffmpeg("-i", str(original), "-vn", "-ac", "1", "-ar", "16000", str(audio))
+            original.unlink(missing_ok=True)
+            source_id = self.upload(audio, mime="audio/wav")
+
+            # Bekannte Sprache vorgeben, sonst erkennt der Dienst sie selbst
+            language = LANGUAGE_NAMES.get((job.get("language") or "").lower(), "auto")
+            created = self.dub.post("/api/jobs", json={
+                "type": "transcribe", "label": f"TubeVault-Transkript: {title[:80]}",
+                "payload": {"file_id": source_id, "language": language},
+            })
+            created.raise_for_status()
+            dub_job_id = created.json()["id"]
+            note("Transkribieren")
+            while True:
+                state = self.dub.get(f"/api/jobs/{dub_job_id}", timeout=30).json()
+                if state.get("status") == "done":
+                    result = state.get("result") or {}
+                    break
+                if state.get("status") in ("error", "cancelled"):
+                    raise RuntimeError((state.get("error") or "Transkription abgebrochen").strip().splitlines()[0])
+                note(state.get("progress_label") or "Transkribieren")
+                time.sleep(self.s.progress_seconds)
+
+            transcription = self.dub.get(f"/api/transcribe/{result['transcription_id']}", timeout=30).json()
+            raw = transcription.get("segments") or []
+            if isinstance(raw, str):
+                raw = json.loads(raw or "[]")
+            segments = [{"start": float(s["start"]), "end": float(s["end"]), "text": str(s.get("text", "")).strip()}
+                        for s in raw if str(s.get("text", "")).strip()]
+            detected = LANGUAGE_CODES.get(str(transcription.get("language") or "").lower()) \
+                or (job.get("language") or "")
+            if not segments or not detected:
+                raise RuntimeError("Die Spracherkennung lieferte keinen Text oder keine Sprache")
+            done = self.pi.post(claimed["result_url"], json={"language": detected, "segments": segments}, timeout=60)
+            if done.status_code == 409:
+                raise Abbruch()
+            done.raise_for_status()
+            log.info("KI-Transkript fertig: %s (%d Sätze, %s)", title, len(segments), detected)
+        except Abbruch:
+            log.info("KI-Transkript für %s wurde bei TubeVault zurückgezogen", video_id)
+            if dub_job_id:
+                self.dub.post(f"/api/jobs/{dub_job_id}/cancel", timeout=30)
+        except Exception as e:   # jeder Fehler geht sichtbar an TubeVault zurück
+            log.exception("KI-Transkript für %s fehlgeschlagen", video_id)
+            self.pi.post(claimed["fail_url"], json={"note": f"{e.__class__.__name__}: {e}"[:480]}, timeout=30)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+            # Löscht im Dienst auch die zugehörige Transkription mit
+            self.remove_remote(source_id)
+
     # ─── Dauerbetrieb ────────────────────────────────────────────────
 
     def step(self) -> bool:
@@ -320,10 +405,15 @@ class Nachvertoner:
             return False
         try:
             claimed = self.claim()
+            if not claimed or not claimed.get("request"):
+                # Nichts zu vertonen: ein KI-Transkript abarbeiten
+                transcript = self.claim_transcript()
+                if transcript and transcript.get("request"):
+                    self.process_transcript(transcript)
+                    return True
+                return False
         except httpx.HTTPError as e:
             log.info("TubeVault nicht erreichbar (%s)", e.__class__.__name__)
-            return False
-        if not claimed or not claimed.get("request"):
             return False
         self.process(claimed)
         return True

@@ -384,7 +384,8 @@ async def search_videos(
         passage = best_passage.get(video["id"])
         if passage:
             # Textstelle aus dem Transkript samt Sprungmarke (Sekunden)
-            video["passage"] = {"text": passage.text, "start": int(passage.start)}
+            video["passage"] = {"text": passage.text, "start": int(passage.start),
+                                "kind": passage.kind}
         videos.append(video)
 
     return {

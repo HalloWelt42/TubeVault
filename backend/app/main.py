@@ -28,7 +28,7 @@ from app.services import loadable as loadable_entries, video_classifier
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
-    ad_markers, own_videos, video_repair, backup, api_endpoints, admin_cleanup,
+    ad_markers, own_videos, video_repair, backup, api_endpoints, admin_cleanup, transcripts as transcripts_router,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
     cookies, admin, dubbing,
 )
@@ -437,6 +437,7 @@ app.include_router(imports.router)
 app.include_router(own_videos.router)
 app.include_router(video_repair.router)
 app.include_router(admin_cleanup.router)
+app.include_router(transcripts_router.router)
 app.include_router(backup.router)
 # System
 app.include_router(settings.router)

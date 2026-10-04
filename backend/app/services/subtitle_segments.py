@@ -114,5 +114,22 @@ def into_sentences(cues: list[Segment]) -> list[Segment]:
     return sentences
 
 
+def _vtt_time(seconds: float) -> str:
+    millis = int(round(max(0.0, seconds) * 1000))
+    hours, rest = divmod(millis, 3_600_000)
+    minutes, rest = divmod(rest, 60_000)
+    return f"{hours:02d}:{minutes:02d}:{rest // 1000:02d}.{rest % 1000:03d}"
+
+
+def to_vtt(segments: list[Segment], note: str = "") -> str:
+    """Segmente als WebVTT-Datei (für Wiedergabe und Untertitel-Liste)."""
+    lines = ["WEBVTT", ""]
+    if note:
+        lines += [f"NOTE {note}", ""]
+    for segment in segments:
+        lines += [f"{_vtt_time(segment.start)} --> {_vtt_time(segment.end)}", segment.text, ""]
+    return "\n".join(lines)
+
+
 def segments_from_file(path: Path) -> list[Segment]:
     return into_sentences(without_repeats(parse_vtt(path.read_text(encoding="utf-8"))))

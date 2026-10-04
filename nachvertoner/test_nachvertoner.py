@@ -241,3 +241,54 @@ def test_unbekannte_sprache_erkennt_der_dienst(make):
     assert worker.step() is True
     assert stage.created_payload["payload"]["source_language"] == "auto"
     assert b'name="source_language"\r\n\r\nde' in stage.result_upload
+
+
+def test_ki_transkript_wenn_nichts_zu_vertonen(make, tmp_path):
+    """Keine Vertonung offen: der Nachvertoner holt ein KI-Transkript, schickt
+    nur den Ton zum Dienst, lässt die Sprache erkennen und liefert die Sätze ab."""
+    worker, stage = make([DONE])
+    delivered = {}
+    calls = []
+
+    def pi(request):
+        path = request.url.path
+        calls.append(path)
+        if path == "/api/dubbing/claim":
+            return httpx.Response(200, json={"request": None})
+        if path == "/api/transcripts/ai/claim":
+            return httpx.Response(200, json={
+                "request": {"video_id": "ohneuntert1", "title": "Ohne Untertitel", "language": None},
+                "media_url": "/api/player/ohneuntert1",
+                "progress_url": "/api/transcripts/ai/ohneuntert1/progress",
+                "result_url": "/api/transcripts/ai/ohneuntert1/result",
+                "fail_url": "/api/transcripts/ai/ohneuntert1/fail"})
+        if path == "/api/player/ohneuntert1":
+            return httpx.Response(200, content=stage.clip)
+        if path.endswith("/progress"):
+            return httpx.Response(200, json={"ok": True})
+        if path.endswith("/result"):
+            delivered.update(json.loads(request.content))
+            return httpx.Response(200, json={"ok": True})
+        return stage.pi(request)
+
+    created = {}
+
+    def dub(request):
+        path = request.url.path
+        if path == "/api/jobs" and request.method == "POST":
+            created.update(json.loads(request.content))
+            return httpx.Response(200, json={"id": "t-1"})
+        if path == "/api/jobs/t-1":
+            return httpx.Response(200, json={"status": "done", "result": {"transcription_id": "tr-1"}})
+        if path == "/api/transcribe/tr-1":
+            return httpx.Response(200, json={"language": "german", "segments": [
+                {"start": 0.0, "end": 2.5, "text": " Guten Tag. "}, {"start": 2.5, "end": 3.0, "text": " "}]})
+        return stage.dub(request)
+
+    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(pi))
+    worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(dub))
+
+    assert worker.step() is True
+    assert created["type"] == "transcribe" and created["payload"]["language"] == "auto"
+    assert delivered == {"language": "de", "segments": [{"start": 0.0, "end": 2.5, "text": "Guten Tag."}]}
+    assert not (tmp_path / "arbeit" / "ki_ohneuntert1").exists()
