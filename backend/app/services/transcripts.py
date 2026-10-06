@@ -1,10 +1,8 @@
 """
 TubeVault – Transkripte
 
-Gesprochener Inhalt der Videos, durchsuchbar gemacht. Die Texte stammen aus
-den Untertiteln der Quelle (vom Autor erstellte zuerst, sonst automatisch
-erzeugte in der Originalsprache). Jedes Transkript wird in Abschnitte mit
-Zeitangabe zerlegt; die Suche findet darin Wörter (Volltext) und Bedeutungen
+Gesprochener Inhalt der Videos, durchsuchbar gemacht. Jedes Transkript wird
+in Abschnitte mit Zeitangabe zerlegt; die Suche findet darin Wörter (Volltext) und Bedeutungen
 (Einbettung je Abschnitt, siehe semantic_index) und kann an die Stelle im
 Video springen.
 
@@ -13,18 +11,24 @@ Tabellen:
     transcript_chunks    Abschnitte mit Start und Ende in Sekunden
     transcript_fts       Volltext über die Abschnitte
 
-Der Bestand wird im Hintergrund abgearbeitet, bewusst langsam: jeder Abruf
-ist eine Anfrage an die Quelle, und die sperrt bei zu vielen.
+Woher die Texte kommen: Untertitel werden NICHT mehr bei der Quelle geholt -
+die vielen Abrufe brachten ihr den Verdacht auf einen Automaten ein. Die
+Transkripte entstehen stattdessen lokal per Spracherkennung: Der Nachvertoner
+auf dem leistungsfähigen Rechner holt sich einen Auftrag, sobald der
+Vertonungsdienst frei ist und nichts zu vertonen ansteht, lässt den Ton
+abschreiben und liefert die Sätze zurück. Reihenfolge: immer das zuletzt
+geladene Video ohne Transkript - neu geladene kommen also sofort an die Reihe,
+danach geht es mit den nächstälteren weiter.
 
-KI-Transkripte: Hat die Quelle für ein Video keine Untertitel, kommt es auf
-die Warteliste ai_transcriptions. Der Nachvertoner auf dem leistungsfähigen
-Rechner holt sich von dort Aufträge, sobald er nichts zu vertonen hat, lässt
-den Ton per Spracherkennung abschreiben und liefert die Sätze zurück. Solche
-Transkripte tragen die Art "ai" und sind überall als KI-Transkript
+Solche Transkripte tragen die Art "ai" und sind überall als KI-Transkript
 gekennzeichnet - sie stammen nicht vom Autor und können Hörfehler enthalten.
+Früher geholte Untertitel der Quelle (Art "manual" oder "auto") bleiben
+bestehen und werden nicht ersetzt.
+
+ai_transcriptions hält den Stand je Video (working | done | error, sowie
+queued für einen wieder freigegebenen Auftrag); was dort nicht steht und
+noch kein Transkript hat, wartet.
 """
-import asyncio
-import logging
 from typing import Literal, Optional
 
 from pydantic import BaseModel
@@ -33,8 +37,6 @@ from app.config import SUBTITLES_DIR
 from app.database import db
 from app.services import subtitle_segments
 from app.services.subtitle_segments import Segment
-
-logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS transcripts (
@@ -71,10 +73,10 @@ BEGIN
     DELETE FROM transcripts WHERE video_id = old.id;
     DELETE FROM ai_transcriptions WHERE video_id = old.id;
 END;
--- Warteliste für KI-Transkripte (Videos ohne Untertitel der Quelle)
+-- Stand der KI-Transkripte je Video (siehe Kopf)
 CREATE TABLE IF NOT EXISTS ai_transcriptions (
     video_id TEXT PRIMARY KEY,
-    status TEXT NOT NULL DEFAULT 'queued',   -- queued | working | done | error
+    status TEXT NOT NULL DEFAULT 'queued',   -- queued (wieder frei) | working | done | error
     worker TEXT,
     note TEXT,
     created_at TEXT DEFAULT (datetime('now')),
@@ -101,21 +103,6 @@ CHUNK_CHARS = 700
 # Nach einer längeren Sprechpause beginnt ein neuer Abschnitt - sonst läge
 # die Sprungmarke weit vor der Textstelle
 CHUNK_MAX_GAP_SECONDS = 20
-# Pause zwischen zwei Abrufen bei der Quelle. Bewusst lang: jeder Abruf zählt
-# bei der Quelle mit, und zu viele bringen ihr die Sperre "kein Automat?" ein,
-# die dann auch die Downloads trifft. Die Quelle drosselt Untertitel
-# streng und ohne festen Wert, deshalb passt sich der Abstand an: nach jeder
-# Bremsung wird er verdoppelt, nach einer Reihe geglückter Abrufe wieder
-# langsam kürzer.
-SECONDS_PER_FETCH = 120
-MAX_SECONDS_PER_FETCH = 1800
-SPEED_UP_AFTER = 20          # geglückte Abrufe in Folge, bis der Abstand sinkt
-# Pause, wenn die Quelle bremst oder nicht erreichbar ist
-BACKOFF_SECONDS = 3600
-# Fehlgeschlagene Abrufe frühestens nach so vielen Tagen erneut versuchen
-RETRY_ERROR_DAYS = 7
-_BLOCK_MARKERS = ("429", "too many requests", "sign in to confirm", "timed out", "timeout",
-                  "name resolution", "connection refused", "network is unreachable")
 
 Status = Literal["ok", "none", "error"]
 
@@ -129,20 +116,8 @@ class Passage(BaseModel):
     kind: Optional[str] = None        # Herkunft des Transkripts (manual | auto | ai)
 
 
-class FetchResult(BaseModel):
-    status: Status
-    language: Optional[str] = None
-    kind: Optional[str] = None
-    chunks: int = 0
-    note: Optional[str] = None
-
-
 async def install_schema(connection) -> None:
     await connection.executescript(SCHEMA_SQL)
-    # Videos, für die die Quelle schon "keine Untertitel" gemeldet hat
-    await connection.execute(
-        """INSERT OR IGNORE INTO ai_transcriptions (video_id)
-           SELECT video_id FROM transcripts WHERE status = 'none'""")
     await connection.commit()
 
 
@@ -189,20 +164,6 @@ async def _mark(video_id: str, status: Status, language: str | None = None,
         (video_id, status, language, kind, note))
 
 
-def _download_caption(video_id: str, preferred_language: str | None):
-    """Synchron (im Thread): passende Untertitel bei der Quelle finden und laden.
-    Liefert (Auswahl, Text) oder (None, None), wenn es keine gibt."""
-    from app.utils.pytube_client import make_youtube
-    choice = make_youtube(f"https://www.youtube.com/watch?v={video_id}").caption_choice(preferred_language)
-    if not choice:
-        return None, None
-    from app.utils import source_net
-    with source_net.client(timeout=30) as http:
-        response = http.get(choice.url)
-    response.raise_for_status()
-    return choice, response.text
-
-
 def _subtitle_file(video_id: str, language: str, kind: str):
     """Ablageort der Untertitel: automatisch erzeugte tragen die Kennung "a.",
     KI-Transkripte "ki." - so bleibt die Herkunft auch an der Datei sichtbar."""
@@ -222,73 +183,43 @@ class DubTranscriptAnswer(BaseModel):
 
 
 async def for_dubbing(video_id: str, use: str) -> DubTranscriptAnswer:
-    """Transkript eines Videos für die Nachvertonung. Die Originalsprache
-    bestimmt die Quelle selbst - sie muss am Video nicht bekannt sein. Liegt
-    noch kein Transkript vor, wird es jetzt geholt. Gibt es keines, steht der
-    Grund in der Antwort (der Vertonungsdienst transkribiert dann selbst)."""
+    """Vorhandenes Transkript eines Videos für die Nachvertonung. Gibt es
+    keines, steht der Grund in der Antwort (der Vertonungsdienst transkribiert
+    dann selbst). Bei der Quelle wird nichts geholt."""
     def missing(reason: str) -> DubTranscriptAnswer:
         return DubTranscriptAnswer(reason=reason)
 
     if use == "never":
         return missing("Untertitel sollen für diesen Auftrag nicht verwendet werden")
 
-    async def state():
-        return await db.fetch_one(
-            "SELECT status, language, kind FROM transcripts WHERE video_id = ?", (video_id,))
-
-    row = await state()
-    path = _subtitle_file(video_id, row["language"], row["kind"]) if row and row["status"] == "ok" else None
-    if not row or row["status"] == "error" or (path and not path.exists()):
-        try:
-            await fetch(video_id)
-        except Exception as e:
-            return missing(f"Untertitel bei der Quelle nicht abrufbar: {str(e)[:160]}")
-        row = await state()
+    row = await db.fetch_one(
+        "SELECT status, language, kind FROM transcripts WHERE video_id = ?", (video_id,))
     if not row or row["status"] != "ok":
-        return missing("Die Quelle hat keine Untertitel in der Originalsprache")
+        return missing("Für dieses Video gibt es noch kein Transkript")
     if row["kind"] != "manual" and use == "manual":
-        return missing("Es gibt nur automatisch erzeugte Untertitel; gewünscht waren vom Autor erstellte")
-    segments = subtitle_segments.segments_from_file(_subtitle_file(video_id, row["language"], row["kind"]))
+        return missing(f"Es gibt nur ein {KIND_LABELS[row['kind']]}; gewünscht waren Untertitel vom Autor")
+    path = _subtitle_file(video_id, row["language"], row["kind"])
+    if not path.exists():
+        return missing("Die Untertitel-Datei des Transkripts fehlt")
+    segments = subtitle_segments.segments_from_file(path)
     if not segments:
         return missing("Die Untertitel enthalten keinen Text")
     return DubTranscriptAnswer(
         transcript=DubTranscript(language=row["language"], kind=row["kind"], segments=segments))
 
 
-async def fetch(video_id: str) -> FetchResult:
-    """Transkript eines Videos bei der Quelle holen und ablegen. Fehler der
-    Quelle werden durchgereicht - der Aufrufer entscheidet, ob er pausiert."""
-    language = await db.fetch_val("SELECT language FROM videos WHERE id = ?", (video_id,))
-    choice, text = await asyncio.to_thread(_download_caption, video_id, language)
-    if not choice:
-        await _mark(video_id, "none")
-        await enqueue_ai(video_id)       # Ersatz: KI-Transkript vom Ton
-        return FetchResult(status="none")
+# ─── Bestand ──────────────────────────────────────────────────────────
 
-    # Die Untertitel auch für Wiedergabe und Nachvertonung ablegen
-    path = _subtitle_file(video_id, choice.language, choice.kind)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    # Die Sprache der Untertitel ist die Sprache des Videos, falls noch unbekannt
-    await db.execute(
-        "UPDATE videos SET language = ? WHERE id = ? AND COALESCE(language, '') = ''",
-        (choice.language, video_id))
-
-    sentences = subtitle_segments.into_sentences(
-        subtitle_segments.without_repeats(subtitle_segments.parse_vtt(text)))
-    count = await store(video_id, choice.language, choice.kind, sentences)
-    return FetchResult(status="ok" if count else "none", language=choice.language,
-                       kind=choice.kind, chunks=count)
-
-
-# ─── Bestand abarbeiten ───────────────────────────────────────────────
-
-_WAITING_SQL = f"""
-    FROM videos v LEFT JOIN transcripts t ON t.video_id = v.id
-    WHERE v.status = 'ready' AND COALESCE(v.source, 'youtube') = 'youtube'
-      AND v.id NOT LIKE 'local\\_%' ESCAPE '\\'
-      AND (t.video_id IS NULL
-           OR (t.status = 'error' AND t.fetched_at < datetime('now', '-{RETRY_ERROR_DAYS} days')))
+# Videos, die auf ein KI-Transkript warten: fertig geladen, keine Musik (kaum
+# Sprache, nur Rechenzeit), noch ohne Transkript und nicht schon in Arbeit,
+# fertig oder gescheitert
+_WAITING_SQL = """
+    FROM videos v
+    LEFT JOIN transcripts t ON t.video_id = v.id
+    LEFT JOIN ai_transcriptions a ON a.video_id = v.id
+    WHERE v.status = 'ready' AND COALESCE(v.is_music, 0) = 0
+      AND (t.video_id IS NULL OR t.status != 'ok')
+      AND (a.video_id IS NULL OR a.status = 'queued')
 """
 
 
@@ -303,64 +234,6 @@ async def counts() -> dict[str, int]:
     result["chunks"] = await db.fetch_val("SELECT COUNT(*) FROM transcript_chunks") or 0
     result["pending"] = await pending()
     return result
-
-
-def is_blocked(error: Exception) -> bool:
-    message = str(error).lower()
-    return any(marker in message for marker in _BLOCK_MARKERS)
-
-
-class _Pace:
-    """Aktueller Abstand zwischen zwei Abrufen."""
-    seconds = SECONDS_PER_FETCH
-    successes = 0
-
-    @classmethod
-    def blocked(cls) -> None:
-        cls.seconds = min(cls.seconds * 2, MAX_SECONDS_PER_FETCH)
-        cls.successes = 0
-
-    @classmethod
-    def succeeded(cls) -> None:
-        cls.successes += 1
-        if cls.successes >= SPEED_UP_AFTER:
-            cls.seconds = max(SECONDS_PER_FETCH, int(cls.seconds * 0.8))
-            cls.successes = 0
-
-
-def seconds_per_fetch() -> int:
-    return _Pace.seconds
-
-
-async def background_fetch() -> None:
-    """Hintergrundlauf: neueste Videos zuerst. Bremst die Quelle, ruht der
-    Lauf und fragt danach in größerem Abstand."""
-    await asyncio.sleep(90)
-    while True:
-        pause = _Pace.seconds
-        try:
-            row = await db.fetch_one(
-                f"SELECT v.id {_WAITING_SQL} ORDER BY v.download_date DESC, v.id LIMIT 1")
-            if not row:
-                pause = 600
-            else:
-                video_id = row["id"]
-                try:
-                    result = await fetch(video_id)
-                    _Pace.succeeded()
-                    logger.debug(f"[TRANSKRIPT] {video_id}: {result.status} ({result.chunks} Abschnitte)")
-                except Exception as e:
-                    if is_blocked(e):
-                        _Pace.blocked()
-                        logger.info(f"[TRANSKRIPT] Quelle bremst, Pause {BACKOFF_SECONDS // 60} Min, "
-                                    f"danach alle {_Pace.seconds} s: {str(e)[:120]}")
-                        pause = BACKOFF_SECONDS
-                    else:
-                        await _mark(video_id, "error", note=str(e)[:300])
-        except Exception as e:
-            logger.warning(f"[TRANSKRIPT] Hintergrundlauf: {e.__class__.__name__}: {e}")
-            pause = 300
-        await asyncio.sleep(pause)
 
 
 # ─── KI-Transkripte ───────────────────────────────────────────────────
@@ -378,10 +251,6 @@ class AiResult(BaseModel):
     segments: list[Segment]
 
 
-async def enqueue_ai(video_id: str) -> None:
-    await db.execute("INSERT OR IGNORE INTO ai_transcriptions (video_id) VALUES (?)", (video_id,))
-
-
 async def _release_stale_ai() -> None:
     await db.execute(
         f"""UPDATE ai_transcriptions
@@ -392,23 +261,23 @@ async def _release_stale_ai() -> None:
 
 
 async def claim_ai(worker: str) -> Optional[AiJob]:
-    """Den nächsten KI-Auftrag reservieren: zuletzt geladene Videos zuerst."""
+    """Den nächsten KI-Auftrag reservieren: immer das zuletzt geladene Video
+    ohne Transkript. Neu geladene kommen so sofort an die Reihe, danach geht
+    es mit den nächstälteren weiter."""
     await _release_stale_ai()
-    row = await db.fetch_one(
-        """SELECT a.video_id FROM ai_transcriptions a JOIN videos v ON v.id = a.video_id
-           WHERE a.status = 'queued' AND v.status = 'ready'
-             AND COALESCE(v.is_music, 0) = 0      -- Musik: kaum Sprache, nur Rechenzeit
-           ORDER BY v.download_date DESC, a.video_id LIMIT 1""")
+    row = await db.fetch_one(f"SELECT v.id {_WAITING_SQL} ORDER BY v.download_date DESC, v.id LIMIT 1")
     if not row:
         return None
     cursor = await db.execute(
-        """UPDATE ai_transcriptions SET status = 'working', worker = ?, note = NULL,
-               claimed_at = datetime('now'), heartbeat_at = datetime('now')
-           WHERE video_id = ? AND status = 'queued'""", (worker, row["video_id"]))
+        """INSERT INTO ai_transcriptions (video_id, status, worker, claimed_at, heartbeat_at)
+           VALUES (?, 'working', ?, datetime('now'), datetime('now'))
+           ON CONFLICT(video_id) DO UPDATE SET status = 'working', worker = excluded.worker,
+               note = NULL, claimed_at = excluded.claimed_at, heartbeat_at = excluded.heartbeat_at
+           WHERE ai_transcriptions.status = 'queued'""", (row["id"], worker))
     if cursor.rowcount != 1:
         return None
     video = await db.fetch_one(
-        "SELECT id, title, duration, language FROM videos WHERE id = ?", (row["video_id"],))
+        "SELECT id, title, duration, language FROM videos WHERE id = ?", (row["id"],))
     return AiJob(video_id=video["id"], title=video["title"], duration=video["duration"],
                  language=(video["language"] or None))
 
@@ -422,8 +291,8 @@ async def heartbeat_ai(video_id: str, note: Optional[str] = None) -> bool:
 
 async def finish_ai(video_id: str, result: AiResult) -> int:
     """KI-Transkript übernehmen: Abschnitte für die Suche, Untertitel-Datei
-    "ki.<sprache>.vtt" für die Wiedergabe. Ein Transkript der Quelle, das
-    inzwischen eingetroffen ist, wird nicht überschrieben."""
+    "ki.<sprache>.vtt" für die Wiedergabe. Ein früher geholtes Transkript
+    der Quelle wird nicht überschrieben."""
     job = await db.fetch_one("SELECT status FROM ai_transcriptions WHERE video_id = ?", (video_id,))
     if not job or job["status"] != "working":
         raise ValueError("Auftrag ist nicht in Arbeit")

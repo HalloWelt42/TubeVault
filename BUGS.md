@@ -60,7 +60,7 @@ Meldung wurde an den echten Daten nachvollzogen und an der Ursache behoben.
 | Gelöschte Videos hinterlassen Reste | Texte, Werbemarken, Verweise, Kapitelbilder blieben; Löschen ohne Rückfrage | Restloses Löschen, Rückfragen, Kanal wahlweise samt Videos |
 | Kanäle: Steuerung und Zuverlässigkeit | Prüfintervall wuchs bis 7 Tage; eine Netzstörung bestrafte jeden Kanal einzeln; jede Prüfung fragte auch bekannte Videos erneut ab; Auto-Download verlor Videos am Tageslimit; gestörter oder abgebrochener Scan galt als erfolgreich, Abbruch wirkte erst am Ende; Läufe warteten bis zu 5 Minuten auf Downloads, abgestürzte blieben "aktiv"; Hinzufügen per Handle blockierte, Unsinn wurde zum Abo; "Alle entsperren" schaltete abgeschaltete Kanäle ein | Einstellbare Obergrenze (`rss.max_interval`), Störung der Quelle pausiert die Prüfung statt Kanäle zu bestrafen, Vormerkung am Tageslimit (`auto_pending`), Scanner liest seitenweise und meldet ehrlich, `job_service.guard`, `channel_reference`, eine Ladbar-Definition (`loadable`), Einzelprüfung je Kanal, Statuszeile der Prüfung |
 
-Neu dazugekommen: Transkripte aus den Untertiteln der Quelle (`transcripts`,
+Neu dazugekommen: Transkripte per lokaler Spracherkennung, neueste Videos zuerst (`transcripts`,
 Volltext und Bedeutung je Textstelle, Sprung an die Stelle), hybride Suche (`semantic_index`), Serien-Playlisten
 (`series_detector`), sichtbare Hintergrundarbeiten, Mobil-Ansicht unter `/m`, Nachvertonung mit umschaltbarer
 Tonspur (`nachvertoner/`), "Shorts ausschließen", eine Versionsquelle

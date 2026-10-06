@@ -1,26 +1,8 @@
-"""Transkripte: holen, zerlegen, im Volltext und nach Bedeutung finden."""
+"""Transkripte: lokal erkennen lassen, zerlegen, im Volltext und nach Bedeutung finden."""
 import pytest
 
 from app.services import search_index, semantic_index, transcripts
 from app.services.subtitle_segments import Segment
-from app.utils.ytdlp_adapter import pick_caption
-
-VTT = [{"ext": "json3", "url": "j"}, {"ext": "vtt", "url": "v"}]
-
-
-def test_untertitel_wahl():
-    # Vom Autor erstellte in der Originalsprache gewinnen
-    choice = pick_caption({"language": "en", "subtitles": {"en-GB": VTT, "de": VTT},
-                           "automatic_captions": {"en-orig": VTT, "en": VTT, "de": VTT}})
-    assert (choice.language, choice.kind, choice.url) == ("en", "manual", "v")
-    # Sonst die automatisch erzeugten des Originals, nie eine Übersetzung
-    choice = pick_caption({"subtitles": {}, "automatic_captions": {"de-orig": VTT, "en": VTT, "de": VTT}})
-    assert (choice.language, choice.kind) == ("de", "auto")
-    assert pick_caption({"language": "fr", "subtitles": {"de": VTT}, "automatic_captions": {"en": VTT}}) is None
-    assert pick_caption({"subtitles": {"live_chat": VTT}}) is None
-    # Sprache unbekannt: die Angabe am Video hilft
-    assert pick_caption({"automatic_captions": {"en": VTT}}, "en").kind == "auto"
-
 
 def test_saetze_werden_zu_abschnitten():
     sentences = [Segment(start=n * 5.0, end=n * 5.0 + 5, text="wort " * 40) for n in range(10)]
@@ -84,79 +66,35 @@ async def test_bedeutung_im_transkript(stock, set_setting, monkeypatch):
     assert "Zinn" in result["videos"][0]["passage"]["text"]
 
 
-async def test_abruf_speichert_oder_vermerkt_fehlen(stock, monkeypatch, tmp_path):
-    monkeypatch.setattr(transcripts, "SUBTITLES_DIR", tmp_path)
-    from app.utils.ytdlp_adapter import CaptionChoice
-    vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nSalz und Pfeffer dazu.\n"
-    answers = {"vidkochen1": (CaptionChoice("de", "auto", "u"), vtt)}
-    monkeypatch.setattr(transcripts, "_download_caption",
-                        lambda video_id, language: answers.get(video_id, (None, None)))
-
-    assert await transcripts.pending() == 1          # das Lötvideo hat schon eines
-    result = await transcripts.fetch("vidkochen1")
-    assert (result.status, result.kind, result.chunks) == ("ok", "auto", 1)
-    assert (tmp_path / "vidkochen1" / "a.de.vtt").exists()
-    assert await transcripts.pending() == 0
-
-    await stock.execute("INSERT INTO videos (id, title, status, source) VALUES ('ohnetext01', 'x', 'ready', 'youtube')")
-    assert (await transcripts.fetch("ohnetext01")).status == "none"
-    assert await transcripts.pending() == 0          # wird nicht immer wieder gefragt
-
-    # Löschen des Videos nimmt Transkript und Abschnitte mit
-    await stock.execute("DELETE FROM videos WHERE id = 'vidkochen1'")
-    assert await stock.fetch_val("SELECT COUNT(*) FROM transcript_chunks WHERE video_id = 'vidkochen1'") == 0
-    assert (await search_index.search_videos("Pfeffer"))["videos"] == []
-
-
 async def test_transkript_fuer_nachvertonung(stock, monkeypatch, tmp_path):
-    """Die Sprache des Originals muss am Video nicht bekannt sein: die Quelle
-    bestimmt sie, und das Video lernt sie dabei. (Fehler: ohne bekannte Sprache
-    gab es nie ein Transkript, der Vertonungsdienst transkribierte alles selbst.)"""
+    """Die Nachvertonung bekommt nur, was schon da ist - bei der Quelle wird
+    nichts geholt. Fehlt es, transkribiert der Vertonungsdienst selbst."""
     monkeypatch.setattr(transcripts, "SUBTITLES_DIR", tmp_path)
-    from app.utils.ytdlp_adapter import CaptionChoice
-    vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nFirst we add salt.\n\n00:00:03.000 --> 00:00:05.000\nThen pepper.\n"
-    calls = []
+    folder = tmp_path / "vidloeten01"
+    folder.mkdir()
+    (folder / "de.vtt").write_text(
+        "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nErst das Zinn.\n\n"
+        "00:00:03.000 --> 00:00:05.000\nDann die Spitze.\n", encoding="utf-8")
+    answer = await transcripts.for_dubbing("vidloeten01", "manual")
+    assert answer.transcript.kind == "manual"
+    assert [s.text for s in answer.transcript.segments] == ["Erst das Zinn.", "Dann die Spitze."]
 
-    def download(video_id, language):
-        calls.append(video_id)
-        if video_id == "vidkochen1":
-            return CaptionChoice("en", "auto", "u"), vtt
-        return None, None
-    monkeypatch.setattr(transcripts, "_download_caption", download)
-
-    assert await stock.fetch_val("SELECT language FROM videos WHERE id = 'vidkochen1'") is None
-    answer = await transcripts.for_dubbing("vidkochen1", "any")
-    assert answer.transcript.language == "en" and answer.transcript.kind == "auto"
-    assert [s.text for s in answer.transcript.segments] == ["First we add salt.", "Then pepper."]
-    assert await stock.fetch_val("SELECT language FROM videos WHERE id = 'vidkochen1'") == "en"
-
-    # Zweite Anfrage: nichts wird erneut geholt
-    await transcripts.for_dubbing("vidkochen1", "any")
-    assert calls == ["vidkochen1"]
-
-    # Gründe, wenn es keines gibt - der Vertonungsdienst transkribiert dann selbst
-    assert "automatisch" in (await transcripts.for_dubbing("vidkochen1", "manual")).reason
-    assert (await transcripts.for_dubbing("vidkochen1", "never")).transcript is None
-    await stock.execute("INSERT INTO videos (id, title, status, source) VALUES ('ohnetext01', 'x', 'ready', 'youtube')")
-    assert "keine Untertitel" in (await transcripts.for_dubbing("ohnetext01", "any")).reason
-
-    def broken(video_id, language):
-        raise RuntimeError("HTTP Error 429: Too Many Requests")
-    monkeypatch.setattr(transcripts, "_download_caption", broken)
-    await stock.execute("INSERT INTO videos (id, title, status, source) VALUES ('gebremst01', 'x', 'ready', 'youtube')")
-    assert "429" in (await transcripts.for_dubbing("gebremst01", "any")).reason
+    assert "noch kein Transkript" in (await transcripts.for_dubbing("vidkochen1", "any")).reason
+    assert (await transcripts.for_dubbing("vidloeten01", "never")).transcript is None
+    await stock.execute("UPDATE transcripts SET kind = 'ai' WHERE video_id = 'vidloeten01'")
+    assert "KI-Transkript" in (await transcripts.for_dubbing("vidloeten01", "manual")).reason
+    assert "fehlt" in (await transcripts.for_dubbing("vidloeten01", "any")).reason
 
 
 # ─── KI-Transkripte ───────────────────────────────────────────────────
 
-async def test_ki_transkript_fuer_videos_ohne_untertitel(stock, monkeypatch, tmp_path):
-    """Ohne Untertitel der Quelle kommt ein Video auf die KI-Warteliste; das
+async def test_ki_transkript_fuer_videos_ohne_transkript(stock, monkeypatch, tmp_path):
+    """Jedes Video ohne Transkript wartet auf die Spracherkennung; das
     abgelieferte Transkript ist durchsuchbar und überall als KI-Transkript
     gekennzeichnet (Datei "ki.<sprache>.vtt", Art "ai")."""
     monkeypatch.setattr(transcripts, "SUBTITLES_DIR", tmp_path)
-    monkeypatch.setattr(transcripts, "_download_caption", lambda video_id, language: (None, None))
 
-    assert (await transcripts.fetch("vidkochen1")).status == "none"
+    assert await transcripts.pending() == 1          # das Lötvideo hat schon eines
     job = await transcripts.claim_ai("mac")
     assert job.video_id == "vidkochen1" and job.language is None
     assert await transcripts.claim_ai("mac") is None             # nur einmal vergeben
@@ -174,6 +112,7 @@ async def test_ki_transkript_fuer_videos_ohne_untertitel(stock, monkeypatch, tmp
     found = (await search_index.search_videos("Pfeffer"))["videos"]
     assert found[0]["id"] == "vidkochen1" and found[0]["passage"]["kind"] == "ai"
     assert (await transcripts.ai_counts())["done"] == 1
+    assert await transcripts.pending() == 0
 
     # Verspätetes Abliefern zu einem nicht mehr laufenden Auftrag wird abgelehnt
     with pytest.raises(ValueError):
@@ -197,5 +136,29 @@ async def test_untertitel_liste_nennt_die_herkunft(async_client_factory, stock, 
 
 async def test_musik_kommt_nicht_zur_ki(stock):
     await stock.execute("UPDATE videos SET is_music = 1 WHERE id = 'vidkochen1'")
-    await transcripts.enqueue_ai("vidkochen1")
     assert await transcripts.claim_ai("mac") is None
+
+
+async def test_neueste_zuerst_neu_geladene_draengeln_vor(stock):
+    """Vergeben wird immer das zuletzt geladene Video ohne Transkript; kommt
+    ein neues hinzu, ist es als nächstes dran, danach geht es mit den
+    nächstälteren weiter."""
+    for video_id, day in (("alt0000001", "2026-01-01"), ("mitte00001", "2026-05-01")):
+        await stock.execute(
+            "INSERT INTO videos (id, title, status, download_date) VALUES (?, 'x', 'ready', ?)",
+            (video_id, day))
+    await stock.execute("UPDATE videos SET download_date = '2025-01-01' WHERE id = 'vidkochen1'")
+    assert (await transcripts.claim_ai("mac")).video_id == "mitte00001"
+    await transcripts.fail_ai("mitte00001", "Testfehler")
+    await stock.execute(
+        "INSERT INTO videos (id, title, status, download_date) VALUES ('neu0000001', 'x', 'ready', '2026-10-06')")
+    assert (await transcripts.claim_ai("mac")).video_id == "neu0000001"
+    assert (await transcripts.claim_ai("mac")).video_id == "alt0000001"
+    assert (await transcripts.claim_ai("mac")).video_id == "vidkochen1"
+    assert await transcripts.claim_ai("mac") is None      # Gescheiterte nicht endlos wiederholen
+
+
+async def test_verwaister_auftrag_kommt_zurueck(stock):
+    assert (await transcripts.claim_ai("mac")).video_id == "vidkochen1"
+    await stock.execute("UPDATE ai_transcriptions SET heartbeat_at = datetime('now', '-2 hours')")
+    assert (await transcripts.claim_ai("mac")).video_id == "vidkochen1"

@@ -57,6 +57,12 @@ PHASE_LABELS = {
     "translate": "Übersetzen", "voices": "Stimme vorbereiten", "speak": "Sprechen", "mux": "Zusammenfügen",
 }
 NO_TIMEOUT = httpx.Timeout(None, connect=30)
+# Herkunft eines Transkripts von TubeVault, so wie sie am Auftrag erscheint
+TRANSCRIPT_KINDS = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch",
+                    "ai": "KI-Transkript"}
+# Ton für die Spracherkennung: unkomprimiert, eine Spur, 16 kHz - genau das,
+# womit die Erkennung rechnet; jedes andere Format würde dort erst umgerechnet
+RECOGNITION_AUDIO = ("-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le")
 
 
 class Abbruch(Exception):
@@ -205,9 +211,9 @@ class Nachvertoner:
             log.info("Kein Transkript von TubeVault: %s - der Dienst transkribiert selbst", reason)
             self.report(request_id, 0.03, f"Ohne Untertitel: {reason}")
             return None
-        kind = "vom Autor" if transcript.get("kind") == "manual" else "automatisch erzeugt"
-        log.info("Untertitel der Quelle (%s) als Transkript: %d Sätze", kind, len(transcript["segments"]))
-        self.report(request_id, 0.03, f"Untertitel der Quelle als Transkript ({kind})")
+        kind = TRANSCRIPT_KINDS.get(transcript.get("kind"), "vorhandenes Transkript")
+        log.info("Transkript von TubeVault (%s): %d Sätze", kind, len(transcript["segments"]))
+        self.report(request_id, 0.03, f"Vorhandenes Transkript verwendet ({kind})")
         return transcript
 
     # ─── Ein Auftrag ─────────────────────────────────────────────────
@@ -318,9 +324,10 @@ class Nachvertoner:
 
     # ─── KI-Transkript ───────────────────────────────────────────────
     #
-    # Videos ohne Untertitel der Quelle: TubeVault führt sie auf einer eigenen
-    # Warteliste. Abgeholt wird nur, wenn nichts zu vertonen ist - Vertonungen
-    # sind ausdrückliche Wünsche, Transkripte füllen die Suche im Hintergrund.
+    # Videos ohne Transkript: TubeVault vergibt immer das zuletzt geladene.
+    # Abgeholt wird nur, wenn der Vertonungsdienst frei ist und nichts zu
+    # vertonen ansteht - Vertonungen sind ausdrückliche Wünsche, Transkripte
+    # füllen die Suche im Hintergrund mit freier Rechenzeit.
 
     def claim_transcript(self) -> dict | None:
         return self.pi.post("/api/transcripts/ai/claim",
@@ -348,7 +355,7 @@ class Nachvertoner:
                         fh.write(chunk)
             # Nur der Ton geht zum Dienst, klein als Mono mit 16 kHz
             audio = folder / f"tubevault_{video_id}.wav"
-            run_ffmpeg("-i", str(original), "-vn", "-ac", "1", "-ar", "16000", str(audio))
+            run_ffmpeg("-i", str(original), *RECOGNITION_AUDIO, str(audio))
             original.unlink(missing_ok=True)
             source_id = self.upload(audio, mime="audio/wav")
 

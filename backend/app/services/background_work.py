@@ -104,32 +104,18 @@ async def _semantic_index() -> Optional[WorkItem]:
         done=done, total=total, progress=done / total if total else None, since=since)
 
 
-async def _transcripts() -> Optional[WorkItem]:
-    from app.services import transcripts
-    remaining = await transcripts.pending()
-    if remaining == 0:
-        _forget("transcripts")
-        return None
-    done, total, since = _countdown("transcripts", remaining)
-    return WorkItem(
-        key="transcripts", label="Transkripte werden geholt",
-        detail="Untertitel der Quelle machen den gesprochenen Inhalt durchsuchbar. Die Quelle "
-               f"drosselt das stark; derzeit ein Abruf alle {transcripts.seconds_per_fetch()} s.",
-        done=done, total=total, progress=done / total if total else None, since=since,
-        eta_seconds=int(remaining * transcripts.seconds_per_fetch()))
-
-
 async def _ai_transcripts() -> Optional[WorkItem]:
+    """Das KI-Transkript, das gerade entsteht; die übrigen warten dahinter,
+    bis der Rechner mit der Spracherkennung wieder frei ist."""
     from app.services import transcripts
     row = await db.fetch_one(
         """SELECT a.note, a.claimed_at, a.worker, v.title FROM ai_transcriptions a
            LEFT JOIN videos v ON v.id = a.video_id WHERE a.status = 'working' LIMIT 1""")
-    counts = await transcripts.ai_counts()
     if not row:
         return None   # wartende ohne Bearbeiter: kein laufender Vorgang
     return WorkItem(key="ai_transcripts", label=f"KI-Transkript: {(row['title'] or 'Video')[:60]}",
                     detail=" · ".join(filter(None, [row["note"], row["worker"]])) or None,
-                    since=row["claimed_at"], waiting=counts["queued"])
+                    since=row["claimed_at"], waiting=await transcripts.pending())
 
 
 async def _passage_index() -> Optional[WorkItem]:
@@ -150,7 +136,7 @@ async def _passage_index() -> Optional[WorkItem]:
 
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _ai_transcripts, _search_index, _semantic_index, _passage_index, _transcripts, _type_check]
+    _dubbing, _ai_transcripts, _search_index, _semantic_index, _passage_index, _type_check]
 
 
 async def overview() -> list[WorkItem]:

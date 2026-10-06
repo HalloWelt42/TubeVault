@@ -208,7 +208,7 @@ def test_untertitel_der_quelle_ersparen_das_transkribieren(make):
     payload = stage.created_payload["payload"]
     assert payload["source_segments"] == segments
     assert payload["source_language"] == "french"
-    assert any("Untertitel der Quelle" in (p.get("note") or "") for p in stage.progress)
+    assert any("Vorhandenes Transkript" in (p.get("note") or "") for p in stage.progress)
 
 
 def test_ohne_untertitel_wird_der_grund_gemeldet(make):
