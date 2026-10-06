@@ -23,6 +23,8 @@ from urllib.parse import urlparse, parse_qs
 
 import yt_dlp
 
+from app.utils import source_net
+
 logger = logging.getLogger(__name__)
 
 # Live-Throttle: KB/s des aktuell laufenden Downloads (0 = kein Limit).
@@ -255,7 +257,6 @@ def _build_ydl_opts(label: str = "", *, for_download: bool = False,
     if not for_download:
         opts["skip_download"] = True
     # Netzweg zur Quelle (IPv4/IPv6), siehe utils/source_net
-    from app.utils import source_net
     opts.update(source_net.ydl_options())
     cf = _login_cookiefile() if use_login_cookies else _cookiefile()
     if use_login_cookies and not cf:
@@ -527,6 +528,8 @@ def _ydl_extract(url: str, extra_opts: Optional[dict] = None,
                     f"[YTBOT-ESCALATE] {label} cat={cat} → schalte auf "
                     f"cookies-login.txt für Folgeversuche"
                 )
+            if cat == "BOT-DETECTION":
+                source_net.report_bot_block()    # Folgeversuch über die andere Adresse
             backoff = 0 if cat == "BOT-DETECTION" else (3 * (attempt + 1))
             logger.info(
                 f"[YTBOT-RETRY] {label} cat={cat} cookies={'login' if use_login else 'anon'} "
@@ -901,6 +904,8 @@ class StreamAdapter:
                         f"[YTBOT-ESCALATE] {_label} cat={cat} → "
                         f"cookies-login.txt für Folgeversuche"
                     )
+                if cat == "BOT-DETECTION":
+                    source_net.report_bot_block()    # Folgeversuch über die andere Adresse
                 backoff = 0 if cat == "BOT-DETECTION" else (3 * (attempt + 1))
                 logger.info(
                     f"[YTBOT-RETRY] {_label} cat={cat} "
