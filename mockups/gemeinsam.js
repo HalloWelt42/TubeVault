@@ -22,24 +22,27 @@ export const VIDEOS = [
   { id: 'WPcxhRC8y7U', titel: 'fett geil.', kanal: 'coldmirror', dauer: 19, groesse: 5197227, aufrufe: 445078, hochgeladen: '2012-12-18', arten: ['short'] },
 ];
 
+// Wie in der App (Sidebar.svelte): Symbolfarben einzelner Einträge bleiben
 const NAVI = [
   ['Übersicht', 'fa-house', 'start', null],
   ['Neu bei Abos', 'fa-rss', 'feed', '95.047'],
   ['Kanäle', 'fa-tv', 'kanaele', '385'],
   ['Bibliothek', 'fa-photo-film', 'bibliothek', '32.479'],
-  ['Downloads', 'fa-download', 'downloads', null],
-  ['Playlists', 'fa-list', 'playlists', '54'],
-  ['Favoriten', 'fa-heart', 'favoriten', '41'],
+  ['Downloads', 'fa-bolt', 'downloads', null, '#FFCA28'],
+  ['Playlists', 'fa-list-ul', 'playlists', '54'],
+  ['Favoriten', 'fa-heart', 'favoriten', '41', '#EF5350'],
   ['Verlauf', 'fa-clock-rotate-left', 'verlauf', '963'],
-  ['Archiv', 'fa-box-archive', 'archiv', '29.355'],
+  ['Kategorien', 'fa-folder', 'kategorien', '3'],
+  ['Archiv', 'fa-box-archive', 'archiv', '29.355', '#A1887F'],
   ['Nachvertonung', 'fa-language', 'vertonung', null],
   ['Eigene Videos', 'fa-film', 'eigene', '14'],
+  ['Suche', 'fa-magnifying-glass', 'suche', null],
 ];
 const SYSTEM = [
-  ['Statistik', 'fa-chart-simple', 'statistik'],
-  ['Einstellungen', 'fa-sliders', 'einstellungen'],
+  ['Statistik', 'fa-chart-simple', 'statistik', null, '#26C6DA'],
+  ['Einstellungen', 'fa-gear', 'einstellungen'],
   ['Protokoll', 'fa-terminal', 'protokoll'],
-  ['Verwaltung', 'fa-shield-halved', 'verwaltung'],
+  ['Verwaltung', 'fa-screwdriver-wrench', 'verwaltung'],
 ];
 
 export function dauer(sekunden) {
@@ -69,9 +72,9 @@ export function kachel(v) {
 }
 
 function schale(aktiv) {
-  const navi = ([name, symbol, schluessel, zahl]) =>
+  const navi = ([name, symbol, schluessel, zahl, farbe]) =>
     `<a class="navi${schluessel === aktiv ? ' aktiv' : ''}" href="${schluessel === 'bibliothek' ? 'bibliothek.html' : '#'}">
-      <i class="fa-solid ${symbol}"></i>${name}${zahl ? `<span class="zaehler">${zahl}</span>` : ''}</a>`;
+      <i class="fa-solid ${symbol}"${farbe ? ` style="--symbolfarbe: ${farbe}"` : ''}></i>${name}${zahl ? `<span class="zaehler">${zahl}</span>` : ''}</a>`;
   document.querySelector('[data-block="kopf"]').outerHTML = `
     <header class="kopf">
       <div class="marke"><span class="marke-zeichen"><i class="fa-solid fa-play"></i></span>TubeVault</div>
