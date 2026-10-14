@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Mobil</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<style>
+  body { padding: var(--tv-a5); display: flex; gap: var(--tv-a6); flex-wrap: wrap; align-items: flex-start; }
+  .telefon {
+    width: 390px; height: 844px; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--tv-grund); border: 1px solid var(--tv-rand-stark); border-radius: 18px;
+  }
+  .telefon-kopf { display: flex; align-items: center; gap: var(--tv-a3); height: 60px; padding: 0 var(--tv-a4); background: var(--tv-leiste); flex: none; }
+  .telefon-kopf h2 { font-size: 22px; flex: 1; }
+  .telefon-inhalt { flex: 1; overflow-y: auto; padding: var(--tv-a4); display: flex; flex-direction: column; gap: var(--tv-a4); }
+  .telefon-fuss { display: grid; grid-template-columns: repeat(4, 1fr); height: 68px; background: var(--tv-leiste); border-top: 1px solid var(--tv-rand); flex: none; }
+  .telefon-fuss a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--tv-text-3); font-size: var(--tv-gr-marke); font-weight: 600; }
+  .telefon-fuss a i { font-size: 20px; }
+  .telefon-fuss a.aktiv { color: var(--tv-akzent); }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--tv-a2); flex: none; }
+  .chips .chip { flex: none; }
+  .telefon .kachel { gap: 6px; }
+  .halten { position: relative; overflow: hidden; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="etikett" style="margin-bottom: var(--tv-a2)">Bibliothek</div>
+    <div class="telefon">
+      <div class="telefon-kopf"><h2>Bibliothek</h2><button class="knopf ohne symbol"><i class="fa-solid fa-magnifying-glass"></i></button><button class="knopf ohne symbol"><i class="fa-solid fa-sliders"></i></button></div>
+      <div class="telefon-inhalt">
+        <div class="chips">
+          <button class="chip aktiv">Videos</button><button class="chip">Shorts</button><button class="chip">Live</button><button class="chip">Musik</button><button class="chip">Deutsch vertont</button>
+        </div>
+        <div id="liste" style="display:flex; flex-direction:column; gap: var(--tv-a5)"></div>
+      </div>
+      <nav class="telefon-fuss">
+        <a href="#"><i class="fa-solid fa-rss"></i>Neu</a>
+        <a href="#" class="aktiv"><i class="fa-solid fa-photo-film"></i>Bibliothek</a>
+        <a href="#"><i class="fa-solid fa-list"></i>Playlists</a>
+        <a href="#"><i class="fa-solid fa-ellipsis"></i>Mehr</a>
+      </nav>
+    </div>
+  </div>
+
+  <div>
+    <div class="etikett" style="margin-bottom: var(--tv-a2)">Wiedergabe</div>
+    <div class="telefon">
+      <div class="telefon-kopf"><button class="knopf ohne symbol"><i class="fa-solid fa-arrow-left"></i></button><h2 style="font-size:19px">c't 3003</h2></div>
+      <div style="position:relative; aspect-ratio:16/9; background:#000; flex:none">
+        <img src="http://192.168.178.49:8031/api/player/74yM0BEmBjg/thumbnail" alt="" style="width:100%; height:100%; object-fit:cover">
+        <div style="position:absolute; left:0; right:0; bottom:0; height:6px; background: rgba(255,255,255,0.25)">
+          <b style="position:absolute; left:0; top:0; bottom:0; width:18.7%; background: var(--tv-akzent)"></b>
+          <b style="position:absolute; left:7.6%; top:-3px; height:12px; width:6.6%; background: repeating-linear-gradient(135deg, rgba(var(--tv-warnung-rgb),0.9) 0 4px, rgba(var(--tv-warnung-rgb),0.45) 4px 8px)"></b>
+        </div>
+      </div>
+      <div class="telefon-inhalt">
+        <h2 style="font-size: 22px; line-height: 1.25">Nvidia wird immer problematischer</h2>
+        <div class="leise klein">246 Tsd. Aufrufe · 30.05.2025 · 17:08</div>
+        <div style="display:flex; gap: var(--tv-a2); flex-wrap: wrap">
+          <button class="knopf"><i class="fa-regular fa-heart"></i> Favorit</button>
+          <button class="knopf"><i class="fa-solid fa-language"></i> Deutsch</button>
+          <button class="knopf symbol"><i class="fa-solid fa-ellipsis"></i></button>
+        </div>
+        <div class="hinweis"><i class="fa-solid fa-forward"></i><span>2 Werbestellen werden übersprungen (1:18 Minuten)</span></div>
+        <div class="etikett">Kapitel</div>
+        <div>
+          <div class="zeile"><span class="zeit">0:00</span>Intro</div>
+          <div class="zeile" style="background: var(--tv-karte)"><span class="zeit">2:24</span>Problem 1: Umgang mit Tests</div>
+          <div class="zeile"><span class="zeit">9:19</span>Problem 2: Linux-Treiber</div>
+          <div class="zeile"><span class="zeit">11:11</span>Problem 3: Das CUDA-Monopol</div>
+          <div class="zeile"><span class="zeit">14:09</span>Fazit</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { seite, VIDEOS, kachel } from './gemeinsam.js';
+  seite();
+  document.getElementById('liste').innerHTML = VIDEOS.slice(0, 6).map(kachel).join('');
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Bibliothek</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt">
+    <div class="seitenkopf">
+      <h1>Bibliothek</h1>
+      <span class="zahl">32.479 Videos · 6,2 TB</span>
+      <div class="aktionen">
+        <button class="knopf"><i class="fa-regular fa-square-check"></i> Auswählen</button>
+        <button class="knopf symbol" title="Als Liste"><i class="fa-solid fa-list"></i></button>
+        <button class="knopf symbol aktiv" title="Als Raster"><i class="fa-solid fa-grip"></i></button>
+      </div>
+    </div>
+
+    <div class="filter">
+      <input class="eingabe" style="width: 260px" placeholder="In der Bibliothek suchen">
+      <span class="trenner"></span>
+      <button class="chip aktiv"><i class="fa-solid fa-play"></i> Videos</button>
+      <button class="chip"><i class="fa-solid fa-bolt"></i> Shorts</button>
+      <button class="chip"><i class="fa-solid fa-tower-broadcast"></i> Live</button>
+      <button class="chip"><i class="fa-solid fa-music"></i> Musik</button>
+      <button class="chip"><i class="fa-solid fa-language"></i> Deutsch vertont</button>
+      <button class="chip" style="margin-left: auto"><i class="fa-solid fa-tv"></i> Alle Kanäle <i class="fa-solid fa-chevron-down"></i></button>
+    </div>
+
+    <div class="filter">
+      <span class="etikett">Sortieren</span>
+      <button class="chip aktiv">Geladen <i class="fa-solid fa-arrow-down-long"></i></button>
+      <button class="chip">Hochgeladen</button>
+      <button class="chip">Titel</button>
+      <button class="chip">Dauer</button>
+      <button class="chip">Größe</button>
+      <button class="chip">Bewertung</button>
+      <button class="chip">Zuletzt gesehen</button>
+    </div>
+
+    <div class="reihe-chips">
+      <span class="etikett">Schlagwörter</span>
+      <button class="chip">Mathematik <span class="zaehler">3.623</span></button>
+      <button class="chip">ARTE <span class="zaehler">2.367</span></button>
+      <button class="chip">Edmund Weitz <span class="zaehler">2.242</span></button>
+      <button class="chip">Mathe <span class="zaehler">2.165</span></button>
+      <button class="chip">tutorial <span class="zaehler">2.065</span></button>
+      <button class="chip ohne-rahmen">+ 116.883 weitere</button>
+    </div>
+
+    <div class="raster" id="raster" style="margin-top: var(--tv-a5)"></div>
+  </main>
+
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, VIDEOS, kachel } from './gemeinsam.js';
+  seite('bibliothek');
+  document.getElementById('raster').innerHTML = VIDEOS.map(kachel).join('');
+</script>
+</body>
+</html>

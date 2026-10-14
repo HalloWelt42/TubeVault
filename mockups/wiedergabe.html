@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Wiedergabe</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<style>
+  /* Nur diese Ansicht: zwei Spalten, rechts Transkript und Weiter */
+  .wiedergabe { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: var(--tv-a5); }
+  .abspieler { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: var(--tv-ecke); overflow: hidden; }
+  .abspieler img { width: 100%; height: 100%; object-fit: cover; opacity: 0.92; }
+  .steuerung {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: var(--tv-a5) var(--tv-a4) var(--tv-a3);
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+  }
+  /* Zeitleiste: Kapitel als Lücken, Werbestellen als eigene Abschnitte */
+  .zeitleiste { position: relative; height: 8px; margin-bottom: var(--tv-a3); display: flex; gap: 3px; }
+  .zeitleiste .stueck { position: relative; height: 100%; background: rgba(255, 255, 255, 0.28); }
+  .zeitleiste .stueck b { position: absolute; inset: 0 auto 0 0; background: var(--tv-akzent); }
+  .zeitleiste .werbung {
+    position: absolute; top: -3px; height: 14px; border-radius: 1px;
+    background: repeating-linear-gradient(135deg, rgba(var(--tv-warnung-rgb), 0.9) 0 4px, rgba(var(--tv-warnung-rgb), 0.45) 4px 8px);
+  }
+  .steuerzeile { display: flex; align-items: center; gap: var(--tv-a2); }
+  .steuerzeile .knopf { background: transparent; border-color: transparent; }
+  .steuerzeile .knopf:hover { background: rgba(255, 255, 255, 0.12); }
+  .steuerzeile .zeitangabe { font-variant-numeric: tabular-nums; font-weight: 600; margin-left: var(--tv-a2); white-space: nowrap; }
+  .steuerzeile .kapitelname { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .titelzeile { display: flex; gap: var(--tv-a4); align-items: flex-start; margin: var(--tv-a4) 0 var(--tv-a3); }
+  .titelzeile h1 { font-size: 26px; flex: 1; }
+  .kanalzeile { display: flex; align-items: center; gap: var(--tv-a3); flex-wrap: wrap; margin-bottom: var(--tv-a5); }
+  .kanalbild { width: 44px; height: 44px; border-radius: var(--tv-ecke); background: var(--tv-karte-3); display: grid; place-items: center; font-weight: 700; }
+  .kanalzeile .aktionen { margin-left: auto; display: flex; gap: var(--tv-a2); flex-wrap: wrap; }
+  .transkript { display: flex; flex-direction: column; gap: 2px; max-height: 470px; overflow-y: auto; }
+  .transkript .zeile { align-items: flex-start; font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .transkript .zeile.jetzt { background: var(--tv-karte); color: var(--tv-text); }
+  .luecke { display: flex; align-items: center; gap: var(--tv-a2); padding: 6px var(--tv-a3); font-size: var(--tv-gr-marke); color: var(--tv-warnung); }
+  .luecke::before, .luecke::after { content: ""; flex: 1; height: 1px; background: rgba(var(--tv-warnung-rgb), 0.3); }
+  .weiter { display: flex; flex-direction: column; gap: var(--tv-a3); }
+  .weiter .kachel { flex-direction: row; gap: var(--tv-a3); }
+  .weiter .bild { width: 168px; flex: none; }
+  .weiter .kachel-titel { font-size: var(--tv-gr-klein); }
+  .weiter .kachel-meta { flex-direction: column; gap: 0; }
+  .marken .zeile { font-size: var(--tv-gr-klein); }
+  .marken .art { background: rgba(var(--tv-warnung-rgb), 0.14); color: var(--tv-warnung); }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt">
+    <div class="wiedergabe">
+      <section>
+        <div class="abspieler">
+          <img src="http://192.168.178.49:8031/api/player/74yM0BEmBjg/thumbnail" alt="">
+          <div class="steuerung">
+            <div class="zeitleiste" id="zeitleiste"></div>
+            <div class="steuerzeile">
+              <button class="knopf symbol"><i class="fa-solid fa-pause"></i></button>
+              <button class="knopf symbol"><i class="fa-solid fa-volume-high"></i></button>
+              <span class="zeitangabe">3:12 / 17:08</span>
+              <span class="leise klein kapitelname">· Problem 1: Umgang mit Tests</span>
+              <button class="knopf klein"><i class="fa-solid fa-language"></i> Deutsch</button>
+              <button class="knopf symbol"><i class="fa-solid fa-closed-captioning"></i></button>
+              <button class="knopf symbol"><i class="fa-solid fa-gauge"></i></button>
+              <button class="knopf symbol"><i class="fa-solid fa-expand"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="titelzeile">
+          <h1>Nvidia wird immer problematischer</h1>
+          <button class="knopf symbol" title="Favorit"><i class="fa-regular fa-heart"></i></button>
+        </div>
+        <div class="kanalzeile">
+          <div class="kanalbild">c't</div>
+          <div>
+            <div style="font-weight:600">c't 3003</div>
+            <div class="leise klein">246 Tsd. Aufrufe · 30.05.2025 · 94 MB</div>
+          </div>
+          <div class="aktionen">
+            <button class="knopf"><i class="fa-solid fa-list"></i> In Playlist</button>
+            <button class="knopf" title="Ohne Werbestellen"><i class="fa-solid fa-download"></i> Video</button>
+            <button class="knopf" title="Ohne Werbestellen"><i class="fa-solid fa-music"></i> Ton</button>
+            <button class="knopf symbol" title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
+          </div>
+        </div>
+
+        <div class="reiter">
+          <button><i class="fa-solid fa-circle-info"></i> Info</button>
+          <button><i class="fa-solid fa-bookmark"></i> Kapitel <span class="zaehler">6</span></button>
+          <button class="aktiv"><i class="fa-solid fa-rectangle-ad"></i> Werbung <span class="zaehler">2</span></button>
+          <button><i class="fa-solid fa-closed-captioning"></i> Untertitel</button>
+          <button><i class="fa-solid fa-pen"></i> Bearbeiten</button>
+        </div>
+
+        <div class="bereich marken">
+          <div class="hinweis" style="margin-bottom: var(--tv-a4)">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Werbestellen werden übersprungen und fehlen in Transkript und Downloads. Die Datei bleibt vollständig.</span>
+          </div>
+          <div class="zeile"><i class="fa-solid fa-shield-halved schwach"></i><span class="zeit">1:18</span><span class="leise">bis 2:26 · 1:08</span><span class="art">Bezahlte Werbung</span></div>
+          <div class="zeile"><i class="fa-solid fa-shield-halved schwach"></i><span class="zeit">16:57</span><span class="leise">bis 17:07 · 0:10</span><span class="art">Aufruf zur Interaktion</span></div>
+          <div style="display:flex; gap: var(--tv-a3); align-items:center; margin-top: var(--tv-a4); flex-wrap: wrap">
+            <button class="knopf klein"><i class="fa-solid fa-rotate"></i> Jetzt abgleichen</button>
+            <span class="schwach klein">zuletzt abgeglichen vor 2 Std.</span>
+            <span style="margin-left:auto"></span>
+            <input class="eingabe" style="width: 120px; height: 34px" placeholder="Start">
+            <input class="eingabe" style="width: 120px; height: 34px" placeholder="Ende">
+            <button class="knopf klein"><i class="fa-solid fa-plus"></i> Eigene Stelle</button>
+          </div>
+        </div>
+      </section>
+
+      <aside style="display:flex; flex-direction:column; gap: var(--tv-a5)">
+        <div class="bereich" style="padding: var(--tv-a3)">
+          <div style="display:flex; align-items:center; gap: var(--tv-a2); padding: 0 var(--tv-a2) var(--tv-a3)">
+            <h3>Transkript</h3><span class="art ki" style="background: rgba(249,232,13,0.12)">KI</span>
+            <button class="knopf ohne klein" style="margin-left:auto"><i class="fa-solid fa-magnifying-glass"></i></button>
+          </div>
+          <div class="transkript">
+            <div class="zeile"><span class="zeit">0:00</span><span>Guck mal hier, das ist der Vertrag, den wir bei Nvidia unterschreiben müssten, wenn wir vor Veröffentlichung von Produkten Informationen oder Testgeräte haben wollten.</span></div>
+            <div class="zeile"><span class="zeit">0:33</span><span>... dem Umgang mit Medien noch zwei weitere Sachen an, die bei Nvidia ziemlich problematisch sind. Unter anderem haben die mit Linux zu tun.</span></div>
+            <div class="luecke">Werbung 1:18 bis 2:26 ausgelassen</div>
+            <div class="zeile"><span class="zeit">2:51</span><span>Gamestar haben das glücklicherweise alles richtig transparent aufgeschrieben. Und das muss man sich wirklich auf der Zunge zergehen lassen.</span></div>
+            <div class="zeile jetzt"><span class="zeit">3:26</span><span>Aber nein, durfte man nicht. Und der absolute Oberhammer, die Kollegen durften nur Benchmark-Werte mit aktiviertem DLSS 4 mit Multi-Frame-Generation veröffentlichen.</span></div>
+            <div class="zeile"><span class="zeit">3:59</span><span>Zum Beispiel, wenn das Spiel kein DLSS unterstützt. Da gibt es einige von, auch einigermaßen aktuelle, wie zum Beispiel Star Wars Jedi Survivor.</span></div>
+            <div class="zeile"><span class="zeit">4:19</span><span>Ich will damit nicht sagen, dass DLSS 4 ein schlechtes Feature ist. Nein, ist es nicht. Das ist ein praktisches Feature.</span></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="etikett" style="margin-bottom: var(--tv-a3)">Als Nächstes</div>
+          <div class="weiter" id="weiter"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div data-block="fuss"></div>
+</div>
+
+<div class="meldung"><i class="fa-solid fa-forward"></i> Werbung übersprungen · 1:08</div>
+
+<script type="module">
+  import { seite, VIDEOS, kachel } from './gemeinsam.js';
+  seite('bibliothek');
+  document.getElementById('weiter').innerHTML = VIDEOS.slice(0, 5).map(kachel).join('');
+
+  // Zeitleiste aus echten Kapiteln und Werbestellen (Sekunden)
+  const dauer = 1028, jetzt = 192;
+  const kapitel = [0, 79, 144, 559, 671, 849, dauer];
+  const werbung = [[78.6, 146.2], [1017.7, 1027.7]];
+  const leiste = document.getElementById('zeitleiste');
+  for (let i = 0; i < kapitel.length - 1; i++) {
+    const [von, bis] = [kapitel[i], kapitel[i + 1]];
+    const stueck = document.createElement('div');
+    stueck.className = 'stueck';
+    stueck.style.flex = `${bis - von}`;
+    const gesehen = Math.max(0, Math.min(1, (jetzt - von) / (bis - von)));
+    stueck.innerHTML = `<b style="width:${gesehen * 100}%"></b>`;
+    leiste.append(stueck);
+  }
+  for (const [von, bis] of werbung) {
+    const w = document.createElement('div');
+    w.className = 'werbung';
+    w.style.left = `${von / dauer * 100}%`;
+    w.style.width = `${(bis - von) / dauer * 100}%`;
+    w.title = 'Werbestelle - wird übersprungen';
+    leiste.append(w);
+  }
+</script>
+</body>
+</html>
