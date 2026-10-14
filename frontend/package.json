@@ -1,6 +1,6 @@
 {
   "name": "tubevault-frontend",
-  "version": "2.37.1",
+  "version": "2.37.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fontsource/barlow": "^5.3.0",
+    "@fontsource/chakra-petch": "^5.3.0",
     "@fortawesome/fontawesome-free": "^7.1.0",
     "marked": "^15.0.0",
     "page": "^1.11.6"

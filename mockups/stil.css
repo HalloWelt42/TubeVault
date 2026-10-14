@@ -18,10 +18,18 @@
 @font-face { font-family: "Barlow"; font-weight: 700; font-display: swap;
   src: url("../frontend/node_modules/@fontsource/barlow/files/barlow-latin-700-normal.woff2") format("woff2"); }
 
+@font-face { font-family: "Chakra Petch"; font-weight: 400; font-display: swap;
+  src: url("../frontend/node_modules/@fontsource/chakra-petch/files/chakra-petch-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Chakra Petch"; font-weight: 500; font-display: swap;
+  src: url("../frontend/node_modules/@fontsource/chakra-petch/files/chakra-petch-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Chakra Petch"; font-weight: 600; font-display: swap;
+  src: url("../frontend/node_modules/@fontsource/chakra-petch/files/chakra-petch-latin-600-normal.woff2") format("woff2"); }
+
 /* ═══ Marken ═══════════════════════════════════════════════════════════ */
 
 :root {
   --tv-schrift: "Barlow", system-ui, sans-serif;
+  --tv-schrift-zahl: "Chakra Petch", "Barlow", ui-monospace, monospace;   /* alle Zahlen */
 
   /* Flächen: von hinten nach vorn */
   --tv-grund: #172127;          /* Seitenhintergrund */
@@ -104,7 +112,8 @@ h3 { font-size: var(--tv-gr-text); font-weight: 600; }
 .leise { color: var(--tv-text-2); }
 .schwach { color: var(--tv-text-3); }
 .klein { font-size: var(--tv-gr-klein); }
-.zahl { font-variant-numeric: tabular-nums; }
+/* Zahlen (Zähler, Dauer, Zeiten, Aufrufe, Daten) in der technischen Zahlenschrift */
+.zahl, .zaehler, .bild .dauer, .zeit { font-family: var(--tv-schrift-zahl); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 
 /* Kleine Überschrift über Gruppen: Versalien, gesperrt - der "kantige" Ton */
 .etikett {

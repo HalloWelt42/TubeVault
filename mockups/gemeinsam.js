@@ -63,7 +63,7 @@ export function kachel(v) {
     </div>
     <div class="kachel-text">
       <div class="kachel-titel">${v.titel}</div>
-      <div class="kachel-meta"><span class="kanal">${v.kanal}</span><span>${aufrufe(v.aufrufe)}</span><span>${datum(v.hochgeladen)}</span></div>
+      <div class="kachel-meta"><span class="kanal">${v.kanal}</span><span class="zahl">${aufrufe(v.aufrufe)}</span><span class="zahl">${datum(v.hochgeladen)}</span></div>
     </div>
   </a>`;
 }
@@ -89,12 +89,12 @@ function schale(aktiv) {
     </nav>`;
   document.querySelector('[data-block="fuss"]').outerHTML = `
     <footer class="fuss">
-      <span><i class="fa-solid fa-download"></i>&nbsp; 1 Download läuft · 38 %</span>
+      <span><i class="fa-solid fa-download"></i>&nbsp; 1 Download läuft · <span class="zahl">38 %</span></span>
       <span><i class="fa-solid fa-closed-captioning"></i>&nbsp; KI-Transkript: Juice Shop Level 3</span>
       <div class="rechts">
         <span><span class="punkt"></span>Quelle</span>
         <span><span class="punkt"></span>Kanalprüfung</span>
-        <span class="schwach">2.37.0</span>
+        <span class="schwach zahl">2.37.1</span>
       </div>
     </footer>`;
 }
