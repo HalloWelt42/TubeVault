@@ -14,27 +14,32 @@
 
 {#if selectedCount > 0}
   <div class="bulk-bar">
-    <span class="bulk-count">{selectedCount} ausgewählt</span>
+    <span class="bulk-count zahl">{selectedCount.toLocaleString('de-DE')} ausgewählt</span>
     {#if onSelectAll}
-      <button class="bulk-btn" onclick={onSelectAll}>
-        <i class="fa-solid fa-check-double"></i> Alle ({totalCount})
+      <button class="tv-knopf klein" onclick={onSelectAll}>
+        <i class="fa-solid fa-check-double"></i> Alle <span class="zahl">({totalCount.toLocaleString('de-DE')})</span>
       </button>
-      <span class="bulk-sep">|</span>
+      <span class="tv-trenner"></span>
     {/if}
     {@render children?.()}
   </div>
 {/if}
 
 <style>
-  .bulk-bar { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--bg-secondary); border:1px solid var(--accent-primary); border-radius:10px; margin-bottom:14px; flex-wrap:wrap; }
-  .bulk-count { font-size:0.82rem; font-weight:600; color:var(--accent-primary); margin-right:4px; }
-  .bulk-bar :global(.bulk-btn), .bulk-btn {
-    padding:5px 12px; background:var(--bg-tertiary); border:1px solid var(--border-primary);
-    border-radius:6px; color:var(--text-secondary); font-size:0.78rem; cursor:pointer;
-    display:flex; align-items:center; gap:5px;
+  /* Auswahlleiste (mockups/stil.css: .filter mit Akzentkante) */
+  .bulk-bar {
+    display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap;
+    padding: var(--tv-a3) var(--tv-a4); margin-bottom: var(--tv-a3);
+    background: var(--tv-flaeche); border: 1px solid rgba(var(--tv-akzent-rgb), 0.55); border-radius: var(--tv-ecke);
   }
-  .bulk-bar :global(.bulk-btn:hover), .bulk-btn:hover { border-color:var(--accent-primary); color:var(--text-primary); }
-  .bulk-bar :global(.bulk-danger:hover) { border-color:var(--status-error); color:var(--status-error); }
-  .bulk-bar :global(.bulk-type:hover) { border-color:#ab47bc; color:#ab47bc; }
-  .bulk-bar :global(.bulk-sep), .bulk-sep { color:var(--border-primary); font-size:0.9rem; }
+  .bulk-count { font-weight: 600; color: var(--tv-akzent); margin-right: var(--tv-a2); }
+  /* Ältere Seiten reichen noch .bulk-btn / .bulk-sep herein: gleiche Gestalt wie tv-knopf klein */
+  .bulk-bar :global(.bulk-btn) {
+    display: inline-flex; align-items: center; gap: var(--tv-a2); height: 34px; padding: 0 var(--tv-a3);
+    background: var(--tv-karte-2); border: 1px solid var(--tv-rand-stark); border-radius: var(--tv-ecke);
+    color: var(--tv-text); font: inherit; font-size: var(--tv-gr-klein); font-weight: 600; cursor: pointer;
+  }
+  .bulk-bar :global(.bulk-btn:hover) { background: var(--tv-karte-3); }
+  .bulk-bar :global(.bulk-danger) { color: var(--tv-gefahr); }
+  .bulk-bar :global(.bulk-sep) { color: transparent; width: 1px; align-self: stretch; background: var(--tv-rand); overflow: hidden; }
 </style>

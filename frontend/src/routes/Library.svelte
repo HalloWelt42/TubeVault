@@ -25,6 +25,7 @@
   let addToPlaylistVideoId = $state(null);
 
   let allTags = $state([]);
+  let totalBytes = $state(0);   // Größe aller Treffer (vom Backend)
   let _loadTimer = null;
 
   async function loadTags() {
@@ -43,6 +44,7 @@
     };
     try {
       const result = await api.getVideos(params);
+      if (page === 1) totalBytes = result.total_bytes || 0;
       return { items: result.videos || [], total: result.total || 0 };
     } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
   });
@@ -92,49 +94,53 @@
 </script>
 
 <div class="library">
-  <PageHeader title="Bibliothek" count={list.total} hasFilter={filters.hasActive} onClearFilter={clearFilters}>
-    <button class="btn-select" class:active={selectMode} onclick={() => { selectMode = !selectMode; selected = new Set(); }}>
-      <i class="fa-solid {selectMode ? 'fa-xmark' : 'fa-check-double'}"></i>
+  <PageHeader title="Bibliothek" count={list.loading && !list.total ? null : list.total} bytes={totalBytes}
+              hasFilter={filters.hasActive} onClearFilter={clearFilters}>
+    <button class="tv-knopf" class:aktiv={selectMode} onclick={() => { selectMode = !selectMode; selected = new Set(); }}>
+      <i class="fa-{selectMode ? 'solid fa-xmark' : 'regular fa-square-check'}"></i>
       {selectMode ? 'Abbrechen' : 'Auswählen'}
     </button>
   </PageHeader>
 
   {#if selectMode}
     <BatchToolbar selectedCount={selected.size} totalCount={list.items.length} onSelectAll={selectAll}>
-      <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('video')}><i class="fa-solid fa-play"></i> → Video</button>
-      <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('short')}><i class="fa-solid fa-mobile-screen"></i> → Short</button>
-      <button class="bulk-btn bulk-type" onclick={() => setTypeBulk('live')}><i class="fa-solid fa-tower-broadcast"></i> → Live</button>
-      <span class="bulk-sep">|</span>
-      <button class="bulk-btn" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Archivieren</button>
-      <button class="bulk-btn bulk-danger" onclick={deleteSelected}><i class="fa-regular fa-trash-can"></i> Löschen</button>
+      <button class="tv-knopf klein" onclick={() => setTypeBulk('video')}><i class="fa-solid fa-play"></i> Als Video</button>
+      <button class="tv-knopf klein" onclick={() => setTypeBulk('short')}><i class="fa-solid fa-mobile-screen"></i> Als Short</button>
+      <button class="tv-knopf klein" onclick={() => setTypeBulk('live')}><i class="fa-solid fa-tower-broadcast"></i> Als Live</button>
+      <span class="tv-trenner"></span>
+      <button class="tv-knopf klein" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Archivieren</button>
+      <button class="tv-knopf klein gefahr" onclick={deleteSelected}><i class="fa-regular fa-trash-can"></i> Löschen</button>
     </BatchToolbar>
   {/if}
 
   <MultiFilter bind:this={filterRef} showSearch={true} showTypes={true} showChannels={true} showCategories={true} showMusic={true}
                initial={filters.multi} onchange={filters.setMulti} />
 
-  <TagFilterBar {allTags} activeTags={filters.activeTags} onToggle={filters.toggleTag} />
-
-  <div class="toolbar">
-    <div class="sort-group">
-      <span class="toolbar-label">Sortieren:</span>
-      {#each [['created_at','Datum'],['upload_date','Upload'],['is_favorite','Favoriten'],['title','Titel'],['duration','Dauer'],['file_size','Größe'],['rating','Bewertung'],['play_count','Abgespielt']] as [field, label]}
-        <button class="sort-btn" class:active={filters.sortBy === field} onclick={() => filters.changeSort(field)}>
-          {label} {#if filters.sortBy === field}<span class="sort-arrow">{filters.sortOrder === 'desc' ? '↓' : '↑'}</span>{/if}
-        </button>
-      {/each}
-    </div>
+  <div class="tv-filter">
+    <span class="tv-etikett">Sortieren</span>
+    {#each [['created_at','Geladen'],['upload_date','Hochgeladen'],['is_favorite','Favoriten'],['title','Titel'],['duration','Dauer'],['file_size','Größe'],['rating','Bewertung'],['play_count','Abgespielt']] as [field, label]}
+      <button class="tv-chip" class:aktiv={filters.sortBy === field} onclick={() => filters.changeSort(field)}>
+        {label}
+        {#if filters.sortBy === field}
+          <i class="fa-solid {filters.sortOrder === 'desc' ? 'fa-arrow-down-long' : 'fa-arrow-up-long'}"
+             title={filters.sortOrder === 'desc' ? 'absteigend' : 'aufsteigend'}></i>
+        {/if}
+      </button>
+    {/each}
   </div>
 
+  <TagFilterBar {allTags} activeTags={filters.activeTags} onToggle={filters.toggleTag} />
+
   {#if list.loading}
-    <div class="loading">Laden…</div>
+    <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
   {:else if list.items.length > 0}
-    <div class="video-grid">
+    <div class="tv-raster">
       {#each list.items as video (video.id)}
         {#if selectMode}
-          <div class="select-card-wrap" class:selected={selected.has(video.id)}>
-            <button class="select-check" onclick={() => toggleSelect(video.id)}>
-              {#if selected.has(video.id)}<i class="fa-solid fa-square-check"></i>{:else}<i class="fa-regular fa-square"></i>{/if}
+          <div class="auswahl" class:gewaehlt={selected.has(video.id)}>
+            <button class="auswahl-haken" onclick={() => toggleSelect(video.id)}
+                    title={selected.has(video.id) ? 'Abwählen' : 'Auswählen'}>
+              <i class="fa-{selected.has(video.id) ? 'solid fa-square-check' : 'regular fa-square'}"></i>
             </button>
             <VideoCard {video} onUpdate={() => list.load(true)} />
           </div>
@@ -145,15 +151,15 @@
     </div>
     <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
     {#if list.loadingMore}
-      <div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>
+      <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt weitere ...</div>
     {/if}
   {:else}
-    <div class="empty">
+    <div class="tv-leer">
       {#if filters.hasActive}
-        <p>Keine Videos für diesen Filter gefunden.</p>
-        <button class="btn-reset" onclick={clearFilters}>Filter zurücksetzen</button>
+        <p>Keine Videos für diesen Filter.</p>
+        <button class="tv-knopf" style="margin-top: var(--tv-a3)" onclick={clearFilters}>Filter zurücksetzen</button>
       {:else}
-        <p>Keine Videos gefunden.</p>
+        <p>Noch keine Videos in der Bibliothek.</p>
       {/if}
     </div>
   {/if}
@@ -163,27 +169,19 @@
 <AddToPlaylistDialog bind:videoId={addToPlaylistVideoId} />
 
 <style>
-  .library { padding: 24px; max-width: none; }
+  /* Gestaltung nach mockups/bibliothek.html */
+  .library { padding: var(--tv-a5) var(--tv-a6) var(--tv-a6); }
+  .tv-raster { margin-top: var(--tv-a5); }
+  .scroll-sentinel { height: 1px; }
 
-  .toolbar { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
-  .toolbar-label { font-size:0.8rem; color:var(--text-tertiary); }
-  .sort-group { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
-  .sort-btn { display:flex; align-items:center; gap:4px; padding:5px 12px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:6px; color:var(--text-secondary); font-size:0.8rem; cursor:pointer; transition:all 0.15s; }
-  .sort-btn:hover { border-color:var(--accent-primary); color:var(--text-primary); }
-  .sort-btn.active { background:var(--accent-muted); color:var(--accent-primary); border-color:var(--accent-primary); }
-  .sort-arrow { font-size:0.7rem; }
-
-  .video-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px; }
-  .scroll-sentinel { height:1px; }
-  .loading-more { text-align:center; padding:16px; color:var(--text-tertiary); font-size:0.82rem; }
-  .loading, .empty { padding:60px 20px; text-align:center; color:var(--text-tertiary); }
-  .btn-reset { margin-top:12px; padding:7px 18px; background:var(--accent-primary); color: var(--accent-text); border:none; border-radius:8px; font-size:0.82rem; cursor:pointer; }
-
-  .btn-select { padding:5px 12px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:6px; color:var(--text-secondary); font-size:0.78rem; cursor:pointer; display:flex; align-items:center; gap:5px; }
-  .btn-select.active { border-color:var(--accent-primary); color:var(--accent-primary); }
-
-  .select-card-wrap { position:relative; }
-  .select-card-wrap.selected { outline:2px solid var(--accent-primary); border-radius:12px; }
-  .select-check { position:absolute; top:8px; left:8px; z-index:4; background:rgba(0,0,0,0.6); border:none; border-radius:4px; color:#fff; font-size:1.1rem; cursor:pointer; padding:2px 4px; }
-  .select-card-wrap.selected .select-check { color:var(--accent-primary); }
+  /* Auswahl: Haken oben rechts auf dem Bild, gewählte Kachel umrandet */
+  .auswahl { position: relative; }
+  .auswahl-haken {
+    position: absolute; top: 8px; right: 8px; z-index: 4;
+    width: 34px; height: 34px; display: grid; place-items: center;
+    background: var(--tv-schleier); border: none; border-radius: var(--tv-ecke);
+    color: var(--tv-text); font-size: 18px; cursor: pointer;
+  }
+  .auswahl.gewaehlt .auswahl-haken { color: var(--tv-akzent); }
+  .auswahl.gewaehlt :global(.bild) { outline: 2px solid var(--tv-akzent); outline-offset: -2px; }
 </style>

@@ -1,15 +1,17 @@
 <!--
-  TubeVault – PageHeader v1.0.0
-  Einheitlicher Seitenkopf: Titel (+Icon), Zähler, optional
-  „Filter zurücksetzen", rechts Platz für seitenspezifische Aktionen
-  (Snippet-Children — Styles der Buttons kommen aus der Seite).
+  TubeVault – Seitenkopf (Gestaltung nach mockups/stil.css: .seitenkopf)
+  Titel, Anzahl (und wahlweise Gesamtgröße) in der Zahlenschrift, optional
+  "Filter zurücksetzen", rechts Platz für Aktionen der Seite.
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import { formatSize } from '../../utils/format.js';
+
   let {
     title,
     icon = null,
     count = null,
+    bytes = null,          // Gesamtgröße der Treffer, falls bekannt
     unit = 'Video',
     unitPlural = null,
     hasFilter = false,
@@ -26,10 +28,12 @@
     {title}
   </h1>
   {#if count !== null}
-    <span class="page-count">{count} {unitLabel}</span>
+    <span class="page-count zahl">
+      {count.toLocaleString('de-DE')} {unitLabel}{#if bytes}{' · '}{formatSize(bytes)}{/if}
+    </span>
   {/if}
   {#if hasFilter && onClearFilter}
-    <button class="btn-clear-filter" onclick={onClearFilter}>
+    <button class="tv-knopf klein ohne" onclick={onClearFilter}>
       <i class="fa-solid fa-xmark"></i> Filter zurücksetzen
     </button>
   {/if}
@@ -39,11 +43,12 @@
 </div>
 
 <style>
-  .page-header { display:flex; align-items:baseline; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
-  .page-title { font-size:1.6rem; font-weight:700; color:var(--text-primary); margin:0; display:flex; align-items:center; gap:10px; }
-  .page-title i { color:var(--accent-primary); }
-  .page-count { font-size:0.9rem; color:var(--text-tertiary); }
-  .btn-clear-filter { padding:5px 12px; background:none; border:1px solid var(--border-primary); border-radius:6px; color:var(--text-secondary); font-size:0.78rem; cursor:pointer; }
-  .btn-clear-filter:hover { border-color:var(--status-error); color:var(--status-error); }
-  .header-actions { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .page-header { display: flex; align-items: flex-end; gap: var(--tv-a4); margin-bottom: var(--tv-a5); flex-wrap: wrap; }
+  .page-title {
+    margin: 0; display: flex; align-items: center; gap: var(--tv-a3);
+    font-size: var(--tv-gr-seite); font-weight: 700; line-height: 1.15; color: var(--tv-text);
+  }
+  .page-title i { color: var(--tv-akzent); font-size: 0.8em; }
+  .page-count { font-size: var(--tv-gr-titel); font-weight: 500; color: var(--tv-text-3); }
+  .header-actions { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; }
 </style>

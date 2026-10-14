@@ -36,7 +36,9 @@
 export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {}) {
   let items = $state([]);
   let total = $state(0);
-  let loading = $state(false);
+  // Vor dem ersten Laden gilt die Liste als "lädt" - sonst zeigen Seiten kurz
+  // "nichts gefunden", bevor die erste Antwort da ist
+  let loading = $state(true);
   let loadingMore = $state(false);
   let hasMore = $state(false);
 

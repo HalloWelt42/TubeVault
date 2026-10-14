@@ -1,0 +1,76 @@
+/*
+ * TubeVault – Grundbausteine
+ *
+ * Die Bausteine aus den Entwürfen (mockups/stil.css) für die App, mit dem
+ * Vorsatz "tv-", damit sie nicht mit den Klassen älterer Seiten kollidieren.
+ * Neu gebaute Seiten benutzen diese Klassen statt eigener Kopien.
+ *
+ *   tv-knopf      Knopf; Varianten: haupt, ohne, gefahr, klein, symbol; Stellung: aktiv
+ *   tv-chip       umschaltbarer Filter; Stellung: aktiv
+ *   tv-zaehler    kleine Zahl (Zahlenschrift); Variante: akzent
+ *   tv-eingabe    Eingabefeld
+ *   tv-filter     Fläche für eine Zeile Filter, tv-trenner dazwischen
+ *   tv-etikett    kleine Überschrift in Versalien
+ */
+
+.tv-knopf {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--tv-a2);
+  height: 40px; padding: 0 var(--tv-a4); white-space: nowrap; cursor: pointer;
+  background: var(--tv-karte-2); color: var(--tv-text); border: 1px solid var(--tv-rand-stark);
+  border-radius: var(--tv-ecke); font-family: inherit; font-weight: 600; font-size: var(--tv-gr-klein);
+  transition: background var(--tv-schnell), border-color var(--tv-schnell);
+}
+.tv-knopf:hover:not(:disabled) { background: var(--tv-karte-3); }
+.tv-knopf:disabled { opacity: 0.45; cursor: not-allowed; }
+.tv-knopf.aktiv { background: var(--tv-karte-3); border-color: rgba(var(--tv-akzent-rgb), 0.7); color: var(--tv-akzent); }
+.tv-knopf.haupt { background: var(--tv-akzent); color: var(--tv-akzent-text); border-color: transparent; }
+.tv-knopf.haupt:hover:not(:disabled) { background: var(--tv-akzent-hell); }
+.tv-knopf.ohne { background: transparent; border-color: transparent; color: var(--tv-text-2); }
+.tv-knopf.ohne:hover:not(:disabled) { background: var(--tv-karte); color: var(--tv-text); }
+.tv-knopf.gefahr { color: var(--tv-gefahr); }
+.tv-knopf.klein { height: 34px; padding: 0 var(--tv-a3); }
+.tv-knopf.symbol { width: 40px; padding: 0; }
+.tv-knopf.symbol.klein { width: 34px; }
+
+.tv-chip {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 var(--tv-a3);
+  background: var(--tv-karte); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke);
+  color: var(--tv-text-2); font-family: inherit; font-size: var(--tv-gr-klein); font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+  transition: color var(--tv-schnell), border-color var(--tv-schnell), background var(--tv-schnell);
+}
+.tv-chip:hover { color: var(--tv-text); border-color: var(--tv-rand-stark); }
+.tv-chip.aktiv { background: rgba(var(--tv-akzent-rgb), 0.12); border-color: rgba(var(--tv-akzent-rgb), 0.55); color: var(--tv-akzent); }
+.tv-chip.ohne-rahmen { background: transparent; border-color: transparent; }
+
+.tv-zaehler {
+  min-width: 22px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center;
+  font-family: var(--tv-schrift-zahl); font-size: var(--tv-gr-marke); font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--tv-karte-2); color: var(--tv-text-2); border-radius: var(--tv-ecke-klein);
+}
+.tv-zaehler.akzent { background: rgba(var(--tv-akzent-rgb), 0.16); color: var(--tv-akzent); }
+
+.tv-eingabe {
+  height: 40px; padding: 0 var(--tv-a3); background: var(--tv-karte); border: 1px solid var(--tv-rand);
+  border-radius: var(--tv-ecke); color: var(--tv-text); font-family: inherit; font-size: var(--tv-gr-klein); outline: 0;
+}
+.tv-eingabe::placeholder { color: var(--tv-text-3); }
+.tv-eingabe:focus { border-color: rgba(var(--tv-akzent-rgb), 0.6); }
+
+.tv-filter {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--tv-a2) var(--tv-a3);
+  padding: var(--tv-a3) var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke);
+  margin-bottom: var(--tv-a3);
+}
+.tv-trenner { width: 1px; align-self: stretch; background: var(--tv-rand); margin: 0 var(--tv-a1); }
+
+.tv-etikett {
+  font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--tv-text-3);
+}
+
+/* Raster für Videokacheln */
+.tv-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: var(--tv-a5) var(--tv-a4); }
+
+/* Leer- und Ladehinweis einer Liste */
+.tv-leer { padding: 64px var(--tv-a5); text-align: center; color: var(--tv-text-3); }

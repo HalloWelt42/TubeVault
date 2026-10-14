@@ -90,36 +90,36 @@ describe('formatSize', () => {
   });
 
   it('formatiert KB', () => {
-    expect(formatSize(1024)).toBe('1.0 KB');
-    expect(formatSize(1536)).toBe('1.5 KB');
-    expect(formatSize(512000)).toBe('500.0 KB');
+    expect(formatSize(1024)).toBe('1,0 KB');
+    expect(formatSize(1536)).toBe('1,5 KB');
+    expect(formatSize(512000)).toBe('500,0 KB');
   });
 
   it('formatiert MB', () => {
-    expect(formatSize(1048576)).toBe('1.0 MB');
-    expect(formatSize(52428800)).toBe('50.0 MB');
-    expect(formatSize(734003200)).toBe('700.0 MB');
+    expect(formatSize(1048576)).toBe('1,0 MB');
+    expect(formatSize(52428800)).toBe('50,0 MB');
+    expect(formatSize(734003200)).toBe('700,0 MB');
   });
 
   it('formatiert GB', () => {
-    expect(formatSize(1073741824)).toBe('1.0 GB');
-    expect(formatSize(5368709120)).toBe('5.0 GB');
+    expect(formatSize(1073741824)).toBe('1,0 GB');
+    expect(formatSize(5368709120)).toBe('5,0 GB');
   });
 
   it('formatiert TB', () => {
-    expect(formatSize(1099511627776)).toBe('1.0 TB');
-    expect(formatSize(4398046511104)).toBe('4.0 TB');
+    expect(formatSize(1099511627776)).toBe('1,0 TB');
+    expect(formatSize(4398046511104)).toBe('4,0 TB');
   });
 
   // Typische Video-Größen
   it('720p Video (~500MB)', () => {
     const result = formatSize(524288000);
-    expect(result).toBe('500.0 MB');
+    expect(result).toBe('500,0 MB');
   });
 
   it('4K Video (~5GB)', () => {
     const result = formatSize(5368709120);
-    expect(result).toBe('5.0 GB');
+    expect(result).toBe('5,0 GB');
   });
 });
 
@@ -203,35 +203,36 @@ describe('formatViews', () => {
     expect(formatViews(999)).toBe('999');
   });
 
-  it('formatiert K für >= 1000', () => {
-    expect(formatViews(1000)).toBe('1.0K');
-    expect(formatViews(1500)).toBe('1.5K');
-    expect(formatViews(15000)).toBe('15.0K');
-    expect(formatViews(999999)).toBe('1000.0K');
+  it('formatiert Tsd. für >= 1000 (deutsch, Komma)', () => {
+    expect(formatViews(1000)).toBe('1 Tsd.');
+    expect(formatViews(1500)).toBe('1,5 Tsd.');
+    expect(formatViews(15000)).toBe('15 Tsd.');
+    expect(formatViews(246078)).toBe('246 Tsd.');
+    expect(formatViews(999999)).toBe('1 Mio.');
   });
 
   it('formatiert Mio. für >= 1.000.000', () => {
-    expect(formatViews(1000000)).toBe('1.0 Mio.');
-    expect(formatViews(2500000)).toBe('2.5 Mio.');
-    expect(formatViews(150000000)).toBe('150.0 Mio.');
+    expect(formatViews(1000000)).toBe('1 Mio.');
+    expect(formatViews(2500000)).toBe('2,5 Mio.');
+    expect(formatViews(150000000)).toBe('150 Mio.');
   });
 
   it('formatiert Mrd. für >= 1.000.000.000', () => {
-    expect(formatViews(1000000000)).toBe('1.0 Mrd.');
-    expect(formatViews(14000000000)).toBe('14.0 Mrd.');
+    expect(formatViews(1000000000)).toBe('1 Mrd.');
+    expect(formatViews(14000000000)).toBe('14 Mrd.');
   });
 
-  // Typische YouTube-Aufrufe
-  it('kleines Video (500 Views)', () => {
+  // Typische Aufrufzahlen
+  it('kleines Video (500 Aufrufe)', () => {
     expect(formatViews(500)).toBe('500');
   });
 
-  it('virales Video (12M Views)', () => {
-    expect(formatViews(12000000)).toBe('12.0 Mio.');
+  it('erfolgreiches Video (12 Mio. Aufrufe)', () => {
+    expect(formatViews(12000000)).toBe('12 Mio.');
   });
 
-  it('Gangnam Style (~5 Mrd.)', () => {
-    expect(formatViews(5000000000)).toBe('5.0 Mrd.');
+  it('Rekordvideo (5 Mrd. Aufrufe)', () => {
+    expect(formatViews(5000000000)).toBe('5 Mrd.');
   });
 });
 

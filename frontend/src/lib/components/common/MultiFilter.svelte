@@ -267,7 +267,7 @@
   <!-- Typ-Chips -->
   {#if showTypes}
     <div class="filter-group">
-      <span class="filter-label">Typ:</span>
+      <span class="filter-label">Art</span>
       <div class="chip-row">
         {#each visibleTypes as vt}
           <button class="filter-chip" class:active={selectedTypes.includes(vt.id)}
@@ -293,7 +293,7 @@
   <!-- Dauer-Chips + Custom -->
   {#if showDuration}
     <div class="filter-group dur-group">
-      <span class="filter-label">Dauer:</span>
+      <span class="filter-label">Dauer</span>
       <div class="chip-row">
         {#each DURATION_RANGES as dr}
           <button class="filter-chip" class:active={!customDurActive && selectedDurations.includes(dr.id)}
@@ -306,7 +306,7 @@
         <input type="number" class="dur-input" placeholder="von" min="0"
                bind:value={customDurMin}
                onchange={applyCustomDuration} title="Min. Dauer (Minuten)" />
-        <span class="dur-sep">–</span>
+        <span class="dur-sep">-</span>
         <input type="number" class="dur-input" placeholder="bis" min="0"
                bind:value={customDurMax}
                onchange={applyCustomDuration} title="Max. Dauer (Minuten)" />
@@ -323,7 +323,7 @@
   <!-- Kanal-Dropdown -->
   {#if showChannels && channels.length > 0}
     <div class="filter-group">
-      <span class="filter-label">Kanal:</span>
+      <span class="filter-label">Kanal</span>
       <div class="filter-dropdown-wrap channel">
         <button class="dropdown-trigger" onclick={(e) => { e.stopPropagation(); showChannelDD = !showChannelDD; showCategoryDD = false; showTagDD = false; }}>
           {selectedChannels.length === 0 ? 'Alle Kanäle' : `${selectedChannels.length} ausgewählt`}
@@ -341,7 +341,7 @@
                      onclick={() => toggleChannel(ch.channel_id)} role="option" tabindex="-1">
                   <input type="checkbox" checked={selectedChannels.includes(ch.channel_id)} tabindex="-1" />
                   <span class="dd-name">{ch.channel_name || ch.channel_id}</span>
-                  <span class="dd-count">{ch.count}</span>
+                  <span class="dd-count">{(ch.count ?? 0).toLocaleString('de-DE')}</span>
                 </div>
               {/each}
               {#if filteredChannels.length === 0}
@@ -357,7 +357,7 @@
   <!-- Kategorie-Dropdown -->
   {#if showCategories && categories.length > 0}
     <div class="filter-group">
-      <span class="filter-label">Kategorie:</span>
+      <span class="filter-label">Kategorie</span>
       <div class="filter-dropdown-wrap category">
         <button class="dropdown-trigger" onclick={(e) => { e.stopPropagation(); showCategoryDD = !showCategoryDD; showChannelDD = false; showTagDD = false; }}>
           {selectedCategories.length === 0 ? 'Alle Kategorien' : `${selectedCategories.length} ausgewählt`}
@@ -391,7 +391,7 @@
   <!-- Tag-Dropdown (Mehrfachauswahl, durchsuchbar) -->
   {#if showTags && tags.length > 0}
     <div class="filter-group">
-      <span class="filter-label">Tags:</span>
+      <span class="filter-label">Schlagwörter</span>
       <div class="filter-dropdown-wrap tag">
         <button class="dropdown-trigger" onclick={(e) => { e.stopPropagation(); showTagDD = !showTagDD; showChannelDD = false; showCategoryDD = false; }}>
           {selectedTags.length === 0 ? 'Alle Tags' : `${selectedTags.length} ausgewählt`}
@@ -407,7 +407,7 @@
                      onclick={() => toggleTag(t.tag)} role="option" tabindex="-1">
                   <input type="checkbox" checked={selectedTags.includes(t.tag)} tabindex="-1" />
                   <span class="dd-name">{t.tag}</span>
-                  <span class="dd-count">{t.count}</span>
+                  <span class="dd-count">{(t.count ?? 0).toLocaleString('de-DE')}</span>
                 </div>
               {/each}
               {#if filteredTags.length === 0}
@@ -457,136 +457,115 @@
 {/if}
 
 <style>
+  /* Gestaltung nach mockups/stil.css: .filter, .chip, .eingabe */
   .multi-filter {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    padding: 10px 14px; background: var(--bg-secondary);
-    border: 1px solid var(--border-primary); border-radius: 10px;
-    margin-bottom: 14px;
+    display: flex; align-items: center; gap: var(--tv-a2) var(--tv-a4); flex-wrap: wrap;
+    padding: var(--tv-a3) var(--tv-a4); background: var(--tv-flaeche);
+    border-radius: var(--tv-ecke); margin-bottom: var(--tv-a3);
   }
-  .filter-group { display: flex; align-items: center; gap: 6px; }
+  .filter-group { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; }
   .filter-label {
-    font-size: 0.72rem; color: var(--text-tertiary); font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+    font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--tv-text-3); white-space: nowrap;
   }
 
   .filter-search {
-    display: flex; align-items: center; gap: 6px;
-    background: var(--bg-primary); border: 1px solid var(--border-primary);
-    border-radius: 8px; padding: 0 10px; min-width: 160px;
+    display: flex; align-items: center; gap: var(--tv-a2); height: 40px; width: 260px;
+    padding: 0 var(--tv-a2) 0 var(--tv-a3);
+    background: var(--tv-karte); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke);
   }
-  .filter-search:focus-within { border-color: var(--accent-primary); }
-  .search-icon { font-size: 0.76rem; color: var(--text-tertiary); }
+  .filter-search:focus-within { border-color: rgba(var(--tv-akzent-rgb), 0.6); }
+  .search-icon { color: var(--tv-text-3); }
   .filter-search input {
-    flex: 1; border: none; background: none; color: var(--text-primary);
-    font-size: 0.82rem; padding: 6px 0; outline: none;
+    flex: 1; min-width: 0; border: none; background: none; outline: none;
+    color: var(--tv-text); font: inherit; font-size: var(--tv-gr-klein);
   }
-  .search-clear {
-    background: none; border: none; color: var(--text-tertiary);
-    cursor: pointer; font-size: 0.72rem; padding: 2px;
-  }
-  .search-clear:hover { color: var(--text-primary); }
+  .filter-search input::placeholder { color: var(--tv-text-3); }
+  .search-clear { background: none; border: none; color: var(--tv-text-3); cursor: pointer; padding: 2px 4px; }
+  .search-clear:hover { color: var(--tv-text); }
 
-  .chip-row { display: flex; gap: 4px; }
-  .filter-chip {
-    display: flex; align-items: center; gap: 4px;
-    padding: 4px 10px; background: var(--bg-primary);
-    border: 1px solid var(--border-primary); border-radius: 6px;
-    color: var(--text-secondary); font-size: 0.78rem; cursor: pointer;
-    transition: all 0.12s; white-space: nowrap;
+  .chip-row { display: flex; flex-wrap: wrap; gap: var(--tv-a2); }
+  .filter-chip, .dropdown-trigger {
+    display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 var(--tv-a3);
+    background: var(--tv-karte); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke);
+    color: var(--tv-text-2); font: inherit; font-size: var(--tv-gr-klein); font-weight: 500;
+    cursor: pointer; white-space: nowrap;
+    transition: color var(--tv-schnell), border-color var(--tv-schnell), background var(--tv-schnell);
   }
-  .filter-chip:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+  .filter-chip:hover, .dropdown-trigger:hover { color: var(--tv-text); border-color: var(--tv-rand-stark); }
   .filter-chip.active {
-    background: var(--accent-primary); color: var(--accent-text);
-    border-color: var(--accent-primary); font-weight: 600;
+    background: rgba(var(--tv-akzent-rgb), 0.12); border-color: rgba(var(--tv-akzent-rgb), 0.55); color: var(--tv-akzent);
   }
-  .filter-chip i { font-size: 0.7rem; }
-  .filter-chip.music-chip { margin-left: 6px; border-left: 2px solid var(--border-secondary); padding-left: 10px; }
+  .filter-chip.music-chip:first-of-type { margin-left: var(--tv-a2); }
 
   .filter-dropdown-wrap { position: relative; }
-  .dropdown-trigger {
-    display: flex; align-items: center; gap: 6px;
-    padding: 4px 10px; background: var(--bg-primary);
-    border: 1px solid var(--border-primary); border-radius: 6px;
-    color: var(--text-secondary); font-size: 0.78rem; cursor: pointer;
-    transition: all 0.12s; white-space: nowrap;
-  }
-  .dropdown-trigger:hover { border-color: var(--accent-primary); }
-  .dd-arrow { font-size: 0.6rem; transition: transform 0.15s; }
+  .dd-arrow { font-size: 12px; transition: transform var(--tv-schnell); }
   .dd-arrow.open { transform: rotate(180deg); }
-
   .dropdown-panel {
-    position: absolute; top: calc(100% + 4px); left: 0;
-    background: var(--bg-primary); border: 1px solid var(--border-primary);
-    border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-    z-index: 100; min-width: 220px; max-width: 320px; padding: 6px;
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+    min-width: 260px; max-width: 360px; padding: var(--tv-a2);
+    background: var(--tv-karte); border: 1px solid var(--tv-rand-stark);
+    border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten);
   }
-  .dropdown-wide { min-width: 280px; max-width: 400px; }
+  .dropdown-wide { min-width: 300px; max-width: 420px; }
   .dd-search {
-    width: 100%; padding: 6px 10px; border: 1px solid var(--border-primary);
-    border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary);
-    font-size: 0.78rem; outline: none; margin-bottom: 4px; box-sizing: border-box;
+    width: 100%; height: 36px; padding: 0 var(--tv-a3); margin-bottom: var(--tv-a1);
+    background: var(--tv-flaeche); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke);
+    color: var(--tv-text); font: inherit; font-size: var(--tv-gr-klein); outline: none;
   }
-  .dd-search:focus { border-color: var(--accent-primary); }
-  .dd-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+  .dd-search:focus { border-color: rgba(var(--tv-akzent-rgb), 0.6); }
+  .dd-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
   .dd-option {
-    display: flex; align-items: center; gap: 8px;
-    padding: 5px 8px; border-radius: 6px; cursor: pointer;
-    font-size: 0.8rem; color: var(--text-secondary); transition: background 0.1s;
-    user-select: none;
+    display: flex; align-items: center; gap: var(--tv-a2); padding: 7px var(--tv-a2);
+    border-radius: var(--tv-ecke-klein); cursor: pointer; user-select: none;
+    font-size: var(--tv-gr-klein); color: var(--tv-text-2);
   }
-  .dd-option:hover { background: var(--bg-hover); }
-  .dd-option.selected { background: var(--accent-muted); color: var(--accent-primary); font-weight: 600; }
-  .dd-option input[type="checkbox"] { accent-color: var(--accent-primary); width: 14px; height: 14px; flex-shrink: 0; pointer-events: none; }
+  .dd-option:hover { background: var(--tv-karte-2); color: var(--tv-text); }
+  .dd-option.selected { background: rgba(var(--tv-akzent-rgb), 0.12); color: var(--tv-akzent); font-weight: 600; }
+  .dd-option input[type="checkbox"] { accent-color: var(--tv-akzent); width: 15px; height: 15px; flex-shrink: 0; pointer-events: none; }
   .dd-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dd-count {
-    font-size: 0.68rem; background: var(--bg-tertiary); padding: 0 5px;
-    border-radius: 8px; color: var(--text-tertiary); font-weight: 600; flex-shrink: 0;
+    min-width: 22px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center; flex-shrink: 0;
+    font-family: var(--tv-schrift-zahl); font-size: var(--tv-gr-marke); font-weight: 600;
+    background: var(--tv-karte-2); color: var(--tv-text-2); border-radius: var(--tv-ecke-klein);
   }
-  .dd-empty { padding: 12px; text-align: center; color: var(--text-tertiary); font-size: 0.78rem; }
-  .dd-hint { display: block; padding: 6px 8px; text-align: center; color: var(--text-tertiary); font-size: 0.7rem; font-style: italic; }
+  .dd-empty, .dd-hint { display: block; padding: var(--tv-a3); text-align: center; color: var(--tv-text-3); font-size: var(--tv-gr-klein); }
 
   .filter-reset {
-    margin-left: auto; padding: 4px 10px; background: none;
-    border: 1px solid var(--border-primary); border-radius: 6px;
-    color: var(--text-tertiary); font-size: 0.76rem; cursor: pointer;
+    margin-left: auto; height: 34px; padding: 0 var(--tv-a3);
+    background: none; border: 1px solid transparent; border-radius: var(--tv-ecke);
+    color: var(--tv-text-2); font: inherit; font-size: var(--tv-gr-klein); cursor: pointer;
   }
-  .filter-reset:hover { border-color: var(--status-error); color: var(--status-error); }
+  .filter-reset:hover { color: var(--tv-gefahr); background: rgba(var(--tv-gefahr-rgb), 0.08); }
 
-  .active-badges { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+  /* Gewählte Filter einzeln entfernbar */
+  .active-badges { display: flex; gap: var(--tv-a2); flex-wrap: wrap; margin-bottom: var(--tv-a3); }
   .fbadge {
-    display: flex; align-items: center; gap: 4px;
-    padding: 3px 10px; border: none; border-radius: 6px;
-    font-size: 0.76rem; font-weight: 600; cursor: pointer; transition: all 0.12s;
+    display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 var(--tv-a3);
+    border: 1px solid transparent; border-radius: var(--tv-ecke);
+    font: inherit; font-size: var(--tv-gr-klein); font-weight: 600; cursor: pointer;
   }
-  .fbadge i { font-size: 0.62rem; }
-  .fbadge.type { background: var(--accent-muted); color: var(--accent-primary); }
-  .fbadge.channel { background: rgba(139,92,246,0.12); color: #8b5cf6; }
-  .fbadge.category { background: rgba(245,158,11,0.12); color: #d97706; }
-  .fbadge.tag { background: rgba(16,185,129,0.12); color: #059669; }
-  .fbadge:hover { opacity: 0.7; }
+  .fbadge.type { background: rgba(var(--tv-akzent-rgb), 0.12); color: var(--tv-akzent); }
+  .fbadge.channel { background: rgba(192, 132, 252, 0.14); color: var(--tv-art-musik); }
+  .fbadge.category { background: rgba(var(--tv-warnung-rgb), 0.14); color: var(--tv-warnung); }
+  .fbadge.tag { background: rgba(var(--tv-erfolg-rgb), 0.14); color: var(--tv-erfolg); }
+  .fbadge:hover { border-color: currentColor; }
 
-  /* Custom Duration */
-  .dur-group { flex-wrap: wrap; }
+  /* Eigene Dauer von-bis */
   .dur-custom {
-    display: flex; align-items: center; gap: 4px;
-    padding: 2px 6px; background: var(--bg-primary);
-    border: 1px solid var(--border-primary); border-radius: 6px;
-    transition: border-color 0.12s;
+    display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 var(--tv-a2);
+    background: var(--tv-karte); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke);
   }
-  .dur-custom.active { border-color: var(--accent-primary); }
+  .dur-custom.active { border-color: rgba(var(--tv-akzent-rgb), 0.55); }
   .dur-input {
-    width: 48px; padding: 3px 4px; border: none; background: none;
-    color: var(--text-primary); font-size: 0.78rem; text-align: center;
-    outline: none; -moz-appearance: textfield;
+    width: 52px; border: none; background: none; outline: none; text-align: center;
+    color: var(--tv-text); font-family: var(--tv-schrift-zahl); font-size: var(--tv-gr-klein);
+    -moz-appearance: textfield;
   }
-  .dur-input::placeholder { color: var(--text-tertiary); }
+  .dur-input::placeholder { color: var(--tv-text-3); font-family: var(--tv-schrift); }
   .dur-input::-webkit-inner-spin-button,
   .dur-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-  .dur-sep { color: var(--text-tertiary); font-size: 0.72rem; }
-  .dur-unit { font-size: 0.68rem; color: var(--text-tertiary); font-weight: 600; }
-  .dur-clear {
-    background: none; border: none; color: var(--text-tertiary);
-    cursor: pointer; font-size: 0.68rem; padding: 2px;
-  }
-  .dur-clear:hover { color: var(--status-error); }
+  .dur-sep, .dur-unit { color: var(--tv-text-3); font-size: var(--tv-gr-klein); }
+  .dur-clear { background: none; border: none; color: var(--tv-text-3); cursor: pointer; padding: 2px 4px; }
+  .dur-clear:hover { color: var(--tv-gefahr); }
 </style>

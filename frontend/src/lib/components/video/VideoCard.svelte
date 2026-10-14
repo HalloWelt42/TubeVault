@@ -1,15 +1,16 @@
 <script>
   /**
-   * TubeVault – VideoCard v1.9.0
-   * Typ-Badges klickbar (video→short→live), Like/Dislike Bar, QPL.
-   * v1.9.0: globale .card-hover-actions / .hover-action-btn (aus global.css)
-   * v1.9.0: User-Label "Weglegen/Weggelegt" (konsistent zum Feed-Tab).
+   * TubeVault – Videokachel (Gestaltung nach mockups/stil.css: .kachel)
+   *
+   * Bild mit dünner Kante, darunter Titel und eine Zeile Angaben. Auf dem
+   * Bild nur Abweichendes: Art (Short, Live), zusätzliche Tonspuren, Dauer und
+   * wie weit schon gesehen. Beim Überfahren: in Playlist, archivieren.
    * © HalloWelt42 – Private Nutzung
    */
   import { api } from '../../api/client.js';
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
-  import { formatDuration, formatSize, formatDateRelative, formatViews } from '../../utils/format.js';
+  import { formatDuration, formatDate, formatViews } from '../../utils/format.js';
   import LikeBar from '../common/LikeBar.svelte';
   import QuickPlaylistBtn from '../common/QuickPlaylistBtn.svelte';
   import HoverActionOverlay from '../common/HoverActionOverlay.svelte';
@@ -17,6 +18,12 @@
 
   let { video, showArchiveBtn = true, onUpdate = null } = $props();
   let hidden = $state(false);
+
+  // Gesehener Anteil: erst ab ein paar Sekunden, damit Antippen nicht zählt
+  const SEEN_FROM_SECONDS = 5;
+  let seen = $derived(
+    video.duration && video.last_position > SEEN_FROM_SECONDS
+      ? Math.min(1, video.last_position / video.duration) : 0);
 
   function play() {
     navigate(`/watch/${video.id}`);
@@ -28,21 +35,17 @@
       await api.archiveVideo(video.id);
       hidden = true;
       toast.success('Archiviert');
-      // Parent benachrichtigen, damit seine Liste neu geladen wird
-      // (bisher blieb die Karte beim nächsten Parent-Reload wieder sichtbar).
-      onUpdate?.();
+      onUpdate?.();   // die Liste des Aufrufers neu laden
     } catch (err) { toast.error(err.message); }
   }
 
   function openChannel(e) {
     e.stopPropagation();
-    if (video.channel_id) {
-      navigate(`/channel/${video.channel_id}`);
-    }
+    if (video.channel_id) navigate(`/channel/${video.channel_id}`);
   }
 
   function onCardKeydown(e) {
-    // Enter/Space auf der Card (außerhalb innerer Buttons) spielt das Video
+    // Enter/Leertaste auf der Kachel (nicht auf inneren Knöpfen) spielt das Video
     if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
       e.preventDefault();
       play();
@@ -51,55 +54,43 @@
 </script>
 
 {#if !hidden}
-<div class="card-wrap">
-  <!-- Card ist role="button" statt <button>, damit innere Buttons (Kanal,
-       Typ-Badge) valide geschachtelt sein dürfen. -->
-  <div class="video-card" role="button" tabindex="0"
-       onclick={play}
-       onkeydown={onCardKeydown}>
-  <div class="thumbnail-wrap">
-    <img
-      class="thumbnail"
-      src={api.thumbnailUrl(video.id)}
-      alt={video.title}
-      loading="lazy"
-      onerror={(e) => e.target.style.display = 'none'}
-    />
-    <span class="duration-badge">{formatDuration(video.duration)}</span>
-    {#if video.status !== 'ready'}
-      <span class="status-badge status-{video.status}">{video.status}</span>
-    {/if}
-    <!-- Nur Abweichendes kennzeichnen: ein normales Video braucht kein Etikett.
-         Der Typ wird im Bearbeiten-Reiter oder über die Mehrfachauswahl geändert -
-         nicht per Klick auf das Etikett (das führte zu versehentlichen Umstellungen). -->
-    {#if video.video_type === 'short'}
-      <span class="type-badge type-short"><i class="fa-solid fa-mobile-screen"></i> Short</span>
-    {:else if video.video_type === 'live'}
-      <span class="type-badge type-live"><i class="fa-solid fa-tower-broadcast"></i> Live</span>
-    {/if}
-    {#if video.extra_audio?.length}
-      <span class="audio-badges">
-      {#each video.extra_audio as track}
+<!-- role="button" statt <button>, damit innere Knöpfe (Kanal) valide bleiben;
+     .card-wrap und .video-card tragen die Überfahr-Aktionen (global.css) -->
+<div class="card-wrap kachel video-card" role="button" tabindex="0" onclick={play} onkeydown={onCardKeydown}>
+  <div class="bild">
+    <img src={api.thumbnailUrl(video.id)} alt="" loading="lazy"
+         onerror={(e) => e.target.style.visibility = 'hidden'} />
+
+    <div class="arten">
+      {#if video.status !== 'ready'}
+        <span class="art status-{video.status}">{video.status}</span>
+      {/if}
+      {#if video.video_type === 'short'}
+        <span class="art short"><i class="fa-solid fa-mobile-screen"></i> Short</span>
+      {:else if video.video_type === 'live'}
+        <span class="art live"><i class="fa-solid fa-tower-broadcast"></i> Live</span>
+      {/if}
+      {#each video.extra_audio || [] as track}
         {#if track === 'neu'}
-          <span class="audio-badge" title="In der Originalsprache mit anderer Stimme neu gesprochen - in der Wiedergabe umschaltbar">
+          <span class="art vertont" title="In der Originalsprache mit anderer Stimme neu gesprochen - in der Wiedergabe umschaltbar">
             <i class="fa-solid fa-microphone-lines"></i> neu gesprochen
           </span>
         {:else}
-          <span class="audio-badge" title="Übersetzte Tonspur ({track.toUpperCase()}) - in der Wiedergabe umschaltbar">
+          <span class="art vertont" title="Übersetzte Tonspur ({track.toUpperCase()}) - in der Wiedergabe umschaltbar">
             <i class="fa-solid fa-language"></i> {track.toUpperCase()}
           </span>
         {/if}
       {/each}
-      </span>
+    </div>
+
+    <span class="dauer zahl">{formatDuration(video.duration)}</span>
+    {#if seen}
+      <div class="gesehen" title="Zu {Math.round(seen * 100)} % gesehen"><b style:width="{seen * 100}%"></b></div>
     {/if}
-    <!-- Like/Dislike Thumbnail-Bar (Variante E) -->
-    {#if video.like_count && video.dislike_count != null}
-      <LikeBar likes={video.like_count} dislikes={video.dislike_count} mode="thumbnail" />
-    {/if}
+
     <HoverActionOverlay>
       <QuickPlaylistBtn videoId={video.id} title={video.title}
-                        channelName={video.channel_name}
-                        channelId={video.channel_id} size="sm" />
+                        channelName={video.channel_name} channelId={video.channel_id} size="sm" />
       {#if showArchiveBtn && !video.is_archived}
         <HoverActionBtn variant="warn" onclick={archiveVideo} title="Archivieren">
           <i class="fa-solid fa-box-archive"></i>
@@ -107,100 +98,70 @@
       {/if}
     </HoverActionOverlay>
   </div>
-  <div class="video-info">
-    <h3 class="video-title">{video.title}</h3>
-    {#if video.channel_id}
-      <button class="video-channel video-channel-btn"
-              onclick={openChannel}
-              title="Zum Kanal">{video.channel_name || 'Unbekannt'}</button>
-    {:else}
-      <span class="video-channel">{video.channel_name || 'Unbekannt'}</span>
-    {/if}
-    <div class="video-meta">
-      {#if video.view_count}
-        <span>{formatViews(video.view_count)} Aufrufe</span>
-        <span class="meta-dot">·</span>
+
+  <div class="text">
+    <h3 class="titel">{video.title}</h3>
+    <div class="meta">
+      {#if video.channel_id}
+        <button class="kanal" onclick={openChannel} title="Zum Kanal">{video.channel_name || 'Unbekannt'}</button>
+      {:else}
+        <span class="kanal">{video.channel_name || 'Unbekannt'}</span>
       {/if}
-      <span>{formatSize(video.file_size)}</span>
+      {#if video.view_count}<span class="zahl">{formatViews(video.view_count)} Aufrufe</span>{/if}
+      {#if video.upload_date}<span class="zahl">{formatDate(video.upload_date)}</span>{/if}
       {#if video.like_count && video.dislike_count != null}
-        <span class="meta-dot">·</span>
         <LikeBar likes={video.like_count} dislikes={video.dislike_count} mode="compact" />
       {/if}
     </div>
   </div>
 </div>
-</div>
 {/if}
 
 <style>
-  .card-wrap { position: relative; }
-  /* .card-hover-actions / .hover-action-btn – zentral in global.css */
+  .kachel { display: flex; flex-direction: column; gap: var(--tv-a2); cursor: pointer; color: var(--tv-text); position: relative; }
+  .kachel:focus-visible { outline: 2px solid var(--tv-akzent); outline-offset: 4px; }
 
-  .video-card {
-    display: flex; flex-direction: column; background: var(--bg-secondary);
-    border: 1px solid var(--border-primary); border-radius: 12px;
-    overflow: hidden; cursor: pointer; transition: all 0.2s;
-    text-align: left; color: inherit;
+  .bild {
+    position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: var(--tv-mulde);
+    border-radius: var(--tv-ecke); outline: 1px solid var(--tv-rand); outline-offset: -1px;
   }
-  .video-card:hover {
-    border-color: var(--accent-primary); transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  }
-  .thumbnail-wrap { position: relative; aspect-ratio: 16/9; background: var(--bg-tertiary); overflow: hidden; }
-  .thumbnail { width: 100%; height: 100%; object-fit: cover; }
-  /* Thumbnail-Layout (konsistent, keine Überlappungen):
-     Top-Right:    type-badge (VIDEO/SHORT/LIVE)
-     Top-Left:     status-badge (pending/error) — nur wenn nicht ready
-     Bottom-Right: duration-badge
-     Mitte (Hover-Overlay): große runde Action-Buttons (Quick-Playlist,
-                            Archivieren) — analog Feed-Card-Stil */
+  .bild img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 300ms ease; }
+  .kachel:hover .bild img { transform: scale(1.04); }
 
-  .duration-badge {
-    position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8);
-    color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;
+  .arten { position: absolute; left: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 4px; z-index: 1; }
+  .art {
+    display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
+    font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    border-radius: var(--tv-ecke-klein); background: var(--tv-schleier); color: var(--tv-text);
   }
-  .status-badge {
-    position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 4px;
-    font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
-    z-index: 1;
+  .art.short { color: var(--tv-art-short); }
+  .art.live { color: var(--tv-art-live); }
+  .art.vertont { color: var(--tv-art-vertont); text-transform: none; letter-spacing: 0; }
+  .art.status-error { color: var(--tv-gefahr); }
+  .art.status-pending, .art.status-downloading { color: var(--tv-info); }
+
+  .dauer {
+    position: absolute; right: 8px; bottom: 8px; z-index: 1;
+    height: 24px; padding: 0 7px; display: flex; align-items: center;
+    background: var(--tv-schleier); border-radius: var(--tv-ecke-klein);
+    font-size: var(--tv-gr-marke); font-weight: 600;
   }
-  .audio-badges { position: absolute; bottom: 8px; left: 8px; display: flex; gap: 4px; z-index: 1; }
-  .audio-badge {
-    padding: 2px 6px; border-radius: 4px;
-    background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 0.7rem; font-weight: 700;
-    display: flex; align-items: center; gap: 4px; z-index: 1;
+  .gesehen { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.5); z-index: 1; }
+  .gesehen b { display: block; height: 100%; background: var(--tv-akzent); }
+
+  .text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .titel {
+    margin: 0; font-size: var(--tv-gr-text); font-weight: 600; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
-  .status-pending { background: var(--status-pending); color: #fff; }
-  .status-downloading { background: var(--status-info); color: #fff; }
-  .status-error { background: var(--status-error); color: #fff; }
-  .type-badge {
-    position: absolute; top: 8px; right: 8px;
-    padding: 3px 8px; border-radius: 4px;
-    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.03em; display: flex; align-items: center; gap: 4px;
-    border: none; cursor: pointer; transition: transform 0.1s;
-    z-index: 1;
+  .kachel:hover .titel { color: var(--tv-akzent); }
+  .meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px;
+    font-size: var(--tv-gr-klein); color: var(--tv-text-2);
   }
-  .type-badge:hover { transform: scale(1.05); }
-  .type-short { background: rgba(171, 71, 188, 0.9); color: #fff; }
-  .type-live { background: rgba(244, 67, 54, 0.9); color: #fff; }
-  /* type-video semi-transparent, etwas zurückgenommen */
-  .type-video { background: rgba(0, 0, 0, 0.65); color: #fff; }
-  .video-info { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
-  .video-title {
-    font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin: 0;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden; line-height: 1.3;
+  .kanal {
+    background: none; border: none; padding: 0; font: inherit; text-align: left;
+    color: var(--tv-text); font-weight: 500; cursor: pointer;
   }
-  .video-channel { font-size: 0.8rem; color: var(--text-secondary); }
-  .video-channel-btn {
-    background: none; border: none; padding: 0;
-    text-align: left; cursor: pointer;
-    align-self: flex-start;
-    transition: color 0.12s;
-  }
-  .video-channel-btn:hover { color: var(--accent-primary); text-decoration: underline; }
-  .video-card[role="button"]:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-  .video-meta { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--text-tertiary); flex-wrap: wrap; }
-  .meta-dot { opacity: 0.5; }
+  button.kanal:hover { color: var(--tv-akzent); text-decoration: underline; }
 </style>

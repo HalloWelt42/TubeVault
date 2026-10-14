@@ -163,8 +163,10 @@ class MetadataService:
             null_placement = "NULLS LAST" if order == "DESC" else "NULLS FIRST"
             order_by = f"v.{sort_by} {order} {null_placement}, v.created_at DESC, v.id"
 
-        # Total Count
-        total = await db.fetch_val(f"SELECT COUNT(*) FROM videos v {where}", params)
+        # Anzahl und Gesamtgröße aller Treffer
+        summary = await db.fetch_one(
+            f"SELECT COUNT(*) AS n, COALESCE(SUM(v.file_size), 0) AS bytes FROM videos v {where}", params)
+        total = summary["n"]
 
         # Paginierte Ergebnisse
         offset = (page - 1) * per_page
@@ -183,6 +185,7 @@ class MetadataService:
         return {
             "videos": [self._with_extra_audio(self._row_to_dict(r)) for r in rows],
             "total": total,
+            "total_bytes": summary["bytes"],
             "page": page,
             "per_page": per_page,
             "total_pages": total_pages,

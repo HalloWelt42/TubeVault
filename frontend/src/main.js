@@ -13,6 +13,7 @@ import '@fontsource/chakra-petch/600.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import './lib/styles/marken.css';
 import './lib/styles/uebergang.css';
+import './lib/styles/bausteine.css';
 import App from './App.svelte';
 import { mount } from 'svelte';
 import { initKeyboard } from './lib/stores/keyboard.js';

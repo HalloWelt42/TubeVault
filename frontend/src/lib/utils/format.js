@@ -28,7 +28,7 @@ export function formatDurationLong(seconds) {
 }
 
 /**
- * Bytes als lesbare Größe: 1.5 GB, 320 MB, 4.2 KB
+ * Bytes als lesbare Größe, deutsch mit Komma: 1,5 GB, 320,0 MB, 4,2 KB
  */
 export function formatSize(bytes) {
   if (!bytes || bytes < 0) return '0 B';
@@ -36,7 +36,8 @@ export function formatSize(bytes) {
   let i = 0;
   let size = bytes;
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
-  return `${size.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+  const digits = i > 0 ? 1 : 0;
+  return `${size.toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false })} ${units[i]}`;
 }
 
 /**
@@ -91,10 +92,18 @@ export function formatDateRelative(dateStr) {
  */
 export function formatViews(count) {
   if (!count) return '–';
-  if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)} Mrd.`;
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)} Mio.`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
-  return String(count);
+  // Deutsch: Komma, Tsd./Mio./Mrd.; unter 10 eine Nachkommastelle, sonst ganz
+  const steps = [[1e9, 'Mrd.'], [1e6, 'Mio.'], [1e3, 'Tsd.']];
+  for (let i = 0; i < steps.length; i++) {
+    const [unit, name] = steps[i];
+    if (count < unit) continue;
+    const value = count / unit;
+    const shown = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+    // 999.999 rundet auf "1.000 Tsd." - dann ist es die nächste Stufe
+    if (shown >= 1000 && i > 0) return formatViews(steps[i - 1][0]);
+    return `${shown.toLocaleString('de-DE')} ${name}`;
+  }
+  return count.toLocaleString('de-DE');
 }
 
 /**

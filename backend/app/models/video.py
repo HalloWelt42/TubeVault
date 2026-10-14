@@ -63,6 +63,7 @@ class VideoResponse(VideoBase):
 class VideoListResponse(BaseModel):
     videos: list[VideoResponse]
     total: int
+    total_bytes: int = 0          # Größe aller Treffer zusammen (nicht nur dieser Seite)
     page: int = 1
     per_page: int = 24
     total_pages: int = 1
