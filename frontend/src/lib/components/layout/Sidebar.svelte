@@ -184,7 +184,7 @@
   }
   .badge.accent {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--accent-text);
   }
   .badge.pulse {
     background: var(--status-info);

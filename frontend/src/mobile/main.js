@@ -8,7 +8,9 @@
 import { mount } from 'svelte';
 import '@fontsource/barlow/400.css';
 import '@fontsource/barlow/600.css';
+import '@fontsource/chakra-petch/500.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
+import '../lib/styles/marken.css';
 import './mobile.css';
 import MobileApp from './MobileApp.svelte';
 

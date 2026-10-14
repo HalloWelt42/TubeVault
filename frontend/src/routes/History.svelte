@@ -177,7 +177,7 @@
   .item-meta { display:flex; align-items:center; gap:6px; font-size:0.76rem; color:var(--text-tertiary); margin-top:2px; }
   .dot { color:var(--text-tertiary); }
   .badge-done { background:var(--status-success); color:#fff; font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:600; }
-  .badge-progress { background:var(--accent-primary); color:#fff; font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:600; }
+  .badge-progress { background:var(--accent-primary); color: var(--accent-text); font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:600; }
 
   .scroll-sentinel { height:1px; }
   .loading-more { text-align:center; padding:16px; color:var(--text-tertiary); font-size:0.82rem; }

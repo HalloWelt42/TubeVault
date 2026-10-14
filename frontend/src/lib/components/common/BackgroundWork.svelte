@@ -88,7 +88,7 @@
     background: var(--accent-muted); color: var(--accent-primary);
     font: inherit; font-weight: 600; white-space: nowrap;
   }
-  .chip.open, .chip:hover { background: var(--accent-primary); color: #fff; }
+  .chip.open, .chip:hover { background: var(--accent-primary); color: var(--accent-text); }
   .chip-text { overflow: hidden; text-overflow: ellipsis; }
   .panel {
     position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 60; width: 360px;

@@ -694,7 +694,7 @@
   .lyrics-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
   .btn-search {
-    background: var(--accent-primary); color: #fff; border: none; border-radius: 5px;
+    background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 5px;
     padding: 4px 10px; font-size: 0.76rem; font-weight: 600; cursor: pointer;
     display: flex; align-items: center; gap: 5px;
   }
@@ -824,7 +824,7 @@
     font-size: 0.68rem; font-weight: 600; color: var(--text-tertiary); cursor: pointer;
   }
   .lyrics-mode-toggle button.active {
-    background: var(--accent-primary); color: #fff;
+    background: var(--accent-primary); color: var(--accent-text);
   }
   .lyrics-mode-toggle.sticky {
     position: sticky; top: 0; z-index: 2;
@@ -892,7 +892,7 @@
     border-bottom: 1px solid var(--border-secondary);
   }
   .sync-edit-row:hover { background: var(--bg-secondary); }
-  .sync-edit-row.playing { background: rgba(99,102,241,0.08); }
+  .sync-edit-row.playing { background: rgba(var(--tv-akzent-rgb), 0.08); }
   .sync-edit-time { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
   .time-adj {
     width: 20px; height: 22px; border: none; background: var(--bg-tertiary);
@@ -934,7 +934,7 @@
   .sync-hint { font-size: 0.62rem; color: var(--text-quaternary, #64748b); margin-left: auto; }
 
   .btn-save {
-    background: var(--accent-primary); color: #fff; border: none; border-radius: 6px;
+    background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 6px;
     padding: 5px 12px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
     display: flex; align-items: center; gap: 5px;
   }

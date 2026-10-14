@@ -164,7 +164,7 @@
     transition: background 0.1s; width: 100%;
   }
   .atpl-item:hover { background: var(--bg-tertiary); }
-  .atpl-item.active { background: rgba(99, 102, 241, 0.1); }
+  .atpl-item.active { background: rgba(var(--tv-akzent-rgb), 0.1); }
   .atpl-check { font-size: 1rem; width: 22px; color: var(--text-tertiary); }
   .atpl-item.active .atpl-check { color: var(--accent-primary); }
   .atpl-name { flex: 1; font-weight: 500; }
@@ -180,7 +180,7 @@
   .atpl-input:focus { border-color: var(--accent-primary); }
   .atpl-add-btn {
     width: 36px; height: 36px; border-radius: 8px; background: var(--accent-primary);
-    color: #fff; border: none; cursor: pointer; font-size: 0.85rem;
+    color: var(--accent-text); border: none; cursor: pointer; font-size: 0.85rem;
     display: flex; align-items: center; justify-content: center;
   }
   .atpl-add-btn:disabled { opacity: 0.4; }

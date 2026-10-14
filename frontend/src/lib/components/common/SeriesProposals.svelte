@@ -120,7 +120,7 @@
   .meta { color: var(--text-secondary); font-size: 0.78rem; }
   .sample { color: var(--text-tertiary); font-size: 0.74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: none; border-radius: 8px; cursor: pointer;
-         background: var(--accent-primary); color: #fff; font: inherit; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+         background: var(--accent-primary); color: var(--accent-text); font: inherit; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
   .btn:disabled { opacity: 0.6; cursor: default; }
   .btn.ghost { background: var(--bg-tertiary); color: var(--text-secondary); }
   .btn.ghost:hover:not(:disabled) { color: var(--text-primary); }

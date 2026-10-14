@@ -496,7 +496,7 @@
   }
   .filter-chip:hover { border-color: var(--accent-primary); color: var(--text-primary); }
   .filter-chip.active {
-    background: var(--accent-primary); color: #fff;
+    background: var(--accent-primary); color: var(--accent-text);
     border-color: var(--accent-primary); font-weight: 600;
   }
   .filter-chip i { font-size: 0.7rem; }

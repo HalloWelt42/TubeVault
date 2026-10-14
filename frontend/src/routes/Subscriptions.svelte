@@ -941,7 +941,7 @@
     border: 1px solid var(--accent-primary);
     cursor: pointer;
   }
-  .btn-retry-all:hover { background: var(--accent-primary); color: #fff; }
+  .btn-retry-all:hover { background: var(--accent-primary); color: var(--accent-text); }
 
   .problem-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
   .problem-item {
@@ -975,6 +975,6 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 0.7rem;
   }
-  .btn-retry:hover { background: var(--accent-primary); color: #fff; }
+  .btn-retry:hover { background: var(--accent-primary); color: var(--accent-text); }
   .btn-dismiss:hover { background: var(--status-error); color: #fff; }
 </style>

@@ -1197,7 +1197,7 @@
   .channel-name { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .btn-subscribe {
     display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px;
-    background: var(--accent-primary); color: #fff; border: none; border-radius: 6px;
+    background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 6px;
     font-size: 0.78rem; font-weight: 600; cursor: pointer;
   }
   .btn-subscribe:hover { background: var(--accent-hover); }
@@ -1245,7 +1245,7 @@
     border-radius: 10px; flex-wrap: wrap;
   }
   .btn-scan {
-    padding: 7px 16px; background: var(--accent-primary); color: #fff; border: none;
+    padding: 7px 16px; background: var(--accent-primary); color: var(--accent-text); border: none;
     border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; white-space: nowrap;
   }
   .btn-scan:hover:not(:disabled) { opacity: 0.9; }
@@ -1598,10 +1598,10 @@
   }
   .pl-toolbar .btn-primary,
   .pl-actions .btn-primary {
-    background: var(--accent-primary); color: #fff; border-color: var(--accent-primary);
+    background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary);
   }
   .pl-toolbar .btn-primary:hover:not(:disabled) { background: var(--accent-hover, var(--accent-primary)); border-color: var(--accent-hover, var(--accent-primary)); color: #fff; }
-  .btn-accent { background: var(--accent-primary) !important; color: #fff !important; border-color: var(--accent-primary) !important; }
+  .btn-accent { background: var(--accent-primary) !important; color: var(--accent-text) !important; border-color: var(--accent-primary) !important; }
   .btn-accent:hover { opacity: 0.9; }
   /* ─── Suggest Toggle ─── */
   .meta-btn-suggest { background: none; border: 1px solid var(--border-primary); color: var(--text-secondary); padding: 2px 8px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; transition: all 0.2s; }

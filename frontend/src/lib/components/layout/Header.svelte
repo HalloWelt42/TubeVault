@@ -6,7 +6,6 @@
 <script>
   import { route, navigate } from '../../router/router.js';
   import { sidebarOpen } from '../../stores/app.js';
-  import { theme } from '../../stores/theme.js';
   import SearchDropdown from './SearchDropdown.svelte';
 
   function toggleSidebar() {
@@ -32,13 +31,6 @@
   <div class="header-right">
     <button class="btn-icon" onclick={() => navigate('/downloads')} title="Downloads">
       <i class="fa-solid fa-download"></i>
-    </button>
-    <button class="btn-icon" onclick={() => theme.toggle()} title="Hell oder dunkel">
-      {#if $theme === 'dark'}
-        <i class="fa-solid fa-sun"></i>
-      {:else}
-        <i class="fa-solid fa-moon"></i>
-      {/if}
     </button>
     <button class="btn-icon" onclick={() => navigate('/settings')} title="Einstellungen">
       <i class="fa-solid fa-gear"></i>

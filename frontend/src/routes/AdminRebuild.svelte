@@ -232,7 +232,7 @@
   .btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 8px; font-size: 0.82rem; cursor: pointer; background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: var(--text-primary); transition: all 0.15s; }
   .btn:hover:not(:disabled) { border-color: var(--accent-primary); }
   .btn:disabled { opacity: 0.45; cursor: default; }
-  .btn-primary { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
+  .btn-primary { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--accent-text); }
   .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
   .btn-danger { border-color: var(--status-error); color: var(--status-error); }
   .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--status-error) 12%, transparent); }

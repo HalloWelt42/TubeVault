@@ -639,11 +639,11 @@
   .batch-opt:last-child { border-radius: 0 8px 8px 0; }
   .batch-opt + .batch-opt { border-left: none; }
   .batch-opt:hover { color: var(--text-primary); }
-  .batch-opt.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+  .batch-opt.active { background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary); }
 
   .btn-run {
     display: flex; align-items: center; gap: 8px;
-    padding: 9px 18px; background: var(--accent-primary); color: #fff;
+    padding: 9px 18px; background: var(--accent-primary); color: var(--accent-text);
     border: none; border-radius: 8px; font-size: 0.88rem; font-weight: 600;
     cursor: pointer; transition: filter 0.12s;
   }

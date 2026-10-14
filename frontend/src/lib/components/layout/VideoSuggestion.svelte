@@ -137,7 +137,7 @@
   .vs-caret { font-size: 0.5rem !important; opacity: 0.5; margin-left: 1px; }
   .vs-pool-btn:hover {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--accent-text);
   }
 
   .vs-shuffle {
@@ -208,7 +208,7 @@
     height: 28px;
     border-radius: 50%;
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--accent-text);
     display: flex;
     align-items: center;
     justify-content: center;

@@ -1,23 +1,24 @@
 /*
- * TubeVault – Mobil-Ansicht: eigene Gestaltungsmarken.
- * Schwarzer Grund, grosse Berührflächen (mindestens 44 Punkt), kein Verlass
- * auf Überfahren. Nichts hiervon wird von der grossen Ansicht benutzt.
+ * TubeVault – Mobil-Ansicht: eigene Gestaltung.
+ * Große Berührflächen (mindestens 44 Punkt), kein Verlass auf Überfahren.
+ * Farben, Schrift und Ecken kommen aus den gemeinsamen Marken
+ * (lib/styles/marken.css); hier stehen nur die Namen der Mobilansicht.
  */
 :root {
-  --m-bg: #000;
-  --m-surface: #101013;
-  --m-surface-2: #1a1a1f;
-  --m-line: #26262d;
-  --m-text: #f3f3f6;
-  --m-dim: #9b9ba8;
-  --m-faint: #6a6a76;
-  --m-accent: #ff6a3d;
-  --m-accent-ink: #1a0a04;
-  --m-ok: #53d18a;
-  --m-warn: #f2b84b;
+  --m-bg: var(--tv-grund);
+  --m-surface: var(--tv-flaeche);
+  --m-surface-2: var(--tv-karte);
+  --m-line: var(--tv-rand-stark);
+  --m-text: var(--tv-text);
+  --m-dim: var(--tv-text-2);
+  --m-faint: var(--tv-text-3);
+  --m-accent: var(--tv-akzent);
+  --m-accent-ink: var(--tv-akzent-text);
+  --m-ok: var(--tv-erfolg);
+  --m-warn: var(--tv-warnung);
   --m-touch: 48px;
   --m-tabbar: 58px;
-  --m-radius: 12px;
+  --m-radius: var(--tv-ecke);
   --m-safe-top: env(safe-area-inset-top, 0px);
   --m-safe-bottom: env(safe-area-inset-bottom, 0px);
   --m-safe-left: env(safe-area-inset-left, 0px);
@@ -28,12 +29,14 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #app { height: 100%; }
+/* rem-Angaben (Überschriften, Marken) mit der größeren Grundschrift anheben */
+html { font-size: 20px; }
 
 body {
   background: var(--m-bg);
   color: var(--m-text);
   font-family: 'Barlow', system-ui, sans-serif;
-  font-size: 16px;
+  font-size: var(--tv-gr-text);
   line-height: 1.35;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;

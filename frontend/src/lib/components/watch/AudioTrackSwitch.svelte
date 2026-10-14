@@ -74,5 +74,5 @@
     color: var(--text-secondary); font-size: 0.8rem; font-weight: 600; cursor: pointer;
   }
   .track:hover { color: var(--text-primary); }
-  .track.on { background: var(--accent-primary); color: #fff; }
+  .track.on { background: var(--accent-primary); color: var(--accent-text); }
 </style>

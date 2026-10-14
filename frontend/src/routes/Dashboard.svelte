@@ -240,7 +240,7 @@
   .download-input { flex: 1; background: none; border: none; color: var(--text-primary); font-size: 0.9rem; outline: none; }
   .download-input::placeholder { color: var(--text-tertiary); }
   .btn-download {
-    padding: 8px 20px; background: var(--accent-primary); color: #fff; border: none;
+    padding: 8px 20px; background: var(--accent-primary); color: var(--accent-text); border: none;
     border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
   }
   .btn-download:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -258,7 +258,7 @@
   }
   .dl-audio-toggle:hover { border-color: var(--accent-primary); color: var(--text-primary); }
   .dl-audio-toggle.active {
-    background: var(--accent-primary); color: #fff; border-color: var(--accent-primary);
+    background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary);
   }
 
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }

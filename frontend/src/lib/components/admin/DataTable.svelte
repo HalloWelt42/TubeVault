@@ -206,7 +206,7 @@
   .dt-tab:first-child { border-radius: 8px 0 0 8px; }
   .dt-tab:last-child { border-radius: 0 8px 8px 0; }
   .dt-tab + .dt-tab { border-left: none; }
-  .dt-tab.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+  .dt-tab.active { background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary); }
   .dt-tab-count { font-size: 0.72rem; opacity: 0.9; background: rgba(255,255,255,0.18); padding: 1px 6px; border-radius: 3px; font-family: monospace; }
   .dt-tab:not(.active) .dt-tab-count { background: var(--bg-secondary); }
 
@@ -222,7 +222,7 @@
   }
   .dt-bulk-btn {
     display: flex; align-items: center; gap: 6px;
-    padding: 6px 12px; background: var(--accent-primary); color: #fff;
+    padding: 6px 12px; background: var(--accent-primary); color: var(--accent-text);
     border: none; border-radius: 6px; font-size: 0.82rem; cursor: pointer;
   }
   .dt-bulk-btn:hover { filter: brightness(1.1); }

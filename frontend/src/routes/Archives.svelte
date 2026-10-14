@@ -186,5 +186,5 @@
   .loading, .empty { padding: 60px 20px; text-align: center; color: var(--text-tertiary); }
   .empty-icon { font-size: 2.5rem; display: block; margin-bottom: 12px; }
   .empty-hint { font-size: 0.8rem; margin-top: 4px; }
-  .btn-reset { margin-top: 12px; padding: 7px 18px; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; font-size: 0.82rem; cursor: pointer; }
+  .btn-reset { margin-top: 12px; padding: 7px 18px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.82rem; cursor: pointer; }
 </style>

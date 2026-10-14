@@ -1,0 +1,72 @@
+/*
+ * TubeVault – Gestaltungsmarken
+ *
+ * Die eine Stelle für Farben, Schriften, Größen, Ecken und Abstände. Große
+ * Ansicht und Mobilansicht laden diese Datei; Bausteine benutzen nur Marken,
+ * keine festen Werte. Vorlage und Leitfaden: mockups/stil.css (Entwürfe).
+ *
+ * Nur ein dunkles Thema. Grundschrift 17 px, kleine Texte 15 px, Marken nie
+ * unter 13 px. Keine einseitigen Ränder als Hervorhebung.
+ */
+
+:root {
+  --tv-schrift: "Barlow", system-ui, sans-serif;
+  --tv-schrift-zahl: "Chakra Petch", "Barlow", ui-monospace, monospace;   /* alle Zahlen */
+
+  /* Flächen: von hinten nach vorn */
+  --tv-grund: #172127;
+  --tv-leiste: #11191e;
+  --tv-flaeche: #1f2b32;
+  --tv-karte: #26343c;
+  --tv-karte-2: #2d3d46;
+  --tv-karte-3: #354752;
+  --tv-mulde: #0d1418;
+
+  /* Schrift */
+  --tv-text: #f2f6f8;
+  --tv-text-2: #b3c1c9;
+  --tv-text-3: #8399a6;
+
+  /* Akzent: Minze wie in Orbit */
+  --tv-akzent: #4dffd2;         --tv-akzent-rgb: 77, 255, 210;
+  --tv-akzent-hell: #8affe4;
+  --tv-akzent-text: #0e1b20;    /* Schrift auf Akzentfläche */
+
+  /* Bedeutung */
+  --tv-erfolg: #3ddc97;   --tv-erfolg-rgb: 61, 220, 151;
+  --tv-warnung: #ff9f0c;  --tv-warnung-rgb: 255, 159, 12;
+  --tv-gefahr: #ff4d4d;   --tv-gefahr-rgb: 255, 77, 77;
+  --tv-info: #58b8f0;     --tv-info-rgb: 88, 184, 240;
+
+  /* Arten von Videos */
+  --tv-art-short: #ff4fa0;
+  --tv-art-live: #ff4d4d;
+  --tv-art-musik: #c084fc;
+  --tv-art-vertont: #58b8f0;
+  --tv-art-ki: #f9e80d;
+
+  --tv-rand: rgba(255, 255, 255, 0.08);
+  --tv-rand-stark: rgba(255, 255, 255, 0.16);
+  --tv-schleier: rgba(8, 13, 16, 0.72);
+  --tv-schatten: 0 16px 40px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.3);
+
+  /* Größen */
+  --tv-gr-seite: 30px;
+  --tv-gr-titel: 21px;
+  --tv-gr-text: 17px;
+  --tv-gr-klein: 15px;
+  --tv-gr-marke: 13px;
+
+  /* Ecken: kantig */
+  --tv-ecke: 3px;
+  --tv-ecke-klein: 2px;
+
+  /* Abstände */
+  --tv-a1: 4px; --tv-a2: 8px; --tv-a3: 12px; --tv-a4: 16px; --tv-a5: 24px; --tv-a6: 32px;
+  --tv-schnell: 120ms;
+
+  color-scheme: dark;
+}
+
+/* Zahlen in der technischen Zahlenschrift */
+.zahl { font-family: var(--tv-schrift-zahl); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }

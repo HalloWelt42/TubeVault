@@ -556,11 +556,11 @@
     border-radius: 14px; color: var(--text-primary); font-size: 0.75rem;
     cursor: pointer; transition: all 0.12s; font-weight: 500;
   }
-  .ua-channel-btn:hover { border-color: var(--accent-primary); background: var(--accent-primary); color: #fff; }
+  .ua-channel-btn:hover { border-color: var(--accent-primary); background: var(--accent-primary); color: var(--accent-text); }
   .ua-channel-btn:hover .ua-ch-count { background: rgba(255,255,255,0.25); color: #fff; }
   .ua-ch-count { font-size: 0.65rem; background: var(--bg-tertiary); color: var(--text-tertiary); padding: 0 5px; border-radius: 8px; font-weight: 600; }
   .ua-actions { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
-  .ua-auto { background: var(--accent-primary) !important; color: #fff !important; border-color: var(--accent-primary) !important; }
+  .ua-auto { background: var(--accent-primary) !important; color: var(--accent-text) !important; border-color: var(--accent-primary) !important; }
   .ua-auto:hover { filter: brightness(1.1); }
   .ua-cleanup { }
 

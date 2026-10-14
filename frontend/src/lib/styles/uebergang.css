@@ -1,0 +1,53 @@
+/*
+ * TubeVault – Übergang: alte Variablennamen der großen Ansicht
+ *
+ * Die Bausteine benutzen noch die alten Namen (--bg-primary, --accent-primary
+ * ...). Hier zeigen sie auf die neuen Marken, damit die ganze Ansicht in einem
+ * Schritt die neue Farbwelt bekommt. Wird ein Baustein umgebaut, benutzt er
+ * die --tv-Marken direkt; ist keiner mehr übrig, entfällt diese Datei.
+ */
+
+:root {
+  --bg-primary: var(--tv-grund);
+  --bg-secondary: var(--tv-flaeche);
+  --bg-tertiary: var(--tv-karte);
+  --bg-hover: var(--tv-karte-2);
+  --bg-active: var(--tv-karte-3);
+
+  --text-primary: var(--tv-text);
+  --text-secondary: var(--tv-text-2);
+  --text-tertiary: var(--tv-text-3);
+  --text-inverse: var(--tv-akzent-text);
+
+  --border-primary: rgba(255, 255, 255, 0.12);
+  --border-secondary: rgba(255, 255, 255, 0.22);
+
+  --accent-primary: var(--tv-akzent);
+  --accent-hover: var(--tv-akzent-hell);
+  --accent-muted: rgba(var(--tv-akzent-rgb), 0.18);
+  --accent-text: var(--tv-akzent-text);
+  --accent-complement: var(--tv-warnung);
+
+  --status-success: var(--tv-erfolg);
+  --status-warning: var(--tv-warnung);
+  --status-error: var(--tv-gefahr);
+  --status-info: var(--tv-info);
+  --status-success-bg: rgba(var(--tv-erfolg-rgb), 0.1);
+  --status-warning-bg: rgba(var(--tv-warnung-rgb), 0.1);
+  --status-error-bg: rgba(var(--tv-gefahr-rgb), 0.1);
+  --status-info-bg: rgba(var(--tv-info-rgb), 0.1);
+  --status-pending: var(--tv-art-musik);
+
+  --code-bg: var(--tv-mulde);
+  --code-text: var(--tv-text-2);
+
+  --scrollbar-track: var(--tv-leiste);
+  --scrollbar-thumb: var(--tv-karte-3);
+  --scrollbar-hover: #46596a;
+}
+
+/* Die Texte sind fast überall in rem angegeben: die größere Wurzelschrift hebt
+   sie gemeinsam an (0.85rem = 17 px, 0.75rem = 15 px, 0.65rem = 13 px). Wer
+   keine eigene Größe hat, bekommt die Grundschrift. */
+html { font-size: 20px; }
+body { font-size: var(--tv-gr-text); }

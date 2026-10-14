@@ -405,13 +405,13 @@
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 10px; }
   .page-title i { color: var(--accent-primary); }
-  .btn-create { padding: 7px 18px; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-create { padding: 7px 18px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 
   .create-form { display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; margin-bottom: 20px; }
   .create-form input { padding: 8px 14px; background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.88rem; outline: none; }
   .create-form input:focus { border-color: var(--accent-primary); }
   .create-actions { display: flex; gap: 8px; }
-  .btn-save { padding: 7px 18px; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .btn-save { padding: 7px 18px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
   .btn-save:disabled { opacity: 0.4; }
   .btn-cancel { padding: 7px 18px; background: none; border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); font-size: 0.82rem; cursor: pointer; }
 
@@ -444,7 +444,7 @@
   .detail-desc { font-size: 0.82rem; color: var(--text-secondary); margin: 0 0 2px; }
   .detail-meta { font-size: 0.78rem; color: var(--text-tertiary); }
   .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .btn-play-all { padding: 8px 20px; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-play-all { padding: 8px 20px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .btn-add-video { padding: 8px 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; font-size: 0.82rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .btn-add-video:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 
@@ -462,7 +462,7 @@
   .av-info { flex: 1; min-width: 0; }
   .av-title { font-size: 0.82rem; font-weight: 500; color: var(--text-primary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .av-channel { font-size: 0.72rem; color: var(--text-tertiary); }
-  .av-add-btn { width: 30px; height: 30px; border-radius: 6px; background: var(--accent-primary); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0; }
+  .av-add-btn { width: 30px; height: 30px; border-radius: 6px; background: var(--accent-primary); color: var(--accent-text); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0; }
   .av-empty { padding: 12px; text-align: center; font-size: 0.82rem; color: var(--text-tertiary); }
 
   /* Video List */
@@ -470,7 +470,7 @@
   .pl-video-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; transition: all 0.1s; border: 1px solid transparent; }
   .pl-video-item:hover { background: var(--bg-secondary); }
   .pl-video-item.dragging { opacity: 0.4; }
-  .pl-video-item.drag-over { border-color: var(--accent-primary); background: rgba(99, 102, 241, 0.05); }
+  .pl-video-item.drag-over { border-color: var(--accent-primary); background: rgba(var(--tv-akzent-rgb), 0.05); }
   .pl-drag-handle { cursor: grab; color: var(--text-tertiary); font-size: 0.82rem; padding: 4px; opacity: 0.3; transition: opacity 0.1s; }
   .pl-video-item:hover .pl-drag-handle { opacity: 1; }
   .pl-drag-handle:active { cursor: grabbing; }

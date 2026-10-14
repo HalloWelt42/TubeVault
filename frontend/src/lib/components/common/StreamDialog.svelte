@@ -295,6 +295,6 @@
   .sd-btn-queue { padding: 8px 18px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .sd-btn-queue:hover { border-color: var(--accent-primary); }
   .sd-btn-queue:disabled, .sd-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-  .sd-btn-primary { display: flex; align-items: center; gap: 6px; padding: 8px 18px; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+  .sd-btn-primary { display: flex; align-items: center; gap: 6px; padding: 8px 18px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
   .sd-btn-primary:hover { background: var(--accent-hover); }
 </style>

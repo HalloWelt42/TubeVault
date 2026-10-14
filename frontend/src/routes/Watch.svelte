@@ -1507,7 +1507,7 @@
   }
   .preview-dl-btn {
     width: 64px; height: 64px; border-radius: 50%;
-    background: var(--accent-primary); color: #fff; border: none;
+    background: var(--accent-primary); color: var(--accent-text); border: none;
     display: flex; align-items: center; justify-content: center;
     font-size: 1.4rem; cursor: pointer;
     transition: transform 0.15s, background 0.15s;
@@ -1558,7 +1558,7 @@
   .action-btn.danger:hover { border-color: var(--status-error); color: var(--status-error); }
   .action-btn.suggest-exclude { text-decoration: line-through; opacity: 0.5; border-color: var(--status-warning); color: var(--status-warning); }
   .action-btn.suggest-include { border-color: var(--status-success); color: var(--status-success); }
-  .btn-badge { position: absolute; top: -4px; right: -4px; font-size: 0.55rem; background: var(--accent-primary); color: #fff; padding: 0 4px; border-radius: 6px; line-height: 1.4; pointer-events: none; }
+  .btn-badge { position: absolute; top: -4px; right: -4px; font-size: 0.55rem; background: var(--accent-primary); color: var(--accent-text); padding: 0 4px; border-radius: 6px; line-height: 1.4; pointer-events: none; }
 
   /* Playlist Picker */
   /* ─── Nav Strip (Playlist + Skip) ─── */
@@ -1640,7 +1640,7 @@
 
   .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
   .tag { padding: 3px 10px; background: var(--accent-muted); color: var(--accent-primary); border-radius: 12px; font-size: 0.76rem; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
-  .tag:hover { border-color: var(--accent-primary); background: var(--accent-primary); color: #fff; }
+  .tag:hover { border-color: var(--accent-primary); background: var(--accent-primary); color: var(--accent-text); }
 
   .notes-box { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; }
   .notes-label { font-size: 0.72rem; color: var(--text-tertiary); text-transform: uppercase; display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
@@ -1698,6 +1698,6 @@
   .dl-buttons { display: flex; gap: 8px; justify-content: flex-end; }
   .btn-queue-dl { padding: 8px 18px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .btn-queue-dl:hover { border-color: var(--accent-primary); }
-  .btn-primary-dl { display: flex; align-items: center; gap: 6px; padding: 8px 18px; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+  .btn-primary-dl { display: flex; align-items: center; gap: 6px; padding: 8px 18px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
   .btn-primary-dl:hover { background: var(--accent-hover); }
 </style>

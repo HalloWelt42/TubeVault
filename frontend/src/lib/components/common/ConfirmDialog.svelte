@@ -92,6 +92,6 @@
   .cd-cancel:hover { background: var(--border-primary); }
   .cd-btn-danger { background: var(--status-error); color: #fff; }
   .cd-btn-danger:hover { filter: brightness(1.1); }
-  .cd-btn-primary { background: var(--accent-primary); color: #fff; }
+  .cd-btn-primary { background: var(--accent-primary); color: var(--accent-text); }
   .cd-btn-primary:hover { filter: brightness(1.1); }
 </style>

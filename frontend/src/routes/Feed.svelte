@@ -780,7 +780,7 @@
   .empty p { margin-bottom:16px; font-size:0.88rem; max-width:380px; }
 
   /* Batch-Auswahl */
-  .btn-ghost.active { background:var(--accent-primary); color:#fff; border-color:var(--accent-primary); }
+  .btn-ghost.active { background:var(--accent-primary); color: var(--accent-text); border-color:var(--accent-primary); }
   .batch-bar {
     display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
     padding:10px 14px; background:var(--accent-muted); border:1px solid var(--accent-primary);
@@ -801,7 +801,7 @@
     transition:all 0.12s;
   }
   .batch-type i { font-size:0.7rem; }
-  .batch-type.badge-video { background:var(--accent-primary); color:#fff; }
+  .batch-type.badge-video { background:var(--accent-primary); color: var(--accent-text); }
   .batch-type.badge-short { background:#f59e0b; color:#fff; }
   .batch-type.badge-live { background:#ef4444; color:#fff; }
   .batch-type:hover { opacity:0.85; transform:scale(1.03); }

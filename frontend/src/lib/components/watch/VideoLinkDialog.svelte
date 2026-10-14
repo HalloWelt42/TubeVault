@@ -195,6 +195,6 @@
   .vld-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
   .vld-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
   .vld-tab { padding: 6px 14px; border: 1px solid var(--border-primary); border-radius: 6px; background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; gap: 5px; }
-  .vld-tab.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+  .vld-tab.active { background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary); }
   .vld-picker { min-height: 150px; max-height: 300px; overflow-y: auto; }
 </style>

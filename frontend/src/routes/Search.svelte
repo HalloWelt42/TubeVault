@@ -397,7 +397,7 @@
 
   .search-scope { display: flex; gap: 4px; }
   .scope-btn { padding: 8px 14px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); font-size: 0.82rem; cursor: pointer; }
-  .scope-btn.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+  .scope-btn.active { background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary); }
 
   .loading, .empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; color: var(--text-tertiary); }
   .empty i { font-size: 2.5rem; opacity: 0.4; margin-bottom: 12px; }
@@ -418,7 +418,7 @@
   .badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
   .badge.ok { background: var(--status-success); color: #fff; }
   .badge.archive { background: rgba(0,0,0,0.72); color: #fff; }
-  .badge.meaning { left: auto; right: 8px; background: var(--accent-primary); color: #fff; text-transform: none; }
+  .badge.meaning { left: auto; right: 8px; background: var(--accent-primary); color: var(--accent-text); text-transform: none; }
   .passage {
     display: flex; gap: 8px; align-items: flex-start; width: 100%; margin-top: 4px; padding: 6px 8px;
     border: none; border-radius: 8px; background: var(--bg-tertiary); color: var(--text-secondary);
@@ -435,7 +435,7 @@
   .pl-btn { margin-left: 12px; padding: 5px 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-secondary); font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
   .pl-form .pl-btn { margin-left: 0; }
   .pl-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent-primary); }
-  .pl-btn.primary { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
+  .pl-btn.primary { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--accent-text); }
   .badge.queue { background: var(--status-warning, #f59e0b); color: #fff; }
 
   .info { padding: 12px; display: flex; flex-direction: column; gap: 4px; }

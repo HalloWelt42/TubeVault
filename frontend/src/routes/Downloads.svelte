@@ -1082,7 +1082,7 @@
   .dbtn { display:inline-flex; align-items:center; gap:7px; padding:9px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--border-primary); background:var(--bg-tertiary); color:var(--text-primary); white-space:nowrap; transition:.15s; }
   .dbtn:hover:not(:disabled) { border-color:var(--border-secondary); background:var(--bg-hover); }
   .dbtn:disabled { opacity:.5; cursor:default; }
-  .dbtn.primary { background:var(--accent-primary); border-color:var(--accent-primary); color:#fff; }
+  .dbtn.primary { background:var(--accent-primary); border-color:var(--accent-primary); color: var(--accent-text); }
   .dbtn.primary:hover:not(:disabled) { background:var(--accent-hover); }
   .dbtn.ghost { background:none; }
   .dbtn.sm { padding:6px 10px; font-size:12px; border-radius:8px; }
@@ -1122,7 +1122,7 @@
   .seg { display:inline-flex; align-items:center; background:var(--bg-primary); border:1px solid var(--border-primary); border-radius:9px; padding:3px; gap:2px; align-self:flex-start; flex-wrap:wrap; }
   .seg-lbl { font-size:11px; color:var(--text-tertiary); font-weight:600; padding:0 8px; text-transform:uppercase; letter-spacing:.03em; }
   .seg button { border:none; background:none; color:var(--text-secondary); font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:7px; cursor:pointer; transition:.12s; }
-  .seg button.on { background:var(--accent-primary); color:#fff; }
+  .seg button.on { background:var(--accent-primary); color: var(--accent-text); }
   .batch-area { display:flex; flex-direction:column; gap:8px; }
   .textarea { width:100%; padding:9px 12px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; color:var(--text-primary); font-family:ui-monospace, monospace; font-size:0.82rem; outline:none; resize:vertical; box-sizing:border-box; }
   .textarea:focus { border-color:var(--accent-primary); }
@@ -1199,7 +1199,7 @@
   .tab:hover { background:var(--bg-hover); color:var(--text-primary); }
   .tab.on { background:var(--accent-muted); color:var(--accent-primary); border-color:color-mix(in srgb, var(--accent-primary) 35%, transparent); }
   .tab .c { font-size:11px; padding:0 6px; border-radius:999px; background:var(--bg-primary); color:var(--text-secondary); font-weight:700; min-width:18px; text-align:center; }
-  .tab.on .c { background:var(--accent-primary); color:#fff; }
+  .tab.on .c { background:var(--accent-primary); color: var(--accent-text); }
   .q-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 
   /* Job-Karten */
@@ -1240,7 +1240,7 @@
 
   .prio { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px; background:var(--bg-primary); color:var(--text-tertiary); cursor:pointer; border:1px solid var(--border-primary); white-space:nowrap; }
   .prio.high { color:var(--status-warning); border-color:color-mix(in srgb, var(--status-warning) 30%, transparent); }
-  .prio.now { color:#fff; background:var(--accent-primary); border-color:var(--accent-primary); }
+  .prio.now { color: var(--accent-text); background:var(--accent-primary); border-color:var(--accent-primary); }
 
   .stage-txt { font-size:12px; color:var(--text-secondary); }
   .err-msg { font-size:12px; color:var(--status-error); background:var(--status-error-bg); border-radius:8px; padding:7px 10px; display:flex; align-items:flex-start; gap:8px; line-height:1.4; word-break:break-word; }

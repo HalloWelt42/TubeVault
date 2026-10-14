@@ -177,7 +177,7 @@
   .scroll-sentinel { height:1px; }
   .loading-more { text-align:center; padding:16px; color:var(--text-tertiary); font-size:0.82rem; }
   .loading, .empty { padding:60px 20px; text-align:center; color:var(--text-tertiary); }
-  .btn-reset { margin-top:12px; padding:7px 18px; background:var(--accent-primary); color:#fff; border:none; border-radius:8px; font-size:0.82rem; cursor:pointer; }
+  .btn-reset { margin-top:12px; padding:7px 18px; background:var(--accent-primary); color: var(--accent-text); border:none; border-radius:8px; font-size:0.82rem; cursor:pointer; }
 
   .btn-select { padding:5px 12px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:6px; color:var(--text-secondary); font-size:0.78rem; cursor:pointer; display:flex; align-items:center; gap:5px; }
   .btn-select.active { border-color:var(--accent-primary); color:var(--accent-primary); }

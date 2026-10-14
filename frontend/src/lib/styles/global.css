@@ -17,7 +17,7 @@
 .btn-primary {
   display: flex; align-items: center; gap: 6px;
   padding: 8px 18px;
-  background: var(--accent-primary); color: #fff;
+  background: var(--accent-primary); color: var(--accent-text);
   border: none; border-radius: 8px;
   font-size: 0.85rem; font-weight: 600;
   cursor: pointer; white-space: nowrap;
@@ -89,7 +89,7 @@
 .btn-sm:hover:not(:disabled) { border-color: var(--accent-primary); color: var(--text-primary); }
 .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-sm.accent {
-  background: var(--accent-primary); color: #fff; border-color: var(--accent-primary);
+  background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary);
 }
 .btn-sm.accent:hover:not(:disabled) { background: var(--accent-hover); }
 .btn-sm.accent:disabled { opacity: 0.5; }
@@ -292,7 +292,7 @@ label:has(input[type="checkbox"]) {
   transition: background 0.15s;
 }
 .stream-option:hover { background: var(--bg-tertiary); }
-.stream-option.selected { background: var(--accent-muted, rgba(99, 102, 241, 0.12)); outline: 1px solid var(--accent-primary); }
+.stream-option.selected { background: var(--accent-muted); outline: 1px solid var(--accent-primary); }
 .stream-option.option-disabled { opacity: 0.4; pointer-events: none; }
 .stream-option input[type="radio"] { margin: 0; accent-color: var(--accent-primary); }
 
@@ -517,7 +517,7 @@ label:has(input[type="checkbox"]) {
 .hover-action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* Farb-Variants – exakt wie Feed (Default bleibt weiss-transparent, Farbe nur im Hover) */
-.hover-action-btn.accent        { background: var(--accent-primary); color: #fff; }   /* .dl-btn: blau */
+.hover-action-btn.accent        { background: var(--accent-primary); color: var(--accent-text); }   /* .dl-btn: blau */
 .hover-action-btn.success       { background: var(--status-success); color: #fff; }   /* .play-btn: gruen */
 .hover-action-btn.flash:hover   { background: rgba(255,200,0,0.5); }                  /* .queue-btn hover: gelb */
 .hover-action-btn.later:hover   { background: rgba(59,130,246,0.6); }                 /* .later-btn hover: blau */

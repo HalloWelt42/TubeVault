@@ -239,7 +239,7 @@
   .tab:hover { background:var(--bg-hover); color:var(--text-primary); }
   .tab.on { background:var(--accent-muted); color:var(--accent-primary); border-color:color-mix(in srgb, var(--accent-primary) 35%, transparent); }
   .tab .c { font-size:11px; padding:0 6px; border-radius:999px; background:var(--bg-primary); color:var(--text-secondary); font-weight:700; min-width:18px; text-align:center; }
-  .tab.on .c { background:var(--accent-primary); color:#fff; }
+  .tab.on .c { background:var(--accent-primary); color: var(--accent-text); }
 
   .empty { padding: 48px 20px; text-align: center; color: var(--text-tertiary); font-size: 0.88rem; line-height: 1.5; }
   .list { display: flex; flex-direction: column; }

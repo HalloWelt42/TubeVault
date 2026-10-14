@@ -7,7 +7,6 @@
   import { api } from '../lib/api/client.js';
   import { toast } from '../lib/stores/notifications.js';
   import { formatSize, parseServerTime } from '../lib/utils/format.js';
-  import { theme } from '../lib/stores/theme.js';
   import { settings as globalSettings, reloadSettings } from '../lib/stores/settings.js';
   import { onMount } from 'svelte';
   import ApiEndpoints from '../lib/components/settings/ApiEndpoints.svelte';
@@ -407,13 +406,6 @@
     {#each settingsFor('view') as item}
       {@render settingRow(item)}
     {/each}
-    <div class="setting-row">
-      <div class="setting-info"><span class="setting-label">Erscheinungsbild</span></div>
-      <div class="theme-toggle">
-        <button class="theme-btn" class:active={$theme === 'dark'} onclick={() => theme.set('dark')}><i class="fa-solid fa-moon"></i> Dunkel</button>
-        <button class="theme-btn" class:active={$theme === 'light'} onclick={() => theme.set('light')}><i class="fa-solid fa-sun"></i> Hell</button>
-      </div>
-    </div>
   </div>
 
   <div class="setting-card">
@@ -723,13 +715,9 @@
   .select-input:focus { border-color: var(--accent-primary); }
   .text-input { width: 160px; padding: 6px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; outline: none; }
   .text-input:focus { border-color: var(--accent-primary); }
-  .theme-toggle { display: flex; gap: 8px; }
-  .theme-btn { padding: 8px 20px; display: flex; align-items: center; gap: 6px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
-  .theme-btn:hover { border-color: var(--accent-primary); }
-  .theme-btn.active { background: var(--accent-muted); color: var(--accent-primary); border-color: var(--accent-primary); }
   .action-row { display: flex; align-items: center; gap: 12px; padding-top: 14px; margin-top: 6px; border-top: 1px solid var(--border-primary); }
   .action-btn { padding: 8px 16px; display: flex; align-items: center; gap: 6px; background: var(--accent-muted); border: 1px solid var(--accent-primary); border-radius: 8px; color: var(--accent-primary); cursor: pointer; font-size: 0.82rem; font-weight: 500; transition: all 0.2s; white-space: nowrap; }
-  .action-btn:hover { background: var(--accent-primary); color: white; }
+  .action-btn:hover { background: var(--accent-primary); color: var(--accent-text); }
   .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .action-btn.danger { background: #ef444418; border-color: #ef4444; color: #ef4444; }
   .action-btn.danger:hover { background: #ef4444; color: white; }
@@ -761,7 +749,7 @@
   .cp-icon { font-size: 0.8rem; flex-shrink: 0; }
   .cp-detail { flex: 1; }
   .action-btn.accent { background: var(--accent-muted); border-color: var(--accent-primary); color: var(--accent-primary); }
-  .action-btn.accent:hover { background: var(--accent-primary); color: #fff; }
+  .action-btn.accent:hover { background: var(--accent-primary); color: var(--accent-text); }
 
   /* Cookies-Panel */
   .card-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px; }

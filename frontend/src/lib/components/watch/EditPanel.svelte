@@ -528,7 +528,7 @@
   label { font-size: 0.85rem; color: var(--text-secondary); }
   input[type="text"], textarea { padding: 8px 12px; border: 1px solid var(--border-primary); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.85rem; font-family: inherit; }
   textarea { resize: vertical; }
-  .btn-save { align-self: flex-start; padding: 8px 20px; font-size: 0.85rem; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  .btn-save { align-self: flex-start; padding: 8px 20px; font-size: 0.85rem; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
   .btn-save:disabled { opacity: 0.5; }
   .edit-tools { display: flex; flex-direction: column; gap: 8px; }
   .tool-btns { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -553,7 +553,7 @@
   .upgrade-target-label { font-size: 0.78rem; color: var(--text-tertiary); font-weight: 600; flex-shrink: 0; }
   .upgrade-sel { padding: 6px 10px; border: 1px solid var(--border-primary); border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.8rem; flex: 1; }
   .btn-upgrade { background: var(--bg-tertiary); border-color: var(--accent-primary); color: var(--accent-primary); white-space: nowrap; }
-  .btn-upgrade:hover:not(:disabled) { background: var(--accent-primary); color: #fff; }
+  .btn-upgrade:hover:not(:disabled) { background: var(--accent-primary); color: var(--accent-text); }
   .upgrade-hint { font-size: 0.7rem; color: var(--text-tertiary); }
 
   /* Audio-Fix */

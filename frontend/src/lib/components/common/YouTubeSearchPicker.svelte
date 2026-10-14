@@ -91,7 +91,7 @@
   .ytp-bar { display: flex; gap: 8px; padding: 10px 0; }
   .ytp-input { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; padding: 7px 12px; color: var(--text-primary); font-size: 0.85rem; }
   .ytp-input:focus { outline: none; border-color: var(--accent-primary); }
-  .ytp-btn { padding: 7px 14px; background: var(--accent-primary); color: #fff; border: none; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+  .ytp-btn { padding: 7px 14px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
   .ytp-btn:hover { background: var(--accent-hover); }
   .ytp-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .ytp-list { overflow-y: auto; max-height: 400px; }
