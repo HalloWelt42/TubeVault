@@ -847,8 +847,8 @@
   .cooldown-banner > i { font-size: 0.72rem; flex-shrink: 0; color: inherit; }
   .cooldown-info { display: flex; align-items: baseline; gap: 6px; }
   .cooldown-timer {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.82rem; font-weight: 700;
+    font-family: var(--tv-schrift-zahl);
+    font-size: 0.82rem; font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
   .cooldown-label { font-size: 0.66rem; opacity: 0.8; }
@@ -1001,12 +1001,13 @@
   }
 
   /* ═══ Unified Bar ═══ */
+  /* Fußleiste (mockups/stil.css: .fuss) */
   .ubar {
-    display: flex; align-items: center; height: 34px;
-    padding: 0 14px; gap: 6px;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-primary);
-    font-size: 0.72rem; color: var(--text-tertiary);
+    display: flex; align-items: center; height: 44px;
+    padding: 0 var(--tv-a4); gap: var(--tv-a2);
+    background: var(--tv-leiste);
+    border-top: 1px solid var(--tv-rand);
+    font-size: var(--tv-gr-klein); color: var(--tv-text-2);
     flex-shrink: 0; user-select: none;
   }
 
@@ -1058,7 +1059,7 @@
   }
   .ubar-cooldown i { font-size: 0.52rem; color: inherit; }
   .ubar-timer {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-family: var(--tv-schrift-zahl);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
   }

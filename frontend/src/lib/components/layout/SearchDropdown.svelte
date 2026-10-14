@@ -72,12 +72,12 @@
 
   // ═══ Scope-Filter ═══
   const scopeDefs = [
-    { id: 'local', label: 'Lokal', icon: 'fa-solid fa-hard-drive', color: 'var(--status-success)' },
-    { id: 'rss', label: 'RSS', icon: 'fa-solid fa-satellite-dish', color: '#3b82f6' },
-    { id: 'youtube', label: 'YouTube', icon: 'fa-brands fa-youtube', color: '#cc0000' },
-    { id: 'favorites', label: 'Favoriten', icon: 'fa-solid fa-heart', color: '#ef4444' },
-    { id: 'playlists', label: 'Playlists', icon: 'fa-solid fa-list-ul', color: '#8b5cf6' },
-    { id: 'own', label: 'Eigene', icon: 'fa-solid fa-film', color: '#f59e0b' },
+    { id: 'local', label: 'Lokal', icon: 'fa-solid fa-hard-drive', color: 'var(--tv-erfolg)' },
+    { id: 'rss', label: 'Abos', icon: 'fa-solid fa-satellite-dish', color: 'var(--tv-info)' },
+    { id: 'youtube', label: 'Quelle', icon: 'fa-solid fa-globe', color: 'var(--tv-gefahr)' },
+    { id: 'favorites', label: 'Favoriten', icon: 'fa-solid fa-heart', color: 'var(--tv-symbol-rot)' },
+    { id: 'playlists', label: 'Playlists', icon: 'fa-solid fa-list-ul', color: 'var(--tv-art-musik)' },
+    { id: 'own', label: 'Eigene', icon: 'fa-solid fa-film', color: 'var(--tv-warnung)' },
   ];
 
   function loadScopes() {
@@ -460,9 +460,9 @@
       </button>
     {/if}
     <button class="sd-yt-btn" onclick={searchYouTube} disabled={loadingYt || !query.trim() || !scopes.youtube}
-      title="YouTube durchsuchen (Enter)">
-      {#if loadingYt}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-brands fa-youtube"></i>{/if}
-      <span class="sd-yt-label">YouTube</span>
+      title="Bei der Quelle suchen (Enter)">
+      {#if loadingYt}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-solid fa-globe"></i>{/if}
+      <span class="sd-yt-label">Quelle</span>
     </button>
   </div>
 
@@ -814,20 +814,21 @@
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .sd-wrap { position: relative; flex: 1; max-width: 600px; margin: 0 auto; }
+  .sd-wrap { position: relative; flex: 1; max-width: 680px; }
 
-  /* Suchleiste */
+  /* Suchleiste (mockups/stil.css: .suche) */
   .sd-bar {
-    display: flex; align-items: center; gap: 8px;
-    background: var(--bg-tertiary); border: 1px solid var(--border-primary);
-    border-radius: 24px; padding: 5px 6px 5px 14px; transition: all 0.2s;
+    display: flex; align-items: center; gap: var(--tv-a2);
+    height: 40px; padding: 0 4px 0 var(--tv-a3);
+    background: var(--tv-karte); border: 1px solid var(--tv-rand);
+    border-radius: var(--tv-ecke); transition: border-color var(--tv-schnell);
   }
-  .sd-bar:focus-within { border-color: var(--accent-primary); }
-  .sd-bar-open { border-radius: 14px 14px 0 0; border-bottom-color: transparent; }
-  .sd-icon { color: var(--text-tertiary); flex-shrink: 0; font-size: 0.85rem; }
+  .sd-bar:focus-within { border-color: rgba(var(--tv-akzent-rgb), 0.6); }
+  .sd-bar-open { border-radius: var(--tv-ecke) var(--tv-ecke) 0 0; border-bottom-color: transparent; }
+  .sd-icon { color: var(--tv-text-3); flex-shrink: 0; }
   .sd-input {
-    flex: 1; background: none; border: none; color: var(--text-primary);
-    font-size: 0.88rem; outline: none; min-width: 0;
+    flex: 1; background: none; border: none; color: var(--tv-text);
+    font-size: var(--tv-gr-text); outline: none; min-width: 0;
   }
   .sd-input::placeholder { color: var(--text-tertiary); }
   .sd-clear {
@@ -838,22 +839,23 @@
 
   /* YouTube-Button */
   .sd-yt-btn {
-    display: flex; align-items: center; gap: 5px;
-    padding: 6px 14px; background: #cc0000; color: #fff; border: none;
-    border-radius: 20px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
-    white-space: nowrap; flex-shrink: 0; transition: background 0.15s;
+    display: flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 var(--tv-a3);
+    background: var(--tv-karte-2); color: var(--tv-text); border: 1px solid var(--tv-rand-stark);
+    border-radius: var(--tv-ecke-klein); font-size: var(--tv-gr-klein); font-weight: 600; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0; transition: background var(--tv-schnell);
   }
-  .sd-yt-btn:disabled { opacity: 0.35; cursor: default; }
-  .sd-yt-btn:hover:not(:disabled) { background: #aa0000; }
+  .sd-yt-btn:disabled { opacity: 0.4; cursor: default; }
+  .sd-yt-btn:hover:not(:disabled) { background: var(--tv-karte-3); }
   .sd-yt-label { display: none; }
   @media (min-width: 640px) { .sd-yt-label { display: inline; } }
 
   /* Dropdown */
   .sd-dropdown {
     position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
-    background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-top: none; border-radius: 0 0 14px 14px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    background: var(--tv-flaeche); border: 1px solid var(--tv-rand);
+    border-top: none; border-radius: 0 0 var(--tv-ecke) var(--tv-ecke);
+    box-shadow: var(--tv-schatten);
     max-height: 70vh; overflow-y: auto;
     scrollbar-width: thin;
   }

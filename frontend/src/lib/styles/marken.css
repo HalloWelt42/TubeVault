@@ -45,6 +45,12 @@
   --tv-art-vertont: #58b8f0;
   --tv-art-ki: #f9e80d;
 
+  /* Symbolfarben der Seitenleiste (wie bisher, Wunsch des Nutzers) */
+  --tv-symbol-gelb: #ffca28;
+  --tv-symbol-rot: #ef5350;
+  --tv-symbol-braun: #a1887f;
+  --tv-symbol-cyan: #26c6da;
+
   --tv-rand: rgba(255, 255, 255, 0.08);
   --tv-rand-stark: rgba(255, 255, 255, 0.16);
   --tv-schleier: rgba(8, 13, 16, 0.72);

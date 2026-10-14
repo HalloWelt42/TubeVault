@@ -49,12 +49,12 @@
         class:active={$route.page === item.key}
         onclick={() => nav(item.key)}
       >
-        <i class={item.icon}></i>
+        <i class={item.icon} style:--symbolfarbe={item.iconColor}></i>
         <span>{item.label}</span>
         {#if item.badge && badges[item.badge]}
           <span class="badge" class:pulse={item.badge === 'active_downloads' && badges[item.badge] > 0}
                 class:accent={item.badge === 'new_feed'}>
-            {badges[item.badge]}
+            {badges[item.badge].toLocaleString('de-DE')}
           </span>
         {/if}
       </button>
@@ -67,7 +67,7 @@
     <span class="sidebar-label">System</span>
     {#each systemItems as item}
       <button class="nav-item" class:active={$route.page === item.key} onclick={() => nav(item.key)}>
-        <i class={item.icon}></i>
+        <i class={item.icon} style:--symbolfarbe={item.iconColor}></i>
         <span>{item.label}</span>
       </button>
     {/each}
@@ -99,142 +99,66 @@
   </div>
 
   <div class="sidebar-footer">
-    © HalloWelt42 – TubeVault
+    © HalloWelt42 - TubeVault
   </div>
 </aside>
 {/if}
 
 <style>
+  /* Gestaltung nach mockups/stil.css (Schale: .seite, .navi, .zaehler) */
   .sidebar {
-    width: 220px;
-    background: var(--bg-secondary);
-    border-right: 1px solid var(--border-primary);
+    width: 256px;
+    background: var(--tv-leiste);
+    border-right: 1px solid var(--tv-rand);
     overflow-y: auto;
-    padding: 12px 8px;
+    padding: var(--tv-a3) var(--tv-a2);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
   }
-
-  .sidebar-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
+  .sidebar-nav, .sidebar-section { display: flex; flex-direction: column; gap: 2px; }
 
   .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    border-radius: 8px;
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 0.88rem;
-    width: 100%;
-    text-align: left;
-    transition: all 0.15s;
+    display: flex; align-items: center; gap: var(--tv-a3);
+    width: 100%; padding: 9px var(--tv-a3);
+    background: none; border: none; border-radius: var(--tv-ecke);
+    color: var(--tv-text-2); font-size: var(--tv-gr-text); font-weight: 500; text-align: left;
+    cursor: pointer; transition: background var(--tv-schnell), color var(--tv-schnell);
   }
-  .nav-item i { width: 20px; text-align: center; font-size: 0.95rem; }
-
-  /* Material-Design Icon-Farben – NUR in der Sidebar (scoped).
-     Dank Svelte-scoped-CSS sind diese Regeln automatisch auf dieses
-     Component beschränkt, ohne :global oder !important. */
-  .nav-item :global(.fa-solid.fa-download),
-  .nav-item :global(.fa-solid.fa-cloud-arrow-down) { color: #42A5F5; }
-  .nav-item :global(.fa-solid.fa-play) { color: #66BB6A; }
-  .nav-item :global(.fa-solid.fa-satellite-dish) { color: #AB47BC; }
-  .nav-item :global(.fa-solid.fa-tower-broadcast) { color: #EF5350; }
-  .nav-item :global(.fa-solid.fa-mobile-screen) { color: #AB47BC; }
-  .nav-item :global(.fa-solid.fa-heart) { color: #EF5350; }
-  .nav-item :global(.fa-solid.fa-star) { color: #FFA726; }
-  .nav-item :global(.fa-solid.fa-chart-simple) { color: #26C6DA; }
-  .nav-item :global(.fa-solid.fa-broom) { color: #8D6E63; }
-  .nav-item :global(.fa-solid.fa-wand-magic-sparkles) { color: #CE93D8; }
-  .nav-item :global(.fa-solid.fa-file-import) { color: #78909C; }
-  .nav-item :global(.fa-solid.fa-box-archive) { color: #A1887F; }
-  .nav-item :global(.fa-solid.fa-image) { color: #4DB6AC; }
-  .nav-item :global(.fa-solid.fa-circle-check) { color: #66BB6A; }
-  .nav-item :global(.fa-solid.fa-triangle-exclamation) { color: #FFA726; }
-  .nav-item :global(.fa-solid.fa-circle-xmark) { color: #EF5350; }
-  .nav-item :global(.fa-solid.fa-bolt) { color: #FFCA28; }
-  .nav-item :global(.fa-regular.fa-keyboard) { color: #90A4AE; }
-  .nav-item:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-  .nav-item.active {
-    background: var(--accent-muted);
-    color: var(--accent-primary);
-    font-weight: 600;
-  }
+  /* Symbole behalten ihre eigene Farbe (iconColor im Routen-Verzeichnis), sonst gedämpft */
+  .nav-item i { width: 20px; text-align: center; color: var(--symbolfarbe, var(--tv-text-3)); }
+  .nav-item:hover { background: var(--tv-flaeche); color: var(--tv-text); }
+  .nav-item.active { background: var(--tv-karte-2); color: var(--tv-text); font-weight: 600; }
+  .nav-item.active i { color: var(--symbolfarbe, var(--tv-akzent)); }
 
   .badge {
-    margin-left: auto;
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 1px 7px;
-    border-radius: 10px;
-    background: var(--bg-tertiary);
-    color: var(--text-tertiary);
-    min-width: 20px;
-    text-align: center;
+    margin-left: auto; min-width: 26px; height: 22px; padding: 0 7px;
+    display: inline-grid; place-items: center;
+    font-family: var(--tv-schrift-zahl); font-size: var(--tv-gr-marke); font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    background: var(--tv-karte-2); color: var(--tv-text-2); border-radius: var(--tv-ecke-klein);
   }
-  .badge.accent {
-    background: var(--accent-primary);
-    color: var(--accent-text);
-  }
-  .badge.pulse {
-    background: var(--status-info);
-    color: #fff;
-    animation: badge-pulse 2s ease-in-out infinite;
-  }
-  @keyframes badge-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-  }
+  .badge.accent { background: rgba(var(--tv-akzent-rgb), 0.16); color: var(--tv-akzent); }
+  .badge.pulse { background: rgba(var(--tv-info-rgb), 0.2); color: var(--tv-info); animation: badge-pulse 2s ease-in-out infinite; }
+  @keyframes badge-pulse { 50% { opacity: 0.6; } }
 
-  .sidebar-divider {
-    height: 1px;
-    background: var(--border-primary);
-    margin: 12px 8px;
-  }
-
-  .sidebar-section { display: flex; flex-direction: column; gap: 2px; }
-
+  .sidebar-divider { height: 1px; background: var(--tv-rand); margin: var(--tv-a3) var(--tv-a2); }
   .sidebar-label {
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-    letter-spacing: 0.06em;
-    padding: 8px 14px 4px;
-    font-weight: 600;
+    padding: var(--tv-a2) var(--tv-a3) var(--tv-a1);
+    font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--tv-text-3);
   }
 
+  .sidebar-player-area { margin-top: auto; padding: var(--tv-a2) 0 var(--tv-a1); }
   .sidebar-footer {
-    padding: 8px 14px;
-    font-size: 0.62rem;
-    color: var(--text-tertiary);
-    border-top: 1px solid var(--border-primary);
-    white-space: nowrap;
-  }
-
-  .sidebar-player-area {
-    margin-top: auto;
-    padding: 8px 0 4px;
+    padding: var(--tv-a2) var(--tv-a3); border-top: 1px solid var(--tv-rand);
+    font-size: var(--tv-gr-marke); color: var(--tv-text-3); white-space: nowrap;
   }
 
   @media (max-width: 768px) {
     .sidebar {
-      position: fixed;
-      top: 56px;
-      left: 0;
-      bottom: 0;
-      z-index: 90;
-      width: 240px;
-      box-shadow: 4px 0 20px rgba(0,0,0,0.3);
+      position: fixed; top: 60px; left: 0; bottom: 0; z-index: 90;
+      box-shadow: var(--tv-schatten);
     }
   }
 </style>

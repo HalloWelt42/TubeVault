@@ -10,6 +10,7 @@
  * @property {string} path      - URL-Pfad (ohne Query)
  * @property {string} label     - Anzeigename (deutsch)
  * @property {string} icon      - FontAwesome Icon-Klasse
+ * @property {string} iconColor - eigene Symbolfarbe in der Seitenleiste (Marke aus marken.css), sonst gedämpft
  * @property {string} group     - Navigations-Gruppe: 'main' | 'system' | 'hidden'
  * @property {boolean} hasId    - Erwartet /:id Segment
  * @property {string} idParam   - Name des ID-Parameters (z.B. 'videoId', 'channelId')
@@ -62,6 +63,7 @@ export const routeDefinitions = {
     path: '/downloads',
     label: 'Downloads',
     icon: 'fa-solid fa-bolt',
+    iconColor: 'var(--tv-symbol-gelb)',
     group: 'main',
     hasId: false,
     badge: 'active_downloads',
@@ -82,6 +84,7 @@ export const routeDefinitions = {
     path: '/favorites',
     label: 'Favoriten',
     icon: 'fa-solid fa-heart',
+    iconColor: 'var(--tv-symbol-rot)',
     group: 'main',
     hasId: false,
     badge: 'favorites',
@@ -112,6 +115,7 @@ export const routeDefinitions = {
     path: '/archives',
     label: 'Archiv',
     icon: 'fa-solid fa-box-archive',
+    iconColor: 'var(--tv-symbol-braun)',
     group: 'main',
     hasId: false,
     badge: 'archives',
@@ -145,6 +149,7 @@ export const routeDefinitions = {
     path: '/stats',
     label: 'Statistiken',
     icon: 'fa-solid fa-chart-simple',
+    iconColor: 'var(--tv-symbol-cyan)',
     group: 'system',
     hasId: false,
     queryParams: [],

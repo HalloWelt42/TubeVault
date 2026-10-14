@@ -19,7 +19,7 @@
       <i class="fa-solid fa-bars"></i>
     </button>
     <button class="logo" onclick={() => navigate('/')}>
-      <svg width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="var(--accent-primary)"/><polygon points="13,8 13,24 25,16" fill="white"/></svg>
+      <span class="logo-mark"><i class="fa-solid fa-play"></i></span>
       <span class="logo-text">TubeVault</span>
     </button>
   </div>
@@ -39,31 +39,31 @@
 </header>
 
 <style>
+  /* Gestaltung nach mockups/stil.css (Schale: .kopf, .marke, .suche) */
   .header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 10px 20px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-primary);
-    height: 56px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
+    display: flex; align-items: center; gap: var(--tv-a4);
+    height: 60px; padding: 0 var(--tv-a4);
+    background: var(--tv-leiste); border-bottom: 1px solid var(--tv-rand);
+    position: sticky; top: 0; z-index: 100;
   }
-  .header-left { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-  .header-center { flex: 1; max-width: 600px; margin: 0 auto; }
-  .header-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .header-left { display: flex; align-items: center; gap: var(--tv-a2); flex-shrink: 0; width: calc(256px - var(--tv-a4)); }
+  .header-center { flex: 1; max-width: 680px; }
+  .header-right { display: flex; align-items: center; gap: var(--tv-a1); flex-shrink: 0; margin-left: auto; }
   .logo {
     display: flex; align-items: center; gap: 10px;
-    background: none; border: none; cursor: pointer; color: var(--text-primary);
+    background: none; border: none; cursor: pointer; color: var(--tv-text);
   }
-  .logo-text { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+  .logo-mark {
+    width: 32px; height: 32px; display: grid; place-items: center;
+    background: var(--tv-akzent); color: var(--tv-akzent-text);
+    border-radius: var(--tv-ecke-klein); font-size: 15px;
+  }
+  .logo-text { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
   .btn-icon {
-    display: flex; align-items: center; justify-content: center;
-    width: 36px; height: 36px; background: none; border: none;
-    color: var(--text-secondary); cursor: pointer; border-radius: 8px;
-    transition: all 0.15s; font-size: 1rem;
+    display: grid; place-items: center; width: 40px; height: 40px;
+    background: none; border: 1px solid transparent; border-radius: var(--tv-ecke);
+    color: var(--tv-text-2); cursor: pointer; font-size: 17px;
+    transition: background var(--tv-schnell), color var(--tv-schnell);
   }
-  .btn-icon:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .btn-icon:hover { background: var(--tv-karte); color: var(--tv-text); }
 </style>
