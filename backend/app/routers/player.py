@@ -297,9 +297,23 @@ async def _video_row(video_id: str):
     return row
 
 
+async def _skip_ranges(video_id: str) -> list[tuple[float, float]]:
+    """Aktueller Stand der Werbestellen - der Download ist der Anlass zum Nachfragen."""
+    from app.services import ad_segments
+    await ad_segments.refresh_if_due(video_id)
+    return await ad_segments.skip_ranges(video_id)
+
+
+def _export_failed(e: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"Download ohne Werbung nicht möglich: {e}")
+
+
 @router.get("/{video_id}/download")
 async def download_video(video_id: str):
-    """Video-Datei direkt herunterladen (attachment mit sauberem Namen)."""
+    """Video-Datei herunterladen (attachment mit sauberem Namen). Hat das Video
+    Werbestellen, wird für diesen Download eine Fassung ohne sie erzeugt."""
+    from starlette.background import BackgroundTask
+    from app.services import ad_free_export, ad_segments
     from app.utils.file_utils import sanitize_filename
     row = await _video_row(video_id)
     src = Path(row["file_path"])
@@ -308,27 +322,56 @@ async def download_video(video_id: str):
     ext = src.suffix.lstrip(".") or "mp4"
     name = sanitize_filename(row["title"] or video_id)[:120]
     mime, _ = mimetypes.guess_type(str(src))
-    return FileResponse(
-        str(src),
-        media_type=mime or "application/octet-stream",
-        filename=f"{name}.{ext}",
-    )
+    ranges = await _skip_ranges(video_id)
+    if not ranges:
+        return FileResponse(str(src), media_type=mime or "application/octet-stream", filename=f"{name}.{ext}")
+
+    folder = ad_free_export.work_dir()
+    try:
+        keep = ad_segments.keep_ranges(ranges, await ad_free_export.duration(src))
+        out = await ad_free_export.video(src, keep, folder)
+    except Exception as e:
+        ad_free_export.remove(folder)
+        raise _export_failed(e)
+    return FileResponse(str(out), media_type=mime or "application/octet-stream",
+                        filename=f"{name} (ohne Werbung).{ext}",
+                        background=BackgroundTask(ad_free_export.remove, folder))
 
 
 @router.get("/{video_id}/audio/download")
 async def download_audio(video_id: str, format: str = "mp3"):
-    """Audiospur aus dem Video extrahieren (ffmpeg) und als Datei liefern.
-    Idempotent: wenn schon extrahiert, wird direkt ausgeliefert."""
+    """Audiospur als Datei. Ohne Werbestellen wird die einmal extrahierte
+    Fassung ausgeliefert (und dafür aufbewahrt); mit Werbestellen entsteht für
+    diesen Download eine Fassung ohne sie, die danach wieder verschwindet."""
+    from starlette.background import BackgroundTask
     from app.config import AUDIO_DIR
+    from app.services import ad_free_export, ad_segments
     from app.utils.file_utils import sanitize_filename
     from app.services.download_service import download_service
 
-    if format not in ("mp3", "m4a", "flac", "ogg"):
+    if format not in ad_free_export.AUDIO_CODECS:
         format = "mp3"
     row = await _video_row(video_id)
-    adir = AUDIO_DIR / video_id
-    out_path = adir / f"audio.{format}"
+    mime_map = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "flac": "audio/flac", "ogg": "audio/ogg"}
+    name = sanitize_filename(row["title"] or video_id)[:120]
 
+    ranges = await _skip_ranges(video_id)
+    if ranges:
+        src = Path(row["file_path"])
+        if not src.exists():
+            raise HTTPException(status_code=404, detail="Datei nicht auf der Platte")
+        folder = ad_free_export.work_dir()
+        try:
+            keep = ad_segments.keep_ranges(ranges, await ad_free_export.duration(src))
+            out = await ad_free_export.audio(src, keep, format, folder)
+        except Exception as e:
+            ad_free_export.remove(folder)
+            raise _export_failed(e)
+        return FileResponse(str(out), media_type=mime_map[format],
+                            filename=f"{name} (ohne Werbung).{format}",
+                            background=BackgroundTask(ad_free_export.remove, folder))
+
+    out_path = AUDIO_DIR / video_id / f"audio.{format}"
     # Nur extrahieren wenn noch nicht vorhanden (ffmpeg ist teuer)
     if not out_path.exists():
         try:
@@ -339,15 +382,7 @@ async def download_audio(video_id: str, format: str = "mp3"):
             raise HTTPException(status_code=500, detail=str(e))
     if not out_path.exists():
         raise HTTPException(status_code=500, detail="Audio-Extraktion fehlgeschlagen")
-
-    mime_map = {"mp3": "audio/mpeg", "m4a": "audio/mp4",
-                "flac": "audio/flac", "ogg": "audio/ogg"}
-    name = sanitize_filename(row["title"] or video_id)[:120]
-    return FileResponse(
-        str(out_path),
-        media_type=mime_map.get(format, "audio/mpeg"),
-        filename=f"{name}.{format}",
-    )
+    return FileResponse(str(out_path), media_type=mime_map[format], filename=f"{name}.{format}")
 
 
 # ─── Audio-Fix: falsche Tonspur nachträglich korrigieren ──────────

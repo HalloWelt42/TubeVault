@@ -651,7 +651,8 @@ async def upgrade_video(video_id: str, quality: Optional[str] = None):
 @router.post("/{video_id}/auto-enrich")
 async def auto_enrich(video_id: str):
     """Automatische Anreicherung beim Videoaufruf.
-    Prüft ob SponsorBlock, Kapitel, Untertitel, Thumbnail fehlen
+    Prüft ob Kapitel, Untertitel, Thumbnail fehlen (Werbemarken gleicht
+    der Abruf der Marken selbst ab, siehe ad_segments)
     und lädt sie nach. Tracking via enrichment_log.
     """
     video = await db.fetch_one("SELECT * FROM videos WHERE id = ?", (video_id,))
@@ -682,24 +683,6 @@ async def auto_enrich(video_id: str):
             """INSERT OR REPLACE INTO enrichment_log (video_id, type, attempted_at, success, result_count, error)
                VALUES (?, ?, datetime('now'), ?, ?, ?)""",
             (video_id, etype, 1 if success else 0, count, error))
-
-    # ─── SponsorBlock ───
-    if await _should_enrich("sponsorblock"):
-        try:
-            existing = await db.fetch_val(
-                "SELECT COUNT(*) FROM ad_markers WHERE video_id = ? AND source = 'sponsorblock'",
-                (video_id,))
-            if existing == 0:
-                from app.routers.ad_markers import import_sponsorblock_segments
-                count = await import_sponsorblock_segments(video_id)
-                await _log_attempt("sponsorblock", count > 0, count,
-                                   "Keine SponsorBlock-Segmente" if count == 0 else None)
-                results["sponsorblock"] = count
-            else:
-                await _log_attempt("sponsorblock", True, existing)
-        except Exception as e:
-            await _log_attempt("sponsorblock", False, error=str(e)[:200])
-            results["sponsorblock_error"] = str(e)[:100]
 
     # ─── Kapitel ───
     if await _should_enrich("chapters"):

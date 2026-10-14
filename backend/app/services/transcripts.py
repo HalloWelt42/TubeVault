@@ -142,7 +142,11 @@ def into_chunks(sentences: list[Segment]) -> list[Segment]:
 
 
 async def store(video_id: str, language: str, kind: str, sentences: list[Segment]) -> int:
-    """Transkript eines Videos ablegen (ersetzt ein vorhandenes)."""
+    """Transkript eines Videos ablegen (ersetzt ein vorhandenes). Sätze in
+    Werbestellen fallen weg - sie sollen weder gefunden noch angezeigt werden
+    (die Untertitel-Datei bleibt vollständig, siehe ad_segments)."""
+    from app.services import ad_segments
+    sentences = ad_segments.outside(sentences, await ad_segments.skip_ranges(video_id))
     chunks = into_chunks(sentences)
     await db.execute("DELETE FROM transcript_chunks WHERE video_id = ?", (video_id,))
     for chunk in chunks:
@@ -162,6 +166,20 @@ async def _mark(video_id: str, status: Status, language: str | None = None,
                language = excluded.language, kind = excluded.kind, note = excluded.note,
                fetched_at = datetime('now')""",
         (video_id, status, language, kind, note))
+
+
+async def rebuild(video_id: str) -> int:
+    """Abschnitte eines Transkripts neu aus seiner Untertitel-Datei bilden -
+    etwa wenn sich die Werbestellen des Videos geändert haben."""
+    row = await db.fetch_one(
+        "SELECT status, language, kind FROM transcripts WHERE video_id = ? AND status IN ('ok', 'none')",
+        (video_id,))
+    if not row or not row["language"] or not row["kind"]:
+        return 0
+    path = _subtitle_file(video_id, row["language"], row["kind"])
+    if not path.exists():
+        return 0
+    return await store(video_id, row["language"], row["kind"], subtitle_segments.segments_from_file(path))
 
 
 def _subtitle_file(video_id: str, language: str, kind: str):

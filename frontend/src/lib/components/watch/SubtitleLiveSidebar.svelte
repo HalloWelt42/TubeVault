@@ -8,15 +8,18 @@
   import { api } from '../../api/client.js';
   import { toast } from '../../stores/notifications.js';
   import { formatSize } from '../../utils/format.js';
+  import { withoutAds } from '../../utils/adSkip.js';
 
   let {
     videoId,
     videoEl = null,
     subtitles = $bindable([]),
+    skipRanges = [],     // Werbestellen: deren Sätze werden nicht gezeigt
   } = $props();
 
   let activeSub = $state(null);
-  let cues = $state([]);
+  let allCues = $state([]);
+  let cues = $derived(withoutAds(allCues, skipRanges));
   let currentIdx = $state(-1);
   let cueListEl = $state(null);
   let rafId = null;
@@ -70,7 +73,7 @@
   async function loadCues(sub) {
     if (activeSub === sub.code) {
       activeSub = null;
-      cues = [];
+      allCues = [];
       stopSync();
       return;
     }
@@ -82,10 +85,10 @@
         const resp2 = await fetch(api.subtitleUrl(videoId, sub.code));
         if (!resp2.ok) throw new Error('Nicht gefunden');
         const text = await resp2.text();
-        cues = parseVTT(text);
+        allCues = parseVTT(text);
       } else {
         const text = await resp.text();
-        cues = parseVTT(text);
+        allCues = parseVTT(text);
       }
       activeSub = sub.code;
       startSync();

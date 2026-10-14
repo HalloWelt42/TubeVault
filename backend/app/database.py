@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 41
+SCHEMA_VERSION = 42
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1183,6 +1183,10 @@ class Database:
         from app.services import semantic_index, transcripts
         await transcripts.install_schema(self._connection)   # vor den Vektoren (Trigger)
         await semantic_index.install_schema(self._connection)
+
+        # v42: Werbestellen - Abgleich mit dem Dienst, Transkripte ohne Werbung
+        from app.services import ad_segments
+        await ad_segments.install_schema(self._connection, backfill=current_version < 42)
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

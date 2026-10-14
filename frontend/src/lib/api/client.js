@@ -210,12 +210,7 @@ export const api = {
   getAdMarkers: (videoId) => request(`/api/ad-markers/${videoId}`),
   addAdMarker: (videoId, data) => request(`/api/ad-markers/${videoId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteAdMarker: (markerId) => request(`/api/ad-markers/${markerId}`, { method: 'DELETE' }),
-  fetchSponsorBlock: (videoId, categories = null, replace = false) => {
-    const q = new URLSearchParams();
-    if (categories) q.set('categories', categories);
-    if (replace) q.set('replace', 'true');
-    return request(`/api/ad-markers/${videoId}/sponsorblock?${q}`, { method: 'POST' });
-  },
+  refreshAdMarkers: (videoId) => request(`/api/ad-markers/${videoId}/refresh`, { method: 'POST' }),
 
   // Subtitles
   getSubtitles: (videoId) => request(`/api/player/${videoId}/subtitles`),

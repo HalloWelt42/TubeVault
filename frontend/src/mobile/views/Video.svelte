@@ -14,6 +14,7 @@
   import { say } from '../notice.js';
   import HoldButton from '../parts/HoldButton.svelte';
   import { followVideo, preferredLanguage, rememberLanguage } from '../../lib/utils/audioTrackSync.js';
+  import { loadSkipRanges, skipTarget } from '../../lib/utils/adSkip.js';
 
   let { id, listId = null, shuffle = false } = $props();
 
@@ -26,6 +27,7 @@
   let failed = $state(false);
   let isFav = $state(false);
   let chapters = $state([]);
+  let skipRanges = [];             // Werbestellen: werden übersprungen
   let showDescription = $state(false);
   let queued = $state(false);
   let player = $state(null);
@@ -71,13 +73,14 @@
     failed = false;
     loadedId = id;
     playRecorded = false;
-    isFav = false; chapters = []; tracks = []; activeTrackId = null; showDescription = false;
+    isFav = false; chapters = []; skipRanges = []; tracks = []; activeTrackId = null; showDescription = false;
     if (listId && !queue) loadQueue(listId, shuffle).then(q => { queue = q; }).catch(() => {});
     try {
       video = await api.getVideoPreview(id);
       if (!video.preview_mode) {
         api.checkFavorite(id).then(r => { isFav = !!r.is_favorite; }).catch(() => {});
         api.getChapters(id).then(r => { chapters = r.chapters || []; }).catch(() => {});
+        loadSkipRanges(id).then(r => { if (loadedId === id) skipRanges = r; });
         api.getAudioTracks(id).then(r => {
           tracks = r.tracks || [];
           activeTrackId = tracks.find(t => t.language === preferredLanguage())?.id ?? null;
@@ -97,6 +100,14 @@
     if (pos > RESUME_MIN_S && pos < (player.duration || 0) - RESUME_END_GAP_S) {
       player.currentTime = pos;
       say('Fortgesetzt bei ' + formatDuration(pos));
+    }
+  }
+
+  function skipAds() {
+    const target = player ? skipTarget(player.currentTime, skipRanges, player.duration) : null;
+    if (target != null) {
+      player.currentTime = target;
+      say('Werbung übersprungen');
     }
   }
 
@@ -225,7 +236,7 @@
       <!-- svelte-ignore a11y_media_has_caption -->
       <video class="stage" class:fill={filled} bind:this={player} src={api.streamUrl(id)} poster={api.thumbnailUrl(id)}
              controls playsinline preload="metadata"
-             onloadedmetadata={onLoadedMetadata} onplay={onPlay} onpause={onPause} onended={onEnded}></video>
+             onloadedmetadata={onLoadedMetadata} ontimeupdate={skipAds} onplay={onPlay} onpause={onPause} onended={onEnded}></video>
     {/if}
 
     {#if queue && place >= 0}

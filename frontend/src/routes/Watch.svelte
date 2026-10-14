@@ -29,6 +29,7 @@
   import { activateMiniPlayer, deactivateMiniPlayer, getMiniPlayerState } from '../lib/stores/miniPlayer.js';
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
+  import { skipTarget } from '../lib/utils/adSkip.js';
 
   marked.setOptions({ breaks: true, gfm: true });
   function renderMarkdown(text) {
@@ -113,6 +114,8 @@
   // Shared state (übergeben an Komponenten)
   let chapters = $state([]);
   let adMarkers = $state([]);
+  let skipRanges = $state([]);   // Werbestellen, zusammengefasst (vom Backend)
+  let adCheckedAt = $state(null);
   let subtitles = $state([]);
   let videoLinkDialog = $state(null);
   let videoLinks = $state({});  // { linked_video_id: { title, channel_name, thumbnail_path, ... } }
@@ -269,7 +272,9 @@
     try {
       const res = await api.getAdMarkers(id);
       adMarkers = res.ad_markers || [];
-    } catch { adMarkers = []; }
+      skipRanges = res.skip_ranges || [];
+      adCheckedAt = res.checked_at || null;
+    } catch { adMarkers = []; skipRanges = []; adCheckedAt = null; }
   }
 
   // Zeitstring "mm:ss" oder "hh:mm:ss" oder Sekunden zu Sekunden
@@ -277,16 +282,12 @@
     return videoEl ? Math.floor(videoEl.currentTime) : 0;
   }
 
-  // Werbung ueberspringen: bei timeupdate pruefen
+  // Werbestellen überspringen: bei jedem timeupdate prüfen
   function onTimeUpdate() {
-    if (!videoEl || adMarkers.length === 0) { maybeSyncUrl(); return; }
-    const t = videoEl.currentTime;
-    for (const m of adMarkers) {
-      if (t >= m.start_time && t < m.end_time - 0.5) {
-        videoEl.currentTime = m.end_time;
-        toast.info(`Werbung uebersprungen (${m.label || 'Werbung'})`);
-        break;
-      }
+    const target = videoEl ? skipTarget(videoEl.currentTime, skipRanges, videoEl.duration) : null;
+    if (target != null) {
+      videoEl.currentTime = target;
+      toast.info('Werbung übersprungen');
     }
     maybeSyncUrl();
   }
@@ -457,7 +458,6 @@
       const res = await api.autoEnrich(id);
       const e = res.enriched || {};
       let reloaded = false;
-      if (e.sponsorblock > 0) { await loadAdMarkers(id); reloaded = true; }
       if (e.chapters > 0) { await loadChapters(id); reloaded = true; }
       if (e.chapter_thumbs > 0) { await loadChapters(id); }
       if (e.subtitles > 0) { await loadSubtitles(id); reloaded = true; }
@@ -760,7 +760,7 @@
             class="ptool-btn"
             href={api.videoDownloadUrl(video.id)}
             download
-            title="Video herunterladen"
+            title="Video herunterladen (ohne Werbestellen)"
             aria-label="Video herunterladen"
           >
             <i class="fa-solid fa-film"></i>
@@ -770,7 +770,7 @@
             class="ptool-btn"
             href={api.audioDownloadUrl(video.id, 'mp3')}
             download
-            title="Nur Audio herunterladen (MP3, wird per ffmpeg extrahiert – kann kurz dauern)"
+            title="Nur Audio herunterladen (MP3 ohne Werbestellen, wird erst erzeugt - kann kurz dauern)"
             aria-label="Audio herunterladen"
             onclick={() => toast.info('Audio wird extrahiert – Download startet gleich…')}
           >
@@ -1015,7 +1015,8 @@
       <AdMarkerPanel
         videoId={video.id}
         bind:adMarkers
-        onSeek={(t) => { if (videoEl) videoEl.currentTime = t; }}
+        bind:skipRanges
+        bind:checkedAt={adCheckedAt}
       />
 
     <!-- Tab: Subtitles -->
@@ -1074,7 +1075,7 @@
               autoSearch={lyricsLocked}
             />
           {:else if activeSidePanel === 'subtitles'}
-            <SubtitleLiveSidebar videoId={video.id} {videoEl} bind:subtitles />
+            <SubtitleLiveSidebar videoId={video.id} {videoEl} {skipRanges} bind:subtitles />
           {:else if activeSidePanel === 'notes'}
             <NotesSidebar videoId={video.id} initialNotes={video.notes || ''} onNotesChange={(n) => { video.notes = n; }} />
           {/if}

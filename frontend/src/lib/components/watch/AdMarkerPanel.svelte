@@ -1,21 +1,25 @@
 <!--
-  AdMarkerPanel – Werbemarker-Verwaltung (manuell + SponsorBlock).
+  AdMarkerPanel – Werbestellen eines Videos: eigene Marken und die des
+  Werbemarken-Dienstes. Werbestellen werden beim Abspielen übersprungen,
+  fehlen im Transkript und in Downloads. Die Marken des Dienstes gleicht das
+  Backend beim Öffnen selbst ab; hier lässt sich das sofort anstoßen.
   © HalloWelt42
 -->
 <script>
   import { api } from '../../api/client.js';
   import { toast } from '../../stores/notifications.js';
-  import { formatDuration } from '../../utils/format.js';
+  import { formatDuration, formatDateRelative } from '../../utils/format.js';
 
   let {
     videoId,
     adMarkers = $bindable([]),
-    onSeek = () => {},
+    skipRanges = $bindable([]),
+    checkedAt = $bindable(null),   // zuletzt beim Dienst abgeglichen
   } = $props();
 
   let newStart = $state('');
   let newEnd = $state('');
-  let loadingSB = $state(false);
+  let refreshing = $state(false);
 
   function parseTime(val) {
     if (!val?.trim()) return null;
@@ -27,11 +31,14 @@
     return null;
   }
 
+  function take(res) {
+    adMarkers = res.ad_markers || [];
+    skipRanges = res.skip_ranges || [];
+    checkedAt = res.checked_at || null;
+  }
+
   async function loadMarkers() {
-    try {
-      const res = await api.getAdMarkers(videoId);
-      adMarkers = res.ad_markers || [];
-    } catch { adMarkers = []; }
+    try { take(await api.getAdMarkers(videoId)); } catch { /* Stand bleibt */ }
   }
 
   async function addMarker() {
@@ -40,8 +47,8 @@
       toast.error('Ungültige Zeiten'); return;
     }
     try {
-      await api.addAdMarker(videoId, { start_time: s, end_time: e, label: 'Werbung', source: 'manual' });
-      toast.success(`Werbemarke ${formatDuration(s)}–${formatDuration(e)}`);
+      await api.addAdMarker(videoId, { start_time: s, end_time: e, label: 'Werbung' });
+      toast.success(`Werbestelle ${formatDuration(s)} - ${formatDuration(e)} gesetzt`);
       newStart = ''; newEnd = '';
       await loadMarkers();
     } catch (err) { toast.error(err.message); }
@@ -50,68 +57,56 @@
   async function removeMarker(id) {
     try {
       await api.deleteAdMarker(id);
-      toast.success('Marker entfernt');
+      toast.success('Werbestelle entfernt');
       await loadMarkers();
     } catch (err) { toast.error(err.message); }
   }
 
-  async function fetchSB(replace = false) {
-    loadingSB = true;
+  async function refresh() {
+    refreshing = true;
     try {
-      const res = await api.fetchSponsorBlock(videoId, replace);
-      if (res.imported > 0) {
-        toast.success(`${res.imported} SponsorBlock-Segmente geladen`);
-        await loadMarkers();
-      } else { toast.info('Keine SponsorBlock-Daten verfügbar'); }
+      const res = await api.refreshAdMarkers(videoId);
+      take(res);
+      toast.success(res.changed ? `Abgeglichen: ${res.found} Stellen vom Dienst` : 'Abgeglichen: unverändert');
     } catch (err) { toast.error(err.message); }
-    loadingSB = false;
-  }
-
-  async function clearSB() {
-    try {
-      const res = await api.clearSponsorBlock(videoId);
-      toast.success(`${res.removed} SB-Marker entfernt`);
-      await loadMarkers();
-    } catch (err) { toast.error(err.message); }
+    refreshing = false;
   }
 </script>
 
 {#if adMarkers.length > 0}
   <div class="marker-list">
     {#each adMarkers as m}
-      <div class="marker-item">
-        <span class="src-badge" class:sb={m.source === 'sponsorblock'}
-              title={m.source === 'sponsorblock' ? `SB: ${m.category || 'sponsor'}${m.votes != null ? ' · ' + m.votes + ' Votes' : ''}` : 'Eigene Marke'}>
-          <i class={m.source === 'sponsorblock' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-user'}></i>
+      {@const own = (m.source || 'manual') === 'manual'}
+      <div class="marker-item" class:inactive={!m.hidden}>
+        <span class="src-badge" class:service={!own}
+              title={own ? 'Eigene Werbestelle' : `Vom Werbemarken-Dienst${m.votes != null ? ' · ' + m.votes + ' Stimmen' : ''}`}>
+          <i class={own ? 'fa-solid fa-user' : 'fa-solid fa-shield-halved'}></i>
         </span>
-        <span class="range">{formatDuration(m.start_time)} – {formatDuration(m.end_time)}</span>
+        <span class="range">{formatDuration(m.start_time)} - {formatDuration(m.end_time)}</span>
         <span class="dur">{formatDuration(m.end_time - m.start_time)}</span>
-        <span class="label" class:sb-cat={m.source === 'sponsorblock'}>{m.label || 'Werbung'}</span>
-        <button class="seek-btn" title="Zum Start" onclick={() => onSeek(m.start_time)}>
-          <i class="fa-solid fa-play"></i>
-        </button>
-        <button class="del-btn" title="Entfernen" onclick={() => removeMarker(m.id)}>
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+        <span class="label">{m.label || 'Werbung'}</span>
+        {#if own}
+          <button class="del-btn" title="Eigene Werbestelle entfernen" onclick={() => removeMarker(m.id)}>
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        {/if}
       </div>
     {/each}
   </div>
 {:else}
-  <p class="hint">Keine Werbemarken gesetzt. Markierte Abschnitte werden automatisch übersprungen.</p>
+  <p class="hint">Keine Werbestellen bekannt.</p>
 {/if}
 
-<div class="sb-actions">
-  <button class="btn-sm" onclick={() => fetchSB(false)} disabled={loadingSB}>
-    {#if loadingSB}<i class="fa-solid fa-spinner fa-spin"></i> Laden…{:else}<i class="fa-solid fa-shield-halved"></i> SponsorBlock laden{/if}
+<p class="hint">
+  Werbestellen werden übersprungen und fehlen in Transkript und Downloads; die Datei bleibt vollständig.
+</p>
+
+<div class="actions">
+  <button class="btn-sm" onclick={refresh} disabled={refreshing}
+          title="Der Dienst wird mit der Zeit vollständiger; beim Öffnen wird regelmäßig selbst nachgefragt">
+    {#if refreshing}<i class="fa-solid fa-spinner fa-spin"></i> Gleiche ab...{:else}<i class="fa-solid fa-rotate"></i> Jetzt abgleichen{/if}
   </button>
-  {#if adMarkers.some(m => m.source === 'sponsorblock')}
-    <button class="btn-sm" onclick={() => fetchSB(true)} disabled={loadingSB} title="SB-Marker ersetzen">
-      <i class="fa-solid fa-rotate"></i> SB neu laden
-    </button>
-    <button class="btn-sm btn-danger-ghost" onclick={clearSB} title="Alle SB-Marker entfernen">
-      <i class="fa-solid fa-trash"></i> SB entfernen
-    </button>
-  {/if}
+  <span class="checked">{checkedAt ? `zuletzt abgeglichen ${formatDateRelative(checkedAt)}` : 'noch nicht abgeglichen'}</span>
 </div>
 
 <div class="add-form">
@@ -130,17 +125,16 @@
   .marker-list { display: flex; flex-direction: column; gap: 4px; }
   .marker-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; font-size: 0.8rem; }
   .marker-item:hover { background: var(--bg-secondary); }
+  .marker-item.inactive { opacity: 0.5; }
   .src-badge { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; background: var(--bg-tertiary); color: var(--text-tertiary); }
-  .src-badge.sb { background: rgba(255,140,0,0.12); color: #ff8c00; }
+  .src-badge.service { background: rgba(255,140,0,0.12); color: #ff8c00; }
   .range { font-family: monospace; color: var(--accent-primary); font-weight: 600; font-size: 0.78rem; }
   .dur { font-size: 0.72rem; color: var(--text-tertiary); }
   .label { font-size: 0.76rem; color: var(--text-secondary); flex: 1; }
-  .label.sb-cat { font-style: italic; }
-  .seek-btn, .del-btn { background: none; border: none; cursor: pointer; color: var(--text-tertiary); padding: 3px 5px; border-radius: 4px; font-size: 0.68rem; opacity: 0.3; }
-  .seek-btn:hover { opacity: 1; color: var(--accent-primary); }
+  .del-btn { background: none; border: none; cursor: pointer; color: var(--text-tertiary); padding: 3px 5px; border-radius: 4px; font-size: 0.68rem; opacity: 0.3; }
   .del-btn:hover { opacity: 1; color: var(--status-error); }
-  .sb-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .btn-danger-ghost { color: var(--status-error) !important; border-color: var(--status-error) !important; }
+  .actions { display: flex; gap: 10px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+  .checked { font-size: 0.72rem; color: var(--text-tertiary); }
   .add-form { margin-top: 14px; }
   .form-row { display: flex; gap: 6px; align-items: center; }
   .input { padding: 6px 10px; border: 1px solid var(--border-primary); border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.82rem; }

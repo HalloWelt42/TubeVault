@@ -10,6 +10,7 @@
   import { playlistQueue, nextInQueue, prevInQueue, hasNext, hasPrev } from '../../stores/playlistQueue.js';
   import { navigate } from '../../router/router.js';
   import { api } from '../../api/client.js';
+  import { loadSkipRanges, skipTarget } from '../../utils/adSkip.js';
 
   let videoEl = $state(null);
   let audioOnly = $state(false);
@@ -17,6 +18,7 @@
   let currentTime = $state(0);
   let duration = $state(0);
   let seekHover = $state(false);
+  let skipRanges = [];   // Werbestellen des laufenden Videos
 
   // Init-Tracking
   let _initDone = false;
@@ -41,6 +43,8 @@
       _startTime = mp.currentTime || 0;
       _shouldPlay = mp.isPlaying ?? true;
       audioOnly = mp.audioOnly ?? false;
+      skipRanges = [];
+      loadSkipRanges(vid).then(r => { if (_initVideoId === vid) skipRanges = r; });
       // Bibliothek-Nachbarn laden wenn keine Queue
       if (!$playlistQueue.active && vid !== _neighborsFor) {
         loadNeighbors(vid);
@@ -181,6 +185,8 @@
 
   function onTimeUpdate() {
     if (!videoEl) return;
+    const target = skipTarget(videoEl.currentTime, skipRanges, videoEl.duration);
+    if (target != null) videoEl.currentTime = target;
     currentTime = videoEl.currentTime;
     duration = videoEl.duration || 0;
     isPlaying = !videoEl.paused;
