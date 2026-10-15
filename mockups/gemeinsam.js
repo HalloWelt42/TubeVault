@@ -78,7 +78,13 @@ export function kachel(v) {
   </a>`;
 }
 
-function schale(aktiv) {
+// Hinweis auf eine neue Version (Entwurf kanal.html): das Wort Update leuchtet
+// und führt zur Projektseite
+const PROJEKT = 'https://github.com/HalloWelt42/TubeVault';
+const update = (neu, laufend) => `<span class="update" title="Neue Version ${neu} verfügbar, hier läuft ${laufend}. Öffnet die Projektseite mit allen Neuerungen.">
+    <i class="fa-solid fa-circle-arrow-up"></i><a href="${PROJEKT}" target="_blank" rel="noopener">Update</a><span class="zahl">${neu}</span></span>`;
+
+function schale(aktiv, optionen = {}) {
   const navi = ([name, symbol, schluessel, zahl, farbe]) =>
     `<a class="navi${schluessel === aktiv ? ' aktiv' : ''}" href="${SEITEN[schluessel] || '#'}">
       <i class="fa-solid ${symbol}"${farbe ? ` style="--symbolfarbe: ${farbe}"` : ''}></i>${name}${zahl ? `<span class="zaehler">${zahl}</span>` : ''}</a>`;
@@ -87,6 +93,7 @@ function schale(aktiv) {
       <div class="marke"><img class="marke-bild" src="../frontend/public/favicon.svg" alt="">TubeVault</div>
       <label class="suche"><i class="fa-solid fa-magnifying-glass"></i><input placeholder="Bibliothek, Transkripte und Kanäle durchsuchen"></label>
       <div class="kopf-aktionen">
+        ${optionen.update ? update(optionen.update, optionen.laufend) : ''}
         <button class="knopf ohne symbol" title="Neuer Download"><i class="fa-solid fa-plus"></i></button>
         <button class="knopf ohne symbol" title="Einstellungen"><i class="fa-solid fa-sliders"></i></button>
       </div>
@@ -140,7 +147,7 @@ function entwurfSchalter() {
   for (const gruppe of Object.keys(gruppen)) setze(gruppe, lesen(gruppe, standard[gruppe]));
 }
 
-export function seite(aktiv) {
-  if (document.querySelector('[data-block="kopf"]')) schale(aktiv);
+export function seite(aktiv, optionen) {
+  if (document.querySelector('[data-block="kopf"]')) schale(aktiv, optionen);
   entwurfSchalter();
 }

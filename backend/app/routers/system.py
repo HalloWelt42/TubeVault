@@ -399,6 +399,13 @@ async def get_version():
     return {"app": APP_NAME, "version": VERSION, "api_version": "v1"}
 
 
+@router.get("/update")
+async def get_update_status():
+    """Ist eine neuere Version des Projekts erschienen? (services/update_check)"""
+    from app.services import update_check
+    return await update_check.status()
+
+
 @router.get("/mountpoints")
 async def get_mountpoints():
     """Docker-Mountpoints und reale Festplatten-Pfade ermitteln."""

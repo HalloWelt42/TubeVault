@@ -263,6 +263,8 @@ export const api = {
   getLogStats: () => request('/api/system/logs/stats'),
   getDockerLogs: (service = 'backend', n = 200) => request(`/api/system/logs/docker?service=${service}&n=${n}`),
   getMountpoints: () => request('/api/system/mountpoints'),
+  // Neue Version des Projekts erschienen? (Backend prüft selbst, abschaltbar)
+  getUpdateStatus: () => request('/api/system/update'),
 
   // Favorites
   getFavorites: (listName) => {

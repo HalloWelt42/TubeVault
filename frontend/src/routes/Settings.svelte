@@ -170,6 +170,7 @@
 
         <section id="abschnitt-system">
           <h2 class="ueberschrift"><i class="fa-solid fa-server"></i> System</h2>
+          <div class="gruppe">{@render rows('system')}</div>
           {#if systemStats}
             <div class="tv-kennzahlen system">
               <div class="tv-kennzahl"><b class="klein">{systemStats.version}</b><span>Version</span></div>

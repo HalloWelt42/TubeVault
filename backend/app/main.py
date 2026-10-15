@@ -229,6 +229,9 @@ async def lifespan(app: FastAPI):
     from app.services import auto_scan
     task_manager.register("auto_scan", "Ungescannte Kanäle erfassen (alle 2 Std.)",
                           auto_scan.loop, auto_restart=True, essential=False)
+    from app.services import update_check
+    task_manager.register("update_check", "Nach neuer Version sehen",
+                          update_check.loop, auto_restart=True, essential=False)
     from app.services import subtitle_import
     task_manager.register("subtitle_import", "Mitgeladene Untertitel einlesen",
                           subtitle_import.loop, auto_restart=True, essential=False)

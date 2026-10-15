@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Kanal</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+<style>
+  /* ── Kopf: Kanal, Medaille, Kennzahlen in einer Zeile, Aktionen rechts ── */
+  .k-kopf { display: flex; align-items: center; gap: var(--tv-a4); margin-bottom: var(--tv-a4); flex-wrap: wrap; }
+  .k-avatar { width: 64px; height: 64px; border-radius: var(--tv-ecke); object-fit: cover; background: var(--tv-mulde); flex: none; }
+  .k-titel { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .k-namezeile { display: flex; align-items: center; gap: var(--tv-a3); flex-wrap: wrap; }
+  .k-namezeile h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .k-meta { display: flex; gap: var(--tv-a2) var(--tv-a4); flex-wrap: wrap; font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .k-meta .zahl { color: var(--tv-text); }
+  .k-aktionen { display: flex; gap: var(--tv-a2); flex-wrap: wrap; }
+  .medaille { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--tv-ecke-klein);
+              font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+              color: var(--medaille); background: var(--medaille-grund); cursor: help; }
+  .medaille.silber { --medaille: #cfd8dc; --medaille-grund: rgba(207, 216, 220, 0.16); }
+  .marke-klein { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--tv-ecke-klein);
+                 font-size: var(--tv-gr-marke); font-weight: 700; background: var(--tv-karte-2); color: var(--tv-text-2); }
+  .marke-klein.an { color: var(--tv-akzent); background: rgba(var(--tv-akzent-rgb), 0.12); }
+
+  /* Scan läuft: Stand statt Knopf */
+  .scanstand { display: inline-flex; align-items: center; gap: var(--tv-a3); height: 40px; padding: 0 var(--tv-a2) 0 var(--tv-a3);
+               border-radius: var(--tv-ecke); background: rgba(var(--tv-akzent-rgb), 0.1); font-size: var(--tv-gr-klein); }
+  .scanstand i { color: var(--tv-akzent); }
+
+  /* Störung des Kanals (gesperrt) */
+  .stoerung { display: flex; align-items: center; gap: var(--tv-a3); padding: var(--tv-a3) var(--tv-a4); margin-bottom: var(--tv-a4);
+              border-radius: var(--tv-ecke); background: rgba(var(--tv-gefahr-rgb), 0.1); border: 1px solid rgba(var(--tv-gefahr-rgb), 0.35); }
+  .stoerung > i { color: var(--tv-gefahr); }
+  .stoerung .text { flex: 1; min-width: 0; }
+  .stoerung .grund { font-size: var(--tv-gr-klein); color: var(--tv-text-2); overflow-wrap: anywhere; }
+
+  /* Lücke: was noch fehlt, mit Laden in Paketen */
+  .luecke { display: flex; align-items: center; gap: var(--tv-a3); flex-wrap: wrap; margin-top: var(--tv-a3); padding: var(--tv-a2) var(--tv-a2) var(--tv-a2) var(--tv-a4);
+            border-radius: var(--tv-ecke); background: var(--tv-flaeche); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .luecke > i { color: var(--tv-text-3); }
+  .luecke .zahl { color: var(--tv-text); font-weight: 600; }
+  .luecke .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; }
+
+  /* ── Rollfeld: Banner, Beschreibung, Kennzahlen, Liste ── */
+  .k-banner { height: 150px; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde); margin-bottom: var(--tv-a3); }
+  .k-banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .k-beschreibung { margin-bottom: var(--tv-a4); }
+  .k-beschreibung .text { margin-top: var(--tv-a2); padding: var(--tv-a3) var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke);
+                          color: var(--tv-text-2); max-width: 900px; white-space: pre-line; }
+  .k-zahlen { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--tv-a3); margin-bottom: var(--tv-a5); }
+  .abdeckung { grid-column: span 2; padding: var(--tv-a3) var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke); display: flex; flex-direction: column; gap: var(--tv-a2); }
+  .abdeckung .oben { display: flex; align-items: center; gap: var(--tv-a3); white-space: nowrap; flex-wrap: wrap; }
+  .abdeckung .oben b { font-family: var(--tv-schrift-zahl); font-size: 26px; font-weight: 600; line-height: 1.2; }
+  .abdeckung .balken { height: 6px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+  .abdeckung .balken b { display: block; height: 100%; background: #cfd8dc; }
+  .abdeckung .satz { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .k-zahlen .kennzahl { min-width: 0; }
+
+  /* Videozeilen des Kanals: Bild, Text mit Marken, Hauptaktion immer sichtbar */
+  .kzeile { display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; align-items: center; gap: var(--tv-a4);
+            padding: var(--tv-a2); border-radius: var(--tv-ecke); }
+  .kzeile:hover { background: var(--tv-flaeche); }
+  .kzeile .vbild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke-klein); overflow: hidden; background: var(--tv-mulde); cursor: pointer; }
+  .kzeile .vbild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .kzeile .vbild .d { position: absolute; right: 5px; bottom: 6px; padding: 0 5px; height: 20px; display: grid; place-items: center;
+                      background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); font-size: var(--tv-gr-marke); font-family: var(--tv-schrift-zahl); }
+  .kzeile.fern .vbild img { opacity: 0.45; filter: grayscale(0.6); }
+  .kzeile .vtitel { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .kzeile .vtitel:hover { color: var(--tv-akzent); }
+  .kzeile.fern .vtitel { color: var(--tv-text-2); }
+  .kzeile .vmeta { margin-top: 4px; font-size: var(--tv-gr-klein); color: var(--tv-text-3); display: flex; gap: var(--tv-a3); flex-wrap: wrap; align-items: center; }
+  .vmarke { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: var(--tv-ecke-klein);
+           font-size: var(--tv-gr-marke); font-weight: 700; background: var(--tv-karte-2); color: var(--tv-text-2); }
+  .vmarke.fehlt { color: var(--tv-text-2); }
+  .vmarke.wartet { color: var(--tv-info); background: rgba(var(--tv-info-rgb), 0.12); }
+  .vmarke.neu { color: var(--tv-akzent); background: rgba(var(--tv-akzent-rgb), 0.12); }
+  .vmarke.short { color: var(--tv-art-short); }
+  .kzeile .tun { display: flex; gap: 2px; align-items: center; }
+  .kzeile .tun .neben { opacity: 0; transition: opacity var(--tv-schnell); }
+  .kzeile:hover .tun .neben { opacity: 1; }
+  .kzeile .tun button { width: 40px; height: 40px; border: 0; background: none; color: var(--tv-text-2); border-radius: var(--tv-ecke); cursor: pointer; }
+  .kzeile .tun button:hover { background: var(--tv-karte-2); color: var(--tv-text); }
+  .kzeile .tun button.spielen { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+  .kzeile .tun button.laden { background: var(--tv-karte-2); color: var(--tv-text); }
+
+  /* Playlists des Kanals */
+  .pl-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--tv-a3); }
+  .pl-karte { padding: var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke); display: flex; flex-direction: column; gap: var(--tv-a2); }
+  .pl-karte .titel { font-weight: 700; }
+  .pl-karte .stand { font-size: var(--tv-gr-klein); color: var(--tv-text-2); display: flex; gap: var(--tv-a3); flex-wrap: wrap; }
+  .pl-karte .balken { height: 6px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+  .pl-karte .balken b { display: block; height: 100%; background: var(--tv-akzent); }
+  .pl-karte .tun { display: flex; gap: var(--tv-a2); flex-wrap: wrap; margin-top: var(--tv-a1); }
+
+  /* Diagnose: Daten und Dateien */
+  .diag { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: var(--tv-a3); }
+  .diag-karte { padding: var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke); }
+  .diag-karte h3 { display: flex; align-items: center; gap: var(--tv-a2); margin-bottom: var(--tv-a3); }
+  .diag-karte h3 i { color: var(--tv-akzent); }
+  .werte { display: grid; grid-template-columns: 1fr auto; gap: 6px var(--tv-a4); font-size: var(--tv-gr-klein); }
+  .werte dt { color: var(--tv-text-2); }
+  .werte dd { margin: 0; text-align: right; font-family: var(--tv-schrift-zahl); }
+  .werte dd.gut { color: var(--tv-erfolg); }
+  .werte dd.lueckig { color: var(--tv-warnung); }
+
+  /* Einstellungen als Seitenblatt (wie Kanäle) */
+  .blatt { position: absolute; right: 0; top: 0; bottom: 0; width: 440px; background: var(--tv-karte); border-left: 1px solid var(--tv-rand-stark);
+           box-shadow: var(--tv-schatten); display: flex; flex-direction: column; z-index: 8; }
+  .blatt-kopf { display: flex; gap: var(--tv-a3); align-items: center; padding: var(--tv-a4); border-bottom: 1px solid var(--tv-rand); }
+  .blatt-kopf img { width: 48px; height: 48px; border-radius: var(--tv-ecke); object-fit: cover; }
+  .blatt-kopf .n { font-weight: 700; font-size: 19px; flex: 1; }
+  .blatt-inhalt { flex: 1; overflow-y: auto; padding: var(--tv-a2) var(--tv-a4) var(--tv-a4); }
+  .blatt h3 { margin: var(--tv-a4) 0 var(--tv-a2); font-size: var(--tv-gr-marke); letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+  .zeile-s { display: flex; align-items: center; gap: var(--tv-a3); padding: 10px 0; border-top: 1px solid var(--tv-rand); }
+  .zeile-s:first-of-type { border-top: 0; }
+  .zeile-s .t { flex: 1; }
+  .zeile-s .e { font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .zeile-s.neu .t::after { content: "neu hier"; margin-left: var(--tv-a2); font-size: var(--tv-gr-marke); font-weight: 700; color: var(--tv-akzent); }
+  .wahl { display: inline-flex; background: var(--tv-mulde); border-radius: var(--tv-ecke); padding: 2px; }
+  .wahl button { height: 30px; padding: 0 10px; border: 0; background: none; color: var(--tv-text-2); border-radius: var(--tv-ecke-klein); cursor: pointer; font-size: var(--tv-gr-klein); }
+  .wahl button.an { background: var(--tv-karte-3); color: var(--tv-akzent); font-weight: 700; }
+  .blatt-fuss { padding: var(--tv-a3) var(--tv-a4); border-top: 1px solid var(--tv-rand); display: flex; gap: var(--tv-a2); flex-wrap: wrap; }
+
+  .beispiel { font-size: var(--tv-gr-marke); color: var(--tv-text-3); margin-top: var(--tv-a3); }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+  <main class="haupt rahmen" id="haupt" style="position: relative"></main>
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, vorschau, dauer } from './gemeinsam.js';
+  import { zustaende } from './sammlung.js';
+  // Neue Version im Kopf (Hinweis für alle, die das Projekt selbst betreiben)
+  seite('kanaele', { update: '2.68.0', laufend: '2.67.3' });
+
+  const QUELLE = 'http://192.168.178.49:8031';
+  const KANAL_ID = 'UCMZgTsrg4GbC7meNeOL86fg';
+  const avatar = `${QUELLE}/api/subscriptions/avatar/${KANAL_ID}`;
+  const banner = `${QUELLE}/api/subscriptions/banner/${KANAL_ID}`;
+  const zahl = (n) => n.toLocaleString('de-DE');
+
+  // Echter Kanal, Stand 15.10.2026
+  const K = { name: 'MathemaTrick', katalog: 1561, lokal: 1548, soll: 1552, da: 1539, scan: '17.02.2026', pruefen: '16 Std.',
+              belegt: '43,6 GB', laufzeit: '212 Std.', aufrufe: '180 Mio.', typen: { video: 1552, short: 8, live: 1 }, playlists: 33,
+              beschreibung: 'Hallo ihr Lieben! Ich bin Susanne und mache Lernvideos zu den verschiedensten Themen der Mathematik.\nNeue Videos jeden Dienstag, Donnerstag und Samstag.' };
+
+  const LOKAL = [
+    ['KYzUIm98NZE', 'Welche Zahl ist der Zauberer? – Harry Potter Rätsel', 369, 60587, '13.10.2026', '64,2 MB', 'neu'],
+    ['P8_BE_fPGyg', 'Schaffst du ALLE Fragen? – Mathe Quiz', 810, 8320, '10.10.2026', '142,2 MB', 'neu'],
+    ['ZtCZ2OZ3tIA', 'Steckbriefaufgaben 4. Grades – Funktion aufstellen', 1030, 416, '06.10.2026', '193,6 MB'],
+    ['VR439fDhBAM', 'Sieht einfach aus? – Geometrie Rätsel', 837, 5085, '03.10.2026', '172,4 MB'],
+    ['F93pr2hAqsA', 'Parabel zeichnen mit Wertetabelle – ganz einfach erklärt!', 657, 11980, '02.10.2026', '22,6 MB'],
+    ['Gks0ukgv2nI', 'Viele scheitern an dieser Aufgabe!', 442, 18360, '26.09.2026', '84,0 MB'],
+    ['ctS7UHd4H-A', 'Sinus, Cosinus, Tangens – Wann benutze ich was?', 749, 10990, '22.09.2026', '134,0 MB'],
+    ['2_7P5S05pnY', 'Findest DU den großen Radius? – Geometrie Challenge', 671, 74572, '21.09.2026', '139,6 MB'],
+    ['nJ3XoAZM42k', 'Integral mit Parameter lösen – Integralrechnung', 663, 11623, '16.09.2026', '121,5 MB'],
+  ];
+  const FEHLEN = [
+    ['AuqDQqqxhFc', 'Was kommt hier raus? – Potenzen berechnen', null, null, '20.05.2026', null, 'wartet'],
+    ['_ke4E-zjI7k', 'STETIGKEIT überprüfen und beweisen – abschnittsweise definierte Funktionen, stetig, Beweis', null, 387832, '09.01.2021'],
+    ['FO3MZrCR97g', 'ABLEITUNG mit h-METHODE berechnen – Differenzenquotient, Differentialquotient, Beispiel x^3', 617, 389986, '08.01.2021'],
+    ['IM1WtnTYJK4', 'PQ-FORMEL anwenden – NULLSTELLEN berechnen, Lösungsformel, QUADRATISCHE Gleichungen lösen', null, 314324, '06.01.2021'],
+    ['07bKsLs7Q4o', 'UNGLEICHUNGEN mit Betrag lösen – Betragsungleichungen, Fallunterscheidung, Beispiel', null, 157598, '04.01.2021'],
+    ['CNiS387yEOc', 'POLYNOMDIVISION Funktion 4. Grades – NULLSTELLEN erraten und berechnen, Beispiel', 685, 541088, '03.01.2021'],
+    ['KzhWHGoAuK8', 'KOMPLEXE Zahlen in POLARFORM umwandeln – Normalform in Polarform, Betrag und Argument berechnen', null, 154258, '02.01.2021'],
+  ];
+  const PLAYLISTS = [
+    ['Ableitung alle Regeln - Mathe', 46, 45], ['Alles rund ums MATHE ABI', 111, 109], ['Alles über BINOMISCHE FORMELN', 22, 22],
+    ['Alles über BRÜCHE - Mathe', 65, 65], ['Alles über INTEGRALE, Integralrechnung - Mathe', 44, 44], ['Alles über LINEARE FUNKTIONEN - Mathe', 17, 17],
+  ];
+
+  const aufrufe = (n) => n == null ? '' : n >= 1e6 ? `${(n / 1e6).toFixed(1).replace('.', ',')} Mio. Aufrufe` : n >= 1e3 ? `${Math.round(n / 1e3)} Tsd. Aufrufe` : `${n} Aufrufe`;
+
+  function zeile([id, titel, laenge, views, wann, groesse, zustand], lokal) {
+    const marken = [
+      zustand === 'neu' ? '<span class="vmarke neu">Neu</span>' : '',
+      zustand === 'wartet' ? '<span class="vmarke wartet"><i class="fa-solid fa-clock"></i> Wartet</span>'
+        : !lokal ? '<span class="vmarke fehlt"><i class="fa-solid fa-cloud"></i> Nicht geladen</span>' : '',
+    ].join('');
+    const haupt = lokal ? '<button class="spielen" title="Abspielen"><i class="fa-solid fa-play"></i></button>'
+      : zustand === 'wartet' ? '<button title="Wartet in den Downloads" disabled><i class="fa-solid fa-clock"></i></button>'
+      : '<button class="laden" title="Herunterladen"><i class="fa-solid fa-download"></i></button>';
+    return `<div class="kzeile${lokal ? '' : ' fern'}">
+      <div class="vbild"><img src="${vorschau(id)}" alt="" loading="lazy">${laenge ? `<span class="d">${dauer(laenge)}</span>` : ''}</div>
+      <div><div class="vtitel">${titel}</div>
+        <div class="vmeta">${marken}<span class="zahl">${wann}</span>${views ? `<span class="zahl">${aufrufe(views)}</span>` : ''}${groesse ? `<span class="zahl">${groesse}</span>` : ''}</div></div>
+      <div class="tun">
+        <button class="neben" title="Zu einer Playlist"><i class="fa-solid fa-bookmark"></i></button>
+        <button class="neben" title="Mehr: Zufallsvorschläge, Quelle öffnen"><i class="fa-solid fa-ellipsis"></i></button>
+        ${haupt}
+      </div>
+    </div>`;
+  }
+
+  function kopf({ zustand, reiter, quelle }) {
+    const scan = zustand === 'scan'
+      ? `<span class="scanstand"><i class="fa-solid fa-satellite-dish fa-fade"></i> Scannt: <span class="zahl">640</span> Videos gelesen
+           <button class="knopf ohne klein" title="Abbrechen - Gefundenes bleibt erhalten"><i class="fa-solid fa-stop"></i> Abbrechen</button></span>`
+      : `<button class="knopf" title="Alle Videos des Kanals einlesen, nicht nur die neuesten"><i class="fa-solid fa-satellite-dish"></i> Ganz scannen</button>`;
+    const fremd = zustand === 'fremd';
+    const tabs = [['alle', 'Alle', K.katalog, 'fa-layer-group'], ['video', 'Videos', K.typen.video, 'fa-video'], ['short', 'Shorts', K.typen.short, 'fa-mobile-screen'],
+                  ['live', 'Live', K.typen.live, 'fa-tower-broadcast'], ['playlists', 'Playlists', K.playlists, 'fa-list-ul'], ['diagnose', 'Diagnose', null, 'fa-stethoscope']];
+    const listenansicht = !['playlists', 'diagnose'].includes(reiter);
+    return `<div class="rahmen-kopf">
+      <div class="k-kopf">
+        <button class="knopf ohne symbol" title="Zurück zu den Kanälen"><i class="fa-solid fa-arrow-left"></i></button>
+        <img class="k-avatar" src="${avatar}" alt="">
+        <div class="k-titel">
+          <div class="k-namezeile"><h1>${K.name}</h1>
+            ${fremd ? '' : `<span class="medaille silber" title="1.539 von 1.552 normalen Videos geladen (99 %), 13 fehlen. Live und Shorts zählen nicht."><i class="fa-solid fa-medal"></i> Silber</span>`}
+            <span class="marke-klein" title="Sprache des Kanals">Deutsch</span>
+            ${fremd ? '' : '<span class="marke-klein an" title="Neue Videos werden selbst geladen"><i class="fa-solid fa-bolt"></i> Auto-Download</span>'}
+          </div>
+          <div class="k-meta">
+            <span><span class="zahl">${zahl(K.katalog)}</span> im Katalog</span>
+            <span><span class="zahl">${zahl(K.lokal)}</span> lokal</span>
+            ${fremd ? '<span>nicht abonniert</span>' : `<span>ganz gescannt <span class="zahl">${K.scan}</span></span><span>prüft alle <span class="zahl">${K.pruefen}</span></span>`}
+          </div>
+        </div>
+        <div class="k-aktionen">
+          ${fremd ? `<button class="knopf haupt"><i class="fa-solid fa-rss"></i> Abonnieren</button>`
+                  : `${scan}<button class="knopf"><i class="fa-solid fa-sliders"></i> Einstellungen</button>`}
+          <button class="knopf ohne symbol" title="Mehr: Auf der Quelle öffnen"><i class="fa-solid fa-ellipsis"></i></button>
+        </div>
+      </div>
+      ${zustand === 'gesperrt' ? `<div class="stoerung"><i class="fa-solid fa-triangle-exclamation"></i>
+        <div class="text"><b>Gesperrt nach 3 Fehlern beim Prüfen</b><div class="grund">Die Quelle meldet: Dieser Kanal existiert nicht mehr.</div></div>
+        <button class="knopf klein"><i class="fa-solid fa-lock-open"></i> Entsperren</button></div>` : ''}
+      <div class="reiter">${tabs.map(([k, name, n, i]) => `<button class="${k === reiter ? 'aktiv' : ''}"><i class="fa-solid ${i}"></i> ${name}${n != null ? ` <span class="zaehler">${zahl(n)}</span>` : ''}</button>`).join('')}</div>
+      ${listenansicht ? `<div class="steuer">
+        ${[['alle', 'Alle', 1561], ['lokal', 'Lokal', 1548], ['fehlen', 'Nicht geladen', 13]].map(([k, name, n]) =>
+          `<button class="chip${k === quelle ? ' aktiv' : ''}">${name} <span class="zaehler">${zahl(n)}</span></button>`).join('')}
+        <div class="rechts">
+          <select class="eingabe" style="width: 170px"><option>Neueste zuerst</option><option>Älteste zuerst</option><option>Meiste Aufrufe</option><option>Längste</option><option>Kürzeste</option></select>
+          <input class="eingabe" placeholder="In diesem Kanal filtern">
+        </div>
+      </div>
+      <div class="luecke"><i class="fa-solid fa-cloud-arrow-down"></i> <span><span class="zahl">13</span> Videos noch nicht geladen</span>
+        <div class="rechts">Laden: <button class="knopf klein">5</button><button class="knopf klein">10</button><button class="knopf klein">Alle 13</button></div></div>` : ''}
+      ${reiter === 'playlists' ? `<div class="steuer"><button class="knopf klein"><i class="fa-solid fa-rotate"></i> Playlists der Quelle abrufen</button>
+        <span class="schwach klein">Holt Namen und Beschreibungen, lädt keine Videos</span></div>` : ''}
+    </div>`;
+  }
+
+  function oben() {
+    return `<div class="k-banner"><img src="${banner}" alt=""></div>
+      <div class="k-beschreibung"><button class="knopf ohne klein"><i class="fa-solid fa-chevron-down"></i> Kanalbeschreibung</button>
+        <div class="text">${K.beschreibung}</div></div>
+      <div class="k-zahlen">
+        <div class="abdeckung" title="Gezählt werden nur normale Videos, Live und Shorts nie">
+          <div class="oben"><span class="medaille silber"><i class="fa-solid fa-medal"></i> Silber</span><b>99 %</b>
+            <span class="schwach klein"><span class="zahl">1.539</span> von <span class="zahl">1.552</span> Videos</span></div>
+          <div class="balken"><b style="width: 99.2%"></b></div>
+          <div class="satz">Bronze ab 80 %, Silber ab 95 %, Gold bei allen. Noch <span class="zahl">13</span> Videos bis Gold.</div>
+        </div>
+        <div class="kennzahl"><b>${K.belegt}</b><span>Belegt</span></div>
+        <div class="kennzahl"><b>${K.laufzeit}</b><span>Laufzeit lokal</span></div>
+        <div class="kennzahl"><b>${K.aufrufe}</b><span>Aufrufe</span></div>
+        <div class="kennzahl"><b>${K.playlists}</b><span>Playlists</span></div>
+      </div>`;
+  }
+
+  function liste(quelle) {
+    const zeilen = quelle === 'fehlen' ? FEHLEN.map((v) => zeile(v, false)) : LOKAL.map((v) => zeile(v, true));
+    return `<div class="zeilen">${zeilen.join('')}</div>`;
+  }
+
+  function playlists() {
+    return `<div class="pl-raster">${PLAYLISTS.map(([titel, alle, da]) => {
+      const fehlt = alle - da;
+      return `<div class="pl-karte">
+        <div class="titel">${titel}</div>
+        <div class="stand"><span><span class="zahl">${alle}</span> Videos</span><span><span class="zahl">${da}</span> lokal</span>${fehlt ? `<span><span class="zahl">${fehlt}</span> nicht geladen</span>` : '<span class="zustand fertig"><i class="fa-solid fa-check"></i> vollständig</span>'}</div>
+        <div class="balken"><b style="width: ${da / alle * 100}%"></b></div>
+        <div class="tun">
+          <button class="knopf haupt klein"><i class="fa-solid fa-play"></i> Abspielen</button>
+          <button class="knopf klein"><i class="fa-solid fa-arrow-up-right-from-square"></i> Öffnen</button>
+          ${fehlt ? `<button class="knopf klein"><i class="fa-solid fa-download"></i> ${fehlt} laden</button>` : ''}
+          <button class="knopf ohne klein" title="Abgleich mit der Quelle: neue Videos und Reihenfolge"><i class="fa-solid fa-arrows-rotate"></i> Abgleichen</button>
+        </div>
+      </div>`;
+    }).join('')}</div>
+    <p class="beispiel">Sechs von 33 Playlists. Noch nicht abgerufene Playlists zeigen statt Abspielen den ersten Schritt "Inhalt abrufen".</p>`;
+  }
+
+  function diagnose() {
+    return `<div class="diag">
+      <div class="diag-karte"><h3><i class="fa-solid fa-hard-drive"></i> Dateien <button class="knopf ohne klein" style="margin-left:auto"><i class="fa-solid fa-rotate"></i> Neu prüfen</button></h3>
+        <dl class="werte">
+          <dt>Videodateien</dt><dd class="gut">1.548 von 1.548</dd>
+          <dt>Vorschaubilder</dt><dd class="gut">1.548 von 1.548</dd>
+          <dt>Untertitel</dt><dd>1.039</dd>
+          <dt>Kapitel</dt><dd>1.157</dd>
+          <dt>Kanalbild und Banner</dt><dd class="gut">vorhanden</dd>
+        </dl></div>
+      <div class="diag-karte"><h3><i class="fa-solid fa-database"></i> Katalog</h3>
+        <dl class="werte">
+          <dt>Einträge</dt><dd>1.561</dd>
+          <dt>Videos · Shorts · Live</dt><dd>1.552 · 8 · 1</dd>
+          <dt>ohne Länge</dt><dd class="lueckig">1.024</dd>
+          <dt>ohne Aufrufe</dt><dd class="lueckig">77</dd>
+          <dt>ohne Beschreibung</dt><dd class="lueckig">81</dd>
+          <dt>ohne Titel</dt><dd class="lueckig">12</dd>
+        </dl>
+        <p class="beispiel">Lücken füllt der nächste vollständige Scan.</p></div>
+      <div class="diag-karte"><h3><i class="fa-solid fa-clock-rotate-left"></i> Letzte Scans</h3>
+        <p class="schwach klein">Keine Scan-Aufträge gespeichert. Ganz gescannt am <span class="zahl">17.02.2026</span>.</p></div>
+    </div>`;
+  }
+
+  function blatt() {
+    return `<div class="blatt">
+      <div class="blatt-kopf"><img src="${avatar}" alt=""><div class="n">${K.name}</div><button class="knopf ohne symbol klein"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="blatt-inhalt">
+        <h3>Laden</h3>
+        <div class="zeile-s"><div class="t">Auto-Download<div class="e">Neue Videos selbst laden</div></div><span class="schalter an"></span></div>
+        <div class="zeile-s"><div class="t">Bestand nachladen<div class="e">Fertig: alles geladen</div></div><span class="schalter"></span></div>
+        <div class="zeile-s"><div class="t">Qualität</div><div class="wahl"><button class="an">Standard</button><button>720p</button><button>1080p</button><button>Beste</button></div></div>
+        <div class="zeile-s"><div class="t">Nur Ton</div><span class="schalter"></span></div>
+        <h3>Einordnen</h3>
+        <div class="zeile-s"><div class="t">Musikkanal<div class="e">Alle Videos gelten als Musik, Ausnahmen am Video</div></div><span class="schalter"></span></div>
+        <div class="zeile-s neu"><div class="t">Nie als Short führen<div class="e">Kurze, aber vollwertige Videos bleiben Videos</div></div><span class="schalter"></span></div>
+        <div class="zeile-s"><div class="t">In Zufallsvorschlägen<div class="e">Ausnahmen am einzelnen Video</div></div><span class="schalter an"></span></div>
+        <h3>Prüfen</h3>
+        <div class="zeile-s"><div class="t">Prüfabstand<div class="e">Richtet sich nach dem neuesten Video</div></div><span class="zahl">16 Std.</span></div>
+      </div>
+      <div class="blatt-fuss">
+        <button class="knopf klein"><i class="fa-solid fa-rotate"></i> Jetzt prüfen</button>
+        <button class="knopf klein"><i class="fa-solid fa-satellite-dish"></i> Ganz scannen</button>
+        <button class="knopf ohne klein gefahr" style="margin-left:auto"><i class="fa-solid fa-xmark"></i> Abo beenden</button>
+      </div>
+    </div>`;
+  }
+
+  const haupt = document.getElementById('haupt');
+  zustaende([
+    ['alle', 'Videos'], ['fehlen', 'Nicht geladen'], ['scan', 'Scan läuft'], ['playlists', 'Playlists'],
+    ['diagnose', 'Diagnose'], ['einstellungen', 'Einstellungen'], ['gesperrt', 'Gesperrt'], ['fremd', 'Nicht abonniert'],
+  ], (z) => {
+    const reiter = ['playlists', 'diagnose'].includes(z) ? z : 'alle';
+    const quelle = z === 'fehlen' ? 'fehlen' : 'alle';
+    const inhalt = reiter === 'playlists' ? playlists() : reiter === 'diagnose' ? diagnose() : oben() + liste(quelle);
+    haupt.innerHTML = kopf({ zustand: z, reiter, quelle }) + `<div class="rollfeld">${inhalt}</div>` + (z === 'einstellungen' ? blatt() : '');
+  });
+</script>
+</body>
+</html>

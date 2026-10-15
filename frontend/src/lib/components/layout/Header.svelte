@@ -7,6 +7,7 @@
   import { route, navigate } from '../../router/router.js';
   import { sidebarOpen } from '../../stores/app.js';
   import SearchBox from './SearchBox.svelte';
+  import UpdateHint from './UpdateHint.svelte';
 
   function toggleSidebar() {
     sidebarOpen.update(v => !v);
@@ -29,6 +30,7 @@
   </div>
 
   <div class="header-right">
+    <UpdateHint />
     <button class="btn-icon" onclick={() => navigate('/downloads')} title="Downloads">
       <i class="fa-solid fa-download"></i>
     </button>

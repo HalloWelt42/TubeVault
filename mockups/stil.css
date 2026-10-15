@@ -143,6 +143,17 @@ h3 { font-size: var(--tv-gr-text); font-weight: 600; }
 .suche input { flex: 1; background: none; border: 0; outline: 0; color: var(--tv-text); }
 .suche:focus-within { border-color: rgba(var(--tv-akzent-rgb), 0.6); }
 .kopf-aktionen { margin-left: auto; display: flex; gap: var(--tv-a1); }
+/* Neue Version: das Wort leuchtet ruhig (Schrift, keine Kante) und führt zur Projektseite */
+.update { display: inline-flex; align-items: center; gap: var(--tv-a2); height: 40px; padding: 0 var(--tv-a3); margin-right: var(--tv-a2);
+          border-radius: var(--tv-ecke); background: rgba(var(--tv-akzent-rgb), 0.08); color: var(--tv-text-2); font-size: var(--tv-gr-klein); }
+.update i { color: var(--tv-akzent); }
+.update a { font-weight: 700; font-size: var(--tv-gr-text); letter-spacing: 0.02em; color: var(--tv-akzent);
+            text-shadow: 0 0 8px rgba(var(--tv-akzent-rgb), 0.55); animation: leuchten 2.8s ease-in-out infinite; }
+.update a:hover { text-decoration: underline; text-underline-offset: 3px; }
+@keyframes leuchten {
+  50% { text-shadow: 0 0 14px rgba(var(--tv-akzent-rgb), 0.95), 0 0 28px rgba(var(--tv-akzent-rgb), 0.4); }
+}
+@media (prefers-reduced-motion: reduce) { .update a { animation: none; } }
 
 .seite {
   grid-area: seite; overflow-y: auto; padding: var(--tv-a3) var(--tv-a2);

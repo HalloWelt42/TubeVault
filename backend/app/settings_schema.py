@@ -12,7 +12,7 @@ Regeln:
   - Was hier steht, hat einen Verbraucher im Code. Kein Eintrag ohne Wirkung.
   - Standardwerte, Grenzen und Auswahllisten stehen nur hier; Datenbank
     (DEFAULT_SETTINGS), Prüfung beim Speichern und Oberfläche leiten sich ab.
-  - section = Block der Einstellungsseite (channels, view, extensions);
+  - section = Block der Einstellungsseite (channels, downloads, view, extensions, system);
     None = wird an anderer Stelle
     bedient (z.B. Drosselung auf der Jobs-Seite), aber hier geprüft.
 """
@@ -151,6 +151,10 @@ SETTINGS: list[SettingDef] = [
                label="Mitgeladene Untertitel einlesen",
                description="Macht das Gesagte von Videos durchsuchbar, zu denen beim Laden Untertitel "
                            "mitkamen. Liest nur lokale Dateien, fragt nicht bei der Quelle."),
+    SettingDef(key="system.update_check", default="true", kind="toggle", category="system", section="system",
+               label="Nach neuen Versionen sehen",
+               description="Liest alle 6 Stunden die Versionsnummer des öffentlichen Projekts, eine kleine Datei "
+                           "ohne Konto. Ist eine neuere Version erschienen, steht oben rechts ein Hinweis."),
     SettingDef(key="scan.auto_enabled", default="false", kind="toggle", category="scan",
                label="Ungescannte Kanäle erfassen",
                description="Liest Kanäle, die noch nie vollständig gelesen wurden, von selbst: höchstens "
