@@ -4,13 +4,13 @@
 -->
 <script>
   import { api } from '../../api/client.js';
-  import { navigate } from '../../router/router.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../utils/format.js';
   import { parseLrc, lineAt } from '../../utils/lrc.js';
   import { scrollWithin } from '../../utils/scrollRoot.js';
 
-  let { view = 'schlange' } = $props();   // schlange | liedtext | infos
+  // schlange | liedtext | infos; Navigation kommt vom Router der jeweiligen Oberfläche
+  let { view = 'schlange', onOpenArtist = null, onOpenVideo = null } = $props();
 
   let track = $derived(player.current);
   let lyrics = $state({ id: null, plain: '', synced: [], offset: 0 });
@@ -46,7 +46,9 @@
     <div class="kopf">
       <img src={api.thumbnailUrl(track.id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
       <div class="titel">{track.title}</div>
-      <button class="interpret" onclick={() => navigate('/music', { quelle: track.artist_source })}>{track.artist}</button>
+      {#if onOpenArtist}
+        <button class="interpret" onclick={() => onOpenArtist(track)}>{track.artist}</button>
+      {:else}<div class="tv-leise">{track.artist}</div>{/if}
       {#if player.title}<div class="tv-schwach tv-klein">aus: {player.title}</div>{/if}
     </div>
     <div class="tv-reiter">
@@ -101,8 +103,10 @@
       <div class="infos-tasten">
         <button class="tv-knopf klein" onclick={() => player.playSource(`similar:${track.id}`)}>
           <i class="fa-solid fa-wand-magic-sparkles"></i> Ähnliche Titel</button>
-        <button class="tv-knopf klein" onclick={() => { player.pause(); navigate(`/watch/${track.id}`); }}>
-          <i class="fa-solid fa-display"></i> Als Video</button>
+        {#if onOpenVideo}
+          <button class="tv-knopf klein" onclick={() => { player.pause(); onOpenVideo(track); }}>
+            <i class="fa-solid fa-display"></i> Als Video</button>
+        {/if}
       </div>
     {/if}
   {:else}

@@ -11,6 +11,15 @@ import { routeDefinitions, resolveRouteKey } from './routes.js';
 
 // ─── State ───────────────────────────────────────────────
 
+/** Navigations-History für Debug/Log (letzte 50) */
+const _history = [];
+const MAX_HISTORY = 50;
+
+/** Log-Buffer — wird periodisch ans Backend gesendet. Muss vor dem ersten
+ *  Parsen stehen: eine unbekannte Adresse beim Start schreibt schon hinein. */
+const _logBuffer = [];
+let _logTimer = null;
+
 /** Kompletter Router-State: { page, id, params, path, fullUrl } */
 export const route = writable(parseCurrentUrl());
 
@@ -18,14 +27,6 @@ export const route = writable(parseCurrentUrl());
 export const currentPage = derived(route, r => r.page);
 export const routeId = derived(route, r => r.id);
 export const routeParams = derived(route, r => r.params);
-
-/** Navigations-History für Debug/Log (letzte 50) */
-const _history = [];
-const MAX_HISTORY = 50;
-
-/** Log-Buffer — wird periodisch ans Backend gesendet */
-const _logBuffer = [];
-let _logTimer = null;
 
 // ─── URL Parsing ─────────────────────────────────────────
 

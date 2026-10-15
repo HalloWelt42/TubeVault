@@ -8,19 +8,22 @@
  *   /m/suche       Suche (?q=)
  *   /m/neu         Neues aus den Abos
  *   /m/listen      Playlists
+ *   /m/musik       Musik (Sammlung, Mixe, Interpreten)
+ *   /m/jetzt       Musik: läuft gerade (großer Abspieler)
  *   /m/liste/:id   eine Playlist
  *   /m/video/:id   Wiedergabe (?liste= spielt die Playlist am Stück, &zufall=1 gemischt)
  */
 import { writable } from 'svelte/store';
 
 export const BASE = '/m';
-export const TABS = ['start', 'videos', 'listen', 'suche', 'neu'];
+export const TABS = ['start', 'videos', 'musik', 'listen', 'suche', 'neu'];
 
 function parse() {
   const rest = window.location.pathname.slice(BASE.length).split('/').filter(Boolean);
   const params = Object.fromEntries(new URLSearchParams(window.location.search));
   if (rest[0] === 'video' && rest[1]) return { view: 'video', id: rest[1], params };
   if (rest[0] === 'liste' && rest[1]) return { view: 'liste', id: rest[1], params };
+  if (rest[0] === 'jetzt') return { view: 'jetzt', id: null, params };
   if (TABS.includes(rest[0])) return { view: rest[0], id: null, params };
   return { view: 'start', id: null, params };
 }

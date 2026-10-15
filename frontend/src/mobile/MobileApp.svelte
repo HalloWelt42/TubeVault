@@ -18,8 +18,11 @@
   import Video from './views/Video.svelte';
   import Listen from './views/Listen.svelte';
   import Liste from './views/Liste.svelte';
+  import Musik from './views/Musik.svelte';
+  import Jetzt from './views/Jetzt.svelte';
+  import MusicMiniBar from './parts/MusicMiniBar.svelte';
 
-  const tabViews = { start: Start, videos: Videos, listen: Listen, suche: Suche, neu: Neu };
+  const tabViews = { start: Start, videos: Videos, musik: Musik, listen: Listen, suche: Suche, neu: Neu };
 
   let ready = $state(false);
   let activeTab = $state('start');
@@ -56,6 +59,9 @@
           <div class="pane over"><Liste id={$route.id} /></div>
         {/key}
       {/if}
+      {#if $route.view === 'jetzt'}
+        <div class="pane over"><Jetzt /></div>
+      {/if}
       {#if $route.view === 'video'}
         <!-- Innerhalb einer Playlist bleibt der Player derselbe: nur so darf
              das Telefon das nächste Stück ohne erneuten Tipp starten. -->
@@ -70,7 +76,10 @@
       <div class="notice {$notice.kind}" role="status">{$notice.text}</div>
     {/if}
   </main>
-  {#if $route.view !== 'video'}<TabBar />{/if}
+  {#if $route.view !== 'video' && $route.view !== 'jetzt'}
+    <MusicMiniBar />
+    <TabBar />
+  {/if}
 </div>
 
 <style>

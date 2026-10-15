@@ -160,6 +160,8 @@
   }
 
   const openMenu = (e, track) => menu?.open(e, track);
+  const onOpenArtist = (track) => openGroup(track.artist_source);
+  const onOpenVideo = (track) => navigate(`/watch/${track.id}`);
   const groupName = $derived(groupTracks?.title || '');
   const groupDuration = $derived((groupTracks?.tracks || []).reduce((sum, t) => sum + (t.duration || 0), 0));
 </script>
@@ -323,7 +325,7 @@
         {/if}
 
       {:else if tab === 'jetzt'}
-        <div class="jetzt-schmal"><NowPlaying view={nowView} /></div>
+        <div class="jetzt-schmal"><NowPlaying view={nowView} {onOpenArtist} {onOpenVideo} /></div>
 
       {:else}
         {#if loading}
@@ -345,7 +347,7 @@
     </div>
 
     <aside class="jetzt-spalte">
-      <NowPlaying view={nowView} />
+      <NowPlaying view={nowView} {onOpenArtist} {onOpenVideo} />
     </aside>
   </div>
 </div>

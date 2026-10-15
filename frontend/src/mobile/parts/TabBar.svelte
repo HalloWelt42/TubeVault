@@ -5,6 +5,7 @@
   const tabs = [
     { view: 'start', path: '/', label: 'Start', icon: 'fa-house' },
     { view: 'videos', path: '/videos', label: 'Videos', icon: 'fa-photo-film' },
+    { view: 'musik', path: '/musik', label: 'Musik', icon: 'fa-music' },
     { view: 'listen', path: '/listen', label: 'Listen', icon: 'fa-list-ul' },
     { view: 'suche', path: '/suche', label: 'Suche', icon: 'fa-magnifying-glass' },
     { view: 'neu', path: '/neu', label: 'Neu', icon: 'fa-rss' },
