@@ -28,7 +28,14 @@ TubeVault lässt sie sich dann in der Wiedergabe umschalten.
 ```bash
 ./nachvertoner.py            # läuft dauerhaft, fragt regelmäßig nach Arbeit
 ./nachvertoner.py --einmal   # höchstens ein Auftrag
+./nachvertoner.py --aufraeumen   # nur eigene Reste im Vertonungsdienst löschen
 ```
+
+Was der Nachvertoner im Vertonungsdienst ablegt (Ton fürs Transkript,
+Arbeitskopie, Ergebnis), löscht er nach jedem Auftrag wieder, samt
+Transkription und Exporten. Beim Start räumt er außerdem Reste früherer Läufe
+weg (Absturz, Abbruch). Gelöscht werden nur Dateien mit dem Namensvorzeichen
+`tubevault_`, die keiner Stimme und keinem Projekt gehören.
 
 Das Programm arbeitet nur, wenn der Vertonungsdienst bereit ist und dort
 gerade kein anderer Auftrag läuft. Es bearbeitet einen Auftrag nach dem

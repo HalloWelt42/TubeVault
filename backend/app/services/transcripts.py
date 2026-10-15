@@ -35,7 +35,7 @@ from pydantic import BaseModel
 
 from app.config import SUBTITLES_DIR
 from app.database import db
-from app.services import subtitle_segments
+from app.services import setting_values, subtitle_segments
 from app.services.subtitle_segments import Segment
 
 SCHEMA_SQL = """
@@ -278,11 +278,17 @@ async def _release_stale_ai() -> None:
               AND COALESCE(heartbeat_at, claimed_at) < datetime('now', '-{AI_STALE_AFTER_MINUTES} minutes')""")
 
 
+# Schalter: KI-Transkripte an/aus (Knopf in der Liste der Hintergrundarbeiten)
+AI_SWITCH = "transcripts.ai_enabled"
+
+
 async def claim_ai(worker: str) -> Optional[AiJob]:
     """Den nächsten KI-Auftrag reservieren: immer das zuletzt geladene Video
     ohne Transkript. Neu geladene kommen so sofort an die Reihe, danach geht
     es mit den nächstälteren weiter."""
     await _release_stale_ai()
+    if not await setting_values.is_on(AI_SWITCH):
+        return None   # angehalten: der laufende Auftrag wird noch fertig, kein neuer
     row = await db.fetch_one(f"SELECT v.id {_WAITING_SQL} ORDER BY v.download_date DESC, v.id LIMIT 1")
     if not row:
         return None

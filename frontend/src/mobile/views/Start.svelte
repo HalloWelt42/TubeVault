@@ -41,7 +41,7 @@
 
 <div class="m-view">
 <header class="top">
-  <h1 class="m-h1">TubeVault</h1>
+  <h1 class="m-h1 marke"><img src="/favicon.svg" alt="" /> TubeVault</h1>
 </header>
 
 {#if loading}
@@ -80,6 +80,8 @@
 
 <style>
   .top { padding: calc(var(--m-safe-top) + 18px) 16px 4px; }
+  .marke { display: flex; align-items: center; gap: 10px; }
+  .marke img { width: 32px; height: 32px; border-radius: 2px; }
   .foot { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px 32px; }
   .version { color: var(--m-faint); font-size: 0.78rem; }
 </style>

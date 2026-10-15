@@ -46,6 +46,8 @@ class Stage:
         self.failed = None
         self.claimable = True
         self.progress_status = 200
+        self.deleted: list[str] = []
+        self.remote_files: list[dict] = []
 
     def pi(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -82,6 +84,14 @@ class Stage:
             return httpx.Response(200, json=[{"id": "v-zeit", "name": "Zeit Stimme"}, {"id": "v-x", "name": "Andere"}])
         if path == "/api/files/upload":
             return httpx.Response(200, json={"id": "f-quelle"})
+        if path == "/api/files" and request.method == "GET":
+            return httpx.Response(200, json=self.remote_files)
+        if request.method == "DELETE" and path.startswith("/api/files/"):
+            # wie der echte Dienst: Löschen nur mit force, sonst 409
+            if request.url.params.get("force") != "true":
+                return httpx.Response(409, json={"detail": {"message": "Rohdaten"}})
+            self.deleted.append(path.rsplit("/", 1)[-1])
+            return httpx.Response(200, json={"status": "deleted"})
         if path == "/api/jobs" and request.method == "POST":
             self.created_payload = json.loads(request.content)
             return httpx.Response(200, json={"id": "j-1"})
@@ -128,8 +138,7 @@ def test_vollstaendiger_ablauf(make, tmp_path):
         {"progress": round(p["progress"], 3), "note": p["note"]} for p in stage.progress]
     assert stage.result_upload and b"de.m4a" in stage.result_upload, "nur die Tonspur geht zurück"
     assert stage.failed is None
-    assert ("DELETE", "/api/files/f-quelle") in stage.dub_calls
-    assert ("DELETE", "/api/files/f-ergebnis") in stage.dub_calls
+    assert stage.deleted == ["f-quelle", "f-ergebnis"], "eigene Dateien im Dienst wirklich gelöscht"
     assert not (tmp_path / "arbeit" / "abc").exists(), "Arbeitsordner ist aufgeräumt"
 
 
@@ -310,3 +319,68 @@ def test_kurzer_ausfall_von_tubevault_bricht_nichts_ab(make):
 
     assert worker.step() is True
     assert stage.failed is None and stage.result_upload
+
+
+def test_reste_frueherer_auftraege_werden_aufgeraeumt(make):
+    """Wunsch 15.10.2026: Ton, der nur fürs Transkript hochging, darf sich im
+    Dienst nicht sammeln. Weg kommen nur eigene Dateien, nie Stimmen oder
+    Dateien des Nutzers; Rohdaten zuerst (ihr Löschen nimmt Exporte mit)."""
+    worker, stage = make([DONE])
+    stage.remote_files = [
+        {"id": "export", "name": "tubevault_abc.srt", "file_type": "transcription_export", "file_size": 10},
+        {"id": "ton", "name": "tubevault_abc.wav", "file_type": "audio_raw", "file_size": 80_000_000},
+        {"id": "stimme", "name": "tubevault_abc.wav", "file_type": "audio_raw", "voice_id": "v-zeit"},
+        {"id": "nutzer", "name": "Interview.wav", "file_type": "audio_raw"},
+    ]
+    assert worker.clean_leftovers() == 2
+    assert stage.deleted == ["ton", "export"]
+
+
+def test_fremde_gleiche_datei_bleibt_liegen(make):
+    """Liegt inhaltsgleich schon eine Datei des Nutzers im Dienst, wird sie
+    benutzt, aber danach nicht gelöscht."""
+    worker, stage = make([DONE])
+    original = stage.dub
+
+    def dub(request):
+        if request.url.path == "/api/files/upload":
+            return httpx.Response(409, json={"detail": {"existing_file": {"id": "f-nutzer", "name": "Mein Ton.wav"}}})
+        return original(request)
+    worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(dub))
+    stage.claimable = True
+    assert worker.step() is True
+    assert "f-nutzer" not in stage.deleted and "f-ergebnis" in stage.deleted
+
+
+
+def test_ki_transkript_raeumt_den_ton_im_dienst_weg(make):
+    """Der Ton fürs KI-Transkript geht als Mono-WAV zum Dienst; nach dem
+    Abliefern ist er dort samt Transkription wieder gelöscht."""
+    worker, stage = make([{"status": "done", "result": {"transcription_id": "t-1"}}])
+    stage.claimable = False
+    delivered = {}
+    pi_original, dub_original = stage.pi, stage.dub
+
+    def pi(request):
+        path = request.url.path
+        if path == "/api/transcripts/ai/claim":
+            return httpx.Response(200, json={
+                "request": {"video_id": "abc", "title": "Ein Titel", "language": "de"},
+                "media_url": "/api/player/abc", "progress_url": "/api/transcripts/ai/abc/progress",
+                "result_url": "/api/transcripts/ai/abc/result", "fail_url": "/api/transcripts/ai/abc/fail"})
+        if path == "/api/transcripts/ai/abc/result":
+            delivered.update(json.loads(request.content))
+            return httpx.Response(200, json={"ok": True})
+        return pi_original(request)
+
+    def dub(request):
+        if request.url.path == "/api/transcribe/t-1":
+            return httpx.Response(200, json={"language": "german",
+                                             "segments": [{"start": 0, "end": 1.5, "text": "Hallo"}]})
+        return dub_original(request)
+
+    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(pi))
+    worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(dub))
+    assert worker.step() is True
+    assert delivered == {"language": "de", "segments": [{"start": 0.0, "end": 1.5, "text": "Hallo"}]}
+    assert stage.deleted == ["f-quelle"]

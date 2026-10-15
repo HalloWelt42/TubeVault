@@ -27,6 +27,7 @@ from typing import Optional
 import httpx
 
 from app.database import db
+from app.services import setting_values
 
 logger = logging.getLogger(__name__)
 
@@ -105,17 +106,11 @@ async def install_schema(connection) -> None:
 
 # ─── Einstellungen und Erreichbarkeit ─────────────────────────────────
 
-async def _setting(key: str) -> str:
-    from app import settings_schema
-    value = await db.fetch_val("SELECT value FROM settings WHERE key = ?", (key,))
-    return value if value not in (None, "") else settings_schema.BY_KEY[key].default
-
-
 async def config() -> Optional[tuple[str, str]]:
     """(Adresse, Modell), wenn die Erweiterung eingeschaltet und eingerichtet ist."""
-    if (await _setting("ai.enabled")) != "true":
+    if (await setting_values.get("ai.enabled")) != "true":
         return None
-    url = (await _setting("ai.url")).strip().rstrip("/")
+    url = (await setting_values.get("ai.url")).strip().rstrip("/")
     return (url, EMBEDDING_MODEL) if url else None
 
 

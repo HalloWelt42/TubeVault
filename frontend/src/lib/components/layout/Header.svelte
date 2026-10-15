@@ -19,7 +19,7 @@
       <i class="fa-solid fa-bars"></i>
     </button>
     <button class="logo" onclick={() => navigate('/')}>
-      <span class="logo-mark"><i class="fa-solid fa-play"></i></span>
+      <img class="logo-mark" src="/favicon.svg" alt="" />
       <span class="logo-text">TubeVault</span>
     </button>
   </div>
@@ -53,11 +53,8 @@
     display: flex; align-items: center; gap: 10px;
     background: none; border: none; cursor: pointer; color: var(--tv-text);
   }
-  .logo-mark {
-    width: 32px; height: 32px; display: grid; place-items: center;
-    background: var(--tv-akzent); color: var(--tv-akzent-text);
-    border-radius: var(--tv-ecke-klein); font-size: 15px;
-  }
+  /* Das App-Symbol selbst (eine Quelle: public/favicon.svg) */
+  .logo-mark { width: 34px; height: 34px; display: block; border-radius: var(--tv-ecke-klein); }
   .logo-text { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
   .btn-icon {
     display: grid; place-items: center; width: 40px; height: 40px;

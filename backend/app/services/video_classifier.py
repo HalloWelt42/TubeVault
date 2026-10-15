@@ -247,9 +247,8 @@ _PAUSED_RECHECK_S = 30
 
 async def check_enabled() -> bool:
     """Darf der Hintergrundlauf bei der Quelle nachfragen? (types.check_enabled)"""
-    from app.settings_schema import default
-    value = await db.fetch_val("SELECT value FROM settings WHERE key = 'types.check_enabled'")
-    return (value or default("types.check_enabled")) == "true"
+    from app.services import setting_values
+    return await setting_values.is_on("types.check_enabled")
 
 
 async def _next_unverified() -> Optional[str]:

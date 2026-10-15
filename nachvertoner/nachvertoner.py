@@ -63,6 +63,22 @@ TRANSCRIPT_KINDS = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Qu
 # Ton für die Spracherkennung: unkomprimiert, eine Spur, 16 kHz - genau das,
 # womit die Erkennung rechnet; jedes andere Format würde dort erst umgerechnet
 RECOGNITION_AUDIO = ("-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le")
+# Eigene Dateien im Vertonungsdienst tragen dieses Namensvorzeichen. Nur sie
+# räumt der Nachvertoner weg - nie Stimmen, Projekte oder Dateien des Nutzers.
+OWN_PREFIX = "tubevault_"
+
+
+@dataclass(frozen=True)
+class RemoteFile:
+    """Eine Datei im Vertonungsdienst; ours: von uns angelegt, darf wieder weg."""
+    id: str
+    ours: bool = True
+
+
+def is_leftover(entry: dict) -> bool:
+    """Eine Datei im Dienst, die von einem früheren Auftrag liegen blieb."""
+    return (str(entry.get("name") or "").startswith(OWN_PREFIX)
+            and not entry.get("voice_id") and not entry.get("project_id"))
 
 
 class Abbruch(Exception):
@@ -151,22 +167,43 @@ class Nachvertoner:
             raise RuntimeError(f"Stimme '{name}' gibt es im Vertonungsdienst nicht (vorhanden: {known})")
         return match["id"]
 
-    def upload(self, path: Path, mime: str = "video/mp4") -> str:
+    def upload(self, path: Path, mime: str = "video/mp4") -> RemoteFile:
         with path.open("rb") as fh:
             r = self.dub.post("/api/files/upload", files={"files": (path.name, fh, mime)})
         body = r.json()
         if r.status_code == 409:   # inhaltsgleiche Datei liegt schon dort
-            return body["detail"]["existing_file"]["id"]
+            existing = body["detail"]["existing_file"]
+            # Nur eine eigene liegengebliebene Datei darf danach weg, nie eine des Nutzers
+            return RemoteFile(existing["id"], ours=is_leftover(existing))
         r.raise_for_status()
         first = body[0] if isinstance(body, list) else (body.get("files") or [body])[0]
-        return first["id"]
+        return RemoteFile(first["id"])
 
-    def remove_remote(self, *file_ids: str | None) -> None:
-        for file_id in filter(None, file_ids):
+    def remove_remote(self, *files: RemoteFile | None) -> None:
+        """Eigene Dateien im Dienst löschen; Transkription und Exporte räumt der
+        Dienst dabei mit ab. force: Rohdaten schützt der Dienst sonst mit 409 -
+        ohne force blieben bis 15.10.2026 alle Uploads liegen (68 GB)."""
+        for remote in files:
+            if not remote or not remote.ours:
+                continue
             try:
-                self.dub.delete(f"/api/files/{file_id}", timeout=30)
-            except httpx.HTTPError:
-                log.warning("Datei %s blieb im Vertonungsdienst liegen", file_id)
+                self.dub.delete(f"/api/files/{remote.id}", params={"force": "true"}, timeout=60).raise_for_status()
+            except httpx.HTTPError as e:
+                log.warning("Datei %s blieb im Vertonungsdienst liegen: %s", remote.id, e)
+
+    def clean_leftovers(self) -> int:
+        """Reste früherer Aufträge im Dienst löschen (Absturz, Abbruch, früher
+        nicht gelöschte Uploads). Nur beim Start, wenn kein eigener Auftrag läuft.
+        Rohdaten zuerst: ihr Löschen nimmt Transkription und Exporte mit."""
+        entries = [e for e in self.dub.get("/api/files", timeout=120).json() if is_leftover(e)]
+        if not entries:
+            return 0
+        entries.sort(key=lambda e: not str(e.get("file_type") or "").endswith("_raw"))
+        size = sum(e.get("file_size") or 0 for e in entries)
+        self.remove_remote(*(RemoteFile(e["id"]) for e in entries))
+        log.info("Vertonungsdienst aufgeräumt: %d liegengebliebene Dateien, %.1f GB",
+                 len(entries), size / 1e9)
+        return len(entries)
 
     # ─── TubeVault ───────────────────────────────────────────────────
 
@@ -224,7 +261,7 @@ class Nachvertoner:
         title = job.get("title") or video_id
         folder = self.s.work_dir / video_id
         folder.mkdir(parents=True, exist_ok=True)
-        source_id = result_id = dub_job_id = None
+        uploaded = result = dub_job_id = None
         log.info("Auftrag %s: %s", request_id, title)
         try:
             # Untertitel der Quelle ersparen dem Dienst das Transkribieren und
@@ -261,8 +298,8 @@ class Nachvertoner:
             if transcript:
                 payload["source_segments"] = transcript["segments"]
 
-            source_id = self.upload(proxy)
-            payload["file_id"] = source_id
+            uploaded = self.upload(proxy)
+            payload["file_id"] = uploaded.id
             created = self.dub.post("/api/jobs", json={
                 "type": "video_dub", "label": f"TubeVault: {title[:80]}",
                 "payload": payload,
@@ -270,11 +307,13 @@ class Nachvertoner:
             created.raise_for_status()
             dub_job_id = created.json()["id"]
 
-            result = self.wait_for(dub_job_id, request_id)
-            result_id = result.get("video_id")
+            outcome = self.wait_for(dub_job_id, request_id)
+            result = RemoteFile(outcome["video_id"]) if outcome.get("video_id") else None
             self.report(request_id, 0.96, "Tonspur abliefern")
             dubbed = folder / "vertont.mp4"
-            with self.dub.stream("GET", f"/api/files/{result_id}/download") as r:
+            if not result:
+                raise RuntimeError("Der Dienst lieferte kein vertontes Video")
+            with self.dub.stream("GET", f"/api/files/{result.id}/download") as r:
                 r.raise_for_status()
                 with dubbed.open("wb") as fh:
                     for chunk in r.iter_bytes(1024 * 1024):
@@ -284,13 +323,13 @@ class Nachvertoner:
 
             if source == "auto":
                 # Der Dienst hat die Sprache erkannt; TubeVault bekommt das Kürzel
-                source = LANGUAGE_CODES.get(str(result.get("source_language") or "").lower(), "")
+                source = LANGUAGE_CODES.get(str(outcome.get("source_language") or "").lower(), "")
             with track.open("rb") as fh:
                 done = self.pi.post(
                     claimed["result_url"], files={"file": (track.name, fh, "audio/mp4")},
                     data={"source_language": source, "voice": job.get("voice") or ""})
             done.raise_for_status()
-            missing = result.get("coverage_failed") or 0
+            missing = outcome.get("coverage_failed") or 0
             log.info("Auftrag %s fertig%s", request_id,
                      f" ({missing} Abschnitte ohne Ton)" if missing else "")
         except Abbruch:
@@ -305,7 +344,7 @@ class Nachvertoner:
             self.fail(request_id, f"{e.__class__.__name__}: {e}")
         finally:
             shutil.rmtree(folder, ignore_errors=True)
-            self.remove_remote(source_id, result_id)
+            self.remove_remote(uploaded, result)
 
     def wait_for(self, dub_job_id: str, request_id: int) -> dict:
         """Auf das Ende der Vertonung warten und den Fortschritt weitermelden."""
@@ -339,7 +378,7 @@ class Nachvertoner:
         title = job.get("title") or video_id
         folder = self.s.work_dir / f"ki_{video_id}"
         folder.mkdir(parents=True, exist_ok=True)
-        source_id = dub_job_id = None
+        uploaded = dub_job_id = None
         log.info("KI-Transkript: %s", title)
 
         def note(text: str) -> None:
@@ -357,13 +396,13 @@ class Nachvertoner:
             audio = folder / f"tubevault_{video_id}.wav"
             run_ffmpeg("-i", str(original), *RECOGNITION_AUDIO, str(audio))
             original.unlink(missing_ok=True)
-            source_id = self.upload(audio, mime="audio/wav")
+            uploaded = self.upload(audio, mime="audio/wav")
 
             # Bekannte Sprache vorgeben, sonst erkennt der Dienst sie selbst
             language = LANGUAGE_NAMES.get((job.get("language") or "").lower(), "auto")
             created = self.dub.post("/api/jobs", json={
                 "type": "transcribe", "label": f"TubeVault-Transkript: {title[:80]}",
-                "payload": {"file_id": source_id, "language": language},
+                "payload": {"file_id": uploaded.id, "language": language},
             })
             created.raise_for_status()
             dub_job_id = created.json()["id"]
@@ -403,7 +442,7 @@ class Nachvertoner:
         finally:
             shutil.rmtree(folder, ignore_errors=True)
             # Löscht im Dienst auch die zugehörige Transkription mit
-            self.remove_remote(source_id)
+            self.remove_remote(uploaded)
 
     # ─── Dauerbetrieb ────────────────────────────────────────────────
 
@@ -472,6 +511,8 @@ def main() -> int:
     parser.add_argument("--einstellungen", type=Path, default=HERE / "nachvertoner.toml")
     parser.add_argument("--einmal", action="store_true", help="höchstens ein Auftrag, dann Ende")
     parser.add_argument("--pruefen", action="store_true", help="nur Erreichbarkeit und Stimme prüfen")
+    parser.add_argument("--aufraeumen", action="store_true",
+                        help="nur liegengebliebene eigene Dateien im Vertonungsdienst löschen")
     parser.add_argument("--ausfuehrlich", action="store_true")
     args = parser.parse_args()
 
@@ -485,6 +526,14 @@ def main() -> int:
     worker = Nachvertoner(settings)
     if args.pruefen:
         return worker.check()
+    # Beim Start läuft kein eigener Auftrag: was jetzt noch von uns im Dienst
+    # liegt, ist Rest eines früheren Laufs und belegt nur Platz auf dem Rechner
+    try:
+        worker.clean_leftovers()
+    except httpx.HTTPError as e:
+        log.warning("Aufräumen im Vertonungsdienst nicht möglich: %s", e)
+    if args.aufraeumen:
+        return 0
 
     log.info("Nachvertoner '%s' bereit - TubeVault %s, Vertonungsdienst %s",
              settings.worker_name, settings.tubevault_url, settings.dub_url)

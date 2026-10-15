@@ -113,6 +113,10 @@ SETTINGS: list[SettingDef] = [
                label="Video-Typen bei der Quelle prüfen",
                description="Fragt im Hintergrund nach, was Short und was Video ist (eine Anfrage "
                            "etwa alle 2 Sekunden). Anhalten schont die Quelle."),
+    SettingDef(key="transcripts.ai_enabled", default="true", kind="toggle", category="transcripts",
+               label="KI-Transkripte erstellen",
+               description="Der Rechner mit der Spracherkennung holt sich laufend das nächste Video. "
+                           "Angehalten wird nach dem Video, das gerade bearbeitet wird."),
     # ── System ────────────────────────────────────────────────────────
     SettingDef(key="archive.mount_check_interval", default="30", kind="number", category="archive",
                min=5, max=3600, unit="s", label="Prüfintervall für externe Archive"),

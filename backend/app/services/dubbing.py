@@ -18,7 +18,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import audio_tracks
+from app.services import audio_tracks, setting_values
 
 logger = logging.getLogger(__name__)
 
@@ -101,14 +101,8 @@ def _to_model(row) -> DubRequest:
     return DubRequest(**{k: data.get(k) for k in DubRequest.model_fields})
 
 
-async def _setting(key: str) -> str:
-    from app import settings_schema
-    value = await db.fetch_val("SELECT value FROM settings WHERE key = ?", (key,))
-    return value if value not in (None, "") else settings_schema.BY_KEY[key].default
-
-
 async def is_enabled() -> bool:
-    return (await _setting("dub.enabled")) == "true"
+    return await setting_values.is_on("dub.enabled")
 
 
 class VoiceChoice(BaseModel):

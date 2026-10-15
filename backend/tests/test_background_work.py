@@ -57,3 +57,21 @@ async def test_ki_transkripte_mit_erledigt_und_restzeit(test_db):
     item = next(i for i in await background_work.overview() if i.key == "ai_transcripts")
     assert (item.done, item.total) == (2, 5)                 # 2 fertig, 1 läuft, 2 warten
     assert abs(item.eta_seconds - 3 * 600) < 5               # 3 offen zu je 10 Minuten
+
+
+async def test_ki_transkripte_lassen_sich_anhalten(test_db, set_setting):
+    """Wunsch 15.10.2026: auch die KI-Transkripte anhaltbar. Angehalten wird
+    kein neues Video vergeben; die Zeile bleibt sichtbar, damit es weitergeht."""
+    from app.services import transcripts
+    for n in range(3):
+        await test_db.execute(
+            "INSERT INTO videos (id, title, status, download_date) VALUES (?, 'T', 'ready', datetime('now'))",
+            (f"kivideo{n:04d}",))
+    await set_setting("transcripts.ai_enabled", "false")
+    assert await transcripts.claim_ai("mac") is None
+    item = next(i for i in await background_work.overview() if i.key == "ai_transcripts")
+    assert item.paused and item.switch_key == "transcripts.ai_enabled"
+    assert (item.done, item.total) == (0, 3) and item.eta_seconds is None
+
+    await set_setting("transcripts.ai_enabled", "true")
+    assert (await transcripts.claim_ai("mac")).video_id.startswith("kivideo")

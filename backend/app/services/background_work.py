@@ -112,23 +112,32 @@ async def _semantic_index() -> Optional[WorkItem]:
 async def _ai_transcripts() -> Optional[WorkItem]:
     """Das KI-Transkript, das gerade entsteht; die übrigen warten dahinter,
     bis der Rechner mit der Spracherkennung wieder frei ist."""
-    from app.services import transcripts
+    from app.services import setting_values, transcripts
+    paused = not await setting_values.is_on(transcripts.AI_SWITCH)
     row = await db.fetch_one(
         """SELECT a.note, a.claimed_at, a.worker, v.title FROM ai_transcriptions a
            LEFT JOIN videos v ON v.id = a.video_id WHERE a.status = 'working' LIMIT 1""")
-    if not row:
-        return None   # wartende ohne Bearbeiter: kein laufender Vorgang
     # Erledigt von insgesamt: fertige gegen fertige plus laufende plus wartende
     counts = await transcripts.ai_counts()
     remaining = await transcripts.pending() + counts["working"]
+    if not row and not (paused and remaining):
+        return None   # wartende ohne Bearbeiter: kein laufender Vorgang
     done = counts["done"]
     total = done + remaining
     average = await transcripts.average_ai_seconds()
-    return WorkItem(key="ai_transcripts", label=f"KI-Transkript: {(row['title'] or 'Video')[:60]}",
-                    detail=" · ".join(filter(None, [row["note"], row["worker"]])) or None,
-                    since=row["claimed_at"], done=done, total=total,
+    if row:
+        label = f"KI-Transkript: {(row['title'] or 'Video')[:60]}"
+        detail = " · ".join(filter(None, [row["note"], row["worker"]])) or None
+        if paused:
+            detail = "Hält nach diesem Video an." + (f" {detail}" if detail else "")
+    else:
+        # angehalten und nichts in Arbeit: sichtbar bleiben, damit es sich fortsetzen lässt
+        label, detail = "KI-Transkripte", "Angehalten - es wird kein neues Video bearbeitet."
+    return WorkItem(key="ai_transcripts", label=label, detail=detail,
+                    since=row["claimed_at"] if row else None, done=done, total=total,
                     progress=done / total if total else None,
-                    eta_seconds=int(remaining * average) if average else None)
+                    eta_seconds=int(remaining * average) if average and not paused else None,
+                    switch_key=transcripts.AI_SWITCH, paused=paused)
 
 
 async def _passage_index() -> Optional[WorkItem]:

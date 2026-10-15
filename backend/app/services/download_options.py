@@ -21,7 +21,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-from app import settings_schema
+from app.services import setting_values
 from app.database import db
 
 Origin = Literal["manual", "auto"]
@@ -43,18 +43,13 @@ class EffectiveOptions(BaseModel):
     quality_source: Literal["auftrag", "kanal", "standard"]
 
 
-async def _setting(key: str) -> str:
-    value = await db.fetch_val("SELECT value FROM settings WHERE key = ?", (key,))
-    return value if value not in (None, "") else settings_schema.BY_KEY[key].default
-
-
 async def subtitle_languages() -> list[str]:
     """Sprachen, deren Untertitel automatisch geholt werden - leer, wenn
     "Untertitel herunterladen" aus ist. Gilt für Downloads und das Nachladen
     beim Öffnen eines Videos."""
-    if (await _setting("download.auto_subtitle")) != "true":
+    if (await setting_values.get("download.auto_subtitle")) != "true":
         return []
-    raw = await _setting("download.subtitle_lang")
+    raw = await setting_values.get("download.subtitle_lang")
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
@@ -100,7 +95,7 @@ async def effective(video_id: str, requested: dict | None) -> EffectiveOptions:
     elif channel.get("download_quality"):
         quality, source = channel["download_quality"], "kanal"
     else:
-        quality, source = await _setting("download.quality"), "standard"
+        quality, source = await setting_values.get("download.quality"), "standard"
 
     if requested.get("download_thumbnail") is not None:
         download_thumbnail = bool(requested["download_thumbnail"])
