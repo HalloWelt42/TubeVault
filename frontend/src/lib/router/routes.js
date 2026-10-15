@@ -59,6 +59,17 @@ export const routeDefinitions = {
     queryParams: ['sort', 'order', 'types', 'channels', 'categories', 'tags', 'q', 'music'],
     description: 'Heruntergeladene Videos mit Filtern',
   },
+  'music': {
+    path: '/music',
+    label: 'Musik',
+    icon: 'fa-solid fa-music',
+    iconColor: 'var(--tv-art-musik)',
+    group: 'main',
+    hasId: false,
+    badge: 'music',
+    queryParams: ['tab', 'ansicht', 'q', 'sort', 'quelle'],
+    description: 'Musiksammlung mit Abspieler',
+  },
   'downloads': {
     path: '/downloads',
     label: 'Downloads',

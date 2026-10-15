@@ -33,6 +33,7 @@ class Track(BaseModel):
     id: str
     title: str
     artist: str
+    artist_source: str               # Quelle zum Abspielen aller Titel des Interpreten
     album: Optional[str] = None
     channel_id: Optional[str] = None
     channel_name: Optional[str] = None
@@ -92,7 +93,8 @@ async def tracks() -> list[Track]:
     result = []
     for row in rows:
         artist, title = names_of(row)
-        result.append(Track(id=row["id"], title=title, artist=artist, album=row["music_album"] or None,
+        result.append(Track(id=row["id"], title=title, artist=artist, artist_source=f"artist:{group_key(artist)}",
+                            album=row["music_album"] or None,
                             channel_id=row["channel_id"], channel_name=row["channel_name"],
                             duration=row["duration"], play_count=row["play_count"], last_played=row["last_played"],
                             added=row["download_date"], favorite=bool(row["favorite"]),

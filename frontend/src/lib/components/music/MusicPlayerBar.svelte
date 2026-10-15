@@ -1,0 +1,131 @@
+<!--
+  Abspielleiste der Musik (Gestaltung nach mockups/musik.html). Steht unten
+  über allen Seiten, solange etwas in der Warteschlange ist; steuert nur den
+  Musikspieler (lib/stores/musicPlayer.svelte.js).
+-->
+<script>
+  import { api } from '../../api/client.js';
+  import { navigate } from '../../router/router.js';
+  import { toast } from '../../stores/notifications.js';
+  import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
+  import { formatDuration } from '../../utils/format.js';
+
+  let track = $derived(player.current);
+  let progress = $derived(player.duration ? player.time / player.duration : 0);
+  const REPEAT_TITLES = { off: 'Wiederholen aus', all: 'Alle wiederholen', one: 'Diesen Titel wiederholen' };
+
+  // Zeitleiste und Lautstärke: Klick oder Ziehen setzt den Wert
+  function drag(node, onValue) {
+    function at(e) {
+      const box = node.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (e.clientX - box.left) / box.width));
+    }
+    function down(e) {
+      node.setPointerCapture(e.pointerId);
+      onValue(at(e));
+      node.onpointermove = (m) => onValue(at(m));
+      node.onpointerup = () => { node.onpointermove = null; node.onpointerup = null; };
+    }
+    node.addEventListener('pointerdown', down);
+    return { destroy: () => node.removeEventListener('pointerdown', down) };
+  }
+
+  async function favorite() {
+    try {
+      const on = await player.toggleFavorite();
+      toast.success(on ? 'Zu den Lieblingssongs' : 'Aus den Lieblingssongs entfernt');
+    } catch (e) { toast.error(e.message); }
+  }
+</script>
+
+{#if track}
+  <div class="spieler">
+    <div class="links">
+      <button class="cover" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Läuft gerade">
+        <img src={api.thumbnailUrl(track.id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+      </button>
+      <div class="text">
+        <div class="t" title={track.title}>{track.title}</div>
+        <div class="tv-leise tv-klein w">{track.artist}{#if player.title}{' · '}{player.title}{/if}</div>
+      </div>
+      <button class="taste" class:an={track.favorite} onclick={favorite} title="Lieblingssong">
+        <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
+    </div>
+
+    <div class="mitte">
+      <div class="tasten">
+        <button class="taste" class:an={player.shuffle} onclick={() => player.toggleShuffle()} title="Zufällige Reihenfolge">
+          <i class="fa-solid fa-shuffle"></i></button>
+        <button class="taste" onclick={() => player.prev()} title="Zurück"><i class="fa-solid fa-backward-step"></i></button>
+        <button class="taste gross" onclick={() => player.toggle()} title={player.playing ? 'Pause' : 'Abspielen'}>
+          <i class="fa-solid {player.loading ? 'fa-spinner fa-spin' : player.playing ? 'fa-pause' : 'fa-play'}"></i></button>
+        <button class="taste" onclick={() => player.next()} title="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+        <button class="taste wiederholen" class:an={player.repeat !== 'off'} onclick={() => player.cycleRepeat()}
+                title={REPEAT_TITLES[player.repeat]}>
+          <i class="fa-solid fa-repeat"></i>{#if player.repeat === 'one'}<b>1</b>{/if}</button>
+      </div>
+      <div class="zeitleiste">
+        <span class="zahl">{formatDuration(Math.floor(player.time))}</span>
+        <div class="spur" use:drag={(v) => player.seek(v * player.duration)} role="slider" tabindex="0"
+             aria-label="Stelle im Titel" aria-valuemin="0" aria-valuemax={Math.round(player.duration)} aria-valuenow={Math.round(player.time)}>
+          <b style:width="{progress * 100}%"></b>
+        </div>
+        <span class="zahl">{formatDuration(Math.floor(player.duration))}</span>
+      </div>
+    </div>
+
+    <div class="rechts">
+      <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt', ansicht: 'liedtext' })} title="Liedtext">
+        <i class="fa-solid fa-align-left"></i></button>
+      <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Warteschlange">
+        <i class="fa-solid fa-list-ol"></i></button>
+      <button class="taste" onclick={() => { player.pause(); navigate(`/watch/${track.id}`); }} title="Als Video ansehen">
+        <i class="fa-solid fa-display"></i></button>
+      <button class="taste" onclick={() => player.toggleMute()} title={player.muted ? 'Ton an' : 'Stumm'}>
+        <i class="fa-solid {player.muted || player.volume === 0 ? 'fa-volume-xmark' : 'fa-volume-high'}"></i></button>
+      <div class="lautstaerke" use:drag={(v) => player.setVolume(v)} role="slider" tabindex="0" aria-label="Lautstärke"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(player.volume * 100)}>
+        <b style:width="{player.volume * 100}%"></b>
+      </div>
+      <button class="taste" onclick={() => player.stop()} title="Musik beenden"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .spieler { flex: none; display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 320px);
+             align-items: center; gap: var(--tv-a5); height: 84px; padding: 0 var(--tv-a4);
+             background: var(--tv-karte); border-top: 1px solid var(--tv-rand-stark); }
+  .links { display: flex; align-items: center; gap: var(--tv-a3); min-width: 0; }
+  .cover { flex: none; width: 56px; height: 56px; padding: 0; border: 0; border-radius: var(--tv-ecke-klein); overflow: hidden;
+           cursor: pointer; background: var(--tv-mulde); }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .text { min-width: 0; }
+  .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mitte { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+  .tasten { display: flex; align-items: center; gap: var(--tv-a2); }
+  .taste { position: relative; width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: 0; background: none;
+           color: var(--tv-text-2); border-radius: var(--tv-ecke); cursor: pointer; font-size: 16px; }
+  .taste:hover { color: var(--tv-text); background: var(--tv-karte-2); }
+  .taste.an { color: var(--tv-akzent); }
+  .taste.gross { width: 46px; height: 46px; background: var(--tv-text); color: var(--tv-grund); font-size: 18px; }
+  .taste.gross:hover { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+  .wiederholen b { position: absolute; right: 5px; bottom: 4px; font-size: 13px; font-family: var(--tv-schrift-zahl); }
+  .zeitleiste { display: flex; align-items: center; gap: var(--tv-a3); width: 100%; max-width: 620px;
+                font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .spur, .lautstaerke { position: relative; height: 14px; cursor: pointer; touch-action: none; }
+  .spur { flex: 1; }
+  .lautstaerke { width: 96px; margin-left: 4px; }
+  .spur::before, .lautstaerke::before { content: ''; position: absolute; left: 0; right: 0; top: 5px; height: 5px;
+                                        background: var(--tv-karte-3); border-radius: 1px; }
+  .spur b, .lautstaerke b { position: absolute; left: 0; top: 5px; height: 5px; border-radius: 1px; background: var(--tv-akzent); }
+  .lautstaerke b { background: var(--tv-text-2); }
+  .rechts { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 0; }
+
+  @media (max-width: 900px) {
+    .spieler { grid-template-columns: minmax(0, 1fr) auto; height: auto; padding: var(--tv-a2) var(--tv-a3); gap: var(--tv-a2); }
+    .zeitleiste, .rechts .lautstaerke { display: none; }
+    .rechts { grid-column: 1 / -1; justify-content: space-between; }
+  }
+</style>

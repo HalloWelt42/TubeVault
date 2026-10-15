@@ -12,6 +12,7 @@
   import ActivityPanel from './lib/components/common/ActivityPanel.svelte';
   import LogTerminal from './lib/components/common/LogTerminal.svelte';
   import VersionBar from './lib/components/common/VersionBar.svelte';
+  import MusicPlayerBar from './lib/components/music/MusicPlayerBar.svelte';
   import { startVersionWatch } from './lib/utils/versionWatch.js';
   import './lib/styles/global.css';
 
@@ -36,11 +37,13 @@
   import AdminRebuild from './routes/AdminRebuild.svelte';
   import AdminCleanup from './routes/AdminCleanup.svelte';
   import Dubbing from './routes/Dubbing.svelte';
+  import Music from './routes/Music.svelte';
 
   /** Route-Key → Svelte-Komponente */
   const pages = {
     dashboard: Dashboard,
     library: Library,
+    music: Music,
     watch: Watch,
     downloads: Downloads,
     favorites: Favorites,
@@ -129,6 +132,7 @@
             {/key}
           {/if}
         </main>
+        <MusicPlayerBar />
         <ActivityPanel />
       </div>
     </div>

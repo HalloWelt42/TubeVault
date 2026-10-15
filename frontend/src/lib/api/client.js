@@ -493,6 +493,23 @@ export const api = {
   scanArchive: (id) => request(`/api/archives/${id}/scan`, { method: 'POST' }),
   checkMounts: () => request('/api/archives/check/mounts'),
 
+  // ── Musik ──
+  musicOverview: () => request('/api/music/overview'),
+  musicTracks: ({ sort = 'added', q = '', favorites = false, offset = 0, limit = 100 } = {}) => {
+    const params = new URLSearchParams({ sort, offset, limit });
+    if (q) params.set('q', q);
+    if (favorites) params.set('favorites', 'true');
+    return request(`/api/music/tracks?${params}`);
+  },
+  musicArtists: () => request('/api/music/artists'),
+  musicAlbums: () => request('/api/music/albums'),
+  musicChannels: () => request('/api/music/channels'),
+  musicPlay: (source, { shuffle = false, start = null } = {}) => {
+    const params = new URLSearchParams({ source, shuffle });
+    if (start) params.set('start', start);
+    return request(`/api/music/play?${params}`);
+  },
+
   // ── Eigene Videos: Sammlung einlesen und einordnen ──
   ownCollection: () => request('/api/own-videos/collection'),
   ownAddFolder: (path) => request('/api/own-videos/folders', { method: 'POST', body: JSON.stringify({ path }) }),

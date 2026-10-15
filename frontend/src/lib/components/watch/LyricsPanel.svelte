@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { parseLrc } from '../../utils/lrc.js';
   import { toast } from '../../stores/notifications.js';
 
   let {
@@ -36,18 +37,7 @@
   let editLines = $state([]);
 
   // Parsed synced lyrics: [{time: seconds, text: string}]
-  let parsedLines = $derived.by(() => {
-    if (!synced) return [];
-    const lines = [];
-    for (const line of synced.split('\n')) {
-      const m = line.match(/^\[(\d+):(\d+)\.(\d+)\]\s*(.*)/);
-      if (m) {
-        const raw = parseInt(m[1]) * 60 + parseInt(m[2]) + parseInt(m[3]) / 100;
-        lines.push({ raw, text: m[4] });
-      }
-    }
-    return lines;
-  });
+  let parsedLines = $derived(parseLrc(synced).map(l => ({ raw: l.time, text: l.text })));
 
   // Auto-scroll synced lyrics
   $effect(() => {
