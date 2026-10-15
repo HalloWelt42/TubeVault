@@ -422,6 +422,27 @@ async def search(query: str, level: Precision) -> Optional[list[tuple[str, float
     return [(ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 
 
+async def similar_to(video_id: str, candidates: list[str], limit: int = 50) -> Optional[list[str]]:
+    """Kandidaten, deren Inhalt dem eines Videos am nächsten ist, beste
+    zuerst - aus den gespeicherten Vektoren, ohne den KI-Dienst zu fragen.
+    None, wenn die Bedeutungssuche aus ist oder das Video keinen Vektor hat."""
+    cfg = await config()
+    if not cfg:
+        return None
+    import numpy as np
+    ids, matrix, _ = await _load_matrix(cfg[1])
+    if matrix is None:
+        return None
+    position = {vid: i for i, vid in enumerate(ids)}
+    if video_id not in position:
+        return None
+    rows = [position[c] for c in candidates if c in position and c != video_id]
+    if not rows:
+        return []
+    scores = matrix[rows] @ matrix[position[video_id]]
+    return [ids[rows[i]] for i in np.argsort(-scores)[:limit]]
+
+
 async def overview() -> dict:
     cfg = await config()
     return {

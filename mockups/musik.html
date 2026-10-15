@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Musik</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<style>
+  /* Die Schale bekommt unten die Abspielleiste (in der App: über allen Seiten) */
+  .schale { grid-template: "kopf kopf" var(--tv-kopf-hoehe) "seite haupt" 1fr "spieler spieler" 84px "fuss fuss" var(--tv-fuss-hoehe)
+                         / var(--tv-seite-breite) 1fr; }
+  .musik { display: grid; grid-template-columns: minmax(0, 1fr) 360px; height: 100%; min-height: 0; }
+  .musik-haupt { overflow-y: auto; padding: var(--tv-a5) var(--tv-a6) var(--tv-a6); }
+  .seitenkopf .aktionen { display: flex; gap: var(--tv-a2); margin-left: auto; }
+  .reiter { margin: var(--tv-a4) 0 var(--tv-a5); }
+
+  .abschnitt { margin-bottom: var(--tv-a6); }
+  .abschnitt-kopf { display: flex; align-items: baseline; gap: var(--tv-a3); margin-bottom: var(--tv-a3); }
+  .abschnitt-kopf h2 { margin: 0; font-size: var(--tv-gr-titel); }
+  .abschnitt-kopf a { margin-left: auto; font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+
+  /* Weiterhören */
+  .weiter { display: flex; align-items: center; gap: var(--tv-a4); padding: var(--tv-a3); background: var(--tv-flaeche); border-radius: var(--tv-ecke); }
+  .weiter img { width: 96px; aspect-ratio: 1; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .weiter .text { flex: 1; min-width: 0; }
+  .weiter .titel { font-weight: 700; font-size: 19px; }
+
+  /* Kacheln mit quadratischem Bild, ein Klick spielt sofort */
+  .raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: var(--tv-a4); }
+  .song { position: relative; cursor: pointer; }
+  .cover { position: relative; aspect-ratio: 1; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde); }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s; }
+  .song:hover .cover img { transform: scale(1.04); }
+  .spielen { position: absolute; right: 10px; bottom: 10px; width: 48px; height: 48px; display: grid; place-items: center;
+             background: var(--tv-akzent); color: var(--tv-akzent-text); border-radius: var(--tv-ecke); border: 0; font-size: 18px;
+             opacity: 0; transform: translateY(6px); transition: opacity 0.15s, transform 0.15s; box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
+  .song:hover .spielen, .song.laeuft .spielen { opacity: 1; transform: none; }
+  .mehr { position: absolute; right: 8px; top: 8px; width: 34px; height: 34px; display: grid; place-items: center; border: 0;
+          border-radius: var(--tv-ecke-klein); background: rgba(8, 13, 16, 0.7); color: var(--tv-text); opacity: 0; }
+  .song:hover .mehr { opacity: 1; }
+  .song .name { margin-top: 8px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song .wer { font-size: var(--tv-gr-klein); color: var(--tv-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song.laeuft .name { color: var(--tv-akzent); }
+  .wellen { position: absolute; left: 10px; bottom: 12px; display: flex; align-items: flex-end; gap: 3px; height: 18px; }
+  .wellen b { width: 4px; background: var(--tv-akzent); animation: welle 0.9s ease-in-out infinite; }
+  .wellen b:nth-child(2) { animation-delay: 0.2s; } .wellen b:nth-child(3) { animation-delay: 0.4s; } .wellen b:nth-child(4) { animation-delay: 0.1s; }
+  @keyframes welle { 0%, 100% { height: 4px; } 50% { height: 18px; } }
+
+  /* Interpreten: Collage aus vier Titelbildern */
+  .collage { display: grid; grid-template-columns: 1fr 1fr; }
+  .collage img { aspect-ratio: 1; }
+
+  /* Oft gehört: dichte Liste */
+  .liste .zeile { display: grid; grid-template-columns: 32px 48px minmax(0, 1fr) 180px 70px 60px 34px; gap: var(--tv-a3); align-items: center;
+                  padding: 6px var(--tv-a2); border-radius: var(--tv-ecke); cursor: pointer; }
+  .liste .zeile:hover { background: var(--tv-flaeche); }
+  .liste .zeile.kopfzeile { cursor: default; font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tv-text-3); }
+  .liste .zeile.kopfzeile:hover { background: none; }
+  .liste .nr { text-align: right; color: var(--tv-text-3); font-family: var(--tv-schrift-zahl); }
+  .liste img { width: 48px; height: 48px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .liste .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .liste .w { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .liste .herz { color: var(--tv-symbol-rot); }
+
+  /* Läuft gerade: rechte Spalte mit Warteschlange und Liedtext */
+  .jetzt { border-left: 1px solid var(--tv-rand); background: var(--tv-leiste); display: flex; flex-direction: column; min-height: 0; }
+  .jetzt-kopf { padding: var(--tv-a4); }
+  .jetzt-kopf img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--tv-ecke); }
+  .jetzt-kopf .titel { margin-top: var(--tv-a3); font-weight: 700; font-size: 19px; }
+  .jetzt .reiter { margin: 0; padding: 0 var(--tv-a4); }
+  .schlange { flex: 1; overflow-y: auto; padding: var(--tv-a2) var(--tv-a3) var(--tv-a4); }
+  .schlange .eintrag { display: grid; grid-template-columns: 18px 40px minmax(0, 1fr) auto; gap: var(--tv-a2); align-items: center;
+                       padding: 6px; border-radius: var(--tv-ecke); font-size: var(--tv-gr-klein); }
+  .schlange .eintrag:hover { background: var(--tv-flaeche); }
+  .schlange .eintrag img { width: 40px; height: 40px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .schlange .griff { color: var(--tv-text-3); cursor: grab; }
+  .schlange .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Abspielleiste */
+  .spieler { grid-area: spieler; display: grid; grid-template-columns: 320px 1fr 320px; align-items: center; gap: var(--tv-a5);
+             padding: 0 var(--tv-a4); background: var(--tv-karte); border-top: 1px solid var(--tv-rand-stark); }
+  .spieler .links { display: flex; align-items: center; gap: var(--tv-a3); min-width: 0; }
+  .spieler .links img { width: 56px; height: 56px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .spieler .links .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spieler .mitte { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .spieler .tasten { display: flex; align-items: center; gap: var(--tv-a3); }
+  .taste { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: none; color: var(--tv-text-2);
+           border-radius: var(--tv-ecke); cursor: pointer; font-size: 16px; }
+  .taste:hover { color: var(--tv-text); background: var(--tv-karte-2); }
+  .taste.an { color: var(--tv-akzent); }
+  .taste.gross { width: 46px; height: 46px; background: var(--tv-text); color: var(--tv-grund); font-size: 18px; }
+  .zeitleiste { display: flex; align-items: center; gap: var(--tv-a3); width: 100%; max-width: 620px; font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .zeitleiste .spur { flex: 1; height: 5px; background: var(--tv-karte-3); border-radius: 1px; position: relative; }
+  .zeitleiste .spur b { position: absolute; inset: 0 auto 0 0; width: 38%; background: var(--tv-akzent); }
+  .spieler .rechts { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+  .lautstaerke { width: 96px; height: 5px; background: var(--tv-karte-3); border-radius: 1px; position: relative; margin-left: 6px; }
+  .lautstaerke b { position: absolute; inset: 0 auto 0 0; width: 70%; background: var(--tv-text-2); }
+
+  /* Kontextmenü einer Kachel */
+  .menue { position: absolute; z-index: 5; width: 260px; padding: 6px; background: var(--tv-karte-2); border: 1px solid var(--tv-rand-stark);
+           border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten); }
+  .menue button { display: flex; align-items: center; gap: var(--tv-a3); width: 100%; padding: 9px 10px; border: 0; background: none;
+                  color: var(--tv-text); font: inherit; text-align: left; border-radius: var(--tv-ecke-klein); cursor: pointer; }
+  .menue button:hover { background: var(--tv-karte-3); }
+  .menue button i { width: 18px; color: var(--tv-text-2); }
+  .menue hr { border: 0; border-top: 1px solid var(--tv-rand); margin: 6px 4px; }
+  .hinweis-box { padding: var(--tv-a3) var(--tv-a4); background: rgba(192, 132, 252, 0.1); border-radius: var(--tv-ecke); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .hinweis-box i { color: #c084fc; }
+  /* Umschalter der Entwürfe würde hier die Abspieltasten verdecken */
+  .entwurf-schalter { display: none; }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt" style="padding: 0; overflow: hidden">
+    <div class="musik">
+      <div class="musik-haupt">
+        <div class="seitenkopf">
+          <h1>Musik</h1>
+          <span class="zahl">198 Titel · 5 Interpreten · 13:05 Std.</span>
+          <div class="aktionen">
+            <input class="eingabe" style="width: 240px" placeholder="Titel, Interpret, Album">
+            <button class="knopf"><i class="fa-solid fa-rotate-left"></i> Weiterhören</button>
+            <button class="knopf haupt"><i class="fa-solid fa-shuffle"></i> Alles zufällig</button>
+          </div>
+        </div>
+
+        <div class="reiter">
+          <button class="aktiv"><i class="fa-solid fa-house"></i> Start</button>
+          <button><i class="fa-solid fa-music"></i> Titel <span class="zaehler">198</span></button>
+          <button><i class="fa-solid fa-microphone"></i> Interpreten <span class="zaehler">5</span></button>
+          <button><i class="fa-solid fa-compact-disc"></i> Alben</button>
+          <button><i class="fa-solid fa-heart"></i> Lieblingssongs <span class="zaehler">12</span></button>
+          <button><i class="fa-solid fa-list-ul"></i> Wiedergabelisten <span class="zaehler">3</span></button>
+          <button><i class="fa-solid fa-clock-rotate-left"></i> Verlauf</button>
+          <button><i class="fa-solid fa-tv"></i> Musikkanäle <span class="zaehler">5</span></button>
+        </div>
+
+        <section class="abschnitt">
+          <div class="weiter">
+            <img id="weiter-bild" alt="">
+            <div class="text">
+              <span class="etikett">Weiterhören</span>
+              <div class="titel">Super Trouper</div>
+              <div class="leise klein">ABBA · Warteschlange: noch 22 Titel, 1:24 Std.</div>
+            </div>
+            <button class="knopf haupt"><i class="fa-solid fa-play"></i> Fortsetzen bei 1:37</button>
+          </div>
+        </section>
+
+        <section class="abschnitt">
+          <div class="abschnitt-kopf"><h2>Interpreten</h2><a href="#">Alle zeigen</a></div>
+          <div class="raster" id="interpreten"></div>
+        </section>
+
+        <section class="abschnitt">
+          <div class="abschnitt-kopf"><h2>Neu in der Sammlung</h2><a href="#">Alle zeigen</a></div>
+          <div class="raster" id="neu"></div>
+        </section>
+
+        <section class="abschnitt">
+          <div class="abschnitt-kopf"><h2>Oft gehört</h2><a href="#">Alle zeigen</a></div>
+          <div class="liste" id="oft"></div>
+        </section>
+
+        <section class="abschnitt">
+          <div class="hinweis-box"><i class="fa-solid fa-circle-info"></i>&nbsp; Musik ist, was du festlegst: ganze Kanäle über
+            "Musikkanal" auf der Kanalseite, einzelne Videos über das Menü einer Kachel oder die Mehrfachauswahl der Bibliothek.
+            Ausreißer in einem Musikkanal nimmst du einzeln heraus.</div>
+        </section>
+      </div>
+
+      <aside class="jetzt">
+        <div class="jetzt-kopf">
+          <img id="jetzt-bild" alt="">
+          <div class="titel">Super Trouper</div>
+          <div class="leise">ABBA · aus AbbaVEVO</div>
+        </div>
+        <div class="reiter">
+          <button class="aktiv"><i class="fa-solid fa-list-ol"></i> Als Nächstes</button>
+          <button><i class="fa-solid fa-align-left"></i> Liedtext</button>
+          <button><i class="fa-solid fa-circle-info"></i> Infos</button>
+        </div>
+        <div class="schlange" id="schlange"></div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="spieler">
+    <div class="links">
+      <img id="spieler-bild" alt="">
+      <div style="min-width: 0">
+        <div class="t">Super Trouper</div>
+        <div class="leise klein">ABBA</div>
+      </div>
+      <button class="taste an" title="Lieblingssong"><i class="fa-solid fa-heart"></i></button>
+    </div>
+    <div class="mitte">
+      <div class="tasten">
+        <button class="taste an" title="Zufällige Reihenfolge"><i class="fa-solid fa-shuffle"></i></button>
+        <button class="taste" title="Zurück"><i class="fa-solid fa-backward-step"></i></button>
+        <button class="taste gross" title="Pause (Leertaste)"><i class="fa-solid fa-pause"></i></button>
+        <button class="taste" title="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+        <button class="taste" title="Wiederholen: aus, alle, dieser Titel"><i class="fa-solid fa-repeat"></i></button>
+      </div>
+      <div class="zeitleiste"><span class="zahl">1:37</span><div class="spur"><b></b></div><span class="zahl">4:14</span></div>
+    </div>
+    <div class="rechts">
+      <button class="taste an" title="Liedtext"><i class="fa-solid fa-align-left"></i></button>
+      <button class="taste an" title="Warteschlange"><i class="fa-solid fa-list-ol"></i></button>
+      <button class="taste" title="Video im kleinen Fenster zeigen"><i class="fa-solid fa-display"></i></button>
+      <button class="taste" title="Einschlafen: anhalten nach Zeit oder Titelende"><i class="fa-solid fa-moon"></i></button>
+      <button class="taste" title="Stumm"><i class="fa-solid fa-volume-high"></i></button>
+      <div class="lautstaerke"><b></b></div>
+    </div>
+  </div>
+
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, vorschau, dauer } from './gemeinsam.js';
+  seite('musik');
+
+  // Echte Titel aus Musikkanälen der Bibliothek (Stand 15.10.2026)
+  const TITEL = [
+    ['ktNt-69TixI', 'Super Trouper', 'ABBA', 254, 31], ['mcssw3utx7o', 'Waterloo', 'ABBA', 168, 24],
+    ['81WhM9dOcYI', 'The Winner Takes It All', 'ABBA', 297, 19], ['dQsjAbZDx-4', 'Fernando', 'ABBA', 254, 12],
+    ['CYm6ejP3A0k', 'Thank You For The Music', 'ABBA', 233, 9], ['XQ45gynAUPg', 'Voulez-Vous', 'ABBA', 311, 4],
+    ['1HnOFwqpLRQ', 'The Day Before You Came', 'ABBA', 347, 3], ['713TdwYryXc', 'Cézanne peint', 'France Gall', 244, 14],
+    ['b6U2K3LfNfg', "Besoin d'amour", 'France Gall', 297, 8], ['rJrGMzrPCAk', 'Papillon de nuit', 'France Gall', 295, 6],
+    ['d2YgyXGnXG4', "La chanson d'Azima", 'France Gall', 180, 2], ['KhLGBKIonTM', 'LUNAR', 'Romulus', 364, 11],
+    ['DMPaUQCvl1g', 'This is Midnight', 'Romulus', 326, 7], ['8PTxWTyd7ng', 'Prologue', 'Romulus', 339, 1],
+    ['V6F1AkGHMZI', 'Unter meiner Uniform', 'AND ONE', 406, 16], ['WsYEKv3C2pE', 'Krieger', 'AND ONE', 244, 10],
+    ['6yP4Nm86yk0', 'All About Us', 't.A.T.u.', 208, 22], ['TVGS1XjFpe0', 'Gomenasai', 't.A.T.u.', 222, 13],
+  ];
+  const [aktuell] = TITEL;
+  for (const id of ['weiter-bild', 'jetzt-bild', 'spieler-bild']) document.getElementById(id).src = vorschau(aktuell[0]);
+
+  const kachel = ([id, titel, wer], laeuft = false) => `
+    <div class="song${laeuft ? ' laeuft' : ''}" title="Klick spielt sofort">
+      <div class="cover"><img src="${vorschau(id)}" alt="" loading="lazy">
+        ${laeuft ? '<div class="wellen"><b></b><b></b><b></b><b></b></div>' : ''}
+        <button class="mehr" title="Als Nächstes, hinten anstellen, Wiedergabeliste, Interpret, Video, keine Musik"><i class="fa-solid fa-ellipsis"></i></button>
+        <button class="spielen" title="Abspielen"><i class="fa-solid ${laeuft ? 'fa-pause' : 'fa-play'}"></i></button>
+      </div>
+      <div class="name">${titel}</div><div class="wer">${wer}</div>
+    </div>`;
+
+  const interpreten = {};
+  for (const t of TITEL) (interpreten[t[2]] ||= []).push(t);
+  const ANZAHL = { 'ABBA': 89, 'France Gall': 47, 'Romulus': 45, 'AND ONE': 12, 't.A.T.u.': 5 };
+  document.getElementById('interpreten').innerHTML = Object.entries(interpreten).map(([wer, liste]) => `
+    <div class="song" title="Klick spielt alle Titel">
+      <div class="cover collage">${[0, 1, 2, 3].map(i => `<img src="${vorschau(liste[i % liste.length][0])}" alt="">`).join('')}
+        <button class="spielen" title="Alle zufällig"><i class="fa-solid fa-shuffle"></i></button></div>
+      <div class="name">${wer}</div><div class="wer zahl">${ANZAHL[wer]} Titel</div>
+    </div>`).join('');
+
+  document.getElementById('neu').innerHTML = TITEL.slice(0, 12).map((t, i) => kachel(t, i === 0)).join('');
+
+  const oft = [...TITEL].sort((a, b) => b[4] - a[4]).slice(0, 6);
+  document.getElementById('oft').innerHTML = `
+    <div class="zeile kopfzeile"><span class="nr">#</span><span></span><span>Titel</span><span>Interpret</span><span>Gehört</span><span>Dauer</span><span></span></div>` +
+    oft.map(([id, titel, wer, d, n], i) => `
+    <div class="zeile"><span class="nr">${i + 1}</span><img src="${vorschau(id)}" alt="">
+      <span class="t">${titel}</span><span class="w">${wer}</span><span class="zahl w">${n}x</span><span class="zahl w">${dauer(d)}</span>
+      <i class="fa-${i < 3 ? 'solid' : 'regular'} fa-heart herz"></i></div>`).join('');
+
+  document.getElementById('schlange').innerHTML = TITEL.slice(1, 12).map(([id, titel, wer, d]) => `
+    <div class="eintrag"><i class="fa-solid fa-grip-vertical griff"></i><img src="${vorschau(id)}" alt="">
+      <div style="min-width: 0"><div class="t">${titel}</div><div class="leise">${wer}</div></div>
+      <span class="zahl leise">${dauer(d)}</span></div>`).join('');
+</script>
+</body>
+</html>

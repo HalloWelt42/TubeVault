@@ -40,6 +40,10 @@ class CountsService:
             + await video_classifier.without_shorts()
         ) or 0
 
+    async def music(self) -> int:
+        """Musiktitel - genau die Sammlung der Musikseite (music_library)."""
+        return await db.fetch_val("SELECT COUNT(*) FROM videos WHERE status = 'ready' AND is_music = 1") or 0
+
     async def own_videos(self) -> int:
         """Eigene und übernommene Videos - genau die Liste "Eingeordnet"."""
         from app.services.own_actions import LIBRARY_WHERE

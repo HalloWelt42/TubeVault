@@ -23,7 +23,7 @@ export const VIDEOS = [
 ];
 
 // Entwurfsseiten je Eintrag der Seitenleiste
-const SEITEN = { bibliothek: 'bibliothek.html', downloads: 'downloads.html', eigene: 'eigene-videos.html', einstellungen: 'einstellungen.html' };
+const SEITEN = { bibliothek: 'bibliothek.html', musik: 'musik.html', downloads: 'downloads.html', eigene: 'eigene-videos.html', einstellungen: 'einstellungen.html' };
 
 // Wie in der App (Sidebar.svelte): Symbolfarben einzelner Einträge bleiben
 const NAVI = [
@@ -31,6 +31,7 @@ const NAVI = [
   ['Neu bei Abos', 'fa-rss', 'feed', '95.047'],
   ['Kanäle', 'fa-tv', 'kanaele', '385'],
   ['Bibliothek', 'fa-photo-film', 'bibliothek', '32.479'],
+  ['Musik', 'fa-music', 'musik', '198', '#C084FC'],
   ['Downloads', 'fa-bolt', 'downloads', null, '#FFCA28'],
   ['Playlists', 'fa-list-ul', 'playlists', '54'],
   ['Favoriten', 'fa-heart', 'favoriten', '41', '#EF5350'],
