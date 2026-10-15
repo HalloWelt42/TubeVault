@@ -336,10 +336,13 @@ async def _run_bulk(run: BulkRun, ids: list[int]) -> None:
 
 async def channels() -> list[dict]:
     """Kanäle zur Auswahl beim Zuordnen: Abos und eigene Kanäle."""
-    rows = await db.fetch_all(
-        """SELECT channel_id, channel_name, 'abo' AS kind FROM subscriptions WHERE COALESCE(channel_name, '') <> ''
-           UNION
-           SELECT channel_id, MAX(channel_name), 'eigen' FROM videos
-           WHERE channel_id LIKE 'own\\_%' ESCAPE '\\' GROUP BY channel_id
-           ORDER BY 2 COLLATE NOCASE""")
+    # Zwei Abfragen statt UNION mit Gruppierung: SQLite 3.47 liefert dort
+    # bei leerer Gruppe eine Zeile aus lauter NULL
+    abos = await db.fetch_all(
+        "SELECT channel_id, channel_name, 'abo' AS kind FROM subscriptions WHERE COALESCE(channel_name, '') <> ''")
+    own = await db.fetch_all(
+        """SELECT channel_id, MAX(channel_name) AS channel_name, 'eigen' AS kind FROM videos
+           WHERE channel_id LIKE 'own\\_%' ESCAPE '\\' AND COALESCE(channel_name, '') <> ''
+           GROUP BY channel_id""")
+    rows = sorted([*abos, *own], key=lambda r: r["channel_name"].casefold())
     return [dict(r) for r in rows]

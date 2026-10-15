@@ -18,10 +18,19 @@ from app.services import own_actions, own_scan
 router = APIRouter(prefix="/api/own-videos", tags=["Eigene Videos"])
 
 
+class BulkState(BaseModel):
+    action: str
+    folder_path: str
+    done: int
+    failed: int
+    total: int
+
+
 class Collection(BaseModel):
     available: bool                  # Sammlungsordner vorhanden
     folders: list[OwnFolder]         # schon eingelesene Ordner
     candidates: list[str]            # Ordner der obersten Ebene, die sich einlesen lassen
+    bulk: Optional[BulkState] = None # laufende Sammelaktion
 
 
 class FolderRequest(BaseModel):
@@ -37,7 +46,10 @@ class FilePage(BaseModel):
 async def get_collection():
     candidates = await own_scan.candidates()
     available = bool(candidates) or own_scan.collection_root().is_dir()
-    return Collection(available=available, folders=await own_scan.folders(), candidates=candidates)
+    run = own_actions.bulk_running()
+    bulk = BulkState(action=run.action, folder_path=run.folder_path, done=run.done, failed=run.failed,
+                     total=run.total) if run else None
+    return Collection(available=available, folders=await own_scan.folders(), candidates=candidates, bulk=bulk)
 
 
 @router.post("/folders")

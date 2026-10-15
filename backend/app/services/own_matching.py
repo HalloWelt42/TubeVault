@@ -126,13 +126,14 @@ def match(facts: FileFacts, index: MatchIndex) -> Match:
 
     # 2. Bibliothek: gleiche Dauer und gleiche Größe oder gleicher Titel
     if facts.duration:
-        candidates = index.same_duration(facts.duration)
-        for video in candidates:
-            if video.size and video.size == facts.size:
-                return _result(Finding.DUPLICATE, MatchReason.SAME_FILE, video)
-        best = max(candidates, key=lambda v: fuzz.token_sort_ratio(title, loose_title(v.title)), default=None)
-        if best and title and fuzz.token_sort_ratio(title, loose_title(best.title)) >= SAME_TITLE_RATIO:
-            return _result(Finding.DUPLICATE, MatchReason.TITLE_DURATION, best)
+        # bester Kandidat: ähnlichster Titel, bei Gleichstand die nächste Dauer
+        scored = sorted(((fuzz.token_sort_ratio(title, loose_title(v.title)), -abs(v.duration - facts.duration), v)
+                         for v in index.same_duration(facts.duration)), key=lambda s: (s[0], s[1]), reverse=True)
+        same_size = next((v for _, _, v in scored if v.size and v.size == facts.size), None)
+        if same_size:
+            return _result(Finding.DUPLICATE, MatchReason.SAME_FILE, same_size)
+        if scored and title and scored[0][0] >= SAME_TITLE_RATIO:
+            return _result(Finding.DUPLICATE, MatchReason.TITLE_DURATION, scored[0][2])
 
     # 3. Gleicher Titel: mit gleicher Dauer sicher, ohne Vergleich vermutlich;
     #    Einträge des vermuteten Kanals zuerst

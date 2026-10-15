@@ -490,31 +490,40 @@ export const api = {
   scanArchive: (id) => request(`/api/archives/${id}/scan`, { method: 'POST' }),
   checkMounts: () => request('/api/archives/check/mounts'),
 
-  // ── Eigene Videos ──
-  getOwnVideos: (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return request(`/api/own-videos?${q}`);
+  // ── Eigene Videos: Sammlung einlesen und einordnen ──
+  ownCollection: () => request('/api/own-videos/collection'),
+  ownAddFolder: (path) => request('/api/own-videos/folders', { method: 'POST', body: JSON.stringify({ path }) }),
+  ownScanFolder: (id) => request(`/api/own-videos/folders/${id}/scan`, { method: 'POST' }),
+  ownPauseFolder: (id) => request(`/api/own-videos/folders/${id}/pause`, { method: 'POST' }),
+  ownForgetFolder: (id) => request(`/api/own-videos/folders/${id}`, { method: 'DELETE' }),
+  ownFiles: (folderId, { finding = '', q = '', offset = 0, limit = 50 } = {}) => {
+    const params = new URLSearchParams({ offset, limit });
+    if (finding) params.set('finding', finding);
+    if (q) params.set('q', q);
+    return request(`/api/own-videos/folders/${folderId}/files?${params}`);
   },
+  ownFile: (id) => request(`/api/own-videos/files/${id}`),
+  ownFileThumbUrl: (id) => `${API_BASE}/api/own-videos/files/${id}/thumbnail`,
+  ownFileMediaUrl: (id) => `${API_BASE}/api/own-videos/files/${id}/media`,
+  ownDelete: (id) => request(`/api/own-videos/files/${id}/delete`, { method: 'POST' }),
+  ownAdopt: (id, videoId = null) =>
+    request(`/api/own-videos/files/${id}/adopt`, { method: 'POST', body: JSON.stringify({ video_id: videoId }) }),
+  ownAssign: (id, channelName, channelId = null, title = null) =>
+    request(`/api/own-videos/files/${id}/own`, { method: 'POST',
+      body: JSON.stringify({ channel_name: channelName, channel_id: channelId, title }) }),
+  ownReplace: (id) => request(`/api/own-videos/files/${id}/replace`, { method: 'POST' }),
+  ownSkip: (id) => request(`/api/own-videos/files/${id}/skip`, { method: 'POST' }),
+  ownReopen: (id) => request(`/api/own-videos/files/${id}/reopen`, { method: 'POST' }),
+  ownBulk: (folderId, action) =>
+    request(`/api/own-videos/folders/${folderId}/bulk`, { method: 'POST', body: JSON.stringify({ action }) }),
+  ownChannels: () => request('/api/own-videos/channels'),
+  ownLookup: (q) => request(`/api/own-videos/lookup?q=${encodeURIComponent(q)}`),
+  ownLibrary: (offset = 0, limit = 60) => request(`/api/own-videos/library?offset=${offset}&limit=${limit}`),
   searchRss: (q, channel = null) => {
     const params = new URLSearchParams({ q });
     if (channel) params.set('channel', channel);
     return request(`/api/own-videos/search-rss?${params}`);
   },
-  previewStreamUrl: (path) => `${API_BASE}/api/own-videos/preview/stream?path=${encodeURIComponent(path)}`,
-
-  // Sofort-Aktionen für Eigene Videos
-  stagingLinkYoutube: (stagingId, youtubeId, categoryId = null) =>
-    request(`/api/own-videos/staging/${stagingId}/link-youtube`, { method: 'POST', body: JSON.stringify({ youtube_id: youtubeId, category_id: categoryId }) }),
-  stagingImportOwn: (stagingId, categoryId = null, channelName = null) =>
-    request(`/api/own-videos/staging/${stagingId}/import-own`, { method: 'POST', body: JSON.stringify({ category_id: categoryId, channel_name: channelName }) }),
-  stagingReplace: (stagingId) =>
-    request(`/api/own-videos/staging/${stagingId}/replace`, { method: 'POST' }),
-  stagingSkip: (stagingId) =>
-    request(`/api/own-videos/staging/${stagingId}/skip`, { method: 'POST' }),
-  stagingCleanupMissing: () =>
-    request('/api/own-videos/staging/cleanup-missing', { method: 'POST' }),
-  stagingDeleteFolder: (sessionId, folder) =>
-    request(`/api/own-videos/staging/delete-folder?session_id=${sessionId}&folder=${encodeURIComponent(folder)}`, { method: 'POST' }),
   thumbnailFromFile: (videoId, position = null) =>
     request(`/api/video-repair/${videoId}/thumbnail-from-file${position === null ? '' : `?position=${position}`}`, { method: 'POST' }),
   metadataFromSource: (videoId) => request(`/api/video-repair/${videoId}/metadata-from-source`, { method: 'POST' }),

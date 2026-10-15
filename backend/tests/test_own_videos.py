@@ -191,7 +191,7 @@ async def test_fehlende_sammlung_ist_kein_fehler(test_db, collection, async_clie
     async with await async_client_factory(own_collection.router) as client:
         r = await client.get("/api/own-videos/collection")
         assert r.status_code == 200
-        assert r.json() == {"available": False, "folders": [], "candidates": []}
+        assert r.json() == {"available": False, "folders": [], "candidates": [], "bulk": None}
         r = await client.post("/api/own-videos/folders", json={"path": "youtube"})
         assert r.status_code == 400
 
@@ -371,3 +371,11 @@ async def test_eingeordnet_zeigt_ordnerpfade_als_kanal(test_db, async_client_fac
     async with await async_client_factory(own_collection.router) as client:
         page = (await client.get("/api/own-videos/library")).json()
     assert (page["total"], page["total_bytes"], page["folder_named_channels"]) == (2, 15, 1)
+
+
+def test_bei_gleicher_groesse_entscheidet_der_titel():
+    """Mehrere gleich große Kandidaten gleicher Dauer: der mit passendem Titel."""
+    a = own_matching.KnownVideo("aaaaaaaaaaa", "Anderes Video", None, None, 415, 500, in_library=True)
+    b = own_matching.KnownVideo("bbbbbbbbbbb", "Sauerteig Folge 176", None, None, 416, 500, in_library=True)
+    index = own_matching.MatchIndex([a, b], [], [])
+    assert own_matching.match(_facts("Sauerteig Folge 176", 415, 500), index).video_id == "bbbbbbbbbbb"

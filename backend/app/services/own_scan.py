@@ -238,10 +238,11 @@ async def build_index() -> own_matching.MatchIndex:
         """SELECT r.video_id, r.title, r.channel_id, s.channel_name, r.duration
            FROM rss_entries r LEFT JOIN subscriptions s ON s.channel_id = r.channel_id
            WHERE r.title IS NOT NULL""")
-    channels = await db.fetch_all(
-        """SELECT channel_id, channel_name FROM subscriptions
-           UNION SELECT channel_id, MAX(channel_name) FROM videos
-           WHERE status = 'ready' AND COALESCE(channel_id, '') <> '' GROUP BY channel_id""")
+    # zwei Abfragen statt UNION mit Gruppierung (SQLite 3.47: Zeile aus NULL bei leerer Gruppe)
+    channels = [*await db.fetch_all("SELECT channel_id, channel_name FROM subscriptions"),
+                *await db.fetch_all(
+                    """SELECT channel_id, MAX(channel_name) AS channel_name FROM videos
+                       WHERE status = 'ready' AND COALESCE(channel_id, '') <> '' GROUP BY channel_id""")]
 
     def make() -> own_matching.MatchIndex:
         return own_matching.MatchIndex(

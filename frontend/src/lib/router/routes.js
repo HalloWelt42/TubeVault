@@ -140,8 +140,8 @@ export const routeDefinitions = {
     group: 'main',
     hasId: false,
     badge: 'own_videos',
-    queryParams: ['session', 'status', 'folder', 'q', 'page'],
-    description: 'Lokale/eigene Video-Dateien',
+    queryParams: ['tab', 'folder', 'befund'],
+    description: 'Alte Videodateien einordnen',
   },
 
   // ─── System ────────────────────────────────────────────
