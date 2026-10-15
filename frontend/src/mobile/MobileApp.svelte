@@ -103,7 +103,12 @@
 </div>
 
 <style>
-  .shell { height: 100dvh; display: flex; flex-direction: column; background: var(--m-bg); }
+  /* Der obere Schutzbereich (Uhrzeit, Kamera) gilt einmal für die ganze Ansicht:
+     nichts, auch keine Hinweisleiste, liegt darunter. Die Ansichten rechnen ihn
+     deshalb nicht noch einmal ein (--m-safe-top innen 0). */
+  .shell { height: 100dvh; display: flex; flex-direction: column; background: var(--m-bg);
+           padding-top: env(safe-area-inset-top, 0px); }
+  .shell > :global(*) { --m-safe-top: 0px; }
   .views { position: relative; flex: 1; min-height: 0; }
   .pane { position: absolute; inset: 0; }
   .pane[hidden] { display: none; }
