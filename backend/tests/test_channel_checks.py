@@ -73,27 +73,42 @@ async def sub_row(db, channel_id):
 
 # ─── Prüfplanung ──────────────────────────────────────────
 
-async def test_intervall_waechst_nur_bis_zur_obergrenze(feeds, test_db, set_setting):
-    await set_setting("rss.max_interval", 7200)
-    await subscribe(test_db, CH[0], check_interval=3600)
-    await subscribe(test_db, CH[1], check_interval=604800)   # alter 7-Tage-Wert
+def test_prueftakt_aus_dem_alter_des_neuesten_videos():
+    """Ein Viertel des Alters, mindestens Grundtakt, höchstens Obergrenze
+    (Nutzerentscheidung: 2x täglich bis 30 Tage)."""
+    from datetime import datetime, timezone
+    from app.services.rss_service import interval_for
+    now = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
+    base, longest = 43200, 2592000
+    assert interval_for(None, base, longest, now) == base
+    assert interval_for("2026-10-15T06:00:00+00:00", base, longest, now) == base     # vor 6 Stunden
+    assert interval_for("2026-10-07T12:00:00+00:00", base, longest, now) == 172800   # vor 8 Tagen: alle 2 Tage
+    assert interval_for("2026-06-01 12:00:00-08:00", base, longest, now) == longest  # vor Monaten: 30 Tage
+    assert interval_for("kein Datum", base, longest, now) == base
+
+
+async def test_ruhiger_kanal_wird_seltener_geprueft(feeds, test_db, set_setting):
+    await set_setting("rss.max_interval", 2592000)
+    await subscribe(test_db, CH[0], check_interval=3600,
+                    last_video_date="2026-01-01T00:00:00+00:00")
+    await subscribe(test_db, CH[1], check_interval=604800)   # ohne bekanntes Video
 
     result = await rss_service.tick()
 
     assert result["status"] == "completed" and result["checked"] == 2
-    assert (await sub_row(test_db, CH[0]))["check_interval"] == 7200
-    # der alte 7-Tage-Wert wird auf die Obergrenze gekappt
-    assert (await sub_row(test_db, CH[1]))["check_interval"] == 7200
+    assert (await sub_row(test_db, CH[0]))["check_interval"] == 2592000
+    assert (await sub_row(test_db, CH[1]))["check_interval"] == 43200
 
 
-async def test_neue_videos_setzen_auf_basisintervall(feeds, test_db):
-    await subscribe(test_db, CH[0], check_interval=43200)
-    feeds[CH[0]] = [item("neu00000001")]
+async def test_neues_video_setzt_auf_den_grundtakt(feeds, test_db):
+    await subscribe(test_db, CH[0], check_interval=2592000,
+                    last_video_date="2026-01-01T00:00:00+00:00")
+    feeds[CH[0]] = [item("neu00000001")]          # ohne Datum: gilt als jetzt erschienen
 
     result = await rss_service.tick()
 
     assert result["new_videos"] == 1
-    assert (await sub_row(test_db, CH[0]))["check_interval"] == 1800
+    assert (await sub_row(test_db, CH[0]))["check_interval"] == 43200
 
 
 async def test_fehler_eines_kanals_trifft_nur_diesen(feeds, test_db):
@@ -177,14 +192,14 @@ async def test_zaehler_des_abos_folgen_der_datenbank(feeds, test_db):
     assert (row["video_count"], row["shorts_count"], row["live_count"]) == (2, 1, 0)
 
 
-async def test_einzelpruefung_von_hand_verlaengert_das_intervall_nicht(feeds, test_db):
+async def test_einzelpruefung_von_hand_folgt_derselben_regel(feeds, test_db):
     await subscribe(test_db, CH[0], check_interval=3600)
     sub_id = (await sub_row(test_db, CH[0]))["id"]
 
     result = await rss_service.check_channel_now(sub_id)
 
     assert result["new_videos"] == 0
-    assert (await sub_row(test_db, CH[0]))["check_interval"] == 3600
+    assert (await sub_row(test_db, CH[0]))["check_interval"] == 43200
 
 
 # ─── Auto-Download ────────────────────────────────────────
@@ -284,7 +299,7 @@ async def test_alle_entsperren_schaltet_abgeschaltete_nicht_ein(feeds, test_db):
     assert result["reset"] == 1
     assert (await sub_row(test_db, CH[0]))["enabled"] == 0
     fixed = await sub_row(test_db, CH[1])
-    assert (fixed["error_count"], fixed["check_interval"], fixed["last_error"]) == (0, 1800, None)
+    assert (fixed["error_count"], fixed["check_interval"], fixed["last_error"]) == (0, 43200, None)
 
 
 # ─── Kanal-Scan ───────────────────────────────────────────

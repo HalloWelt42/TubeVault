@@ -82,6 +82,37 @@ def _utc_iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
+# Prüftakt eines Kanals: ein Bruchteil des Alters seines neuesten Videos,
+# mindestens der Grundtakt (rss.interval), höchstens rss.max_interval. Ein
+# Kanal, der gestern etwas zeigte, wird oft geprüft; einer, der seit Monaten
+# schweigt, selten - und ein neues Video setzt ihn sofort auf den Grundtakt.
+# Ein Viertel: ein Wochenkanal (Video höchstens 7 Tage alt) wird spätestens
+# alle 1,75 Tage geprüft und nie tagelang übersehen.
+AGE_FRACTION = 4
+
+
+def _parse_published(value: str | None) -> datetime | None:
+    """published/last_video_date lesen ("2026-10-14T00:00:00+00:00" oder
+    "2022-02-14 08:17:28-08:00"); ohne Zeitzone gilt UTC."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def interval_for(last_video_date: str | None, base: int, longest: int,
+                 now: datetime | None = None) -> int:
+    """Prüfabstand in Sekunden aus dem Alter des neuesten Videos."""
+    newest = _parse_published(last_video_date)
+    if not newest:
+        return base
+    age = ((now or datetime.now(timezone.utc)) - newest).total_seconds()
+    return int(min(max(age / AGE_FRACTION, base), longest))
+
+
 class ChannelNotFound(ValueError):
     """Die Quelle kennt den Kanal nicht oder gibt keine Auskunft."""
 
@@ -142,8 +173,9 @@ class RSSService:
 
     async def _intervals(self) -> tuple[int, int]:
         """(Basis-Intervall, längstes Intervall) in Sekunden."""
-        base = int(await self._get_setting("rss.interval") or 1800)
-        longest = int(await self._get_setting("rss.max_interval") or 86400)
+        from app.settings_schema import default
+        base = int(await self._get_setting("rss.interval") or default("rss.interval"))
+        longest = int(await self._get_setting("rss.max_interval") or default("rss.max_interval"))
         return base, max(base, longest)
 
     def _disturbance_pause_left(self) -> int:
@@ -235,7 +267,7 @@ class RSSService:
         )
         await job_service.start(job["id"])
         async with job_service.guard(job["id"]):
-            outcome = await self._check_feeds(job["id"], subs, adaptive=True)
+            outcome = await self._check_feeds(job["id"], subs)
             await job_service.complete(job["id"], outcome["message"])
         logger.info(f"Kanalprüfung: {outcome['message']}")
 
@@ -255,11 +287,9 @@ class RSSService:
         return await db.fetch_val(
             f"SELECT COUNT(*) FROM subscriptions WHERE {self._DUE_SQL}") or 0
 
-    async def _check_feeds(self, job_id: int, subs: list[dict], adaptive: bool) -> dict:
-        """Kanäle der Reihe nach prüfen.
-
-        adaptive=True (automatische Prüfung): ohne neue Videos wächst das
-        Intervall des Kanals. Bei einer Prüfung von Hand bleibt es stehen.
+    async def _check_feeds(self, job_id: int, subs: list[dict]) -> dict:
+        """Kanäle der Reihe nach prüfen; danach richtet sich der Prüftakt
+        jedes Kanals nach dem Alter seines neuesten Videos (interval_for).
 
         Fehler eines einzelnen Kanals bestrafen nur diesen Kanal. Fällt die
         Quelle insgesamt aus, bricht der Durchlauf ab und kein Kanal wird
@@ -303,7 +333,7 @@ class RSSService:
             self._last_checked_channel = sub.get("channel_name") or sub["channel_id"]
             self._last_checked_at = now_sqlite()
             self._feeds_checked_cycle += 1
-            await self._reward(sub, new_count, base_interval, longest_interval, adaptive)
+            await self._reward(sub, base_interval, longest_interval)
 
             if (i + 1) % 5 == 0 or i == len(subs) - 1:
                 await job_service.progress(
@@ -325,16 +355,12 @@ class RSSService:
         return {"checked": checked, "new_videos": total_new, "errors": errors,
                 "disturbed": disturbed, "message": message}
 
-    async def _reward(self, sub: dict, new_count: int, base_interval: int,
-                      longest_interval: int, adaptive: bool):
-        """Erfolgreiche Prüfung: Fehler löschen, Intervall anpassen."""
-        current = sub.get("check_interval") or base_interval
-        if new_count > 0:
-            interval = base_interval
-        elif adaptive:
-            interval = min(current * 2, longest_interval)
-        else:
-            interval = current
+    async def _reward(self, sub: dict, base_interval: int, longest_interval: int):
+        """Erfolgreiche Prüfung: Fehler löschen, Prüftakt nach dem neuesten
+        Video des Kanals (die Prüfung hat last_video_date eben nachgezogen)."""
+        newest = await db.fetch_val(
+            "SELECT last_video_date FROM subscriptions WHERE id = ?", (sub["id"],))
+        interval = interval_for(newest, base_interval, longest_interval)
         await db.execute(
             "UPDATE subscriptions SET error_count = 0, last_error = NULL, check_interval = ? "
             "WHERE id = ?",
@@ -351,7 +377,7 @@ class RSSService:
             message = (f"[404] Kanal nicht erreichbar ({error_count}x) - "
                        f"nächster Versuch in {interval // 3600} h")
         else:
-            interval = min((sub.get("check_interval") or 1800) * 2, longest_interval)
+            interval = min((sub.get("check_interval") or longest_interval) * 2, longest_interval)
         await db.execute(
             """UPDATE subscriptions SET error_count = ?, last_error = ?, check_interval = ?,
                last_checked = ? WHERE id = ?""",
@@ -379,7 +405,7 @@ class RSSService:
         return 0 if has_unchecked else None
 
     async def check_channel_now(self, sub_id: int) -> dict:
-        """Einen Kanal sofort prüfen (von Hand). Das Intervall wächst dabei nicht."""
+        """Einen Kanal sofort prüfen (von Hand)."""
         sub = await db.fetch_one("SELECT * FROM subscriptions WHERE id = ?", (sub_id,))
         if not sub:
             raise ChannelNotFound("Kanal nicht gefunden")
@@ -394,7 +420,7 @@ class RSSService:
                 await self._penalize(sub, e, longest_interval)
             raise
         rate_limiter.success("rss")
-        await self._reward(sub, new_count, base_interval, longest_interval, adaptive=False)
+        await self._reward(sub, base_interval, longest_interval)
         return {"channel_id": sub["channel_id"], "new_videos": new_count}
 
     async def _fetch_latest(self, channel_id: str) -> tuple[str, list]:
@@ -716,7 +742,7 @@ class RSSService:
         if not channel_name:
             raise ChannelNotFound(f"Kanal {channel_id} ist bei der Quelle nicht bekannt")
 
-        default_interval = int(await self._get_setting("rss.interval") or 1800)
+        default_interval = (await self._intervals())[0]
         cursor = await db.execute(
             """INSERT OR IGNORE INTO subscriptions
                (channel_id, channel_name, channel_url, auto_download, download_quality, check_interval)
@@ -1349,7 +1375,7 @@ class RSSService:
             )
             await job_service.start(job["id"])
             async with job_service.guard(job["id"]):
-                outcome = await self._check_feeds(job["id"], subs, adaptive=False)
+                outcome = await self._check_feeds(job["id"], subs)
                 if not job_service.is_cancelled(job["id"]):
                     await job_service.complete(job["id"], outcome["message"])
             if outcome["new_videos"] > 0:

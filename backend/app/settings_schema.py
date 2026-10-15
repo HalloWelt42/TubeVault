@@ -47,15 +47,15 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="rss.enabled", default="true", kind="toggle", category="rss", section="channels",
                label="Scanner aktiv",
                description="Prüft automatisch alle abonnierten Kanäle auf neue Videos."),
-    SettingDef(key="rss.interval", default="1800", kind="duration", category="rss", section="channels",
-               min=300, max=86400, label="Basis-Prüfintervall",
-               description="Startintervall für neue Abos. Verdoppelt sich bei jeder Prüfung ohne neue "
-                           "Videos bis zum längsten Prüfintervall. Neue Videos setzen auf diesen Wert "
-                           "zurück."),
-    SettingDef(key="rss.max_interval", default="86400", kind="duration", category="rss",
-               section="channels", min=1800, max=604800, label="Längstes Prüfintervall",
-               description="So lange bleibt ein ruhiger Kanal höchstens ungeprüft. Ein neues Video "
-                           "erscheint spätestens nach dieser Zeit im Feed."),
+    SettingDef(key="rss.interval", default="43200", kind="duration", category="rss", section="channels",
+               min=3600, max=86400, label="Grundtakt der Prüfung",
+               description="So oft wird ein Kanal geprüft, der kürzlich ein Video gezeigt hat. Je länger "
+                           "sein neuestes Video zurückliegt, desto seltener (ein Viertel dessen Alters); "
+                           "ein neues Video setzt sofort auf den Grundtakt zurück."),
+    SettingDef(key="rss.max_interval", default="2592000", kind="duration", category="rss",
+               section="channels", min=86400, max=2592000, label="Längster Prüfabstand",
+               description="So lange bleibt ein Kanal, der seit Langem nichts zeigt, höchstens "
+                           "ungeprüft."),
     SettingDef(key="rss.max_age_days", default="90", kind="number", category="rss", section="channels",
                min=7, max=365, unit="Tage", label="Maximales Video-Alter",
                description="Bei der Prüfung auf neue Videos werden ältere Einträge übergangen."),
@@ -139,6 +139,11 @@ REMOVED_KEYS = [
     "ai.embedding_model",          # fest (semantic_index.EMBEDDING_MODEL)
     "ai.min_similarity",
 ]
+
+
+def default(key: str) -> str:
+    """Standardwert einer Einstellung - die eine Quelle für Ersatzwerte im Code."""
+    return next(s.default for s in SETTINGS if s.key == key)
 
 
 def default_rows() -> list[tuple[str, str, str, str]]:

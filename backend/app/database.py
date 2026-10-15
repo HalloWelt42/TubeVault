@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 42
+SCHEMA_VERSION = 43
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1187,6 +1187,22 @@ class Database:
         # v42: Werbestellen - Abgleich mit dem Dienst, Transkripte ohne Werbung
         from app.services import ad_segments
         await ad_segments.install_schema(self._connection, backfill=current_version < 42)
+
+        # v43: Prüftakt nach dem Alter des neuesten Videos (rss_service.interval_for).
+        # Nutzerentscheidung 15.10.2026: Grundtakt 2x täglich, höchstens 30 Tage.
+        # Nur die alten Standardwerte werden ersetzt, eigene Werte bleiben.
+        if current_version < 43:
+            await self._connection.executescript("""
+                UPDATE settings SET value = '43200' WHERE key = 'rss.interval' AND value = '1800';
+                UPDATE settings SET value = '2592000' WHERE key = 'rss.max_interval' AND value = '86400';
+                UPDATE subscriptions SET check_interval = MIN(
+                    MAX(COALESCE(CAST((julianday('now') - julianday(last_video_date)) * 86400 / 4 AS INTEGER), 0),
+                        COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'rss.interval'), 43200)),
+                    COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'rss.max_interval'), 2592000))
+                WHERE COALESCE(error_count, 0) = 0;
+            """)
+            await self._connection.commit()
+            logger.info("Migration v43: Prüftakt nach dem Alter des neuesten Videos")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

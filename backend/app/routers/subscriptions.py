@@ -950,7 +950,7 @@ async def reset_suggest_overrides(sub_id: int):
 # --- Aktionen ---
 
 async def _base_interval() -> int:
-    return int((await db.fetch_val("SELECT value FROM settings WHERE key = 'rss.interval'")) or 1800)
+    return (await rss_service._intervals())[0]
 
 
 @router.post("/reset-errors")
