@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Präsentation - Geräte</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<!--
+  Präsentationsbild: Notebook (zwei Drittel), davor versetzt Handy und Uhr,
+  gezeichnet ohne Logos. Bildschirminhalte sind die Entwürfe (?neutral).
+  ?grund=dunkel: auf dunklem Grund, sonst freigestellt (transparent).
+  Gerendert mit 2400 x 1400 Punkten.
+-->
+<style>
+  html, body { margin: 0; width: 2400px; height: 1400px; overflow: hidden; background: transparent; }
+  body.dunkel { background: radial-gradient(1400px 900px at 45% 40%, #1b2a33 0%, #0e151b 55%, #090d11 100%); }
+  .buehne { position: relative; width: 2400px; height: 1400px; }
+  /* Weicher Schatten auf dem Boden unter allen Geräten */
+  .boden { position: absolute; left: 140px; top: 1110px; width: 2060px; height: 120px; border-radius: 50%;
+           background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0)); filter: blur(6px); }
+
+  /* ─── Notebook ─── */
+  .notebook { position: absolute; left: 70px; top: 70px; width: 1820px; }
+  .deckel { position: relative; margin: 0 auto; width: 1572px; padding: 4px; border-radius: 34px 34px 14px 14px;
+            background: linear-gradient(160deg, #d4d8dd, #8f959d 45%, #c3c8ce);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.35), 0 12px 24px rgba(0, 0, 0, 0.25); }
+  .deckel-innen { position: relative; padding: 20px 20px 22px; border-radius: 30px 30px 10px 10px; background: #0a0c0f; }
+  .kamera { position: absolute; top: 7px; left: 50%; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #3a4a5a, #050607); }
+  .notebook .bild { width: 1524px; height: 952px; overflow: hidden; border-radius: 6px; background: #0b0f12; }
+  .notebook iframe { width: 1600px; height: 1000px; border: 0; transform: scale(0.9525); transform-origin: 0 0; }
+  .unterteil { position: relative; width: 1820px; height: 30px; margin-top: -2px; border-radius: 3px 3px 26px 26px / 3px 3px 16px 16px;
+               background: linear-gradient(180deg, #eef0f3 0%, #c7ccd2 35%, #9aa0a8 75%, #6c727a 100%);
+               box-shadow: 0 30px 50px rgba(0, 0, 0, 0.35); }
+  .mulde { position: absolute; top: 0; left: 50%; width: 260px; height: 12px; margin-left: -130px; border-radius: 0 0 12px 12px;
+           background: linear-gradient(180deg, #8e949c, #b7bcc2); }
+
+  /* ─── Handy ─── */
+  .handy { position: absolute; left: 1500px; top: 330px; width: 410px; padding: 14px; border-radius: 66px;
+           background: linear-gradient(150deg, #a8adb4, #5d636b 40%, #8f959c 70%, #4a4f56);
+           box-shadow: 0 50px 90px rgba(0, 0, 0, 0.45), 0 14px 28px rgba(0, 0, 0, 0.3); }
+  .handy-innen { position: relative; padding: 0; border-radius: 54px; background: #000; overflow: hidden; }
+  .handy .bild { position: relative; width: 382px; height: 873px; overflow: hidden; border-radius: 52px; background: #10161b; }
+  .statusleiste { position: absolute; left: 0; right: 0; top: 0; height: 47px; display: flex; align-items: center; justify-content: space-between;
+                  padding: 6px 30px 0 40px; color: #fff; font-family: var(--tv-schrift); font-weight: 600; font-size: 17px; z-index: 2;
+                  background: #2c2219; }
+  .statusleiste .rechts { display: flex; gap: 6px; font-size: 14px; }
+  .insel { position: absolute; top: 12px; left: 50%; width: 118px; height: 34px; margin-left: -59px; border-radius: 20px; background: #000; z-index: 3; }
+  .handy iframe { position: absolute; top: 47px; left: 0; width: 390px; height: 844px; border: 0; transform: scale(0.97949); transform-origin: 0 0; }
+  .knopf-seite { position: absolute; width: 5px; border-radius: 3px; background: linear-gradient(90deg, #6d737b, #a3a8af); }
+
+  /* ─── Uhr ─── */
+  .uhr { position: absolute; left: 1835px; top: 790px; width: 318px; height: 382px; }
+  .band { position: absolute; left: 58px; width: 202px; height: 330px; border-radius: 26px;
+          background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0) 0 9px, rgba(0, 0, 0, 0.10) 9px 11px),
+                      linear-gradient(90deg, #b8521d, #e8783a 30%, #f08a4b 50%, #e8783a 70%, #b8521d); }
+  .band.oben { top: -280px; -webkit-mask-image: linear-gradient(to top, #000 55%, transparent 100%); }
+  .band.unten { top: 330px; -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%); }
+  .gehaeuse { position: absolute; inset: 0; padding: 20px; border-radius: 70px / 76px;
+              background: linear-gradient(145deg, #e3e5e8, #a4a9af 40%, #d0d3d7 62%, #858a91);
+              box-shadow: 0 40px 70px rgba(0, 0, 0, 0.5), 0 10px 22px rgba(0, 0, 0, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.35); }
+  .glas { position: relative; width: 100%; height: 100%; border-radius: 52px / 58px; background: #000; overflow: hidden;
+          box-shadow: inset 0 0 0 6px #050505; }
+  .krone { position: absolute; right: -20px; top: 92px; width: 26px; height: 74px; border-radius: 8px;
+           background: repeating-linear-gradient(0deg, #9aa0a7 0 3px, #c9cdd2 3px 6px); box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15); }
+  .krone::after { content: ''; position: absolute; left: 8px; top: 25px; width: 10px; height: 24px; border-radius: 3px; background: #f26a21; }
+  .schutz { position: absolute; right: -12px; top: 70px; width: 14px; height: 120px; border-radius: 0 14px 14px 0;
+            background: linear-gradient(90deg, #8a8f96, #c8ccd1); }
+  .seitentaste { position: absolute; right: -10px; top: 220px; width: 12px; height: 70px; border-radius: 0 8px 8px 0;
+                 background: linear-gradient(90deg, #8a8f96, #c4c8cd); }
+  .aktionstaste { position: absolute; left: -11px; top: 100px; width: 13px; height: 70px; border-radius: 8px 0 0 8px; background: #f26a21; }
+
+  /* Wiedergabe auf der Uhr */
+  .wiedergabe { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 22px 22px 18px; color: #fff;
+                font-family: var(--tv-schrift); }
+  .wiedergabe .oben { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; font-weight: 600; }
+  .wiedergabe .app { color: var(--tv-akzent); }
+  .wiedergabe .zeit { font-family: var(--tv-schrift-zahl); }
+  .wiedergabe .titel { margin-top: 16px; font-size: 26px; font-weight: 700; line-height: 1.1; }
+  .wiedergabe .wer { font-size: 19px; color: #9aa3ab; margin-top: 2px; }
+  .wiedergabe .spur { position: relative; height: 4px; margin-top: 12px; border-radius: 2px; background: #2a2f35; }
+  .wiedergabe .spur b { position: absolute; left: 0; top: 0; bottom: 0; width: 38%; border-radius: 2px; background: var(--tv-akzent); }
+  .wiedergabe .tasten { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center; margin-top: 18px; }
+  .wiedergabe .tasten i { font-size: 30px; }
+  .wiedergabe .mitte { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; background: #2a2f35; }
+  .wiedergabe .mitte i { font-size: 32px; }
+  .wiedergabe .unten { display: grid; grid-template-columns: repeat(3, 1fr); justify-items: center; margin-top: auto; }
+  .wiedergabe .unten span { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #1c2025; color: #c9d1d8; font-size: 18px; }
+  .lautring { position: absolute; right: 8px; top: 70px; width: 6px; height: 120px; border-radius: 3px; background: #24292e; }
+  .lautring b { position: absolute; left: 0; right: 0; bottom: 0; height: 64%; border-radius: 3px; background: var(--tv-erfolg); }
+</style>
+</head>
+<body>
+<div class="buehne">
+  <span class="boden"></span>
+  <div class="notebook">
+    <div class="deckel"><div class="deckel-innen">
+      <span class="kamera"></span>
+      <div class="bild"><iframe src="musik.html?neutral" title="Rechner"></iframe></div>
+    </div></div>
+    <div class="unterteil"><span class="mulde"></span></div>
+  </div>
+
+  <div class="handy">
+    <span class="knopf-seite" style="left:-4px; top:170px; height:34px"></span>
+    <span class="knopf-seite" style="left:-4px; top:230px; height:64px"></span>
+    <span class="knopf-seite" style="left:-4px; top:306px; height:64px"></span>
+    <span class="knopf-seite" style="right:-4px; top:250px; height:100px"></span>
+    <div class="handy-innen">
+      <div class="bild">
+        <div class="statusleiste"><span class="zahl">15:21</span><span class="rechts"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-three-quarters"></i></span></div>
+        <span class="insel"></span>
+        <iframe id="handy" src="mobil-musik.html?nur=2&neutral" title="Handy"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <div class="uhr">
+    <div class="band oben"></div>
+    <div class="band unten"></div>
+    <span class="schutz"></span>
+    <span class="krone"></span>
+    <span class="seitentaste"></span>
+    <span class="aktionstaste"></span>
+    <div class="gehaeuse"><div class="glas">
+      <div class="wiedergabe">
+        <div class="oben"><span class="app">TubeVault</span><span class="zeit">15:21</span></div>
+        <div class="titel">Super Trouper</div>
+        <div class="wer">ABBA</div>
+        <div class="spur"><b></b></div>
+        <div class="tasten">
+          <i class="fa-solid fa-backward-step"></i>
+          <span class="mitte"><i class="fa-solid fa-pause"></i></span>
+          <i class="fa-solid fa-forward-step"></i>
+        </div>
+        <div class="unten">
+          <span><i class="fa-solid fa-display"></i></span>
+          <span><i class="fa-solid fa-volume-high"></i></span>
+          <span><i class="fa-solid fa-ellipsis"></i></span>
+        </div>
+      </div>
+      <span class="lautring"><b></b></span>
+    </div></div>
+  </div>
+</div>
+
+<script>
+  if (new URLSearchParams(location.search).get('grund') === 'dunkel') document.body.classList.add('dunkel');
+  // Handy zeigt denselben Titel wie der Rechner (Super Trouper, 1:37 von 4:14)
+  document.getElementById('handy').addEventListener('load', (e) => {
+    const doc = e.target.contentDocument;
+    const setze = (sel, text) => { const el = doc.querySelector(sel); if (el) el.textContent = text; };
+    setze('.titelzeile .t', 'Super Trouper');
+    setze('.zeiten span:first-child', '1:37');
+    setze('.zeiten span:last-child', '4:14');
+    const spur = doc.querySelector('.voll .spur b');
+    if (spur) spur.style.width = '38%';
+  });
+</script>
+</body>
+</html>

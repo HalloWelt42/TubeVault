@@ -28,3 +28,7 @@ export async function setFavorite(track, favorite) {
   if (isFile(track)) return api.musicFileFavorite(track.id, favorite);
   return favorite ? api.addFavorite({ video_id: track.id }) : api.removeFavorite(track.id);
 }
+
+/** "Gefällt nicht": ein Video wird gelöscht, eine Datei der Sammlung nur ausgeblendet
+ *  (die Sammlung ist lesend eingebunden, die Datei bleibt unberührt) */
+export const discard = (track) => (isFile(track) ? api.musicFileHidden(track.id, true) : api.deleteVideo(track.id));

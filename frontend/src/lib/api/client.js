@@ -540,6 +540,10 @@ export const api = {
   musicFilePlayed: (id) => request(`/api/music/files/${id}/played`, { method: 'POST' }),
   musicFileFavorite: (id, favorite) =>
     request(`/api/music/files/${id}/favorite`, { method: 'PUT', body: JSON.stringify({ favorite }) }),
+  // Sammlung liegt nur lesend vor: ausblenden statt löschen
+  musicFileHidden: (id, hidden) =>
+    request(`/api/music/files/${id}/hidden`, { method: 'PUT', body: JSON.stringify({ hidden }) }),
+  musicHiddenFiles: () => request('/api/music/files/hidden'),
   musicFilesStatus: () => request('/api/music/files/status'),
   // Hörbücher: feste Reihenfolge, Stand je Buch (Teil und Stelle)
   musicBooks: () => request('/api/music/books'),

@@ -1,6 +1,6 @@
 <!--
   Menü eines Musiktitels: als Nächstes, hinten anstellen, ähnliche Titel,
-  Interpret, Video, Lieblingssong, keine Musik. Erscheint an der Klickstelle.
+  Interpret, Video, Lieblingssong, keine Musik, bei Dateien der Sammlung ausblenden. Erscheint an der Klickstelle.
   Nutzung: <TrackMenu bind:this={menu} onChanged={...} />, menu.open(event, track)
 -->
 <script>
@@ -10,7 +10,7 @@
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
 
-  // onChanged(track, change): change = { favorite } oder { removed: true }
+  // onChanged(track, change): change = { favorite }, { removed: true } oder { restored: true }
   let { onChanged = () => {} } = $props();
 
   let track = $state(null);
@@ -53,6 +53,14 @@
         link.click();
       } },
     { icon: 'fa-display', label: 'Als Video ansehen', video: true, run: (t) => { player.pause(); navigate(`/watch/${t.id}`); } },
+    { icon: 'fa-eye-slash', label: 'Ausblenden', file: true, run: async (t) => {
+        await api.musicFileHidden(t.id, true);
+        onChanged(t, { removed: true });
+        toast.undo(`Ausgeblendet: ${t.title}`, async () => {
+          await api.musicFileHidden(t.id, false);
+          onChanged(t, { restored: true });
+        });
+      } },
     { icon: 'fa-ban', label: 'Keine Musik', video: true, run: async (t) => {
         await api.setMusicBatch([t.id], false);
         onChanged(t, { removed: true });
@@ -68,7 +76,7 @@
   <div class="menue" style:left="{x}px" style:top="{y}px" role="menu">
     <div class="kopf"><div class="t">{track.title}</div><div class="tv-leise tv-klein">{track.artist}</div></div>
     <!-- Was nur ein Video kann, fehlt bei Dateien der eigenen Sammlung -->
-    {#each actions.filter(a => !a.video || !isFile(track)) as action}
+    {#each actions.filter(a => (!a.video || !isFile(track)) && (!a.file || isFile(track))) as action}
       {#if action.trenner}<hr />
       {:else}
         <button role="menuitem" onclick={() => act(action.run)}>

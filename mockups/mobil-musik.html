@@ -276,5 +276,17 @@
   </div>
 </div>
 
+<script>
+  // ?nur=2: nur der zweite Bildschirm, ohne Rahmen und Beschriftung (für Präsentationsbilder)
+  const nur = Number(new URLSearchParams(location.search).get('nur'));
+  if (nur) {
+    document.querySelectorAll('.spalte').forEach((spalte, i) => { if (i + 1 !== nur) spalte.remove(); });
+    document.querySelector('.spalte > .etikett')?.remove();
+    document.body.style.padding = '0';
+    const telefon = document.querySelector('.telefon');
+    telefon.style.border = '0';
+    telefon.style.borderRadius = '0';
+  }
+</script>
 </body>
 </html>

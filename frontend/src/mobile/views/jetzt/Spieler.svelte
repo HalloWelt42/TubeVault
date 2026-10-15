@@ -66,11 +66,13 @@
     } catch (e) { toast.error(e.message); }
   }
 
-  function deleteVideo() {
+  // Gefällt nicht: Videos werden gelöscht, Dateien der Sammlung nur ausgeblendet
+  function discardTrack() {
     menu = false;
     const title = track.title;
+    const file = isFile(track);
     player.deleteTrack();
-    toast.undo(`"${title}" wird gelöscht`, () => player.undoDelete(), UNDO_MS);
+    toast.undo(`"${title}" wird ${file ? 'ausgeblendet' : 'gelöscht'}`, () => player.undoDelete(), UNDO_MS);
   }
 </script>
 
@@ -140,8 +142,10 @@
       <a role="menuitem" href={downloadUrl(track)} download onclick={() => menu = false}><i class="fa-solid fa-download"></i> Ton herunterladen</a>
       <button role="menuitem" onclick={removeFromList}><i class="fa-solid fa-circle-minus"></i>
         {player.playlistId ? 'Aus der Wiedergabeliste nehmen' : 'Aus der Warteschlange nehmen'}</button>
-      {#if !isFile(track)}
-        <button role="menuitem" class="gefahr" onclick={deleteVideo}><i class="fa-solid fa-trash-can"></i> Gefällt nicht: Video löschen</button>
+      {#if isFile(track)}
+        <button role="menuitem" class="gefahr" onclick={discardTrack}><i class="fa-solid fa-eye-slash"></i> Gefällt nicht: ausblenden</button>
+      {:else}
+        <button role="menuitem" class="gefahr" onclick={discardTrack}><i class="fa-solid fa-trash-can"></i> Gefällt nicht: Video löschen</button>
       {/if}
     </div>
   {/if}

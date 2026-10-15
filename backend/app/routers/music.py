@@ -12,7 +12,6 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from app.database import db
 from app.services import ad_free_export, audio_export, audiobooks, music_files, music_library
 from app.utils.range_file import range_response
 from app.services.music_library import Group, PlayList, Track
@@ -60,8 +59,7 @@ async def overview():
     return Overview(
         source=await music_library.source_setting(),
         sources=SourceCounts(videos=len(await music_library.video_tracks()),
-                             sammlung=await db.fetch_val(
-                                 "SELECT COUNT(*) FROM music_files WHERE COALESCE(category, 'musik') = 'musik'") or 0),
+                             sammlung=await music_files.count()),
         counts=Counts(tracks=len(items), artists=len(artists), albums=len(albums), channels=len(channels),
                       favorites=sum(1 for t in items if t.favorite), duration=sum(t.duration or 0 for t in items),
                       books=len(await audiobooks.books())),
@@ -173,6 +171,12 @@ async def _file_or_404(item_id: str) -> music_files.FileInfo:
     return found
 
 
+@router.get("/files/hidden", response_model=list[music_files.FileInfo])
+async def files_hidden():
+    """Ausgeblendete Titel der eigenen Sammlung (zum Wieder-Einblenden)."""
+    return await music_files.hidden_files()
+
+
 @router.get("/files/{item_id}", response_model=music_files.FileInfo)
 async def file_info(item_id: str):
     return await _file_or_404(item_id)
@@ -221,6 +225,18 @@ async def file_favorite(item_id: str, req: FavoriteRequest):
     await _file_or_404(item_id)
     await music_files.set_favorite(item_id, req.favorite)
     return {"favorite": req.favorite}
+
+
+class HiddenRequest(BaseModel):
+    hidden: bool
+
+
+@router.put("/files/{item_id}/hidden")
+async def file_hidden(item_id: str, req: HiddenRequest):
+    """Titel der Sammlung ausblenden (statt löschen: die Sammlung liegt nur lesend vor) oder wieder einblenden."""
+    await _file_or_404(item_id)
+    await music_files.set_hidden(item_id, req.hidden)
+    return {"hidden": req.hidden}
 
 
 @router.get("/audio-info/{video_id}", response_model=audio_export.AudioInfo)

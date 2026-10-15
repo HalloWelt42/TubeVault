@@ -54,11 +54,10 @@
       <button class="taste weg" onclick={removeFromList}
               title={player.playlistId ? 'Aus der Wiedergabeliste nehmen und weiter' : 'Aus der Warteschlange nehmen und weiter'}>
         <i class="fa-solid fa-circle-minus"></i></button>
-      {#if !isFile(track)}
-        <!-- Dateien der eigenen Sammlung werden nie gelöscht, nur aus der Liste genommen -->
-        <button class="taste weg" onclick={() => player.deleteTrack()} title="Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück">
-          <i class="fa-solid fa-trash-can"></i></button>
-      {/if}
+      <button class="taste weg" onclick={() => player.deleteTrack()}
+              title={isFile(track) ? 'Gefällt nicht: aus der Sammlung ausblenden und weiter (die Datei bleibt). Kurz rückgängig zu machen'
+                                   : 'Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück'}>
+        <i class="fa-solid {isFile(track) ? 'fa-eye-slash' : 'fa-trash-can'}"></i></button>
     </div>
 
     <div class="mitte">
@@ -90,7 +89,7 @@
         {#if player.pendingDelete}
           <div class="rueckgaengig">
             <i class="fa-solid fa-trash-can"></i>
-            <span class="was" title={player.pendingDelete.track.title}>Gelöscht: {player.pendingDelete.track.title}</span>
+            <span class="was" title={player.pendingDelete.track.title}>{isFile(player.pendingDelete.track) ? 'Ausgeblendet' : 'Gelöscht'}: {player.pendingDelete.track.title}</span>
             <button onclick={() => player.undoDelete()}>Rückgängig</button>
           </div>
         {:else if player.segment}

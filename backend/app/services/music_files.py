@@ -118,15 +118,17 @@ class FileInfo(BaseModel):
     play_count: int = 0
     last_played: Optional[str] = None
     favorite: bool = False
+    hidden: bool = False              # vom Nutzer ausgeblendet; die Datei bleibt unberührt
     added_at: Optional[str] = None
 
 
 async def install_schema(connection) -> None:
     await connection.executescript(SCHEMA_SQL)
-    try:
-        await connection.execute(f"ALTER TABLE music_files ADD COLUMN category TEXT DEFAULT '{MUSIC}'")
-    except Exception:
-        pass  # Spalte existiert bereits
+    for column in (f"category TEXT DEFAULT '{MUSIC}'", "hidden INTEGER DEFAULT 0", "hidden_at TEXT"):
+        try:
+            await connection.execute(f"ALTER TABLE music_files ADD COLUMN {column}")
+        except Exception:
+            pass  # Spalte existiert bereits
     await connection.commit()
 
 
@@ -356,17 +358,43 @@ async def background_scan() -> None:
 # ─── Lesen ────────────────────────────────────────────────────────────
 
 def _info(row) -> FileInfo:
-    return FileInfo(**{k: row[k] for k in FileInfo.model_fields if k in row.keys() and k not in ("has_cover", "has_lyrics", "favorite")},
+    return FileInfo(**{k: row[k] for k in FileInfo.model_fields
+                       if k in row.keys() and k not in ("has_cover", "has_lyrics", "favorite", "hidden")},
                     has_cover=bool(row["cover"]), has_lyrics=bool(row["lyrics_path"] or row["lyrics_text"]),
-                    favorite=bool(row["favorite"]))
+                    favorite=bool(row["favorite"]), hidden=bool(row["hidden"]) if "hidden" in row.keys() else False)
+
+
+# Ausgeblendete Dateien zählen nirgends mit: die Sammlung liegt nur lesend vor,
+# ausblenden ist dort das Gegenstück zum Löschen eines Videos
+VISIBLE = "COALESCE(hidden, 0) = 0"
 
 
 async def all_files(category: Optional[str] = MUSIC) -> list[FileInfo]:
-    """Dateien einer Art (Standard: Musik), neueste zuerst; None = alle."""
+    """Sichtbare Dateien einer Art (Standard: Musik), neueste zuerst; None = alle."""
     if category is None:
-        return [_info(r) for r in await db.fetch_all("SELECT * FROM music_files ORDER BY added_at DESC, path")]
+        return [_info(r) for r in await db.fetch_all(f"SELECT * FROM music_files WHERE {VISIBLE} ORDER BY added_at DESC, path")]
     return [_info(r) for r in await db.fetch_all(
-        "SELECT * FROM music_files WHERE COALESCE(category, ?) = ? ORDER BY added_at DESC, path", (MUSIC, category))]
+        f"SELECT * FROM music_files WHERE COALESCE(category, ?) = ? AND {VISIBLE} ORDER BY added_at DESC, path",
+        (MUSIC, category))]
+
+
+async def hidden_files() -> list[FileInfo]:
+    """Ausgeblendete Dateien, zuletzt ausgeblendete zuerst."""
+    return [_info(r) for r in await db.fetch_all(
+        "SELECT * FROM music_files WHERE COALESCE(hidden, 0) = 1 ORDER BY hidden_at DESC, path")]
+
+
+async def count(category: str = MUSIC) -> int:
+    return await db.fetch_val(
+        f"SELECT COUNT(*) FROM music_files WHERE COALESCE(category, ?) = ? AND {VISIBLE}", (MUSIC, category)) or 0
+
+
+async def set_hidden(item_id: str, hidden: bool) -> bool:
+    """Ausblenden oder wieder einblenden; die Datei selbst bleibt unberührt."""
+    cursor = await db.execute(
+        "UPDATE music_files SET hidden = ?, hidden_at = CASE WHEN ? THEN datetime('now') END WHERE id = ?",
+        (int(hidden), int(hidden), item_id))
+    return cursor.rowcount == 1
 
 
 async def get(item_id: str) -> Optional[FileInfo]:
@@ -443,4 +471,5 @@ async def status() -> dict:
     row = await db.fetch_one("SELECT * FROM music_files_scan WHERE id = 1")
     return {"available": available(), "root": str(root()),
             "files": await db.fetch_val("SELECT COUNT(*) FROM music_files") or 0,
+            "hidden": await db.fetch_val("SELECT COUNT(*) FROM music_files WHERE COALESCE(hidden, 0) = 1") or 0,
             "last_scan": dict(row) if row else None}

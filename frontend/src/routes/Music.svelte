@@ -8,6 +8,7 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import HiddenFiles from '../lib/components/music/HiddenFiles.svelte';
   import { untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { api } from '../lib/api/client.js';
@@ -181,6 +182,7 @@
 
   // Änderungen aus dem Menü in die sichtbaren Listen übernehmen
   function changed(track, change) {
+    if (change.restored) { loadOverview(); loadTab(); return; }
     const update = (items) => change.removed ? items.filter(t => t.id !== track.id)
                                              : items.map(t => t.id === track.id ? { ...t, ...change } : t);
     list.items = update(list.items);
@@ -215,6 +217,7 @@
           {/each}
           <button class="einlesen" onclick={scanCollection} disabled={scanning} title="Eigene Sammlung neu einlesen (nur Neues und Geändertes)">
             <i class="fa-solid fa-rotate" class:fa-spin={scanning}></i></button>
+          <HiddenFiles onRestored={() => { loadOverview(); loadTab(); }} />
         </div>
       {/if}
       <div class="aktionen">

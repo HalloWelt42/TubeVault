@@ -9,7 +9,7 @@
 // Versionswache laufende Wiedergabe und lädt nicht mitten im Titel neu.
 // Startet ein Video, hält die Musik an - und umgekehrt.
 import { api } from '../api/client.js';
-import { audioSrc, coverUrl, isFile, recordPlay, setFavorite } from '../utils/musicTrack.js';
+import { audioSrc, coverUrl, discard, isFile, recordPlay, setFavorite } from '../utils/musicTrack.js';
 import { loadSkipRanges, skipTarget } from '../utils/adSkip.js';
 import { emitVideoMutation } from '../utils/videoMutations.js';
 import { insertItem, moveItem, removeItem } from '../utils/queueOps.js';
@@ -440,8 +440,8 @@ class MusicPlayer {
     const pending = this.pendingDelete;
     this.pendingDelete = null;
     if (!pending) return;
-    api.deleteVideo(pending.track.id)
-      .then(() => emitVideoMutation(pending.track.id, 'deleted'))
+    discard(pending.track)
+      .then(() => { if (!isFile(pending.track)) emitVideoMutation(pending.track.id, 'deleted'); })
       .catch(() => {});
   }
 

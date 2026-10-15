@@ -210,3 +210,27 @@ async def test_hoerbuecher_als_videos(test_db):
     await audiobook_flag.set_by_user(["hbeinzel001"], False)
     await audiobook_flag.apply_auto("hbeinzel001", "Der Hobbit - Hörbuch komplett", "[]")
     assert "Der Hobbit - Hörbuch komplett" not in {b.title for b in await audiobooks.books()}
+
+
+async def test_ausblenden_statt_loeschen(test_db, sammlung, async_client_factory):
+    """Die Sammlung liegt nur lesend vor: "Gefällt nicht" blendet aus. Ausgeblendetes
+    fehlt in allen Listen und Zählern, bleibt über erneutes Einlesen ausgeblendet
+    und lässt sich wieder einblenden; die Datei bleibt unberührt."""
+    await music_files.scan()
+    children = next(f for f in await music_files.all_files() if f.title == "Children")
+    datei = sammlung / "01. Robert Miles - Children.flac"
+    async with await async_client_factory(music.router) as client:
+        assert (await client.put(f"/api/music/files/{children.id}/hidden", json={"hidden": True})).json() == {"hidden": True}
+        assert [f["title"] for f in (await client.get("/api/music/files/hidden")).json()] == ["Children"]
+        assert (await client.get("/api/music/files/status")).json()["hidden"] == 1
+    assert datei.exists()
+    assert "Children" not in {t.title for t in await music_library.tracks()}
+    assert (await music.overview()).sources.sammlung == 3
+
+    os.utime(datei, (datei.stat().st_atime, datei.stat().st_mtime + 10))   # erneut einlesen
+    await music_files.scan()
+    assert (await music_files.get(children.id)).hidden
+
+    await music_files.set_hidden(children.id, False)
+    assert "Children" in {t.title for t in await music_library.tracks()}
+    assert await music_files.hidden_files() == []
