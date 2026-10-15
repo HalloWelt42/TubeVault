@@ -91,7 +91,8 @@
     navigator.mediaSession.setActionHandler('nexttrack', next ? () => playFromQueue(next) : null);
   }
 
-  $effect(() => { queue; previous; next; video; announce(); });
+  // Nur während das Video spielt: sonst gehören Sperrbildschirm und Uhr der Musik
+  $effect(() => { queue; previous; next; video; if (playing) announce(); });
 
   let isLongDescription = $derived(
     (video?.description || '').length > LONG_DESCRIPTION_CHARS

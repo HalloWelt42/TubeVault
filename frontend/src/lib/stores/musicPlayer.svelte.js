@@ -61,7 +61,6 @@ class MusicPlayer {
   #audio = null;
   #counted = null;               // Kennung, deren Wiedergabe schon gezählt ist
   #skipRanges = [];
-  #skipsForBook = null;          // für welche Art die Sprungtasten angemeldet sind (#sessionSkips)
   #saveTimer = null;
   #unlocked = false;
   #deleteTimer = null;
@@ -100,7 +99,13 @@ class MusicPlayer {
     audio.dataset.musik = '1';
     audio.volume = this.volume;
     document.body.appendChild(audio);
-    audio.addEventListener('play', () => { this.playing = true; this.#pauseVideos(); this.sleep = running(this.sleep, Date.now()); });
+    audio.addEventListener('play', () => {
+      this.playing = true;
+      this.#pauseVideos();
+      this.sleep = running(this.sleep, Date.now());
+      this.#claimMediaSession();     // Tasten zurückholen, falls eine andere Ansicht sie belegt hat
+      this.#updateMetadata();
+    });
     audio.addEventListener('pause', () => { this.playing = false; this.sleep = frozen(this.sleep, Date.now()); this.#save(); });
     audio.addEventListener('waiting', () => { this.loading = true; });
     audio.addEventListener('playing', () => { this.loading = false; });
@@ -113,7 +118,7 @@ class MusicPlayer {
       if (e.target !== audio && e.target?.tagName === 'VIDEO') audio.pause();
     }, true);
     this.#audio = audio;
-    this.#mediaSession();
+    this.#claimMediaSession();
     return audio;
   }
 
@@ -177,7 +182,7 @@ class MusicPlayer {
     audio.src = audioSrc(track);
     audio.currentTime = at;
     this.#applyRate();
-    this.#sessionSkips();
+    this.#claimMediaSession();
     this.#updateMetadata();
     this.#save();
     if (autoplay) audio.play().catch(() => { this.playing = false; });
@@ -518,30 +523,21 @@ class MusicPlayer {
   }
 
   // ─── Sperrbildschirm und Medientasten ───
-  #mediaSession() {
+  /** Tasten für Sperrbildschirm, Uhr und Kopfhörer anmelden. Geschieht bei
+   *  jedem Abspielstart neu: andere Ansichten (Video) melden eigene an, und ohne
+   *  Neuanmeldung blieben deren Tasten stehen. Sprungtasten verdrängen auf iPhone
+   *  und Uhr "Titel vor/zurück"; darum gibt es sie nur beim Hörbuch (30 s). */
+  #claimMediaSession() {
     if (!('mediaSession' in navigator)) return;
-    const session = navigator.mediaSession;
+    const book = !!this.audiobook;
+    const skip = (direction) => (book ? (d) => this.skipBy(direction * (d.seekOffset || BOOK_SKIP_S)) : null);
     const handlers = {
       play: () => this.toggle(), pause: () => this.pause(),
       previoustrack: () => this.prev(), nexttrack: () => this.next(),
       seekto: (d) => this.seek(d.seekTime),
+      seekbackward: skip(-1), seekforward: skip(1),
     };
     for (const [action, handler] of Object.entries(handlers)) {
-      try { session.setActionHandler(action, handler); } catch { /* nicht unterstützt */ }
-    }
-    this.#sessionSkips();
-  }
-
-  /** Sprungtasten für Sperrbildschirm, Uhr und Kopfhörer. Sind sie angemeldet,
-   *  zeigen iPhone und Uhr nur sie statt "Titel vor/zurück". Darum: bei Musik
-   *  keine (dort zählen Titel und Abschnitte), beim Hörbuch 30 Sekunden. */
-  #sessionSkips() {
-    if (!('mediaSession' in navigator)) return;
-    const book = !!this.audiobook;
-    if (this.#skipsForBook === book) return;
-    this.#skipsForBook = book;
-    const skip = (direction) => (book ? (d) => this.skipBy(direction * (d.seekOffset || BOOK_SKIP_S)) : null);
-    for (const [action, handler] of [['seekbackward', skip(-1)], ['seekforward', skip(1)]]) {
       try { navigator.mediaSession.setActionHandler(action, handler); } catch { /* nicht unterstützt */ }
     }
   }
