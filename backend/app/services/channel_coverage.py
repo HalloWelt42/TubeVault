@@ -17,6 +17,10 @@ nur die neuesten Feed-Einträge, und eine Medaille wäre geraten.
 """
 from typing import Optional
 
+from pydantic import BaseModel
+
+from app.database import db
+
 GOLD = "gold"
 SILVER = "silver"
 BRONZE = "bronze"
@@ -65,3 +69,20 @@ def medal(wanted: int, have: int, scanned: bool = True) -> Optional[str]:
     if share >= BRONZE_SHARE:
         return BRONZE
     return None
+
+
+class Coverage(BaseModel):
+    """Abdeckung eines Kanals, wie sie Kanalübersicht und Kanalseite zeigen."""
+    wanted_count: int
+    have_count: int
+    medal: Optional[str]
+
+
+async def of_channel(channel_id: str, scanned: bool) -> Coverage:
+    """Abdeckung und Medaille eines einzelnen Kanals (die Liste rechnet alle
+    Kanäle in einem Durchgang mit denselben Bedingungen)."""
+    row = await db.fetch_one(
+        f"""SELECT COUNT(*) AS wanted, COALESCE(SUM({have_sql("r")}), 0) AS have
+            FROM rss_entries r WHERE r.channel_id = ? AND {wanted_sql("r")}""", (channel_id,))
+    wanted, have = row["wanted"], row["have"]
+    return Coverage(wanted_count=wanted, have_count=have, medal=medal(wanted, have, scanned))

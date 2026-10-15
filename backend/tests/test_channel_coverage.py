@@ -4,6 +4,7 @@ die normalen Videos eines Kanals, Live und Shorts nie; Gold ist lückenlos,
 Silber fehlen wenige Prozent (ab 95 %), Bronze ist fast voll (ab 80 %).
 Bewertet wird nur ein vollständig gescannter Kanal.
 """
+from app.routers.subscriptions import get_channel_detail
 from app.services import channel_coverage
 from app.services.rss_service import rss_service
 
@@ -43,6 +44,22 @@ async def test_nur_normale_videos_zaehlen(test_db):
     await test_db.execute("INSERT INTO videos (id, title, channel_id, status) VALUES ('feed0000002', 'T', 'UCk', 'ready')")
     [sub] = (await rss_service.get_subscriptions())["subscriptions"]
     assert (sub["wanted_count"], sub["have_count"], sub["medal"]) == (3, 3, "gold")
+
+
+async def test_kanalseite_zeigt_dieselbe_medaille_wie_die_liste(test_db):
+    # Früher rechnete die Kanalseite selbst: Shorts und Live zählten mit, Silber
+    # nur bis 5 fehlende - so stand dort Bronze, wo die Liste Silber zeigte
+    await _kanal(test_db)
+    for n in range(40):
+        await test_db.execute("INSERT INTO rss_entries (video_id, channel_id, title) VALUES (?, 'UCk', 'T')", (f"feed{n:07d}",))
+        if n < 38:
+            await test_db.execute("INSERT INTO videos (id, title, channel_id, status) VALUES (?, 'T', 'UCk', 'ready')", (f"feed{n:07d}",))
+    for n in range(8):
+        await test_db.execute("INSERT INTO rss_entries (video_id, channel_id, title, video_type) VALUES (?, 'UCk', 'S', 'short')", (f"short{n:06d}",))
+    [sub] = (await rss_service.get_subscriptions())["subscriptions"]
+    detail = await get_channel_detail("UCk")
+    assert (detail["wanted_count"], detail["have_count"], detail["medal"]) == (40, 38, "silver")
+    assert (sub["wanted_count"], sub["have_count"], sub["medal"]) == (40, 38, "silver")
 
 
 async def test_vorübergehend_verweigert_zaehlt_als_fehlend(test_db):

@@ -20,6 +20,7 @@
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   import { marked } from 'marked';
+  import { coverageTitle, medalOf, medalStyle, missingCount as medalGap, num } from '../lib/components/channel/channelView.js';
   marked.setOptions({ breaks: true, gfm: true });
 
   let channel = $state(null);
@@ -647,17 +648,12 @@
         <span class="stat-val">{channel.downloaded_count || 0}</span>
         <span class="stat-lbl">Lokal</span>
       </div>
-      {#if (channel.rss_entry_count || 0) > 0 && channel.last_scanned}
-        {@const rss = channel.rss_entry_count || 0}
-        {@const dl = channel.downloaded_count || 0}
-        {@const missing = rss - dl}
-        {#if missing <= 0}
-          <div class="stat-box medal-box medal-gold"><span class="stat-val">🥇</span><span class="stat-lbl">Vollständig</span></div>
-        {:else if missing <= 5}
-          <div class="stat-box medal-box medal-silver"><span class="stat-val">🥈</span><span class="stat-lbl">{missing} fehlen</span></div>
-        {:else if channel.drip_completed_at}
-          <div class="stat-box medal-box medal-bronze"><span class="stat-val">🥉</span><span class="stat-lbl">{missing} fehlen</span></div>
-        {/if}
+      <!-- Medaille wie in der Kanalübersicht (Backend: services/channel_coverage.py) -->
+      {#if medalOf(channel)}
+        <div class="stat-box medal-box" style={medalStyle(channel)} title={coverageTitle(channel)}>
+          <span class="stat-val"><i class="fa-solid fa-medal"></i> {medalOf(channel).label}</span>
+          <span class="stat-lbl">{medalGap(channel) ? `${num(medalGap(channel))} fehlen` : 'Vollständig'}</span>
+        </div>
       {/if}
       {#if channel.type_counts}
         {#if channel.type_counts.video > 0}
@@ -1647,9 +1643,6 @@
   .btn-suggest.sg-include { opacity: 0.9; color: var(--status-success); }
 
   /* ─── Medals ─── */
-  .medal-box { text-align: center; }
-  .medal-box .stat-val { font-size: 1.4rem; }
-  .medal-gold { border-color: #fbbf24 !important; }
-  .medal-silver { border-color: #9ca3af !important; }
-  .medal-bronze { border-color: #d97706 !important; }
+  .medal-box { border-color: var(--medaille); background: var(--medaille-grund); }
+  .medal-box .stat-val { color: var(--medaille); }
 </style>

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import AVATARS_DIR, RSS_THUMBS_DIR
 from app.database import db
-from app.services import channel_reference, deleted_videos, feed_scope, loadable, music_flag, video_classifier
+from app.services import channel_coverage, channel_reference, deleted_videos, feed_scope, loadable, music_flag, video_classifier
 from app.services.rss_service import rss_service, ChannelNotFound
 from app.routers.jobs import activity_ws
 
@@ -185,6 +185,7 @@ async def get_channel_detail(channel_id: str):
     result["total_known_duration"] = total_known_duration
     result["total_views"] = total_views
     result["needs_scan"] = not result.get("last_scanned")
+    result.update((await channel_coverage.of_channel(channel_id, scanned=bool(result.get("last_scanned")))).model_dump())
     result["type_counts"] = type_counts
     result["channel_tags_parsed"] = channel_tags
     return result
