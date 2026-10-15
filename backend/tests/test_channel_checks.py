@@ -475,3 +475,12 @@ async def test_geladene_videos_zaehlen_im_feed_nicht_als_neu(feeds, test_db):
     assert (await rss_service.get_stats())["new_videos"] == 2
     listed = (await rss_service.get_subscriptions())["subscriptions"][0]
     assert (listed["rss_count"], listed["new_videos"]) == (3, 2)
+
+
+async def test_geaenderter_grundtakt_gilt_sofort_fuer_alle(feeds, test_db, set_setting):
+    await subscribe(test_db, CH[0], check_interval=43200)
+    await subscribe(test_db, CH[1], check_interval=43200, error_count=2)   # Fehlerkanal bleibt
+    await set_setting("rss.interval", 7200)
+    assert await rss_service.recompute_intervals() == 1
+    assert (await sub_row(test_db, CH[0]))["check_interval"] == 7200
+    assert (await sub_row(test_db, CH[1]))["check_interval"] == 43200

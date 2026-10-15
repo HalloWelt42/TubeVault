@@ -151,7 +151,6 @@
     }
     return parts.join(' · ') + '.';
   });
-  let baseInterval = $derived(scheduler?.active_settings?.default_interval || 1800);
 
   async function addSingle() {
     const input = channelInput.trim();
@@ -342,26 +341,6 @@
     } catch (e) { toast.error(e.message); }
   }
 
-  async function resetAllIntervals() {
-    try {
-      const result = await api.resetAllIntervals();
-      toast.success(`${result.reset} Kanäle auf ${fmtInterval(result.interval)} zurückgesetzt`);
-      loadSubs();
-    } catch (e) { toast.error(e.message); }
-  }
-
-  // Antwort einer Intervall-Änderung in die Liste übernehmen
-  async function applyInterval(sub, call) {
-    try {
-      const result = await call(sub.id);
-      const idx = subs.findIndex(s => s.id === sub.id);
-      if (idx >= 0) { subs[idx] = { ...subs[idx], check_interval: result.new_interval }; subs = [...subs]; }
-      toast.info(`${sub.channel_name}: Prüfintervall ${fmtInterval(result.old_interval)} → ${fmtInterval(result.new_interval)}`);
-    } catch (e) { toast.error(`${sub.channel_name}: ${e.message}`); }
-  }
-  const halveInterval = (sub) => applyInterval(sub, api.halveInterval);
-  const resetInterval = (sub) => applyInterval(sub, api.resetInterval);
-
   async function resetAllErrors() {
     try {
       const res = await api.resetAllErrors();
@@ -433,9 +412,6 @@
       <button class="btn-ghost" onclick={() => navigate('/feed')}>
         <i class="fa-solid fa-rss"></i> Feed{#if rssStats?.new_videos > 0}<span class="badge-red">{rssStats.new_videos}</span>{/if}
       </button>
-      <button class="btn-ghost" onclick={resetAllIntervals} title="Alle Intervalle zurücksetzen">
-        <i class="fa-solid fa-clock-rotate-left"></i> Prüfzeiten zurücksetzen
-      </button>
       <button class="btn-primary" onclick={pollNow} disabled={scheduler?.polling}
               title="Alle aktiven Kanäle sofort auf neue Videos prüfen"><i class="fa-solid fa-rotate-right"></i> Alle jetzt prüfen</button>
     </div>
@@ -488,7 +464,7 @@
     {/if}
     {#if subs.some(s => s.error_count > 0)}
       <button class="filter-chip reset-chip" onclick={resetAllErrors}
-              title="Fehlerzähler löschen und die Kanäle wieder im Basis-Intervall prüfen. Abgeschaltete Kanäle bleiben abgeschaltet.">
+              title="Fehlerzähler löschen und die Kanäle bald wieder prüfen. Abgeschaltete Kanäle bleiben abgeschaltet.">
         <i class="fa-solid fa-rotate-left"></i> Fehler zurücksetzen
       </button>
     {/if}
@@ -597,7 +573,7 @@
             {:else}
               {sub.rss_count > 0 ? `${sub.rss_count} bekannt` : 'Keine Videos bekannt'} ·
               <span title="Zuletzt auf neue Videos geprüft">geprüft {formatDateRelative(sub.last_checked)}</span> ·
-              <span class="card-interval" title="Prüfintervall: wächst ohne neue Videos, ein neues Video setzt es zurück"><i class="fa-solid fa-rotate"></i> {fmtInterval(sub.check_interval)}</span>
+              <span class="card-interval" title="Prüfabstand: richtet sich nach dem Alter des neuesten Videos (ein Viertel davon, mindestens Grundtakt, höchstens Längster Prüfabstand)"><i class="fa-solid fa-rotate"></i> {fmtInterval(sub.check_interval)}</span>
             {/if}
           </span>
           {#if sub.error_count > 0}
@@ -621,10 +597,11 @@
                 onclick={()=>toggleDrip(sub)} title={dripTooltip(sub)}>
           {#if sub.drip_completed_at}<i class="fa-solid fa-check"></i> Fertig{:else}<i class="fa-solid fa-hourglass-half"></i> +{sub.drip_count||3}/Tag{/if}
         </button>
-        {#if sub.drip_enabled}
         <button class="tag" class:tag-on={sub.drip_auto_archive}
-                onclick={()=>toggleDripArchive(sub)} title="Geladenes direkt archivieren"><i class="fa-solid fa-box-archive"></i></button>
-        {/if}
+                onclick={()=>toggleDripArchive(sub)}
+                title={sub.drip_auto_archive ? 'Neue Videos dieses Kanals landen direkt im Archiv statt in der Bibliothek - Klick schaltet aus' : 'Neue Videos landen in der Bibliothek - Klick: künftig direkt ins Archiv'}>
+          <i class="fa-solid fa-box-archive"></i> {sub.drip_auto_archive ? 'Direkt ins Archiv' : 'Bibliothek'}
+        </button>
         <button class="tag" class:tag-warn={sub.suggest_exclude}
                 onclick={()=>toggleSuggestExclude(sub)} title={sub.suggest_exclude ? 'Aus Vorschlägen ausgeschlossen – Klick zum Einschließen' : 'In Vorschlägen – Klick zum Ausschließen'}>
           <i class="fa-solid fa-dice" class:strikethrough={sub.suggest_exclude}></i>
@@ -635,10 +612,6 @@
                 title="Diesen Kanal jetzt auf neue Videos prüfen">
           <i class="fa-solid fa-rotate-right" class:fa-spin={checking[sub.id]}></i>
         </button>
-        {#if sub.check_interval > baseInterval}
-          <button class="tag tag-interval" onclick={() => halveInterval(sub)} title="Prüfintervall halbieren ({fmtInterval(sub.check_interval)} → {fmtInterval(Math.max(baseInterval, Math.floor(sub.check_interval/2)))})">½</button>
-          <button class="tag tag-interval" onclick={() => resetInterval(sub)} title="Prüfintervall auf den Basiswert ({fmtInterval(baseInterval)}) zurücksetzen"><i class="fa-solid fa-clock-rotate-left"></i></button>
-        {/if}
         <button class="tag tag-del" title="Entfernen" onclick={()=>removeSub(sub)}><i class="fa-solid fa-xmark"></i></button>
       </div>
       {#if sub.auto_download}

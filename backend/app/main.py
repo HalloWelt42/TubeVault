@@ -105,7 +105,8 @@ async def _drip_cron_loop():
                      AND s.drip_next_run <= datetime('now')"""
             )
             for sub in due:
-                # (Auto-Archive ist oben in Schritt 1 für alle Kanäle gelaufen.)
+                # "Direkt ins Archiv" (drip_auto_archive) setzt der Download selbst
+                # beim Abschluss, siehe download_service.
                 loadable = await loadable_entries.clause()
                 drip_count = sub["drip_count"] or 3
                 # Je Lauf genau drip_count Videos: das neueste fehlende plus
@@ -315,6 +316,11 @@ async def lifespan(app: FastAPI):
     from app.services import semantic_index
     task_manager.register("semantic_index", "Bedeutungssuche: Videos einbetten",
                           semantic_index.background_index, auto_restart=True, essential=False)
+    # Externe Archive: Erreichbarkeit überwachen, bei Rückkehr wahlweise
+    # scannen (archive.mount_check_interval) - wurde früher nie gestartet
+    from app.services.archive_service import archive_service
+    task_manager.register("archive_mounts", "Externe Archive überwachen",
+                          archive_service._mount_watcher_loop, auto_restart=True, essential=False)
     from app.services import ad_segments
     task_manager.register("ad_transcript_rebuild", "Transkripte ohne Werbestellen neu bilden",
                           ad_segments.background_rebuild, auto_restart=False, essential=False)

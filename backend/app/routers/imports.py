@@ -341,8 +341,8 @@ async def import_freetube_subscriptions(file: UploadFile = File(...)):
                 
                 await db.execute(
                     """INSERT OR IGNORE INTO subscriptions 
-                       (channel_id, channel_name, thumbnail_url, auto_download, check_interval)
-                       VALUES (?, ?, ?, 0, 3600)""",
+                       (channel_id, channel_name, thumbnail_url, auto_download)
+                       VALUES (?, ?, ?, 0)""",
                     (channel_id, channel_name, thumbnail)
                 )
                 imported += 1
@@ -483,8 +483,8 @@ async def import_youtube_takeout_subs(file: UploadFile = File(...)):
             if cid:
                 await db.execute(
                     """INSERT OR IGNORE INTO subscriptions 
-                       (channel_id, channel_name, thumbnail_url, source, auto_download, check_interval)
-                       VALUES (?, ?, ?, 'youtube_takeout', 0, 3600)""",
+                       (channel_id, channel_name, thumbnail_url, source, auto_download)
+                       VALUES (?, ?, ?, 'youtube_takeout', 0)""",
                     (cid, name, thumb)
                 )
                 imported += 1
@@ -516,8 +516,8 @@ async def import_youtube_takeout_subs(file: UploadFile = File(...)):
         if cid and cid.startswith("UC"):
             await db.execute(
                 """INSERT OR IGNORE INTO subscriptions 
-                   (channel_id, channel_name, source, auto_download, check_interval)
-                   VALUES (?, ?, 'youtube_takeout', 0, 3600)""",
+                   (channel_id, channel_name, source, auto_download)
+                   VALUES (?, ?, 'youtube_takeout', 0)""",
                 (cid, name)
             )
             imported += 1

@@ -91,3 +91,10 @@ async def test_zuruecksetzen(client, test_db):
     await client.put("/api/settings/general.videos_per_page", json={"value": "48"})
     await client.post("/api/settings/reset")
     assert await test_db.fetch_val("SELECT value FROM settings WHERE key='general.videos_per_page'") == "24"
+
+
+def test_ganzzahlige_einstellungen_werden_gerundet():
+    """Befund 15.10.2026: "1800.5" wurde gespeichert, int() beim Lesen ließ
+    dann jeden Durchlauf der Kanalprüfung abstürzen."""
+    assert settings_schema.validate("rss.interval", "43200.6") == "43201"
+    assert settings_schema.validate("rss.interval", "7200,0") == "7200"

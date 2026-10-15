@@ -121,3 +121,12 @@ def test_qualitaetswahl_trifft_den_wunsch():
     assert _pick("best", 360, 2160) == (2160, "getrennt")
     # Wunsch nicht verfügbar → das Nächstkleinere
     assert _pick("1080p", 360, 720) == (720, "getrennt")
+
+
+async def test_untertitel_nur_wenn_eingeschaltet(test_db, set_setting):
+    from app.services.download_options import subtitle_languages
+    await set_setting("download.auto_subtitle", "false")
+    assert await subtitle_languages() == []
+    await set_setting("download.auto_subtitle", "true")
+    await set_setting("download.subtitle_lang", "de, en")
+    assert await subtitle_languages() == ["de", "en"]

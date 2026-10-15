@@ -1030,42 +1030,6 @@ async def trigger_poll():
     return await rss_service.trigger_poll_now()
 
 
-@router.post("/interval/reset-all")
-async def reset_all_intervals():
-    """Alle Kanal-Intervalle auf Basis-Wert zurücksetzen."""
-    default_interval = await _base_interval()
-    await db.execute(
-        "UPDATE subscriptions SET check_interval = ? WHERE enabled = 1",
-        (default_interval,)
-    )
-    count = await db.fetch_val("SELECT COUNT(*) FROM subscriptions WHERE enabled = 1")
-    return {"reset": count, "interval": default_interval}
-
-
-@router.post("/{sub_id}/interval/halve")
-async def halve_interval(sub_id: int):
-    """Prüfintervall eines Kanals halbieren."""
-    default_interval = await _base_interval()
-    sub = await db.fetch_one("SELECT check_interval FROM subscriptions WHERE id = ?", (sub_id,))
-    if not sub:
-        raise HTTPException(status_code=404, detail="Kanal nicht gefunden")
-    current = sub["check_interval"] or default_interval
-    new_interval = max(default_interval, current // 2)
-    await db.execute("UPDATE subscriptions SET check_interval = ? WHERE id = ?", (new_interval, sub_id))
-    return {"id": sub_id, "old_interval": current, "new_interval": new_interval}
-
-
-@router.post("/{sub_id}/interval/reset")
-async def reset_interval(sub_id: int):
-    """Prüfintervall eines Kanals auf Basis-Wert zurücksetzen."""
-    default_interval = await _base_interval()
-    sub = await db.fetch_one("SELECT check_interval FROM subscriptions WHERE id = ?", (sub_id,))
-    if not sub:
-        raise HTTPException(status_code=404, detail="Kanal nicht gefunden")
-    await db.execute("UPDATE subscriptions SET check_interval = ? WHERE id = ?", (default_interval, sub_id))
-    return {"id": sub_id, "old_interval": sub["check_interval"], "new_interval": default_interval}
-
-
 @router.post("/cleanup")
 async def cleanup_subscriptions():
     """Ungültige Subscriptions finden und deaktivieren."""

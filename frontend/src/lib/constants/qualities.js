@@ -21,5 +21,3 @@ export const VIDEO_QUALITIES = [
   { value: '144p',  label: '144p' },
 ];
 
-/** Default für neue Downloads, wenn der Nutzer nichts explizit wählt. */
-export const DEFAULT_QUALITY = 'best';

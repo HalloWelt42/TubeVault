@@ -285,7 +285,7 @@
       <div class="card-header">
         <i class="fa-solid fa-satellite-dish"></i>
         <h3>Kanalprüfung</h3>
-        {#if scheduler?.running}
+        {#if scheduler?.running && scheduler?.rss_enabled}
           <span class="status-pill active"><i class="fa-solid fa-clock"></i> Zeitgesteuert</span>
         {:else}
           <span class="status-pill inactive"><i class="fa-solid fa-circle"></i> Gestoppt</span>
@@ -364,7 +364,7 @@
               </div>
             {/each}
           </div>
-          <p class="hint">Bei Fehlern verdoppelt sich das Intervall (max 24h). Nach Erfolg: zurück auf Standardwert.</p>
+          <p class="hint">Der Prüfabstand eines Kanals richtet sich nach dem Alter seines neuesten Videos; Fehler verlängern ihn.</p>
         </div>
         {/if}
 

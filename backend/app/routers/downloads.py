@@ -118,7 +118,8 @@ async def set_cooldown(seconds: int = None):
         seconds = D.COOLDOWN_BASE_S
     seconds = max(D.COOLDOWN_MIN_S, min(seconds, D.COOLDOWN_MAX_S))
     await db.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (K.DOWNLOAD_COOLDOWN_BASE_S, str(seconds))
     )
     await download_service.reload_cooldown_base()
@@ -134,11 +135,13 @@ async def set_throttle(kbps: int = 0, realtime: bool = False):
     from app.constants import SettingsKeys as K, Defaults as D
     kbps = max(0, min(kbps, D.THROTTLE_KBPS_MAX))
     await db.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (K.DOWNLOAD_THROTTLE_KBPS, str(kbps))
     )
     await db.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (K.DOWNLOAD_THROTTLE_REALTIME, 'true' if realtime else 'false')
     )
     return {"throttle_kbps": kbps, "throttle_realtime": realtime}

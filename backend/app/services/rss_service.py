@@ -216,7 +216,8 @@ class RSSService:
 
     async def _do_tick(self, max_feeds: int = 20) -> dict:
         """Eigentliche Tick-Logik (durch Lock geschützt)."""
-        enabled = await self._get_setting("rss.enabled")
+        from app.settings_schema import default
+        enabled = await self._get_setting("rss.enabled") or default("rss.enabled")
         if enabled != "true":
             return {"status": "disabled", "message": "Scanner ist in den Einstellungen abgeschaltet"}
 
@@ -366,6 +367,18 @@ class RSSService:
             "WHERE id = ?",
             (interval, sub["id"]))
 
+    async def recompute_intervals(self) -> int:
+        """Alle fehlerfreien Kanäle nach der Regel neu takten - nach einer
+        Änderung von Grundtakt oder längstem Prüfabstand gilt sie sofort."""
+        base_interval, longest_interval = await self._intervals()
+        rows = await db.fetch_all(
+            "SELECT id, last_video_date FROM subscriptions WHERE COALESCE(error_count, 0) = 0")
+        for row in rows:
+            await db.execute(
+                "UPDATE subscriptions SET check_interval = ? WHERE id = ?",
+                (interval_for(row["last_video_date"], base_interval, longest_interval), row["id"]))
+        return len(rows)
+
     async def _penalize(self, sub: dict, error: Exception, longest_interval: int):
         """Fehlgeschlagene Prüfung eines Kanals: Fehler merken, seltener prüfen.
         last_checked wird gesetzt, sonst wäre der Kanal sofort wieder fällig."""
@@ -373,7 +386,7 @@ class RSSService:
         message = str(error)[:500]
         if "404" in message:
             # Kanal evtl. gelöscht oder umgezogen: stark bremsen, nicht abschalten
-            interval = min(86400, 21600 * error_count)
+            interval = min(longest_interval, 21600 * error_count)
             message = (f"[404] Kanal nicht erreichbar ({error_count}x) - "
                        f"nächster Versuch in {interval // 3600} h")
         else:
@@ -1456,12 +1469,13 @@ class RSSService:
         )
 
         # Settings die den Scanner beeinflussen
-        max_age = await self._get_setting("rss.max_age_days") or "90"
-        interval = await self._get_setting("rss.interval") or "1800"
-        rss_enabled = await self._get_setting("rss.enabled") or "true"
+        from app.settings_schema import default
+        max_age = await self._get_setting("rss.max_age_days") or default("rss.max_age_days")
+        interval = await self._get_setting("rss.interval") or default("rss.interval")
+        rss_enabled = await self._get_setting("rss.enabled") or default("rss.enabled")
         auto_dl_channels = await db.fetch_val(
             "SELECT COUNT(*) FROM subscriptions WHERE auto_download = 1 AND enabled = 1") or 0
-        daily_limit = await self._get_setting("rss.auto_dl_daily_limit") or "20"
+        daily_limit = await self._get_setting("rss.auto_dl_daily_limit") or default("rss.auto_dl_daily_limit")
 
         # Letzter Cron-Lauf aus Jobs-Tabelle
         last_cron_job = await db.fetch_one(

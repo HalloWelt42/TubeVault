@@ -173,7 +173,13 @@ def validate(key: str, raw) -> str:
             raise ValueError(f"{definition.label}: mindestens {definition.min:g}")
         if definition.max is not None and number > definition.max:
             raise ValueError(f"{definition.label}: höchstens {definition.max:g}")
-        return str(int(number)) if number == int(number) else str(number)
+        # Ganzzahlige Einstellungen (Schrittweite ganz oder ohne) werden gerundet
+        # gespeichert: gelesen wird mit int(), und "1800.5" ließe sonst den
+        # Scanner bei jedem Durchlauf abstürzen
+        whole = definition.step is None or float(definition.step).is_integer()
+        if whole or number == int(number):
+            return str(int(round(number)))
+        return str(number)
 
     if definition.kind == "select":
         if value not in (definition.options or []):

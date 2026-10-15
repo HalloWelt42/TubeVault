@@ -48,16 +48,17 @@
   async function saveCooldown(v) {
     // Validierung: leere/ungültige Eingaben nicht übernehmen
     const num = parseInt(v);
-    if (isNaN(num) || num < 0 || num > 3600) {
-      // zurücksetzen auf letzten gültigen Wert
-      cooldownSec = cooldownSec > 0 ? cooldownSec : 30;
+    if (isNaN(num) || num < 5 || num > 3600) {
+      // Grenzen wie im Backend (5 bis 3600 s); sonst letzten gültigen Wert zeigen
+      toast.error('Wartezeit: 5 bis 3600 Sekunden');
+      cooldownSec = cooldownSec >= 5 ? cooldownSec : 30;
       return;
     }
     settingsSaving = true;
     try {
-      await api.setDownloadCooldown(num);
-      cooldownSec = num;
-      toast.success(`Wartezeit: ${num}s zwischen Downloads`);
+      const res = await api.setDownloadCooldown(num);
+      cooldownSec = res.cooldown_base_s;   // was das Backend tatsächlich gespeichert hat
+      toast.success(`Wartezeit: ${cooldownSec} s zwischen Downloads`);
     } catch (e) { toast.error(e.message); }
     settingsSaving = false;
   }
@@ -1022,7 +1023,7 @@
             <div class="ctrl-hint">{cooldownSec}s zwischen Downloads (min. 30 empfohlen)</div>
             <div class="ctrl-row">
               <div class="num-field">
-                <input type="number" min="0" max="3600" step="5" bind:value={cooldownSec} disabled={settingsSaving}
+                <input type="number" min="5" max="3600" step="5" bind:value={cooldownSec} disabled={settingsSaving}
                        onblur={() => saveCooldown(cooldownSec)} onkeydown={(e) => e.key === 'Enter' && saveCooldown(cooldownSec)} />
                 <span class="u">s</span>
               </div>

@@ -718,19 +718,22 @@ async def auto_enrich(video_id: str):
         except Exception as e:
             await _log_attempt("chapter_thumbs", False, error=str(e)[:200])
 
-    # ─── Untertitel ───
-    if await _should_enrich("subtitles"):
+    # ─── Untertitel (nur wenn "Untertitel herunterladen" an ist, in den
+    #     eingestellten Sprachen; die erste gefundene genügt) ───
+    from app.services.download_options import subtitle_languages
+    languages = await subtitle_languages()
+    if languages and await _should_enrich("subtitles"):
         try:
             from app.config import SUBTITLES_DIR
             sdir = SUBTITLES_DIR / video_id
             existing = list(sdir.glob("*.vtt")) if sdir.exists() else []
             if len(existing) == 0:
-                res = await download_service.download_subtitles(video_id, "de")
-                count = res.get("count", 0)
-                # Auch englische Untertitel versuchen
-                if count == 0:
-                    res2 = await download_service.download_subtitles(video_id, "en")
-                    count += res2.get("count", 0)
+                count = 0
+                for language in languages:
+                    res = await download_service.download_subtitles(video_id, language)
+                    count += res.get("count", 0)
+                    if count:
+                        break
                 await _log_attempt("subtitles", count > 0, count,
                                    "Keine Untertitel verfügbar" if count == 0 else None)
                 results["subtitles"] = count

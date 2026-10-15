@@ -11,8 +11,7 @@ mal die Einstellung, mal der Kanal, mal ein fester Wert im Frontend. Ergebnis:
 Vorrang (für jede Option einzeln):
     1. Auftrag    - was der Nutzer für genau diesen Download gewählt hat
     2. Kanal      - Vorgabe am Abo des Kanals, zu dem das Video gehört
-    3. Standard   - Einstellungen: download.quality für von Hand gestartete,
-                    rss.auto_quality für automatische Downloads
+    3. Standard   - Einstellung download.quality (für alle Downloads)
 
 Aufträge speichern nur, was ausdrücklich gewählt wurde. Aufgelöst wird beim
 Start des Downloads: eine geänderte Einstellung gilt damit auch für bereits
@@ -47,6 +46,16 @@ class EffectiveOptions(BaseModel):
 async def _setting(key: str) -> str:
     value = await db.fetch_val("SELECT value FROM settings WHERE key = ?", (key,))
     return value if value not in (None, "") else settings_schema.BY_KEY[key].default
+
+
+async def subtitle_languages() -> list[str]:
+    """Sprachen, deren Untertitel automatisch geholt werden - leer, wenn
+    "Untertitel herunterladen" aus ist. Gilt für Downloads und das Nachladen
+    beim Öffnen eines Videos."""
+    if (await _setting("download.auto_subtitle")) != "true":
+        return []
+    raw = await _setting("download.subtitle_lang")
+    return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 async def channel_prefs(video_id: str) -> dict:
@@ -100,11 +109,8 @@ async def effective(video_id: str, requested: dict | None) -> EffectiveOptions:
 
     if requested.get("subtitle_lang"):
         subtitle_langs = [requested["subtitle_lang"]]
-    elif (await _setting("download.auto_subtitle")) == "true":
-        raw = await _setting("download.subtitle_lang")
-        subtitle_langs = [part.strip() for part in raw.split(",") if part.strip()]
     else:
-        subtitle_langs = []
+        subtitle_langs = await subtitle_languages()
 
     return EffectiveOptions(
         quality=AUDIO_ONLY if audio_only else quality,

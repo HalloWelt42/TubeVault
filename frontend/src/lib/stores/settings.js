@@ -11,7 +11,6 @@ import { api } from '../api/client.js';
 const DEFAULTS = {
   'general.videos_per_page': '24',
   'download.quality': '720p',
-  'download.format': 'mp4',
 };
 
 export const settings = writable({...DEFAULTS});

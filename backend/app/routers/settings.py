@@ -83,6 +83,9 @@ async def _notify_services(key: str) -> None:
     if key.startswith("ai."):
         from app.services import semantic_index
         semantic_index.reset_availability()
+    if key in ("rss.interval", "rss.max_interval"):
+        from app.services.rss_service import rss_service
+        await rss_service.recompute_intervals()
     if key == "download.cooldown_base_s":
         from app.services.download_service import download_service
         await download_service.reload_cooldown_base()

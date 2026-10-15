@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 43
+SCHEMA_VERSION = 44
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     channel_description TEXT,
     subscriber_count INTEGER,
     auto_download BOOLEAN DEFAULT 0,
-    download_quality TEXT DEFAULT '720p',
+    download_quality TEXT,            -- NULL = Standard-Qualität aus den Einstellungen
     audio_only BOOLEAN DEFAULT 0,
     category_id INTEGER,              -- ohne Funktion (Altbestand)
     last_checked TEXT,
@@ -1203,6 +1203,16 @@ class Database:
             """)
             await self._connection.commit()
             logger.info("Migration v43: Prüftakt nach dem Alter des neuesten Videos")
+
+        # v44: Kanäle mit der früher fest eingetragenen Qualität 720p, die der
+        # Nutzer nie sehen konnte (Auswahl nur bei Auto-Download), folgen
+        # wieder der Standard-Qualität aus den Einstellungen
+        if current_version < 44:
+            await self._connection.execute(
+                """UPDATE subscriptions SET download_quality = NULL
+                   WHERE download_quality = '720p' AND COALESCE(auto_download, 0) = 0""")
+            await self._connection.commit()
+            logger.info("Migration v44: Kanalqualität ohne eigene Wahl folgt dem Standard")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing
