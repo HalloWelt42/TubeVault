@@ -2,7 +2,7 @@
 
 **Das eigene Videoarchiv für zu Hause.** Abonnieren, laden, ansehen, hören und durchsuchen, alles auf eigener Hardware und ohne fremde Dienste dazwischen. TubeVault ist für den Raspberry Pi 5 gebaut und läuft überall, wo Docker läuft.
 
-![Nachvertonung: laufender Auftrag in Schritten, fertige Aufträge, Stimmen](.github/bilder/nachvertonung.png)
+![TubeVault auf Rechner, Handy und Uhr: dieselbe Wiedergabe, auf jedem Gerät steuerbar](.github/bilder/geraete.png)
 
 ## Auf einen Blick
 
@@ -70,6 +70,8 @@
   - Erkannt werden sie in Ordnern der Sammlung und als Videos.
 
 ### Nachvertonung
+
+![Nachvertonung: laufender Auftrag in Schritten, fertige Aufträge, Stimmen](.github/bilder/nachvertonung.png)
 
 Fremdsprachige Videos bekommen eine deutsche Tonspur:
 
