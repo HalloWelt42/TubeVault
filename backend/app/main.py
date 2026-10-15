@@ -28,7 +28,7 @@ from app.services import loadable as loadable_entries, video_classifier
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
-    ad_markers, own_videos, video_repair, backup, api_endpoints, admin_cleanup, transcripts as transcripts_router,
+    ad_markers, own_collection, own_videos, video_repair, backup, api_endpoints, admin_cleanup, transcripts as transcripts_router,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
     cookies, admin, dubbing,
 )
@@ -324,6 +324,9 @@ async def lifespan(app: FastAPI):
     from app.services import ad_segments
     task_manager.register("ad_transcript_rebuild", "Transkripte ohne Werbestellen neu bilden",
                           ad_segments.background_rebuild, auto_restart=False, essential=False)
+    from app.services import own_scan
+    task_manager.register("own_scan", "Eigene Videos einlesen",
+                          own_scan.worker, auto_restart=True, essential=False)
     task_manager.register("search_index", "Suchindex nachziehen",
                           search_index.background_catch_up, auto_restart=False, essential=False)
     await task_manager.start_all()
@@ -440,6 +443,7 @@ app.include_router(subscriptions.router)
 app.include_router(feed_router.router)
 app.include_router(channel_playlists.router)
 app.include_router(imports.router)
+app.include_router(own_collection.router)
 app.include_router(own_videos.router)
 app.include_router(video_repair.router)
 app.include_router(admin_cleanup.router)

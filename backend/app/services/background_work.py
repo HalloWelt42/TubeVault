@@ -157,8 +157,24 @@ async def _passage_index() -> Optional[WorkItem]:
         done=done, total=total, progress=done / total if total else None, since=since)
 
 
+async def _own_videos() -> Optional[WorkItem]:
+    from app.models.own_files import ScanPhase
+    from app.services import own_scan
+    scan = await own_scan.live()
+    if not scan:
+        return None
+    folder = scan.path or "ganze Sammlung"
+    if scan.phase == ScanPhase.LISTING:
+        return WorkItem(key="own_videos", label="Eigene Videos: Dateien werden gesucht",
+                        detail=f"{folder} - bisher {scan.found:,} gefunden".replace(",", "."), since=scan.since)
+    return WorkItem(key="own_videos", label="Eigene Videos werden eingelesen",
+                    detail=f"{folder} - Angaben lesen und mit der Bibliothek abgleichen",
+                    done=scan.checked, total=scan.files,
+                    progress=scan.checked / scan.files if scan.files else None, since=scan.since)
+
+
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _ai_transcripts, _search_index, _semantic_index, _passage_index, _type_check]
+    _dubbing, _ai_transcripts, _own_videos, _search_index, _semantic_index, _passage_index, _type_check]
 
 
 async def overview() -> list[WorkItem]:

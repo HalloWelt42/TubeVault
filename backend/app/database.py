@@ -1188,6 +1188,10 @@ class Database:
         from app.services import ad_segments
         await ad_segments.install_schema(self._connection, backfill=current_version < 42)
 
+        # Eigene Videos: eingelesene Ordner und der Stand jeder Datei
+        from app.services import own_scan
+        await own_scan.install_schema(self._connection)
+
         # v43: Prüftakt nach dem Alter des neuesten Videos (rss_service.interval_for).
         # Nutzerentscheidung 15.10.2026: Grundtakt 2x täglich, höchstens 30 Tage.
         # Nur die alten Standardwerte werden ersetzt, eigene Werte bleiben.

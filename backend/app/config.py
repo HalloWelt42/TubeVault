@@ -40,7 +40,7 @@ DEFAULT_FORMAT = os.getenv("DEFAULT_FORMAT", "mp4")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", str(1024 * 1024)))  # 1MB
 
 # Versioning
-VERSION = "2.49.0"
+VERSION = "2.50.0"
 APP_NAME = "TubeVault"
 
 # CORS – immer offen, keine Einschränkungen
@@ -50,5 +50,6 @@ CORS_ORIGINS = ["*"]
 def ensure_directories():
     """Alle Datenverzeichnisse erstellen falls nicht vorhanden."""
     for d in [VIDEOS_DIR, AUDIO_DIR, THUMBNAILS_DIR, METADATA_DIR,
-              SUBTITLES_DIR, AVATARS_DIR, BANNERS_DIR, DB_DIR, EXPORTS_DIR, TEMP_DIR, RSS_THUMBS_DIR, TEXTS_DIR]:
+              SUBTITLES_DIR, AVATARS_DIR, BANNERS_DIR, DB_DIR, EXPORTS_DIR, TEMP_DIR, RSS_THUMBS_DIR, TEXTS_DIR,
+              SCAN_DIR]:
         d.mkdir(parents=True, exist_ok=True)
