@@ -7,6 +7,8 @@
 <script>
   import { loadSettings } from '../lib/stores/settings.js';
   import { route } from './router.js';
+  import VersionBar from '../lib/components/common/VersionBar.svelte';
+  import { startVersionWatch } from '../lib/utils/versionWatch.js';
   import { notice } from './notice.js';
   import TabBar from './parts/TabBar.svelte';
   import Start from './views/Start.svelte';
@@ -24,6 +26,7 @@
   let visited = $state(new Set());
 
   loadSettings().finally(() => { ready = true; });
+  startVersionWatch(route);   // nach einem Update selbst neu laden
 
   $effect(() => {
     const view = $route.view;
@@ -40,6 +43,7 @@
 </script>
 
 <div class="shell">
+  <VersionBar />
   <main class="views">
     {#if ready}
       {#each Object.entries(tabViews) as [name, View] (name)}

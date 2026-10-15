@@ -225,20 +225,31 @@ async def settle_without_probe() -> int:
     return changed + cursor.rowcount
 
 
-# Was der Hintergrundlauf nachfragt: alle geladenen Videos und die Feed-Einträge
-# der letzten TYPE_CHECK_DAYS Tage, die der Nutzer noch vor sich hat (aktiv oder
-# "später"). Bewusst unabhängig von "Höchstes Video-Alter": steht das auf
-# "alle", wären es zehntausende alte Einträge und rund ein Tag Dauerabfrage
-# bei der Quelle (Entscheidung des Nutzers 15.10.2026: nur Neues prüfen).
-# Ältere Einträge werden geprüft, sobald sie geladen werden.
-TYPE_CHECK_DAYS = 90
+# Was der Hintergrundlauf nachfragt: alle geladenen Videos und die Feed-Einträge,
+# die der Nutzer noch vor sich hat (aktiv oder "später"), so alt wie
+# "Höchstes Video-Alter" erlaubt (0 = alle). Bei "alle" sind das zehntausende
+# Einträge und viele Stunden Nachfragen bei der Quelle - der Nutzer will sie
+# trotzdem, der Lauf lässt sich dafür jederzeit anhalten (types.check_enabled,
+# Knopf in der Liste der Hintergrundarbeiten; Entscheidung 15.10.2026).
 _VIDEOS_TODO = (
     f"COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live' "
     "AND length(id) = 11")
 _FEED_TODO = (
     f"COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live' "
     "AND COALESCE(feed_status, 'active') IN ('active', 'later') "
-    f"AND published >= date('now', '-{TYPE_CHECK_DAYS} days')")
+    "AND (COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'rss.max_age_days'), 90) <= 0 "
+    "OR published >= date('now', '-' || COALESCE("
+    "(SELECT value FROM settings WHERE key = 'rss.max_age_days'), '90') || ' days'))")
+
+# Angehalten: so oft wird nachgesehen, ob es weitergehen darf
+_PAUSED_RECHECK_S = 30
+
+
+async def check_enabled() -> bool:
+    """Darf der Hintergrundlauf bei der Quelle nachfragen? (types.check_enabled)"""
+    from app.settings_schema import default
+    value = await db.fetch_val("SELECT value FROM settings WHERE key = 'types.check_enabled'")
+    return (value or default("types.check_enabled")) == "true"
 
 
 async def _next_unverified() -> Optional[str]:
@@ -341,6 +352,9 @@ async def verify_backlog() -> None:
     trouble = 0
     async with source_net.async_client(timeout=_PROBE_TIMEOUT_S, follow_redirects=False) as client:
         while True:
+            if not await check_enabled():
+                await asyncio.sleep(_PAUSED_RECHECK_S)
+                continue
             video_id = await _next_unverified()
             if not video_id:
                 await asyncio.sleep(_IDLE_PAUSE_S)

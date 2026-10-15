@@ -27,6 +27,8 @@ class WorkItem(BaseModel):
     since: Optional[str] = None       # läuft seit (UTC)
     eta_seconds: Optional[int] = None # geschätzte Restdauer
     waiting: int = 0                  # weitere wartende Aufträge dahinter
+    switch_key: Optional[str] = None  # Einstellung, die die Arbeit an- und abschaltet
+    paused: bool = False              # angehalten (switch_key steht auf aus)
 
 
 # Höchststand je Arbeit seit Programmstart: daraus ergibt sich "x von y"
@@ -67,11 +69,14 @@ async def _type_check() -> Optional[WorkItem]:
         _forget("type_check")
         return None
     done, total, since = _countdown("type_check", remaining)
+    paused = not await video_classifier.check_enabled()
     return WorkItem(
         key="type_check", label="Video-Typen werden geprüft",
-        detail="Fragt die Quelle, was Short und was Video ist (bewusst langsam).",
+        detail=("Angehalten - fragt die Quelle erst nach dem Fortsetzen weiter." if paused
+                else "Fragt die Quelle, was Short und was Video ist (bewusst langsam)."),
         done=done, total=total, progress=done / total if total else None, since=since,
-        eta_seconds=int(remaining * video_classifier.SECONDS_PER_PROBE))
+        eta_seconds=None if paused else int(remaining * video_classifier.SECONDS_PER_PROBE),
+        switch_key="types.check_enabled", paused=paused)
 
 
 async def _dubbing() -> Optional[WorkItem]:

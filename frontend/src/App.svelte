@@ -11,6 +11,8 @@
   import Toast from './lib/components/common/Toast.svelte';
   import ActivityPanel from './lib/components/common/ActivityPanel.svelte';
   import LogTerminal from './lib/components/common/LogTerminal.svelte';
+  import VersionBar from './lib/components/common/VersionBar.svelte';
+  import { startVersionWatch } from './lib/utils/versionWatch.js';
   import './lib/styles/global.css';
 
   import Dashboard from './routes/Dashboard.svelte';
@@ -93,9 +95,12 @@
   });
 
   onConnectionChange(ok => { offline = !ok; });
+  // Nach einem Update selbst neu laden (spätestens beim nächsten Seitenwechsel)
+  startVersionWatch(route);
 </script>
 
 <div class="app">
+  <VersionBar />
   {#if offline}
     <div class="offline-banner">
       <i class="fa-solid fa-plug-circle-xmark"></i> Backend nicht erreichbar — Verbindung zum Pi prüfen

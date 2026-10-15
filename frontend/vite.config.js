@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { readFileSync } from 'node:fs';
 import pkg from './package.json';
 
 // Ziel des Entwicklungs-Proxys. Für Tests gegen ein lokales Backend mit
@@ -20,8 +21,28 @@ const mobileEntry = {
   },
 };
 
+// Versionsdatei der Oberfläche: offene Seiten fragen sie regelmäßig ab und
+// laden nach einem Update selbst neu (lib/utils/versionWatch.js). Sie kommt
+// aus demselben Build wie die Seite - zeigt sie eine neue Version, ist die
+// neue Oberfläche wirklich ausgeliefert.
+const appVersionFile = {
+  name: 'tubevault-app-version',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'app-version.json', source: JSON.stringify({ version: pkg.version }) });
+  },
+  configureServer(server) {
+    server.middlewares.use('/app-version.json', (_req, res) => {
+      // Entwicklung: package.json frisch lesen, damit ein Versionssprung sofort wirkt
+      const version = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(JSON.stringify({ version }));
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [svelte(), mobileEntry],
+  plugins: [svelte(), mobileEntry, appVersionFile],
   // Frontend-Version aus package.json in den Build inlinen.
   // Nutzung im Code: __APP_VERSION__ (Vite ersetzt beim Build durch den String).
   define: {

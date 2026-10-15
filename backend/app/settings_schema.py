@@ -108,6 +108,11 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="ai.url", default="", kind="text", category="ai", section="extensions",
                label="Adresse des KI-Dienstes",
                description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.178.20:1234/v1"),
+    # ── Hintergrundarbeiten (geschaltet in deren Liste, nicht auf der Einstellungsseite) ──
+    SettingDef(key="types.check_enabled", default="true", kind="toggle", category="types",
+               label="Video-Typen bei der Quelle prüfen",
+               description="Fragt im Hintergrund nach, was Short und was Video ist (eine Anfrage "
+                           "etwa alle 2 Sekunden). Anhalten schont die Quelle."),
     # ── System ────────────────────────────────────────────────────────
     SettingDef(key="archive.mount_check_interval", default="30", kind="number", category="archive",
                min=5, max=3600, unit="s", label="Prüfintervall für externe Archive"),

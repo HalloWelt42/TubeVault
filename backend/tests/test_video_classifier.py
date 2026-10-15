@@ -103,13 +103,24 @@ async def test_unklare_auskunft_aendert_nichts(test_db):
     assert await vc.pending() == 1
 
 
-async def test_nur_neue_feed_eintraege_werden_nachgefragt(test_db, set_setting):
-    """Auch bei "Höchstes Video-Alter: alle" fragt der Hintergrundlauf nur
-    Feed-Einträge der letzten Tage nach (Befund 15.10.2026: 34.685 alte
-    Einträge, rund 19 Stunden Dauerabfrage bei der Quelle)."""
-    await set_setting("rss.max_age_days", 0)
+async def test_feed_eintraege_nach_hoechstem_video_alter(test_db, set_setting):
+    """Nachgefragt wird bis "Höchstes Video-Alter", bei 0 alles (Entscheidung
+    15.10.2026: alles prüfen, dafür an- und abschaltbar)."""
     await test_db.execute(
         "INSERT INTO rss_entries (video_id, channel_id, title, published) VALUES "
         "('neu00000001', 'UCx', 'T', datetime('now', '-3 days')), "
         "('alt00000001', 'UCx', 'T', datetime('now', '-400 days'))")
+    await set_setting("rss.max_age_days", 90)
     assert await vc.pending() == 1
+    await set_setting("rss.max_age_days", 0)
+    assert await vc.pending() == 2
+
+
+async def test_typpruefung_laesst_sich_anhalten(test_db, set_setting):
+    from app.services import background_work
+    await test_db.execute("INSERT INTO videos (id, title, video_type) VALUES ('abcdefghijk', 'T', 'video')")
+    assert await vc.check_enabled()
+    await set_setting("types.check_enabled", "false")
+    assert not await vc.check_enabled()
+    item = next(i for i in await background_work.overview() if i.key == "type_check")
+    assert item.paused and item.switch_key == "types.check_enabled" and item.eta_seconds is None
