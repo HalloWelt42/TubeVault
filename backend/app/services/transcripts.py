@@ -340,6 +340,21 @@ async def fail_ai(video_id: str, note: str) -> None:
            WHERE video_id = ? AND status = 'working'""", (note[:500], video_id))
 
 
+# So viele zuletzt fertige Aufträge zählen für die geschätzte Dauer je Auftrag
+AI_DURATION_SAMPLE = 30
+
+
+async def average_ai_seconds() -> Optional[float]:
+    """Durchschnittliche Dauer der zuletzt fertigen KI-Transkripte (Abholen bis
+    Abliefern) - Grundlage der Restzeit-Schätzung; None ohne Erfahrungswerte."""
+    return await db.fetch_val(
+        f"""SELECT AVG(seconds) FROM (
+              SELECT (julianday(finished_at) - julianday(claimed_at)) * 86400 AS seconds
+              FROM ai_transcriptions
+              WHERE status = 'done' AND claimed_at IS NOT NULL AND finished_at IS NOT NULL
+              ORDER BY finished_at DESC LIMIT {AI_DURATION_SAMPLE})""")
+
+
 async def ai_counts() -> dict[str, int]:
     rows = await db.fetch_all("SELECT status, COUNT(*) AS n FROM ai_transcriptions GROUP BY status")
     result = {"queued": 0, "working": 0, "done": 0, "error": 0}

@@ -6,7 +6,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
-  import { parseServerTime } from '../../utils/format.js';
+  import { parseServerTime, formatClock } from '../../utils/format.js';
 
   const REFRESH_MS = 8000;
 
@@ -24,16 +24,10 @@
     return item.progress === null || item.progress === undefined ? null : Math.round(item.progress * 100);
   }
 
-  function span(seconds) {
-    if (seconds < 90) return `${Math.max(1, Math.round(seconds))} s`;
-    if (seconds < 5400) return `${Math.round(seconds / 60)} Min`;
-    return `${(seconds / 3600).toFixed(1).replace('.', ',')} Std`;
-  }
-
   function runningFor(item) {
     if (!item.since) return null;
     const started = parseServerTime(item.since).getTime();
-    return Number.isNaN(started) ? null : span((now - started) / 1000);
+    return Number.isNaN(started) ? null : formatClock((now - started) / 1000);
   }
 
   function summary(item) {
@@ -67,9 +61,9 @@
               <div class="track"><span style="width: {percent(item)}%"></span></div>
             {/if}
             <div class="row-meta">
-              {#if item.total}<span>{item.done.toLocaleString('de-DE')} von {item.total.toLocaleString('de-DE')}</span>{/if}
-              {#if runningFor(item)}<span>läuft seit {runningFor(item)}</span>{/if}
-              {#if item.eta_seconds}<span>noch etwa {span(item.eta_seconds)}</span>{/if}
+              {#if item.total}<span class="zahl">{item.done.toLocaleString('de-DE')} von {item.total.toLocaleString('de-DE')} erledigt</span>{/if}
+              {#if runningFor(item)}<span>läuft seit <span class="zahl">{runningFor(item)}</span></span>{/if}
+              {#if item.eta_seconds}<span title="Tage:Stunden:Minuten:Sekunden">noch etwa <span class="zahl">{formatClock(item.eta_seconds)}</span></span>{/if}
               {#if item.waiting > 0}<span>{item.waiting} weitere warten</span>{/if}
             </div>
             {#if item.detail}<div class="row-detail">{item.detail}</div>{/if}

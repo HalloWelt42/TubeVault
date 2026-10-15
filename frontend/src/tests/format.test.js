@@ -10,6 +10,7 @@ import {
   formatDate,
   formatDateRelative,
   formatViews,
+  formatClock,
   truncate,
 } from '../lib/utils/format.js';
 
@@ -273,5 +274,23 @@ describe('truncate', () => {
     const result = truncate(title, 60);
     expect(result).toHaveLength(61);
     expect(result.endsWith('…')).toBe(true);
+  });
+});
+
+
+// ============================================================
+// formatClock (dd:hh:mm:ss)
+// ============================================================
+describe('formatClock', () => {
+  it('zeigt Tage, Stunden, Minuten, Sekunden zweistellig', () => {
+    expect(formatClock(0)).toBe('00:00:00:00');
+    expect(formatClock(65)).toBe('00:00:01:05');
+    expect(formatClock(19.3 * 3600)).toBe('00:19:18:00');
+    expect(formatClock(86400 + 3 * 3600 + 12 * 60 + 5)).toBe('01:03:12:05');
+  });
+  it('rundet und kennt keine negativen Zeiten', () => {
+    expect(formatClock(59.6)).toBe('00:00:01:00');
+    expect(formatClock(-5)).toBe('00:00:00:00');
+    expect(formatClock(null)).toBe('00:00:00:00');
   });
 });

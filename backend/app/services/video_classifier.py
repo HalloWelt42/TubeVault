@@ -225,21 +225,20 @@ async def settle_without_probe() -> int:
     return changed + cursor.rowcount
 
 
-# Was der Hintergrundlauf nachfragt: alle geladenen Videos und die Feed-Einträge,
-# die der Nutzer noch vor sich hat (aktiv oder "später", nicht älter als das
-# eingestellte Höchstalter). Der übrige Feed-Katalog (zehntausende alte
-# Einträge) wird geprüft, sobald ein Eintrag geladen oder der Kanal neu
-# gescannt wird - so bleibt die Zahl der Nachfragen bei der Quelle klein.
+# Was der Hintergrundlauf nachfragt: alle geladenen Videos und die Feed-Einträge
+# der letzten TYPE_CHECK_DAYS Tage, die der Nutzer noch vor sich hat (aktiv oder
+# "später"). Bewusst unabhängig von "Höchstes Video-Alter": steht das auf
+# "alle", wären es zehntausende alte Einträge und rund ein Tag Dauerabfrage
+# bei der Quelle (Entscheidung des Nutzers 15.10.2026: nur Neues prüfen).
+# Ältere Einträge werden geprüft, sobald sie geladen werden.
+TYPE_CHECK_DAYS = 90
 _VIDEOS_TODO = (
     f"COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live' "
     "AND length(id) = 11")
 _FEED_TODO = (
     f"COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live' "
     "AND COALESCE(feed_status, 'active') IN ('active', 'later') "
-    # 0 = alle Videos (Einstellung "Höchstes Video-Alter")
-    "AND (COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'rss.max_age_days'), 90) <= 0 "
-    "OR published >= date('now', '-' || COALESCE("
-    "(SELECT value FROM settings WHERE key = 'rss.max_age_days'), '90') || ' days'))")
+    f"AND published >= date('now', '-{TYPE_CHECK_DAYS} days')")
 
 
 async def _next_unverified() -> Optional[str]:

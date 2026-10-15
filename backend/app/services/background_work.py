@@ -113,9 +113,17 @@ async def _ai_transcripts() -> Optional[WorkItem]:
            LEFT JOIN videos v ON v.id = a.video_id WHERE a.status = 'working' LIMIT 1""")
     if not row:
         return None   # wartende ohne Bearbeiter: kein laufender Vorgang
+    # Erledigt von insgesamt: fertige gegen fertige plus laufende plus wartende
+    counts = await transcripts.ai_counts()
+    remaining = await transcripts.pending() + counts["working"]
+    done = counts["done"]
+    total = done + remaining
+    average = await transcripts.average_ai_seconds()
     return WorkItem(key="ai_transcripts", label=f"KI-Transkript: {(row['title'] or 'Video')[:60]}",
                     detail=" · ".join(filter(None, [row["note"], row["worker"]])) or None,
-                    since=row["claimed_at"], waiting=await transcripts.pending())
+                    since=row["claimed_at"], done=done, total=total,
+                    progress=done / total if total else None,
+                    eta_seconds=int(remaining * average) if average else None)
 
 
 async def _passage_index() -> Optional[WorkItem]:

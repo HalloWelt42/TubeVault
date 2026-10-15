@@ -40,3 +40,20 @@ async def test_nachvertonung_in_arbeit(test_db):
     item = (await background_work.overview())[0]
     assert item.label == "Nachvertonung: Ein Film"
     assert (item.progress, item.detail, item.waiting) == (0.4, "Übersetzen · Mac", 1)
+
+
+async def test_ki_transkripte_mit_erledigt_und_restzeit(test_db):
+    """Wunsch 15.10.2026: wie viel von wie viel erledigt, Restzeit aus der
+    Dauer der zuletzt fertigen Aufträge."""
+    for n in range(5):
+        await test_db.execute(
+            "INSERT INTO videos (id, title, status, download_date) VALUES (?, 'T', 'ready', datetime('now'))",
+            (f"kivideo{n:04d}",))
+    await test_db.execute(
+        """INSERT INTO ai_transcriptions (video_id, status, claimed_at, finished_at) VALUES
+           ('kivideo0000', 'done', datetime('now', '-30 minutes'), datetime('now', '-20 minutes')),
+           ('kivideo0001', 'done', datetime('now', '-20 minutes'), datetime('now', '-10 minutes')),
+           ('kivideo0002', 'working', datetime('now', '-1 minutes'), NULL)""")
+    item = next(i for i in await background_work.overview() if i.key == "ai_transcripts")
+    assert (item.done, item.total) == (2, 5)                 # 2 fertig, 1 läuft, 2 warten
+    assert abs(item.eta_seconds - 3 * 600) < 5               # 3 offen zu je 10 Minuten

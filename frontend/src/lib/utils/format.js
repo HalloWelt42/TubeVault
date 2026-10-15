@@ -28,6 +28,17 @@ export function formatDurationLong(seconds) {
 }
 
 /**
+ * Zeitspanne als Uhr mit Tagen: dd:hh:mm:ss (z.B. 01:03:12:05 = 1 Tag, 3 Std.,
+ * 12 Min., 5 s). Für Restzeiten und Laufzeiten langer Hintergrundarbeiten.
+ */
+export function formatClock(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const two = (n) => String(n).padStart(2, '0');
+  const days = Math.floor(total / 86400);
+  return `${two(days)}:${two(Math.floor(total % 86400 / 3600))}:${two(Math.floor(total % 3600 / 60))}:${two(total % 60)}`;
+}
+
+/**
  * Bytes als lesbare Größe, deutsch mit Komma: 1,5 GB, 320,0 MB, 4,2 KB
  */
 export function formatSize(bytes) {

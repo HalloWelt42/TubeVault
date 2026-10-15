@@ -101,3 +101,15 @@ async def test_unklare_auskunft_aendert_nichts(test_db):
     await vc.apply("abcdefghijk", vc.Classification(video_type="video", verified=False))
     assert await _row(test_db, "abcdefghijk") == {"video_type": "short", "type_verified": 0}
     assert await vc.pending() == 1
+
+
+async def test_nur_neue_feed_eintraege_werden_nachgefragt(test_db, set_setting):
+    """Auch bei "Höchstes Video-Alter: alle" fragt der Hintergrundlauf nur
+    Feed-Einträge der letzten Tage nach (Befund 15.10.2026: 34.685 alte
+    Einträge, rund 19 Stunden Dauerabfrage bei der Quelle)."""
+    await set_setting("rss.max_age_days", 0)
+    await test_db.execute(
+        "INSERT INTO rss_entries (video_id, channel_id, title, published) VALUES "
+        "('neu00000001', 'UCx', 'T', datetime('now', '-3 days')), "
+        "('alt00000001', 'UCx', 'T', datetime('now', '-400 days'))")
+    assert await vc.pending() == 1
