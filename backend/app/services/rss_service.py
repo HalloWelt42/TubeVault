@@ -1104,7 +1104,7 @@ class RSSService:
                    SELECT r.channel_id, COUNT(*) AS wanted_count,
                           SUM({channel_coverage.have_sql("r")}) AS have_count
                    FROM rss_entries r
-                   WHERE {channel_coverage.wanted_sql("r")}{await video_classifier.without_shorts("r")}
+                   WHERE {channel_coverage.wanted_sql("r")}
                    GROUP BY r.channel_id),
                  problems AS (
                    SELECT r.channel_id, COUNT(*) AS problem_count
@@ -1132,7 +1132,8 @@ class RSSService:
         subscriptions = []
         for row in rows:
             item = dict(row)
-            item["medal"] = channel_coverage.medal(item["wanted_count"], item["have_count"])
+            item["medal"] = channel_coverage.medal(item["wanted_count"], item["have_count"],
+                                                   scanned=bool(item.get("last_scanned")))
             item["music_channel"] = bool(item["music_channel"])
             subscriptions.append(item)
         return {

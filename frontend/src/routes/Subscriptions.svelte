@@ -260,9 +260,9 @@
 
   /**
    * Vollständigkeit eines Kanals: die Medaille rechnet das Backend
-   * (channel_coverage) an den gewünschten Feed-Einträgen - ohne ausgeblendete,
-   * nicht ladbare und ausgeschlossene Shorts. Gold: alles geladen, Silber: ab
-   * 90 %, Bronze: ab 75 %.
+   * (channel_coverage) an den normalen Videos des Kanals, Live und Shorts nie,
+   * ohne dauerhaft nicht Ladbares. Gold: lückenlos, Silber: ab 95 %,
+   * Bronze: ab 80 %. Ungescannte Kanäle bekommen keine (never-scanned).
    */
   const MEDALS = {
     gold: { icon: '🥇', cls: 'medal-gold' },
@@ -275,8 +275,8 @@
     if (!look || !sub.last_scanned) return null;
     const missing = Math.max(0, sub.wanted_count - sub.have_count);
     const pct = Math.floor(sub.have_count / sub.wanted_count * 100);
-    return { ...look, label: missing ? `${sub.have_count} von ${sub.wanted_count} geladen (${pct} %) · ${missing} fehlen`
-                                     : `Vollständig: alle ${sub.wanted_count} gewünschten Videos geladen` };
+    return { ...look, label: missing ? `${sub.have_count} von ${sub.wanted_count} Videos geladen (${pct} %) · ${missing} fehlen`
+                                     : `Lückenlos: alle ${sub.wanted_count} Videos geladen (ohne Live und Shorts)` };
   }
 
   function dripTooltip(sub) {
@@ -341,7 +341,6 @@
 
   /** 'gold' | 'silver' | 'bronze' | 'none' | 'never-scanned' für Filter und Zähler */
   function medalLevel(sub) {
-    if (!sub.last_scanned) return 'never-scanned';
     return sub.medal || 'none';
   }
   let goldCount    = $derived(subs.filter(s => medalLevel(s) === 'gold').length);

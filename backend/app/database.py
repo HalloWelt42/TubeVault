@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 49
+SCHEMA_VERSION = 50
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1123,6 +1123,16 @@ class Database:
         if current_version < 48:
             reset = await music_flag.reset_to_certain(self._connection)
             logger.info(f"Migration v47/v48: {reset} Videos nicht mehr als Musik, nur Eindeutiges bleibt")
+
+        # v50: Vorübergehende Fehler (gedrosselt, Format fehlt) landeten wegen
+        # "Video unavailable" im Text dauerhaft auf der Sperrliste (error_classifier).
+        # Diese Fehlerzustände entfallen, die Videos sind wieder ladbar.
+        if current_version < 50:
+            cursor = await self._connection.execute(
+                """DELETE FROM ignored_videos WHERE reason LIKE '%try again later%'
+                   OR reason LIKE '%rate-limited%' OR reason LIKE '%format is not available%'""")
+            await self._connection.commit()
+            logger.info(f"Migration v50: {cursor.rowcount} nur vorübergehend gesperrte Videos wieder ladbar")
 
         # v49: Playlists laden ihre noch fehlenden Videos nach und nach (drip)
         for column in ("drip_enabled INTEGER DEFAULT 0", "drip_count INTEGER DEFAULT 3",

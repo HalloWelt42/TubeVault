@@ -70,6 +70,19 @@ _OFFLINE_KW = (
     "this live event has ended",  # VOD wird oft noch verarbeitet
 )
 
+# Vorübergehend, auch wenn "unavailable" im Text steht: die Quelle drosselt
+# ("Video unavailable. This content isn't available, try again later ...
+# rate-limited") bzw. nur das gewählte Format fehlt. Hat Vorrang vor
+# unavailable - sonst landeten solche Videos dauerhaft auf der Sperrliste.
+_RETRY_LATER_KW = (
+    "try again later",
+    "rate-limited",
+    "rate limited",
+)
+_FORMAT_KW = (
+    "requested format is not available",
+)
+
 _BOT_KW = (
     "detected as a bot",
     "do not open an issue",
@@ -120,7 +133,13 @@ def classify(err: str) -> ErrorClass:
     if any(kw in low for kw in _OFFLINE_KW) or low.rstrip().rstrip(".").endswith(": offline"):
         return ErrorClass(offline=True)
 
-    # 3. unavailable (andere dauerhafte Fehler)
+    # 3. nur vorübergehend verweigert (gedrosselt, Format fehlt) - vor unavailable
+    if any(kw in low for kw in _RETRY_LATER_KW):
+        return ErrorClass(throttle=True)
+    if any(kw in low for kw in _FORMAT_KW):
+        return ErrorClass(temporary=True)
+
+    # 4. unavailable (andere dauerhafte Fehler)
     if any(kw in low for kw in _UNAVAILABLE_KW):
         return ErrorClass(unavailable=True)
 

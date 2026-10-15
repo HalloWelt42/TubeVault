@@ -1,32 +1,49 @@
 """
 TubeVault – Wie vollständig ein Kanal geladen ist (Medaillen der Kanalübersicht)
 
-Gemessen wird an den Feed-Einträgen, die der Nutzer haben will: ohne
-ausgeblendete Einträge, ohne dauerhaft nicht ladbare (ignored_videos, z.B.
-nur für Mitglieder oder gelöscht) und ohne Shorts, wenn sie ausgeschlossen
-sind. Davon zählt, was in Bibliothek oder Archiv liegt.
+Gezählt werden nur die normalen Videos eines Kanals, Live und Shorts nie
+(Nutzerentscheidung 15.10.2026). Ausgenommen ist nur, was sich dauerhaft
+nicht laden lässt (nur für Mitglieder, privat, entfernt, Urheberrecht,
+Altersfreigabe) oder was der Nutzer selbst gelöscht bzw. ausgeschlossen hat.
+Was die Quelle nur vorübergehend verweigert hat (gedrosselt, "später noch
+einmal"), zählt weiter mit. Davon zählt, was in Bibliothek oder Archiv liegt.
 
-Früher (bis 15.10.2026) wurden alle geladenen Videos des Kanals gegen alle
-Feed-Einträge gerechnet: Videos außerhalb des Feeds glichen fehlende aus, ein
-Kanal konnte Gold tragen, obwohl die Hälfte fehlte; "war mal komplett" gab
-dauerhaft Bronze. Nutzerwunsch: sinnvolle Metrik.
+  Gold    lückenlos
+  Silber  es fehlen nur wenige Prozent (ab 95 %)
+  Bronze  fast voll, aber mit mehr Lücken als Silber (ab 80 %)
+
+Bewertet wird nur ein vollständig gescannter Kanal - vorher kennt TubeVault
+nur die neuesten Feed-Einträge, und eine Medaille wäre geraten.
 """
 from typing import Optional
 
 GOLD = "gold"
 SILVER = "silver"
 BRONZE = "bronze"
+NEVER_SCANNED = "never-scanned"
 
-SILVER_SHARE = 0.90
-BRONZE_SHARE = 0.75
+SILVER_SHARE = 0.95
+BRONZE_SHARE = 0.80
 MIN_WANTED = 3            # darunter ist eine Bewertung nicht aussagekräftig
+
+# Gründe der Sperrliste, die dauerhaft gelten (Rest: vorübergehend, zählt mit)
+_PERMANENT_PREFIXES = ("manuell gelöscht", "Manuell ausgeschlossen", "members-only", "Members-Only",
+                       "private", "removed", "copyright", "age-gate")
+
+
+def permanently_unloadable_sql(column: str) -> str:
+    """SQL-Bedingung: das Video mit dieser Kennung lässt sich dauerhaft nicht laden."""
+    prefixes = " OR ".join(f"pi.reason LIKE '{p}%'" for p in _PERMANENT_PREFIXES)
+    return (f"EXISTS (SELECT 1 FROM ignored_videos pi WHERE pi.video_id = {column} AND ({prefixes}"
+            f" OR (pi.reason LIKE 'unavailable%' AND pi.reason NOT LIKE '%try again later%'"
+            f" AND pi.reason NOT LIKE '%format is not available%')))")
 
 
 def wanted_sql(alias: str = "r") -> str:
-    """SQL-Bedingung (ohne führendes AND) für gewünschte Feed-Einträge.
-    Shorts schließt der Aufrufer mit video_classifier.without_shorts aus."""
-    return (f"COALESCE({alias}.feed_status, 'active') <> 'dismissed' "
-            f"AND {alias}.video_id NOT IN (SELECT video_id FROM ignored_videos)")
+    """SQL-Bedingung (ohne führendes AND) für die zählenden Feed-Einträge:
+    normale Videos, die sich laden lassen."""
+    return (f"COALESCE({alias}.video_type, 'video') = 'video' "
+            f"AND NOT {permanently_unloadable_sql(f'{alias}.video_id')}")
 
 
 def have_sql(alias: str = "r") -> str:
@@ -34,8 +51,10 @@ def have_sql(alias: str = "r") -> str:
     return f"EXISTS (SELECT 1 FROM videos hv WHERE hv.id = {alias}.video_id AND hv.status = 'ready')"
 
 
-def medal(wanted: int, have: int) -> Optional[str]:
-    """gold: alles Gewünschte geladen, silver: ab 90 %, bronze: ab 75 %."""
+def medal(wanted: int, have: int, scanned: bool = True) -> Optional[str]:
+    """gold: lückenlos, silver: ab 95 %, bronze: ab 80 %; ungescannt: never-scanned."""
+    if not scanned:
+        return NEVER_SCANNED
     if wanted < MIN_WANTED:
         return None
     if have >= wanted:

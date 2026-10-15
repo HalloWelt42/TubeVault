@@ -214,3 +214,20 @@ def test_offline_exclusive_flag():
     r = classify("ERROR: [youtube] abc: Offline.")
     flags = [r.members_only, r.unavailable, r.bot, r.throttle, r.temporary]
     assert sum(flags) == 0, f"offline soll exklusiv sein, andere Flags: {flags}"
+
+
+def test_gedrosselt_trotz_unavailable_im_text_ist_voruebergehend():
+    """Die Drossel-Meldung beginnt mit "Video unavailable" - früher dauerhaft gesperrt."""
+    err = ("ERROR: [youtube] abc: Video unavailable. This content isn't available, try again later. "
+           "The current session has been rate-limited by YouTube for up to an hour.")
+    c = classify(err)
+    assert c.throttle and not c.unavailable
+
+
+def test_fehlendes_format_ist_voruebergehend():
+    c = classify("ERROR: [youtube] abc: Requested format is not available. Use --list-formats")
+    assert c.temporary and not c.unavailable
+
+
+def test_wirklich_nicht_verfuegbar_bleibt_dauerhaft():
+    assert classify("ERROR: [youtube] abc: Video unavailable. This video has been removed by the uploader").unavailable

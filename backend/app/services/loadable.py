@@ -1,5 +1,5 @@
 """
-TubeVault – Ladbare Videos
+TubeVault - Ladbare Videos
 
 Die EINE Definition, welche Videos noch geladen werden können: nicht schon
 geladen, nicht gesperrt (gelöscht, dauerhaft nicht verfügbar), nicht im
