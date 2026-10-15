@@ -52,8 +52,8 @@ MEDIA_NS = "{http://search.yahoo.com/mrss/}"
 
 _executor = ThreadPoolExecutor(max_workers=2)
 
-# Auto-Download: max pro Tag
-AUTO_DL_DAILY_LIMIT = 20
+# Ohne Tageslimit: so viele vorgemerkte Videos holt ein Prüflauf höchstens nach
+PENDING_BATCH_UNLIMITED = 500
 
 # So viele der neuesten Einträge liest eine Prüfung je Kanal
 POLL_DEPTH = 15
@@ -170,6 +170,12 @@ class RSSService:
             "skipped_in_a_row": self._ticks_skipped,
         }
         return result
+
+    async def _limit(self, key: str) -> int | None:
+        """Zahl-Einstellung mit "0 = ohne Grenze" (zero_label im Schema): None heißt unbegrenzt."""
+        from app.settings_schema import default
+        value = int(await self._get_setting(key) or default(key))
+        return value if value > 0 else None
 
     async def _intervals(self) -> tuple[int, int]:
         """(Basis-Intervall, längstes Intervall) in Sekunden."""
@@ -511,8 +517,8 @@ class RSSService:
         if fresh or has_live:
             short_ids, live_ids = await self._fetch_typed_video_ids(channel_id)
 
-        max_age = int(await self._get_setting("rss.max_age_days") or 90)
-        cutoff = past_sqlite(days=max_age)
+        max_age = await self._limit("rss.max_age_days")
+        cutoff = past_sqlite(days=max_age) if max_age else None   # None: alle Videos
         shorts_excluded = await video_classifier.shorts_excluded()
 
         new_count = 0
@@ -520,7 +526,7 @@ class RSSService:
             video_id = v.video_id
             # Ohne Datum der Quelle gilt der Zeitpunkt des Fundes
             published = published_from_upload_date(v.publish_date) or _utc_iso_now()
-            if published < cutoff:
+            if cutoff and published < cutoff:
                 continue
 
             # Video-Typ: Livestreams und Shorts aus den Listen der Quelle.
@@ -651,9 +657,9 @@ class RSSService:
                 "UPDATE rss_entries SET auto_pending = 0 WHERE video_id = ?", (video_id,))
             return False
 
-        limit = int(await self._get_setting("rss.auto_dl_daily_limit") or AUTO_DL_DAILY_LIMIT)
+        limit = await self._limit("rss.auto_dl_daily_limit")
         used = await self._auto_dl_count_today()
-        if used >= limit:
+        if limit and used >= limit:
             await db.execute(
                 "UPDATE rss_entries SET auto_pending = 1 WHERE video_id = ?", (video_id,))
             logger.debug(f"Auto-DL Tageslimit ({limit}) erreicht, {video_id} vorgemerkt")
@@ -681,7 +687,7 @@ class RSSService:
             (video_id,)
         )
         await self._auto_dl_count_today(add=1)
-        logger.info(f"Auto-DL queued: {video_id} ({used + 1}/{limit} heute)")
+        logger.info(f"Auto-DL queued: {video_id} ({used + 1}/{limit or 'unbegrenzt'} heute)")
         return True
 
     async def queue_pending_auto_downloads(self) -> int:
@@ -691,8 +697,8 @@ class RSSService:
             """UPDATE rss_entries SET auto_pending = 0
                WHERE auto_pending = 1 AND channel_id NOT IN (
                    SELECT channel_id FROM subscriptions WHERE auto_download = 1 AND enabled = 1)""")
-        limit = int(await self._get_setting("rss.auto_dl_daily_limit") or AUTO_DL_DAILY_LIMIT)
-        free = limit - await self._auto_dl_count_today()
+        limit = await self._limit("rss.auto_dl_daily_limit")
+        free = (limit - await self._auto_dl_count_today()) if limit else PENDING_BATCH_UNLIMITED
         if free <= 0:
             return 0
         pending = await db.fetch_all(
@@ -1420,8 +1426,7 @@ class RSSService:
             "total_entries": total_entries,
             "checked_last_hour": checked_1h,
             "auto_dl_today": await self._auto_dl_count_today(),
-            "auto_dl_limit": int(await self._get_setting("rss.auto_dl_daily_limit")
-                                 or AUTO_DL_DAILY_LIMIT),
+            "auto_dl_limit": await self._limit("rss.auto_dl_daily_limit") or 0,   # 0 = unbegrenzt
             "auto_dl_pending": await db.fetch_val(
                 "SELECT COUNT(*) FROM rss_entries WHERE auto_pending = 1") or 0,
         }

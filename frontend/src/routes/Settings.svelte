@@ -1,765 +1,214 @@
 <!--
-  TubeVault – Settings v1.5.52
+  TubeVault – Einstellungen (Gestaltung nach mockups/einstellungen.html)
+  Fester Kopf mit Sprungmarken, darunter alle Abschnitte in einem Rollfeld.
+  Die Regler kommen aus dem Einstellungs-Schema des Backends (Art, Grenzen,
+  Auswahl, Erklärung) - eine Stelle für Datenbank, Prüfung und Oberfläche.
   © HalloWelt42 – Private Nutzung
-  Alle Einstellungen sichtbar, erklärt, transparent
 -->
 <script>
   import { api } from '../lib/api/client.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { formatSize, parseServerTime } from '../lib/utils/format.js';
+  import { formatSize } from '../lib/utils/format.js';
   import { settings as globalSettings, reloadSettings } from '../lib/stores/settings.js';
-  import { onMount } from 'svelte';
-  import ApiEndpoints from '../lib/components/settings/ApiEndpoints.svelte';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
-  let confirmRef;
+  import ApiEndpoints from '../lib/components/settings/ApiEndpoints.svelte';
+  import SettingRow from '../lib/components/settings/SettingRow.svelte';
+  import ChannelCheckStatus from '../lib/components/settings/ChannelCheckStatus.svelte';
+  import BackupCard from '../lib/components/settings/BackupCard.svelte';
+  import MaintenanceCard from '../lib/components/settings/MaintenanceCard.svelte';
 
-  let settings = $state({});
+  let confirmRef;
+  const confirm = (...args) => confirmRef.ask(...args);
+
+  const SECTIONS = [
+    { id: 'channels', label: 'Kanäle', icon: 'fa-satellite-dish' },
+    { id: 'downloads', label: 'Downloads', icon: 'fa-download' },
+    { id: 'view', label: 'Ansicht', icon: 'fa-display' },
+    { id: 'extensions', label: 'Erweiterungen', icon: 'fa-puzzle-piece' },
+    { id: 'system', label: 'System', icon: 'fa-server' },
+  ];
+
+  let schema = $state([]);
+  let values = $state({});
+  let loading = $state(true);
   let scheduler = $state(null);
   let systemStats = $state(null);
-  let cleaningGhosts = $state(false);
-  let runningFullCleanup = $state(false);
-  let cleanupProtocol = $state(null);
-  let loading = $state(true);
-
-  // Cookies-Status
-  let cookiesStatus = $state(null);
-  let cookiesBusy = $state(false);
-  async function loadCookiesStatus() {
-    try { cookiesStatus = await api.getCookiesStatus(); } catch {}
-  }
-  async function uploadCookiesFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    cookiesBusy = true;
-    try {
-      cookiesStatus = await api.uploadCookies(file);
-      toast.success('Cookies aktualisiert');
-    } catch (err) { toast.error(err.message); }
-    cookiesBusy = false;
-    e.target.value = '';
-  }
-  async function deleteCookiesFile() {
-    if (!await confirmRef.ask('Cookies entfernen?', 'Login-Cookies werden gelöscht.', { confirmLabel: 'Entfernen' })) return;
-    cookiesBusy = true;
-    try {
-      await api.deleteCookies();
-      cookiesStatus = { present: false };
-      toast.info('Cookies entfernt');
-    } catch (err) { toast.error(err.message); }
-    cookiesBusy = false;
-  }
-
-  // Backup
-  let backups = $state([]);
-  let backupStats = $state(null);
-  let creatingBackup = $state(false);
-  let restoringBackup = $state(false);
-  let confirmRestore = $state(null);
-
-  let pollTimer = null;
-
-  // Die Regler kommen aus dem Einstellungs-Schema des Backends: dort stehen
-  // Art, Grenzen, Auswahl und Beschreibung - an einer Stelle für Datenbank,
-  // Prüfung und Oberfläche. Kein Regler ohne Wirkung, keiner ohne Schlüssel.
-  let schema = $state([]);
-
-
-  onMount(() => {
-    load();
-    loadScheduler();
-    loadBackups();
-    loadCookiesStatus();
-    loadShorts();
-    loadSemantic();
-    pollTimer = setInterval(loadScheduler, 5000);
-    return () => clearInterval(pollTimer);
-  });
+  let shorts = $state(null);
+  let semantic = $state(null);
+  let deletingShorts = $state(false);
 
   async function load() {
     loading = true;
     try {
-      const [groups, stats, defs] = await Promise.all([api.getSettings(), api.getStats(), api.getSettingsSchema()]);
+      const [groups, defs, stats] = await Promise.all([api.getSettings(), api.getSettingsSchema(), api.getStats()]);
       schema = defs;
       const flat = {};
       for (const g of groups) for (const s of g.settings) flat[s.key] = s.value;
-      settings = flat;
+      values = flat;
       systemStats = stats;
     } catch (e) { toast.error(e.message); }
     loading = false;
   }
+  const loadScheduler = () => api.getSchedulerStatus().then(s => scheduler = s).catch(() => {});
+  const loadShorts = () => api.getShortsOverview().then(s => shorts = s).catch(() => shorts = null);
+  const loadSemantic = () => api.getSemanticOverview().then(s => semantic = s).catch(() => semantic = null);
 
-  async function loadScheduler() {
-    try { scheduler = await api.getSchedulerStatus(); } catch {}
-  }
+  $effect(() => {
+    load(); loadScheduler(); loadShorts(); loadSemantic();
+    const iv = setInterval(loadScheduler, 5000);
+    return () => clearInterval(iv);
+  });
 
   async function save(key, value) {
-    const before = settings[key];
-    settings[key] = String(value);
+    const before = values[key];
+    values[key] = String(value);
     try {
-      // Das Backend prüft und liefert den gespeicherten Wert zurück
-      const res = await api.updateSetting(key, String(value));
-      settings[key] = res.value;
+      const res = await api.updateSetting(key, String(value));   // das Backend prüft und liefert den Wert
+      values[key] = res.value;
       globalSettings.update(s => ({ ...s, [key]: res.value }));
       if (key.startsWith('ai.')) loadSemantic();
+      if (key.startsWith('rss.')) loadScheduler();
       toast.success('Gespeichert');
     } catch (e) {
-      settings[key] = before;   // abgelehnter Wert darf nicht stehen bleiben
+      values[key] = before;
       toast.error(e.message);
     }
   }
 
-  function toggleSetting(key) { save(key, settings[key] === 'true' ? 'false' : 'true'); }
-
-  async function cleanupGhosts() {
-    cleaningGhosts = true;
-    try {
-      const res = await api.cleanupGhosts();
-      if (res.ghosts_found === 0) {
-        toast.success('Keine Ghost-Einträge gefunden');
-      } else {
-        toast.success(`${res.cleaned} Ghost-Einträge bereinigt`);
-      }
-    } catch (e) { toast.error(e.message); }
-    cleaningGhosts = false;
-  }
-
-  async function runFullCleanup() {
-    runningFullCleanup = true;
-    cleanupProtocol = null;
-    try {
-      const res = await api.cleanupFull();
-      cleanupProtocol = res;
-      toast.success(`Bereinigung: ${res.totals.cleaned} Einträge, ${res.totals.freed_human} freigegeben`);
-    } catch (e) { toast.error(e.message); }
-    runningFullCleanup = false;
-  }
-
-  // ═══ Backup-Funktionen ═══
-  async function loadBackups() {
-    try {
-      const [list, stats] = await Promise.all([api.backupList(), api.backupStats()]);
-      backups = list.backups || [];
-      backupStats = stats;
-    } catch {}
-  }
-
-  async function createBackup() {
-    creatingBackup = true;
-    try {
-      const res = await api.backupCreate();
-      toast.success(`Backup erstellt: ${res.filename}`);
-      await loadBackups();
-    } catch (e) { toast.error(e.message); }
-    creatingBackup = false;
-  }
-
-  async function deleteBackup(filename) {
-    try {
-      await api.backupDelete(filename);
-      toast.success('Backup gelöscht');
-      await loadBackups();
-    } catch (e) { toast.error(e.message); }
-  }
-
-  async function restoreBackup(filename) {
-    restoringBackup = true;
-    try {
-      const res = await api.backupRestore(filename);
-      toast.success(`Wiederhergestellt! Sicherheits-Backup: ${res.safety_backup}`);
-      confirmRestore = null;
-      await loadBackups();
-      // Settings neu laden
-      await load();
-      await reloadSettings();
-    } catch (e) { toast.error(e.message); }
-    restoringBackup = false;
-  }
-
-  async function uploadAndRestore(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.name.endsWith('.db')) { toast.error('Nur .db Dateien erlaubt'); return; }
-    restoringBackup = true;
-    try {
-      const res = await api.backupRestoreUpload(file);
-      toast.success(`Aus Upload wiederhergestellt! Sicherheits-Backup: ${res.safety_backup}`);
-      await loadBackups();
-      await load();
-      await reloadSettings();
-    } catch (err) { toast.error(err.message); }
-    restoringBackup = false;
-    e.target.value = '';
-  }
-
-
-  // Shorts im Bestand (Reiter Feed)
-  let shorts = $state(null);
-  let semantic = $state(null);
-
-  async function loadSemantic() {
-    try { semantic = await api.getSemanticOverview(); } catch { semantic = null; }
-  }
-  let deletingShorts = $state(false);
-
-  async function loadShorts() {
-    try { shorts = await api.getShortsOverview(); } catch { shorts = null; }
-  }
-
   async function removeShorts() {
-    const ok = await confirmRef.ask(
-      `${shorts.confirmed_shorts} Shorts löschen?`,
+    const ok = await confirm(`${shorts.confirmed_shorts} Shorts löschen?`,
       'Gelöscht werden nur Videos, die die Quelle als Short bestätigt hat. Sie sind danach restlos weg.',
       { confirmLabel: 'Shorts löschen' });
     if (!ok) return;
     deletingShorts = true;
-    try {
-      const result = await api.deleteShorts();
-      toast.success(`${result.deleted} Shorts gelöscht`);
-    } catch (e) { toast.error(e.message); }
+    try { toast.success(`${(await api.deleteShorts()).deleted} Shorts gelöscht`); }
+    catch (e) { toast.error(e.message); }
     deletingShorts = false;
     loadShorts();
   }
 
-  async function resetAll() {
-    if (!await confirmRef.ask('Einstellungen zurücksetzen?', 'Alle Werte gehen auf Default.', { confirmLabel: 'Zurücksetzen' })) return;
-    try { await api.resetSettings(); toast.success('Zurückgesetzt'); await load(); await reloadSettings(); }
-    catch (e) { toast.error(e.message); }
-  }
+  async function afterRestore() { await load(); await reloadSettings(); }
 
-  function settingsFor(catKey) {
-    return schema.filter(d => d.section === catKey).map(d => ({
-      key: d.key, label: d.label, desc: d.description, type: d.kind,
-      min: d.min, max: d.max, step: d.step ?? 1, unit: d.unit, options: d.options, optionLabels: d.option_labels || {},
-      value: settings[d.key] ?? d.default,
-    }));
-  }
+  const rowsOf = (section) => schema.filter(d => d.section === section);
 
-  function fmtDur(secs) {
-    if (!secs) return '–';
-    secs = Number(secs);
-    if (secs < 60) return `${secs}s`;
-    if (secs < 3600) return `${Math.round(secs / 60)} Min`;
-    if (secs < 86400) return `${(secs / 3600).toFixed(1)} Std`;
-    return `${(secs / 86400).toFixed(1)} Tage`;
+  // ─── Sprungmarken: Klick rollt zum Abschnitt, der sichtbare ist hervorgehoben ───
+  let scroller = $state(null);
+  let current = $state('channels');
+  function jump(id) {
+    const target = scroller?.querySelector(`#abschnitt-${id}`);
+    if (target) scroller.scrollTo({ top: target.offsetTop - scroller.offsetTop - 8, behavior: 'smooth' });
   }
-
-  function fmtTime(iso) {
-    if (!iso) return '–';
-    try {
-      const diff = (Date.now() - parseServerTime(iso)) / 1000;
-      if (diff < 60) return `vor ${Math.round(diff)}s`;
-      if (diff < 3600) return `vor ${Math.round(diff / 60)} Min`;
-      return parseServerTime(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    } catch { return iso; }
+  function onScroll() {
+    let best = SECTIONS[0].id;
+    for (const s of SECTIONS) {
+      const el = scroller.querySelector(`#abschnitt-${s.id}`);
+      if (el && el.getBoundingClientRect().top - scroller.getBoundingClientRect().top < 120) best = s.id;
+    }
+    current = best;
   }
 </script>
 
-<div class="settings-page">
-  <h1 class="page-title"><i class="fa-solid fa-gear"></i> Einstellungen</h1>
-
-  {#if loading}
-    <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Lade…</div>
-  {:else}
-
-  <div class="setting-card">
-    <div class="card-header"><i class="fa-solid fa-satellite-dish"></i><h3>Kanäle und Downloads</h3></div>
-    {#each settingsFor('channels') as item}
-      {@render settingRow(item)}
-    {/each}
-    {#if shorts && shorts.confirmed_shorts > 0}
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label" title="Gelöscht werden nur Videos, die die Quelle als Short bestätigt hat.{shorts.unverified > 0 ? ` ${shorts.unverified} Einträge werden noch geprüft und bleiben unangetastet.` : ''}">
-            Shorts im Bestand: {shorts.confirmed_shorts} ({formatSize(shorts.confirmed_bytes)}) <i class="fa-solid fa-circle-info row-info"></i>
-          </span>
-        </div>
-        <button class="action-btn danger" onclick={removeShorts} disabled={deletingShorts}>
-          <i class="fa-regular fa-trash-can"></i> {deletingShorts ? 'Wird gelöscht…' : 'Löschen'}
-        </button>
-      </div>
-    {/if}
-  </div>
-
-    <details class="setting-card fold">
-      <summary><i class="fa-solid fa-satellite-dish"></i> Stand der Kanalprüfung</summary>
-      <div class="card-header">
-        <i class="fa-solid fa-satellite-dish"></i>
-        <h3>Kanalprüfung</h3>
-        {#if scheduler?.running && scheduler?.rss_enabled}
-          <span class="status-pill active"><i class="fa-solid fa-clock"></i> Zeitgesteuert</span>
-        {:else}
-          <span class="status-pill inactive"><i class="fa-solid fa-circle"></i> Gestoppt</span>
-        {/if}
-      </div>
-
-      {#if scheduler}
-        <div class="live-grid">
-          <div class="live-item">
-            <span class="live-label">Zuletzt geprüft</span>
-            <span class="live-value">{scheduler.last_checked_channel || '–'}</span>
-            <span class="live-sub">{fmtTime(scheduler.last_checked_at)}</span>
-          </div>
-          <div class="live-item">
-            <span class="live-label">Fällige Feeds</span>
-            <span class="live-value big">{scheduler.feeds_pending}</span>
-            <span class="live-sub">warten auf Prüfung</span>
-          </div>
-          <div class="live-item">
-            <span class="live-label">Letzter Cron-Lauf</span>
-            {#if scheduler.last_cron_job}
-              <span class="live-value">{scheduler.last_cron_job.status === 'active' ? '⏳ läuft…' : '✓ ' + (scheduler.last_cron_job.result || 'fertig')}</span>
-              <span class="live-sub">{fmtTime(scheduler.last_cron_job.completed_at || scheduler.last_cron_job.started_at)}</span>
-            {:else}
-              <span class="live-value">–</span>
-              <span class="live-sub">Noch kein Durchlauf</span>
-            {/if}
-          </div>
-          <div class="live-item">
-            <span class="live-label">Geprüft (gesamt)</span>
-            <span class="live-value big">{scheduler.feeds_checked_total || 0}</span>
-          </div>
-        </div>
-
-        <div class="sub-section">
-          <h4><i class="fa-solid fa-users"></i> Abonnements</h4>
-          <div class="stat-pills">
-            <span class="pill">{scheduler.subscriptions.total} Gesamt</span>
-            <span class="pill ok">{scheduler.subscriptions.enabled} Aktiv</span>
-            <span class="pill">{scheduler.subscriptions.checked} Geprüft</span>
-            {#if scheduler.subscriptions.unchecked > 0}<span class="pill warn">{scheduler.subscriptions.unchecked} Ungeprüft</span>{/if}
-            {#if scheduler.subscriptions.with_errors > 0}<span class="pill err">{scheduler.subscriptions.with_errors} Fehler</span>{/if}
-            {#if scheduler.subscriptions.disabled > 0}<span class="pill dim">{scheduler.subscriptions.disabled} Deaktiviert</span>{/if}
-          </div>
-        </div>
-
-        <div class="sub-section">
-          <h4><i class="fa-solid fa-rss"></i> Feed-Einträge</h4>
-          <div class="stat-pills">
-            <span class="pill">{scheduler.entries.total} Einträge</span>
-            <span class="pill ok">{scheduler.subscriptions.channels_with_entries} Kanäle mit Videos</span>
-            {#if scheduler.subscriptions.channels_without_entries > 0}<span class="pill warn">{scheduler.subscriptions.channels_without_entries} ohne Videos</span>{/if}
-          </div>
-          <p class="hint">Ohne Videos = kein Upload in den letzten {scheduler.active_settings.max_age_days} Tagen oder YouTube liefert nur ältere Einträge.</p>
-        </div>
-
-        {#if scheduler.auto_download.enabled}
-        <div class="sub-section">
-          <h4><i class="fa-solid fa-robot"></i> Auto-Download</h4>
-          <div class="stat-pills">
-            <span class="pill ok">Aktiv für {scheduler.auto_download.channels} {scheduler.auto_download.channels === 1 ? 'Kanal' : 'Kanäle'}</span>
-            <span class="pill">{scheduler.auto_download.today_count} / {scheduler.auto_download.daily_limit} heute</span>
-          </div>
-        </div>
-        {/if}
-
-        {#if scheduler.interval_distribution?.length > 0}
-        <div class="sub-section">
-          <h4><i class="fa-solid fa-clock"></i> Prüf-Intervalle</h4>
-          <div class="interval-bars">
-            {#each scheduler.interval_distribution as dist}
-              <div class="interval-row">
-                <span class="interval-label">{fmtDur(dist.interval)}</span>
-                <div class="interval-bar"><div class="interval-fill" style="width:{Math.min(100, (dist.count / scheduler.subscriptions.enabled) * 100)}%"></div></div>
-                <span class="interval-count">{dist.count} Kanäle</span>
-              </div>
-            {/each}
-          </div>
-          <p class="hint">Der Prüfabstand eines Kanals richtet sich nach dem Alter seines neuesten Videos; Fehler verlängern ihn.</p>
-        </div>
-        {/if}
-
-        {#if scheduler.upcoming?.length > 0}
-        <div class="sub-section">
-          <h4><i class="fa-solid fa-list-check"></i> Nächste in der Warteschlange</h4>
-          <div class="upcoming-list">
-            {#each scheduler.upcoming as u}
-              <div class="upcoming-item">
-                <span class="up-name">{u.channel_name || u.channel_id}</span>
-                <span class="up-meta">Intervall: {fmtDur(u.check_interval)}{#if u.error_count > 0} · <span class="text-err">{u.error_count}× Fehler</span>{/if}</span>
-              </div>
-            {/each}
-          </div>
-        </div>
-        {/if}
-
-        {#if scheduler.recent_errors?.length > 0}
-        <div class="sub-section">
-          <h4><i class="fa-solid fa-triangle-exclamation"></i> Fehler</h4>
-          <div class="upcoming-list">
-            {#each scheduler.recent_errors as e}
-              <div class="upcoming-item err-item">
-                <span class="up-name">{e.channel_name}</span>
-                <span class="up-meta">{e.error_count}× · Intervall: {fmtDur(e.check_interval)}</span>
-                {#if e.last_error}<span class="up-err">{e.last_error.substring(0, 120)}</span>{/if}
-              </div>
-            {/each}
-          </div>
-        </div>
-        {/if}
-      {:else}
-        <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Lade…</div>
-      {/if}
-    </details>
-
-  <div class="setting-card">
-    <div class="card-header"><i class="fa-solid fa-display"></i><h3>Ansicht</h3></div>
-    {#each settingsFor('view') as item}
-      {@render settingRow(item)}
-    {/each}
-  </div>
-
-  <div class="setting-card">
-    <div class="card-header"><i class="fa-solid fa-puzzle-piece"></i><h3>Erweiterungen</h3></div>
-    {#each settingsFor('extensions') as item}
-      {@render settingRow(item)}
-    {/each}
-    {#if semantic?.enabled}
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label">Stand der Bedeutungssuche</span>
-        </div>
-        <span class="action-hint">
-          KI-Dienst {semantic.available ? 'erreichbar' : 'nicht erreichbar - die Suche arbeitet als reine Wortsuche'} ·
-          {semantic.indexed.toLocaleString('de-DE')} Videos eingebettet{#if semantic.pending > 0}, {semantic.pending.toLocaleString('de-DE')} warten{/if}
-          · {semantic.passages_indexed.toLocaleString('de-DE')} Textstellen aus Transkripten{#if semantic.passages_pending > 0}, {semantic.passages_pending.toLocaleString('de-DE')} warten{/if}
-        </span>
-      </div>
-    {/if}
-  </div>
-
-    {#if systemStats}
-    <div class="setting-card">
-      <div class="card-header"><i class="fa-solid fa-server"></i><h3>System</h3></div>
-      <div class="sys-grid">
-        <div class="sys-item"><span class="sys-label">Version</span><span class="sys-value">{systemStats.version}</span></div>
-        <div class="sys-item"><span class="sys-label">Videos</span><span class="sys-value">{systemStats.video_count || 0}</span></div>
-        <div class="sys-item"><span class="sys-label">Belegt</span><span class="sys-value">{systemStats.total_size_human}</span></div>
-        <div class="sys-item"><span class="sys-label">DB-Größe</span><span class="sys-value">{systemStats.db_size_human}</span></div>
-        {#if systemStats.storage_split}
-          <div class="sys-item"><span class="sys-label">Medien frei</span><span class="sys-value">{systemStats.disk_media?.free_human || '–'}</span></div>
-          <div class="sys-item"><span class="sys-label">System frei</span><span class="sys-value">{systemStats.disk_meta?.free_human || '–'}</span></div>
-        {:else}
-          <div class="sys-item"><span class="sys-label">Frei</span><span class="sys-value">{systemStats.disk?.free_human || '–'}</span></div>
-          <div class="sys-item"><span class="sys-label">Auslastung</span><span class="sys-value">{systemStats.disk?.percent || '–'}%</span></div>
-        {/if}
-        <div class="sys-item"><span class="sys-label">Abos</span><span class="sys-value">{systemStats.total_subscriptions || 0}</span></div>
-        <div class="sys-item"><span class="sys-label">Downloads</span><span class="sys-value">{systemStats.download_queue_active || 0} aktiv</span></div>
-      </div>
-    </div>
-    {/if}
-    <div class="setting-card">
-      <div class="card-header"><i class="fa-solid fa-cookie-bite"></i><h3>YouTube Cookies (optional)</h3></div>
-      <p class="card-desc">
-        Cookies aus dem Browser-Login umgehen hartnäckige Bot-Blocks. Benötigt wird eine
-        <code>cookies.txt</code> im Netscape-Format. Browser-Extensions wie
-        „Get cookies.txt LOCALLY" erstellen die Datei.
-      </p>
-      {#if cookiesStatus?.present}
-        <div class="cookies-status ok">
-          <i class="fa-solid fa-circle-check"></i>
-          <span>Cookies aktiv – {cookiesStatus.cookie_count || 0} Einträge, {Math.round((cookiesStatus.size || 0)/1024)} KB</span>
-        </div>
-        <div class="action-row">
-          <label class="action-btn" for="cookies-upload-change">
-            <i class="fa-solid fa-upload"></i> Ersetzen
-            <input id="cookies-upload-change" type="file" accept=".txt" onchange={uploadCookiesFile} hidden />
-          </label>
-          <button class="action-btn danger" onclick={deleteCookiesFile} disabled={cookiesBusy}>
-            <i class="fa-solid fa-trash-can"></i> Entfernen
-          </button>
-        </div>
-      {:else}
-        <div class="cookies-status">
-          <i class="fa-solid fa-circle-xmark"></i>
-          <span>Keine Cookies hinterlegt</span>
-        </div>
-        <div class="action-row">
-          <label class="action-btn accent" for="cookies-upload">
-            <i class="fa-solid {cookiesBusy ? 'fa-spinner fa-spin' : 'fa-upload'}"></i> cookies.txt hochladen
-            <input id="cookies-upload" type="file" accept=".txt" onchange={uploadCookiesFile} hidden />
-          </label>
-        </div>
-      {/if}
-    </div>
-
-    <details class="setting-card fold">
-      <summary><i class="fa-solid fa-wrench"></i> Wartung</summary>
-      <div class="action-row">
-        <button class="action-btn accent" onclick={runFullCleanup} disabled={runningFullCleanup}>
-          <i class="fa-solid {runningFullCleanup ? 'fa-spinner fa-spin' : 'fa-broom'}"></i>
-          {runningFullCleanup ? 'Bereinigung läuft…' : 'Volle DB-Bereinigung'}
-        </button>
-        <span class="action-hint">Ghosts, verwaiste Zuordnungen, alte Jobs, Temp + VACUUM</span>
-      </div>
-      {#if cleanupProtocol}
-        <div class="cleanup-protocol">
-          <div class="cp-header">
-            <span class="cp-title"><i class="fa-solid fa-clipboard-list"></i> Protokoll</span>
-            <span class="cp-summary">{cleanupProtocol.totals.cleaned} bereinigt · {cleanupProtocol.totals.freed_human} freigegeben</span>
-          </div>
-          <div class="cp-list">
-            {#each cleanupProtocol.protocol as step}
-              <div class="cp-row" class:cp-active={step.count > 0 || step.freed > 0}>
-                <span class="cp-icon">{step.count > 0 || step.freed > 0 ? '✅' : '⚪'}</span>
-                <span class="cp-detail">{step.detail}</span>
-              </div>
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-    </details>
-
-    <details class="setting-card fold">
-      <summary><i class="fa-solid fa-box-archive"></i> Sicherung und Wiederherstellung</summary>
-
-      <!-- Stats -->
-      {#if backupStats}
-        <div class="backup-stats">
-          <span class="bs-item"><i class="fa-solid fa-database"></i> DB: {formatSize(backupStats.db_size)}</span>
-          <span class="bs-item"><i class="fa-solid fa-film"></i> {backupStats.tables?.videos ?? 0} Videos</span>
-          <span class="bs-item"><i class="fa-solid fa-bookmark"></i> {backupStats.tables?.chapters ?? 0} Kapitel</span>
-          <span class="bs-item"><i class="fa-solid fa-rss"></i> {backupStats.tables?.subscriptions ?? 0} Abos</span>
-          <span class="bs-item"><i class="fa-solid fa-satellite-dish"></i> {backupStats.tables?.rss_entries ?? 0} RSS</span>
-        </div>
-      {/if}
-
-      <!-- Erstellen -->
-      <div class="action-row">
-        <button class="action-btn" onclick={createBackup} disabled={creatingBackup}>
-          <i class="fa-solid fa-plus"></i> {creatingBackup ? 'Erstelle…' : 'Neues Backup erstellen'}
-        </button>
-        <span class="action-hint">SQLite-DB sicher exportieren (VACUUM INTO)</span>
-      </div>
-
-      <!-- Upload -->
-      <div class="action-row">
-        <label class="action-btn upload-btn" class:disabled={restoringBackup}>
-          <i class="fa-solid fa-upload"></i> DB-Datei hochladen & wiederherstellen
-          <input type="file" accept=".db" onchange={uploadAndRestore} disabled={restoringBackup} style="display:none" />
-        </label>
-        <span class="action-hint">Externe .db Datei als Backup einspielen</span>
-      </div>
-
-      <!-- Liste -->
-      {#if backups.length > 0}
-        <div class="backup-list">
-          {#each backups as b}
-            <div class="backup-item">
-              <div class="backup-info">
-                <span class="backup-name">{b.filename}</span>
-                <span class="backup-meta">{formatSize(b.size)} · {new Date(b.created_at).toLocaleString('de-DE')}</span>
-              </div>
-              <div class="backup-actions">
-                <a class="backup-btn" href={api.backupDownloadUrl(b.filename)} download title="Herunterladen">
-                  <i class="fa-solid fa-download"></i>
-                </a>
-                {#if confirmRestore === b.filename}
-                  <button class="backup-btn danger" onclick={() => restoreBackup(b.filename)} disabled={restoringBackup} title="Bestätigen">
-                    {#if restoringBackup}<i class="fa-solid fa-spinner fa-spin"></i>{:else}<i class="fa-solid fa-check"></i> Ja{/if}
-                  </button>
-                  <button class="backup-btn" onclick={() => confirmRestore = null} title="Abbrechen">
-                    <i class="fa-solid fa-xmark"></i>
-                  </button>
-                {:else}
-                  <button class="backup-btn warn" onclick={() => confirmRestore = b.filename} title="Wiederherstellen">
-                    <i class="fa-solid fa-clock-rotate-left"></i>
-                  </button>
-                {/if}
-                <button class="backup-btn danger" onclick={() => deleteBackup(b.filename)} title="Löschen">
-                  <i class="fa-solid fa-trash-can"></i>
-                </button>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <p class="no-backups">Noch keine Backups vorhanden</p>
-      {/if}
-    </details>
-
-    <div class="setting-card danger-card">
-      <div class="card-header"><i class="fa-solid fa-triangle-exclamation"></i><h3>Gefahrenzone</h3></div>
-      <div class="action-row">
-        <button class="action-btn danger" onclick={resetAll}><i class="fa-solid fa-rotate-left"></i> Alle Einstellungen zurücksetzen</button>
-        <span class="action-hint">Setzt alle Werte auf Standard zurück</span>
-      </div>
-    </div>
-
-
-    <details class="setting-card fold">
-      <summary><i class="fa-solid fa-plug"></i> Dienste und Schnittstellen</summary>
-      <ApiEndpoints />
-    </details>
-  {/if}
-</div>
-
-{#snippet settingRow(item)}
-  <div class="setting-row">
-    <div class="setting-info" title={item.desc || ''}>
-      <span class="setting-label">{item.label}{#if item.desc} <i class="fa-solid fa-circle-info row-info"></i>{/if}</span>
-    </div>
-    <div class="setting-control">
-      {#if item.type === 'toggle'}
-        <button class="toggle" class:on={item.value === 'true'} onclick={() => toggleSetting(item.key)}><span class="toggle-knob"></span></button>
-      {:else if item.type === 'duration'}
-        <div class="duration-wrap">
-          <input type="number" class="number-input" value={item.value} min={item.min} max={item.max} step={item.step} onchange={(e) => save(item.key, e.target.value)} />
-          <span class="duration-hint">{fmtDur(item.value)}</span>
-        </div>
-      {:else if item.type === 'number'}
-        <div class="number-wrap">
-          <input type="number" class="number-input" value={item.value} min={item.min} max={item.max} step={item.step} onchange={(e) => save(item.key, e.target.value)} />
-          {#if item.unit}<span class="unit-hint">{item.unit}</span>{/if}
-        </div>
-      {:else if item.type === 'select'}
-        <select class="select-input" value={item.value} onchange={(e) => save(item.key, e.target.value)}>
-          {#each item.options as opt}<option value={opt}>{item.optionLabels[opt] || opt}</option>{/each}
-        </select>
-      {:else}
-        <input type="text" class="text-input" value={item.value} onchange={(e) => save(item.key, e.target.value)} />
-      {/if}
-    </div>
-  </div>
+{#snippet rows(section)}
+  {#each rowsOf(section) as def (def.key)}
+    <SettingRow {def} value={values[def.key] ?? def.default} onSave={(v) => save(def.key, v)} />
+  {/each}
 {/snippet}
+
+<div class="tv-seite">
+  <div class="tv-seitenkopf">
+    <div class="kopfzeile">
+      <h1>Einstellungen</h1>
+      <span class="tv-schwach tv-klein">Änderungen gelten sofort</span>
+    </div>
+    <div class="tv-reiter">
+      {#each SECTIONS as s}
+        <button class:aktiv={current === s.id} onclick={() => jump(s.id)}><i class="fa-solid {s.icon}"></i> {s.label}</button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="tv-rollfeld" data-scroll-root bind:this={scroller} onscroll={onScroll}>
+    {#if loading}
+      <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+    {:else}
+      <div class="inhalt">
+        <section class="gruppe" id="abschnitt-channels">
+          <h2><i class="fa-solid fa-satellite-dish"></i> Kanäle</h2>
+          {@render rows('channels')}
+          {#if shorts?.confirmed_shorts > 0}
+            <div class="zusatz">
+              <div class="name" title="Gelöscht werden nur Videos, die die Quelle als Short bestätigt hat.{shorts.unverified > 0 ? ` ${shorts.unverified} werden noch geprüft und bleiben.` : ''}">
+                Shorts im Bestand <span class="zahl tv-leise">{shorts.confirmed_shorts.toLocaleString('de-DE')} · {formatSize(shorts.confirmed_bytes)}</span></div>
+              <button class="tv-knopf klein gefahr" onclick={removeShorts} disabled={deletingShorts}>
+                <i class="fa-solid {deletingShorts ? 'fa-spinner fa-spin' : 'fa-trash-can'}"></i> Alle löschen</button>
+            </div>
+          {/if}
+          <ChannelCheckStatus {scheduler} />
+        </section>
+
+        <section class="gruppe" id="abschnitt-downloads">
+          <h2><i class="fa-solid fa-download"></i> Downloads</h2>
+          {@render rows('downloads')}
+          <div class="zusatz tv-klein tv-leise">Drosselung und Pause zwischen Downloads stehen auf der Downloads-Seite.</div>
+        </section>
+
+        <section class="gruppe" id="abschnitt-view">
+          <h2><i class="fa-solid fa-display"></i> Ansicht</h2>
+          {@render rows('view')}
+        </section>
+
+        <section class="gruppe" id="abschnitt-extensions">
+          <h2><i class="fa-solid fa-puzzle-piece"></i> Erweiterungen</h2>
+          {@render rows('extensions')}
+          {#if semantic?.enabled}
+            <div class="zusatz tv-klein">
+              <span class="tv-zustand {semantic.available ? 'fertig' : 'warnung'}">KI-Dienst {semantic.available ? 'erreichbar' : 'nicht erreichbar'}</span>
+              <span class="zahl tv-leise">{semantic.indexed.toLocaleString('de-DE')} Videos und {semantic.passages_indexed.toLocaleString('de-DE')} Textstellen eingebettet{#if semantic.pending + semantic.passages_pending > 0}, {(semantic.pending + semantic.passages_pending).toLocaleString('de-DE')} warten{/if}</span>
+            </div>
+          {/if}
+        </section>
+
+        <section id="abschnitt-system">
+          <h2 class="ueberschrift"><i class="fa-solid fa-server"></i> System</h2>
+          {#if systemStats}
+            <div class="tv-kennzahlen system">
+              <div class="tv-kennzahl"><b class="klein">{systemStats.version}</b><span>Version</span></div>
+              <div class="tv-kennzahl"><b class="klein">{(systemStats.video_count || 0).toLocaleString('de-DE')}</b><span>Videos</span></div>
+              <div class="tv-kennzahl"><b class="klein">{formatSize(systemStats.total_size_bytes)}</b><span>Belegt</span></div>
+              <div class="tv-kennzahl"><b class="klein">{formatSize((systemStats.storage_split ? systemStats.disk_media : systemStats.disk)?.free)}</b><span>Frei</span></div>
+              <div class="tv-kennzahl"><b class="klein">{formatSize(systemStats.db_size_bytes)}</b><span>Datenbank</span></div>
+            </div>
+          {/if}
+          <BackupCard onRestored={afterRestore} />
+          <MaintenanceCard {confirm} onReset={afterRestore} />
+          <details class="tv-karte dienste">
+            <summary><i class="fa-solid fa-plug"></i> Dienste und Schnittstellen</summary>
+            <ApiEndpoints />
+          </details>
+        </section>
+      </div>
+    {/if}
+  </div>
+</div>
 
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .settings-page { padding: 20px 24px; max-width: 980px; }
-  .page-title { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0 0 20px; display: flex; align-items: center; gap: 10px; }
-  .page-title i { color: var(--accent-primary); font-size: 1.2rem; }
-  .loading { text-align: center; padding: 48px; color: var(--text-tertiary); }
-  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-  .setting-card { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
-  .fold > summary { cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 10px; list-style: none; }
-  .fold > summary::-webkit-details-marker { display: none; }
-  .fold > summary::after { content: '▾'; font-size: 0.9rem; margin-left: auto; color: var(--text-tertiary); transition: transform 0.15s; }
-  .fold[open] > summary::after { transform: rotate(180deg); }
-  .fold[open] > summary { margin-bottom: 12px; }
-  .fold > summary i { color: var(--accent-primary); width: 20px; text-align: center; }
-  .row-info { font-size: 0.68rem; color: var(--text-tertiary); margin-left: 4px; }
-  .danger-card { border-color: #ef444466; }
-
-  /* Backup */
-  .backup-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; padding: 10px 12px; background: var(--bg-tertiary); border-radius: 8px; }
-  .bs-item { font-size: 0.76rem; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; }
-  .bs-item i { color: var(--text-tertiary); font-size: 0.7rem; }
-  .upload-btn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-  .upload-btn.disabled { opacity: 0.5; pointer-events: none; }
-  .backup-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
-  .backup-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 8px; gap: 10px; }
-  .backup-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .backup-name { font-size: 0.78rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .backup-meta { font-size: 0.68rem; color: var(--text-tertiary); }
-  .backup-actions { display: flex; gap: 4px; flex-shrink: 0; }
-  .backup-btn { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 5px; padding: 4px 8px; font-size: 0.72rem; color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
-  .backup-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
-  .backup-btn.warn { color: var(--status-warning); border-color: var(--status-warning); }
-  .backup-btn.warn:hover { background: var(--status-warning); color: #fff; }
-  .backup-btn.danger { color: var(--status-error); border-color: var(--status-error); }
-  .backup-btn.danger:hover { background: var(--status-error); color: #fff; }
-  .no-backups { font-size: 0.78rem; color: var(--text-tertiary); margin: 8px 0 0 0; }
-  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border-primary); }
-  .card-header i { color: var(--accent-primary); font-size: 1rem; width: 20px; text-align: center; }
-  .card-header h3 { margin: 0; font-size: 0.88rem; font-weight: 600; color: var(--text-primary); flex: 1; }
-  .status-pill { display: flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
-  .status-pill.active { background: #22c55e20; color: #22c55e; }
-  .status-pill.inactive { background: #ef444420; color: #ef4444; }
-  .status-pill i { font-size: 0.45rem; }
-  .live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-  .live-item { background: var(--bg-tertiary); border-radius: 8px; padding: 12px; }
-  .live-label { display: block; font-size: 0.7rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
-  .live-value { display: block; font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
-  .live-value.big { font-size: 1.4rem; font-family: monospace; }
-  .live-sub { display: block; font-size: 0.72rem; color: var(--text-tertiary); margin-top: 2px; }
-  .sub-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-primary); }
-  .sub-section h4 { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
-  .sub-section h4 i { color: var(--accent-primary); font-size: 0.8rem; }
-  .stat-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pill { padding: 4px 10px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; }
-  .pill.ok { background: #22c55e18; color: #22c55e; }
-  .pill.warn { background: #f59e0b18; color: #d97706; }
-  .pill.err { background: #ef444418; color: #ef4444; }
-  .pill.dim { opacity: 0.5; }
-  .hint { font-size: 0.72rem; color: var(--text-tertiary); margin: 8px 0 0; line-height: 1.5; }
-  .interval-bars { display: flex; flex-direction: column; gap: 6px; }
-  .interval-row { display: flex; align-items: center; gap: 10px; }
-  .interval-label { width: 60px; font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; text-align: right; }
-  .interval-bar { flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; }
-  .interval-fill { height: 100%; background: var(--accent-primary); border-radius: 4px; transition: width 0.3s; min-width: 2px; }
-  .interval-count { font-size: 0.72rem; color: var(--text-tertiary); min-width: 65px; }
-  .upcoming-list { display: flex; flex-direction: column; gap: 6px; }
-  .upcoming-item { background: var(--bg-tertiary); border-radius: 6px; padding: 8px 12px; }
-  .err-item { border-left: 3px solid #ef4444; }
-  .up-name { display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
-  .up-meta { font-size: 0.72rem; color: var(--text-tertiary); }
-  .up-err { display: block; font-size: 0.68rem; color: #ef4444; margin-top: 3px; font-family: monospace; word-break: break-all; }
-  .text-err { color: #ef4444; }
-  .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 5px 0; border-bottom: 1px solid var(--border-primary); min-height: 38px; }
-  .setting-row:last-of-type { border-bottom: none; }
-  .setting-info { flex: 1; min-width: 0; }
-  .setting-label { display: block; font-size: 0.88rem; color: var(--text-primary); font-weight: 500; }
-  .setting-control { flex-shrink: 0; }
-  .toggle { position: relative; width: 44px; height: 24px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 12px; cursor: pointer; transition: all 0.2s; padding: 0; }
-  .toggle.on { background: var(--accent-primary); border-color: var(--accent-primary); }
-  .toggle-knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: white; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-  .toggle.on .toggle-knob { transform: translateX(20px); }
-  .duration-wrap { display: flex; align-items: center; gap: 8px; }
-  .duration-hint { font-size: 0.72rem; color: var(--text-tertiary); min-width: 50px; }
-  .number-wrap { display: flex; align-items: center; gap: 6px; }
-  .number-input { width: 90px; padding: 6px 10px; text-align: right; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; font-family: monospace; outline: none; }
-  .number-input:focus { border-color: var(--accent-primary); }
-  .unit-hint { font-size: 0.72rem; color: var(--text-tertiary); }
-  .select-input { padding: 6px 10px; min-width: 120px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; outline: none; cursor: pointer; }
-  .select-input:focus { border-color: var(--accent-primary); }
-  .text-input { width: 160px; padding: 6px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; outline: none; }
-  .text-input:focus { border-color: var(--accent-primary); }
-  .action-row { display: flex; align-items: center; gap: 12px; padding-top: 14px; margin-top: 6px; border-top: 1px solid var(--border-primary); }
-  .action-btn { padding: 8px 16px; display: flex; align-items: center; gap: 6px; background: var(--accent-muted); border: 1px solid var(--accent-primary); border-radius: 8px; color: var(--accent-primary); cursor: pointer; font-size: 0.82rem; font-weight: 500; transition: all 0.2s; white-space: nowrap; }
-  .action-btn:hover { background: var(--accent-primary); color: var(--accent-text); }
-  .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .action-btn.danger { background: #ef444418; border-color: #ef4444; color: #ef4444; }
-  .action-btn.danger:hover { background: #ef4444; color: white; }
-  .action-hint { font-size: 0.75rem; color: var(--text-tertiary); }
-  .sys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-  .sys-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-primary); font-size: 0.85rem; }
-  .sys-item:nth-last-child(-n+2) { border-bottom: none; }
-  .sys-item:nth-child(odd) { padding-right: 16px; border-right: 1px solid var(--border-primary); }
-  .sys-item:nth-child(even) { padding-left: 16px; }
-  .sys-label { color: var(--text-secondary); }
-  .sys-value { color: var(--text-primary); font-weight: 500; font-family: monospace; }
-  @media (max-width: 600px) {
-    .setting-row { flex-direction: column; align-items: flex-start; gap: 8px; }
-    .live-grid { grid-template-columns: 1fr; }
-    .sys-grid { grid-template-columns: 1fr; }
-    .sys-item:nth-child(odd) { padding-right: 0; border-right: none; }
-    .sys-item:nth-child(even) { padding-left: 0; }
-    .action-row { flex-direction: column; align-items: flex-start; }
+  .kopfzeile { display: flex; align-items: baseline; gap: var(--tv-a4); margin-bottom: var(--tv-a4); }
+  .kopfzeile h1 { margin: 0; font-size: var(--tv-gr-seite); }
+  .inhalt { max-width: 1000px; }
+  .gruppe { background: var(--tv-flaeche); border-radius: var(--tv-ecke); margin-bottom: var(--tv-a5); }
+  .gruppe h2, .ueberschrift {
+    display: flex; align-items: center; gap: var(--tv-a3); margin: 0; padding: var(--tv-a4);
+    font-size: var(--tv-gr-titel); border-bottom: 1px solid var(--tv-rand);
   }
-
-  /* Cleanup Protocol */
-  .cleanup-protocol { margin: 12px 0; background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 12px; }
-  .cp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .cp-title { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
-  .cp-summary { font-size: 0.75rem; color: var(--accent-primary); font-weight: 500; }
-  .cp-list { display: flex; flex-direction: column; gap: 4px; }
-  .cp-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; font-size: 0.76rem; color: var(--text-tertiary); }
-  .cp-row.cp-active { color: var(--text-primary); background: var(--accent-muted); }
-  .cp-icon { font-size: 0.8rem; flex-shrink: 0; }
-  .cp-detail { flex: 1; }
-  .action-btn.accent { background: var(--accent-muted); border-color: var(--accent-primary); color: var(--accent-primary); }
-  .action-btn.accent:hover { background: var(--accent-primary); color: var(--accent-text); }
-
-  /* Cookies-Panel */
-  .card-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px; }
-  .card-desc code { background: var(--bg-tertiary); padding: 1px 6px; border-radius: 4px; font-size: 0.78rem; }
-  .cookies-status {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; border-radius: 8px; margin-bottom: 10px;
-    background: var(--bg-tertiary); color: var(--text-tertiary);
-    font-size: 0.84rem;
-  }
-  .cookies-status.ok { background: rgba(34,197,94,0.08); color: var(--status-success); border: 1px solid rgba(34,197,94,0.3); }
-  .cookies-status i { font-size: 0.95rem; }
+  .ueberschrift { padding: 0 0 var(--tv-a3); border: 0; }
+  .gruppe h2 i, .ueberschrift i { color: var(--tv-akzent); width: 22px; text-align: center; }
+  .zusatz { display: flex; align-items: center; justify-content: space-between; gap: var(--tv-a3); padding: var(--tv-a3) var(--tv-a4); border-top: 1px solid var(--tv-rand); flex-wrap: wrap; }
+  .zusatz .name { font-weight: 600; }
+  .system { margin-bottom: var(--tv-a3); }
+  .tv-kennzahl b.klein { font-size: 20px; }
+  .dienste { margin-top: var(--tv-a3); }
+  .dienste summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: var(--tv-a2); }
+  .dienste summary i { color: var(--tv-akzent); }
 </style>

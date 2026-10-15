@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 44
+SCHEMA_VERSION = 45
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1213,6 +1213,17 @@ class Database:
                    WHERE download_quality = '720p' AND COALESCE(auto_download, 0) = 0""")
             await self._connection.commit()
             logger.info("Migration v44: Kanalqualität ohne eigene Wahl folgt dem Standard")
+
+        # v45: "ohne Grenze" heißt jetzt 0. Werte jenseits der Grenzen standen
+        # für "alles" (z.B. 9000 Tage, 5000000 Downloads am Tag) und wurden in
+        # der Oberfläche abgeschnitten angezeigt
+        if current_version < 45:
+            await self._connection.executescript("""
+                UPDATE settings SET value = '0' WHERE key = 'rss.max_age_days' AND CAST(value AS INTEGER) > 3650;
+                UPDATE settings SET value = '0' WHERE key = 'rss.auto_dl_daily_limit' AND CAST(value AS INTEGER) > 1000;
+            """)
+            await self._connection.commit()
+            logger.info("Migration v45: Videoalter und Tageslimit 'ohne Grenze' als 0")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

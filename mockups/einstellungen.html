@@ -24,6 +24,7 @@
   .verteilung { display: grid; grid-template-columns: 120px 1fr 90px; gap: 6px var(--tv-a3); align-items: center; font-size: var(--tv-gr-klein); padding: var(--tv-a3) var(--tv-a4) var(--tv-a4); }
   .verteilung .balken { height: 8px; }
   .gefahr h2 i { color: var(--tv-gefahr); }
+  .info { margin-left: 6px; font-size: 14px; color: var(--tv-text-3); cursor: help; }
 </style>
 </head>
 <body>
@@ -52,24 +53,28 @@
         <section class="gruppe">
           <h2><i class="fa-solid fa-satellite-dish"></i> Kanäle <span class="zustand laeuft"><i class="fa-solid fa-clock"></i> Prüfung läuft</span></h2>
           <div class="einstellung">
-            <div><div class="name">Kanäle prüfen</div><div class="erklaerung">Abonnierte Kanäle automatisch auf neue Videos prüfen</div></div>
+            <div class="name" title="Abonnierte Kanäle automatisch auf neue Videos prüfen">Kanäle prüfen <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><button class="schalter an"></button></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Grundtakt</div><div class="erklaerung">So oft wird ein Kanal mit frischem Video geprüft</div></div>
+            <div class="name" title="So oft wird ein Kanal mit frischem Video geprüft">Grundtakt <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert dauer-wahl"><input class="eingabe" value="12"><select class="eingabe"><option>Stunden</option><option>Tage</option></select></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Längster Prüfabstand</div><div class="erklaerung">Ein Kanal, der lange schweigt, wird höchstens so selten geprüft</div></div>
+            <div class="name" title="Ein Kanal, der lange schweigt, wird höchstens so selten geprüft">Längster Prüfabstand <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert dauer-wahl"><input class="eingabe" value="30"><select class="eingabe"><option>Tage</option><option>Stunden</option></select></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Ältere Videos übergehen</div><div class="erklaerung">Neu im Feed erscheinen nur Videos bis zu diesem Alter</div></div>
+            <div class="name" title="Neu im Feed erscheinen nur Videos bis zu diesem Alter">Ältere Videos übergehen <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><label class="ohne-grenze"><button class="schalter an"></button> alle</label></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Shorts ausschließen</div><div class="erklaerung">Shorts erscheinen nirgends und werden nicht geladen</div></div>
+            <div class="name" title="Shorts erscheinen nirgends und werden nicht geladen">Shorts ausschließen <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><button class="schalter an"></button></div>
+          </div>
+          <div class="einstellung">
+            <div class="name">Shorts im Bestand <span class="zahl leise">2.648 · 140,2 GB</span></div>
+            <div class="wert"><button class="knopf klein gefahr"><i class="fa-solid fa-trash"></i> Alle löschen</button></div>
           </div>
           <div class="verteilung">
             <span class="etikett" style="grid-column: 1 / -1">So oft wird gerade geprüft</span>
@@ -83,35 +88,28 @@
         <section class="gruppe">
           <h2><i class="fa-solid fa-download"></i> Downloads</h2>
           <div class="einstellung">
-            <div><div class="name">Standard-Qualität</div><div class="erklaerung">Gilt, wenn weder Auftrag noch Kanal eine eigene vorgeben</div></div>
+            <div class="name" title="Gilt, wenn weder Auftrag noch Kanal eine eigene vorgeben">Standard-Qualität <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><select class="eingabe"><option>1080p</option></select></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Automatische Downloads je Tag</div><div class="erklaerung">Neue Videos aus Abos mit Auto-Download und Drip</div></div>
+            <div class="name" title="Neue Videos aus Abos mit Auto-Download und Drip">Automatische Downloads je Tag <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><label class="ohne-grenze"><button class="schalter an"></button> unbegrenzt</label></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Untertitel mitladen</div><div class="erklaerung">Beim Download und beim Öffnen eines Videos</div></div>
+            <div class="name" title="Beim Download und beim Öffnen eines Videos">Untertitel mitladen <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><button class="schalter an"></button></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Untertitel-Sprachen</div><div class="erklaerung">Die erste vorhandene wird genommen</div></div>
+            <div class="name" title="Die erste vorhandene wird genommen">Untertitel-Sprachen <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><button class="knopf klein aktiv">Deutsch</button><button class="knopf klein aktiv">Englisch</button><button class="knopf klein symbol"><i class="fa-solid fa-plus"></i></button></div>
           </div>
-          <div class="einstellung">
-            <div><div class="name">Drosselung</div><div class="erklaerung">Höchstens so schnell laden; 0 = ohne Grenze</div></div>
-            <div class="wert"><input class="eingabe" value="800"><span class="leise klein">KB/s</span></div>
-          </div>
-          <div class="einstellung">
-            <div><div class="name">Pause zwischen Downloads</div><div class="erklaerung">Schont die Quelle, mindestens 5 Sekunden</div></div>
-            <div class="wert"><input class="eingabe" value="20"><span class="leise klein">s</span></div>
-          </div>
+          <div class="einstellung"><div class="leise klein">Drosselung und Pause zwischen Downloads stehen auf der Downloads-Seite.</div><div></div></div>
         </section>
 
         <section class="gruppe">
           <h2><i class="fa-solid fa-display"></i> Ansicht</h2>
           <div class="einstellung">
-            <div><div class="name">Videos je Ladeschritt</div><div class="erklaerung">So viele Kacheln kommen beim Blättern auf einmal dazu</div></div>
+            <div class="name" title="So viele Kacheln kommen beim Blättern auf einmal dazu">Videos je Ladeschritt <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><input class="eingabe" value="24"></div>
           </div>
         </section>
@@ -119,15 +117,15 @@
         <section class="gruppe">
           <h2><i class="fa-solid fa-puzzle-piece"></i> Erweiterungen</h2>
           <div class="einstellung">
-            <div><div class="name">Nachvertonung</div><div class="erklaerung">Videos auf Deutsch neu sprechen lassen (Rechner im Heimnetz)</div></div>
+            <div class="name" title="Videos auf Deutsch neu sprechen lassen (Rechner im Heimnetz)">Nachvertonung <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><button class="schalter an"></button></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Bedeutungssuche</div><div class="erklaerung">Suche nach Sinn statt nur nach Wörtern, mit lokaler KI</div></div>
+            <div class="name" title="Suche nach Sinn statt nur nach Wörtern, mit lokaler KI">Bedeutungssuche <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><button class="schalter an"></button></div>
           </div>
           <div class="einstellung">
-            <div><div class="name">Adresse des KI-Dienstes</div><div class="erklaerung"><span class="punkt"></span>erreichbar</div></div>
+            <div class="name" title="erreichbar">Adresse des KI-Dienstes <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><input class="eingabe" value="http://192.168.178.45:1234/v1" style="width:260px; text-align:left; font-family: var(--tv-schrift)"></div>
           </div>
         </section>
@@ -135,12 +133,8 @@
         <section class="gruppe">
           <h2><i class="fa-solid fa-server"></i> System</h2>
           <div class="einstellung">
-            <div><div class="name">Sicherung</div><div class="erklaerung">Datenbank und Einstellungen sichern oder zurückspielen</div></div>
+            <div class="name" title="Datenbank und Einstellungen sichern oder zurückspielen">Sicherung <i class="fa-solid fa-circle-info info"></i></div>
             <div class="wert"><button class="knopf klein"><i class="fa-solid fa-floppy-disk"></i> Sichern</button><button class="knopf klein">Zurückspielen</button></div>
-          </div>
-          <div class="einstellung">
-            <div><div class="name">Shorts im Bestand</div><div class="erklaerung"><span class="zahl">2.648 Videos · 140,2 GB</span></div></div>
-            <div class="wert"><button class="knopf klein gefahr"><i class="fa-solid fa-trash"></i> Alle löschen</button></div>
           </div>
         </section>
       </div>

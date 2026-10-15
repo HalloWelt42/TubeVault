@@ -484,3 +484,18 @@ async def test_geaenderter_grundtakt_gilt_sofort_fuer_alle(feeds, test_db, set_s
     assert await rss_service.recompute_intervals() == 1
     assert (await sub_row(test_db, CH[0]))["check_interval"] == 7200
     assert (await sub_row(test_db, CH[1]))["check_interval"] == 43200
+
+
+async def test_ohne_grenze_laedt_alles_und_nimmt_alte_videos(feeds, test_db, set_setting):
+    """0 heißt "ohne Grenze" (Befund 15.10.2026: 5000000 und 9000 Tage standen
+    für unbegrenzt und lagen außerhalb der erlaubten Werte)."""
+    await set_setting("rss.auto_dl_daily_limit", 0)
+    await set_setting("rss.max_age_days", 0)
+    await subscribe(test_db, CH[0], auto_download=1)
+    feeds[CH[0]] = [item(f"alt00000{n:03d}", date="2010-01-01") for n in range(30)]
+
+    result = await rss_service.tick()
+
+    assert result["new_videos"] == 30                      # auch 16 Jahre alte Videos
+    queued = await test_db.fetch_val("SELECT COUNT(*) FROM jobs WHERE type = 'download'")
+    assert queued == 30                                    # kein Tageslimit

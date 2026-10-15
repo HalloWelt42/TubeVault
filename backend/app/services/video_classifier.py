@@ -236,8 +236,10 @@ _VIDEOS_TODO = (
 _FEED_TODO = (
     f"COALESCE(type_verified, 0) = {UNVERIFIED} AND COALESCE(video_type, 'video') <> 'live' "
     "AND COALESCE(feed_status, 'active') IN ('active', 'later') "
-    "AND published >= date('now', '-' || COALESCE("
-    "(SELECT value FROM settings WHERE key = 'rss.max_age_days'), '90') || ' days')")
+    # 0 = alle Videos (Einstellung "Höchstes Video-Alter")
+    "AND (COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'rss.max_age_days'), 90) <= 0 "
+    "OR published >= date('now', '-' || COALESCE("
+    "(SELECT value FROM settings WHERE key = 'rss.max_age_days'), '90') || ' days'))")
 
 
 async def _next_unverified() -> Optional[str]:

@@ -40,15 +40,16 @@ class SettingDef(BaseModel):
     step: Optional[float] = None      # Schrittweite des Eingabefelds (Standard 1)
     options: Optional[list[str]] = None
     option_labels: Optional[dict[str, str]] = None   # Anzeige je Auswahlwert
+    zero_label: Optional[str] = None   # 0 bedeutet "ohne Grenze"; so heißt es in der Oberfläche
 
 
 SETTINGS: list[SettingDef] = [
     # ── Scanner ───────────────────────────────────────────────────────
     SettingDef(key="rss.enabled", default="true", kind="toggle", category="rss", section="channels",
-               label="Scanner aktiv",
-               description="Prüft automatisch alle abonnierten Kanäle auf neue Videos."),
+               label="Kanäle prüfen",
+               description="Abonnierte Kanäle automatisch auf neue Videos prüfen."),
     SettingDef(key="rss.interval", default="43200", kind="duration", category="rss", section="channels",
-               min=3600, max=86400, label="Grundtakt der Prüfung",
+               min=3600, max=86400, label="Grundtakt",
                description="So oft wird ein Kanal geprüft, der kürzlich ein Video gezeigt hat. Je länger "
                            "sein neuestes Video zurückliegt, desto seltener (ein Viertel dessen Alters); "
                            "ein neues Video setzt sofort auf den Grundtakt zurück."),
@@ -57,8 +58,8 @@ SETTINGS: list[SettingDef] = [
                description="So lange bleibt ein Kanal, der seit Langem nichts zeigt, höchstens "
                            "ungeprüft."),
     SettingDef(key="rss.max_age_days", default="90", kind="number", category="rss", section="channels",
-               min=7, max=365, unit="Tage", label="Maximales Video-Alter",
-               description="Bei der Prüfung auf neue Videos werden ältere Einträge übergangen."),
+               min=0, max=3650, unit="Tage", zero_label="alle", label="Höchstes Video-Alter",
+               description="Neu im Feed erscheinen nur Videos bis zu diesem Alter."),
     # ── Feed ──────────────────────────────────────────────────────────
     SettingDef(key="shorts.exclude", default="false", kind="toggle", category="feed", section="channels",
                label="Shorts ausschließen",
@@ -67,29 +68,31 @@ SETTINGS: list[SettingDef] = [
                            "die Dauer allein entscheidet nicht."),
     # ── Auto-Download ─────────────────────────────────────────────────
     SettingDef(key="rss.auto_dl_daily_limit", default="20", kind="number", category="rss",
-               section="channels", min=1, max=200, unit="pro Tag", label="Tageslimit",
-               description="Höchstzahl automatischer Downloads pro Tag (Schutz vor Massen-Downloads)."),
+               section="downloads", min=0, max=1000, unit="je Tag", zero_label="unbegrenzt",
+               label="Automatische Downloads",
+               description="Höchstzahl automatischer Downloads je Tag (Auto-Download und Drip)."),
     # ── Downloads ─────────────────────────────────────────────────────
     SettingDef(key="download.quality", default="720p", kind="select", category="download",
-               section="channels", options=VIDEO_QUALITIES, label="Standard-Qualität",
+               section="downloads", options=VIDEO_QUALITIES, label="Standard-Qualität",
                description="Gilt für alle Downloads, wenn weder der Auftrag noch der Kanal eine "
                            "Qualität vorgibt."),
     SettingDef(key="download.auto_subtitle", default="false", kind="toggle", category="download",
-               section="channels", label="Untertitel herunterladen"),
+               section="downloads", label="Untertitel mitladen",
+               description="Beim Download und beim Öffnen eines Videos, in den genannten Sprachen."),
     SettingDef(key="download.subtitle_lang", default="de,en", kind="text", category="download",
-               section="channels", label="Untertitel-Sprachen",
-               description="Kommagetrennt, z.B. de,en. Alle genannten Sprachen werden geladen."),
+               section="downloads", label="Untertitel-Sprachen",
+               description="Kommagetrennt, z.B. de,en. Die erste vorhandene wird genommen."),
     SettingDef(key="download.throttle_kbps", default="0", kind="number", category="download",
-               section="channels", min=0, max=100000, unit="KB/s", label="Bandbreiten-Limit",
-               description="0 = unbegrenzt. Wirkt nicht, solange auf der Jobs-Seite die Drosselung "
-                           "in Echtzeit eingeschaltet ist."),
+               min=0, max=100000, unit="KB/s", label="Drosselung",
+               description="0 = ohne Grenze. Wirkt nicht, solange die dynamische Drosselung an ist. "
+                           "Eingestellt auf der Downloads-Seite."),
     SettingDef(key="download.throttle_realtime", default="false", kind="toggle", category="download",
                label="Drosselung in Echtzeit"),
     SettingDef(key="download.cooldown_base_s", default="30", kind="number", category="download",
                min=5, max=3600, unit="s", label="Pause zwischen Downloads"),
     # ── Allgemein ─────────────────────────────────────────────────────
     SettingDef(key="general.videos_per_page", default="24", kind="number", category="general",
-               section="view", min=12, max=96, label="Videos pro Seite",
+               section="view", min=12, max=96, label="Videos je Ladeschritt",
                description="So viele Videos lädt eine Liste je Schritt nach."),
     # ── Erweiterungen ─────────────────────────────────────────────────
     SettingDef(key="dub.enabled", default="false", kind="toggle", category="dub",
