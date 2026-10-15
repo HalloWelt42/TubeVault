@@ -213,7 +213,9 @@
   });
 </script>
 
-<div class="search-page">
+<!-- Fester Kopf mit Suchzeile und Genauigkeit; darunter rollen nur die Treffer -->
+<div class="tv-seite">
+ <div class="tv-seitenkopf">
   <div class="page-header">
     <h1 class="page-title"><i class="fa-solid fa-magnifying-glass"></i> Suche</h1>
   </div>
@@ -244,7 +246,9 @@
       {/each}
     </div>
   {/if}
+ </div>
 
+ <div class="tv-rollfeld" data-scroll-root>
   {#if loading && yt.items.length === 0 && local.items.length === 0}
     <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Suche läuft…</div>
   {:else if query && yt.items.length === 0 && local.items.length === 0 && !loading && !local.loading}
@@ -403,6 +407,7 @@
       {/if}
     </section>
   {/if}
+ </div>
 </div>
 
 <StreamDialog
@@ -414,7 +419,8 @@
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .search-page { padding: 24px; max-width: none; }
+  /* Abstand zum Rollfeld kommt aus Kopf und Rollfeld, nicht vom letzten Element */
+  .tv-seitenkopf > :last-child { margin-bottom: 0; }
   .search-form { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
   .search-input-wrap { flex: 1; min-width: 280px; position: relative; display: flex; align-items: center; }
   .search-icon { position: absolute; left: 14px; color: var(--text-tertiary); font-size: 0.9rem; pointer-events: none; }

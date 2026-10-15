@@ -77,7 +77,9 @@
 
 </script>
 
-<div class="history-page">
+<div class="tv-seite">
+ <!-- Fester Kopf: Titel, Aktion, Filter -->
+ <div class="tv-seitenkopf">
   <PageHeader title="Verlauf" icon="fa-solid fa-clock-rotate-left" count={list.total}>
     {#if list.items.length > 0}
       <button class="btn-clear" onclick={clearAll}>Verlauf löschen</button>
@@ -85,7 +87,10 @@
   </PageHeader>
 
   <MultiFilter showSearch={true} showTypes={true} showChannels={true} showCategories={false} onchange={onHistFilterChange} />
+ </div>
 
+ <!-- Nur Weiterschauen und die Liste rollen -->
+ <div class="tv-rollfeld" data-scroll-root>
   {#if list.items.filter(isInProgress).length > 0}
     <section class="continue-section">
       <h2 class="section-title">Weiterschauen</h2>
@@ -142,10 +147,10 @@
     <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
     {#if list.loadingMore}<div class="loading-more"><i class="fa-solid fa-spinner fa-spin"></i> Lade mehr…</div>{/if}
   {/if}
+ </div>
 </div>
 
 <style>
-  .history-page { padding:0 24px 24px; max-width:none; }
   .btn-clear { padding:7px 16px; background:none; border:1px solid var(--border-primary); border-radius:8px; color:var(--text-secondary); font-size:0.82rem; cursor:pointer; }
   .btn-clear:hover { border-color:var(--status-error); color:var(--status-error); }
 

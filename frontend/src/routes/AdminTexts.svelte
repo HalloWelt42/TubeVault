@@ -256,8 +256,9 @@
   $effect(() => { loadOverview(); loadTable(); });
 </script>
 
-<div class="admin-page">
-  <header class="admin-header">
+<div class="tv-seite">
+  <!-- Fester Kopf: Titel und Erklärung; die Tafeln darunter rollen -->
+  <header class="tv-seitenkopf admin-header">
     <h1><i class="fa-solid fa-file-lines"></i> Textexport</h1>
     <p class="subtitle">
       Dokument-artige Daten aus der DB in Dateien auslagern. Jede Datei trägt
@@ -266,6 +267,7 @@
     </p>
   </header>
 
+ <div class="tv-rollfeld" data-scroll-root>
   <!-- Übersicht -->
   <section class="panel">
     <div class="panel-head">
@@ -596,16 +598,17 @@
       </div>
     </div>
   </section>
+ </div>
 </div>
 
 <style>
-  .admin-page { padding: 32px 40px; width: 100%; }
   .admin-header h1 {
     display: flex; align-items: center; gap: 12px;
     margin: 0 0 6px; font-size: 1.5rem; color: var(--text-primary);
   }
   .admin-header h1 i { color: var(--accent-primary); }
-  .subtitle { color: var(--text-tertiary); font-size: 0.88rem; max-width: 780px; margin: 0 0 28px; line-height: 1.5; }
+  /* Mit Kopf- und Rollfeldpolsterung (12 + 8 px) wie bisher 28 px bis zur ersten Tafel */
+  .subtitle { color: var(--text-tertiary); font-size: 0.88rem; max-width: 780px; margin: 0 0 8px; line-height: 1.5; }
   .subtitle code { background: var(--bg-tertiary); padding: 1px 6px; border-radius: 4px; font-size: 0.82rem; }
 
   .panel {

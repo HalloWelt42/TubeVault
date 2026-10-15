@@ -374,7 +374,9 @@
   $effect(() => { loadSubs(); loadPrognosis(); });
 </script>
 
-<div class="page">
+<div class="tv-seite">
+ <!-- Fester Kopf: Titel, Aktionen, Filter, Prüfstand, Hinzufügen, Suche, Drip-Kennzahlen -->
+ <div class="tv-seitenkopf">
   <div class="page-header">
     <div>
       <h1 class="title">Kanäle</h1>
@@ -526,7 +528,10 @@
     {/if}
   </div>
   {/if}
+ </div>
 
+ <!-- Nur die Kanalliste rollt -->
+ <div class="tv-rollfeld" data-scroll-root>
   {#if filtered.length > 0}
   <div class="grid">
     {#each filtered as sub (sub.id)}
@@ -696,12 +701,15 @@
     {/if}
   </div>
   {/if}
+ </div>
 </div>
 
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .page { padding: 24px; max-width: none; }
+  /* Ränder kommen von .tv-seitenkopf und .tv-rollfeld. Das letzte Element im Kopf
+     braucht keinen eigenen Abstand nach unten, sonst addiert er sich zum Kopfrand. */
+  .tv-seitenkopf > :last-child { margin-bottom: 0; }
   .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:12px; }
   .title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
   .subtitle { font-size:0.82rem; color:var(--text-tertiary); }

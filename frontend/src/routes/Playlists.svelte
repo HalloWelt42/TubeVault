@@ -214,9 +214,11 @@
   });
 </script>
 
-<div class="playlists-page">
+<!-- Beide Ansichten: fester Kopf mit Titel und Steuerung, darunter rollt nur die Liste -->
+<div class="tv-seite">
   {#if selectedPl}
-    <!-- ═══ Playlist Detail ═══ -->
+   <!-- ═══ Playlist Detail ═══ -->
+   <div class="tv-seitenkopf">
     <div class="detail-header">
       <button class="btn-back" onclick={back}><i class="fa-solid fa-arrow-left"></i></button>
       <div class="detail-info">
@@ -270,8 +272,10 @@
         {/if}
       </div>
     {/if}
+   </div>
 
-    <!-- Video Liste mit Drag & Drop -->
+   <!-- Video Liste mit Drag & Drop -->
+   <div class="tv-rollfeld" data-scroll-root>
     {#if plVideos.length === 0}
       <div class="empty">
         <i class="fa-solid fa-music empty-icon"></i>
@@ -313,9 +317,11 @@
         {/each}
       </div>
     {/if}
+   </div>
 
   {:else}
-    <!-- ═══ Playlist-Übersicht ═══ -->
+   <!-- ═══ Playlist-Übersicht ═══ -->
+   <div class="tv-seitenkopf">
     <div class="page-header">
       <h1 class="page-title"><i class="fa-solid fa-list-ul"></i> Playlists</h1>
       <button class="btn-create" onclick={() => showSeries = !showSeries}
@@ -324,10 +330,6 @@
       </button>
       <button class="btn-create" onclick={() => showCreate = !showCreate}><i class="fa-solid fa-plus"></i> Neue Playlist</button>
     </div>
-
-    {#if showSeries}
-      <SeriesProposals onchange={loadPlaylists} />
-    {/if}
 
     {#if showCreate}
       <div class="create-form">
@@ -338,6 +340,13 @@
           <button class="btn-cancel" onclick={() => showCreate = false}>Abbrechen</button>
         </div>
       </div>
+    {/if}
+   </div>
+
+   <!-- Erkannte Serien sind eine lange Liste und rollen mit den Playlists -->
+   <div class="tv-rollfeld" data-scroll-root>
+    {#if showSeries}
+      <SeriesProposals onchange={loadPlaylists} />
     {/if}
 
     {#if loading}
@@ -400,11 +409,13 @@
         {/each}
       </div>
     {/if}
+   </div>
   {/if}
 </div>
 
 <style>
-  .playlists-page { padding: 24px; max-width: none; }
+  /* Abstand zum Rollfeld kommt aus Kopf und Rollfeld, nicht vom letzten Element */
+  .tv-seitenkopf > :last-child { margin-bottom: 0; }
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 10px; }
   .page-title i { color: var(--accent-primary); }

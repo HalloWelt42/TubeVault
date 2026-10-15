@@ -1,21 +1,31 @@
-// Das Rollfeld einer Ansicht. Neu gebaute Seiten haben einen festen Kopf und
-// darunter ein eigenes Rollfeld (Element mit data-scroll-root, Baustein
-// .tv-rollfeld); ältere Seiten rollen noch als Ganzes in .main-content bzw.
-// im Verwaltungsbereich in .admin-main. Nachladen, Rollposition merken und
-// "nach oben" fragen hier nach, statt fest .main-content anzunehmen.
+// Das Rollfeld einer Ansicht. Jede Seite hat einen festen Kopf und darunter
+// ein eigenes Rollfeld (Element mit data-scroll-root, Baustein .tv-rollfeld);
+// .main-content bzw. im Verwaltungsbereich .admin-main bleiben die Rückfall-
+// ebene. Nachladen, Rollposition merken und "nach oben" fragen hier nach,
+// statt fest .main-content anzunehmen.
 
 const PAGE_SCROLLERS = '.main-content, .admin-main';
+const SCROLL_ROOTS = `[data-scroll-root], .tv-spalten, ${PAGE_SCROLLERS}`;
 
-/** Das Rollfeld, in dem ein Element liegt. */
+const rolls = (el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY);
+
+/** Das Rollfeld, in dem ein Element liegt: das nächste als Rollfeld
+ * gekennzeichnete Element, das gerade tatsächlich rollt. Ein Rollfeld, das
+ * nicht selbst rollt (bei schmalem Fenster rollen untereinander gestellte
+ * Spalten gemeinsam), zählt nicht - sonst sähe das Nachladen sein Ende
+ * immer als sichtbar an. */
 export function scrollRootOf(node) {
-  return node?.closest?.('[data-scroll-root]') || node?.closest?.(PAGE_SCROLLERS)
-    || document.querySelector(PAGE_SCROLLERS);
+  for (let el = node?.parentElement?.closest(SCROLL_ROOTS); el; el = el.parentElement?.closest(SCROLL_ROOTS)) {
+    if (rolls(el)) return el;
+  }
+  return document.querySelector(PAGE_SCROLLERS);
 }
 
 /** Das Rollfeld der gerade angezeigten Seite. */
 export function activeScrollRoot() {
   const page = document.querySelector(PAGE_SCROLLERS);
-  return page?.querySelector('[data-scroll-root]') || page;
+  const roots = page ? [...page.querySelectorAll('[data-scroll-root], .tv-spalten')] : [];
+  return roots.find(rolls) || page;
 }
 
 /**

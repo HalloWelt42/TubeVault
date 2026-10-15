@@ -81,17 +81,18 @@
  *     <div class="tv-rollfeld" data-scroll-root> lange Liste </div>
  *   </div>
  * Zwei Spalten, die jede für sich rollen: .tv-spalten mit zwei .tv-rollfeld.
- * Bei schmalem oder niedrigem Fenster rollt die Seite wieder als Ganzes. */
+ * Der Kopf steht immer, die Seite rollt nie als Ganzes - auch nicht bei
+ * niedrigem oder schmalem Fenster. Schmal stehen die Spalten untereinander
+ * und rollen gemeinsam unter dem Kopf. */
 .tv-seite { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .tv-seitenkopf { flex: none; padding: var(--tv-a5) var(--tv-a6) var(--tv-a3); }
 .tv-rollfeld { flex: 1; min-height: 0; overflow-y: auto; padding: var(--tv-a2) var(--tv-a6) var(--tv-a6); }
 .tv-spalten { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--tv-a4); padding: 0 var(--tv-a6); }
 .tv-spalten > .tv-rollfeld { padding: var(--tv-a2) var(--tv-a1) var(--tv-a6); }
 
-@media (max-width: 1023px), (max-height: 620px) {
-  .tv-seite { height: auto; }
-  .tv-rollfeld { overflow-y: visible; }
-  .tv-spalten { grid-template-columns: 1fr; }
+@media (max-width: 1023px) {
+  .tv-spalten { grid-template-columns: 1fr; align-content: start; overflow-y: auto; }
+  .tv-spalten > .tv-rollfeld { overflow-y: visible; }
 }
 
 /* ═══ Weitere Bausteine aus den Entwürfen ═══ */

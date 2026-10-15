@@ -79,7 +79,9 @@
   };
 </script>
 
-<div class="dashboard">
+<!-- Fester Kopf mit Titel und Eingabezeile; Kacheln und Listen rollen darunter -->
+<div class="tv-seite">
+ <div class="tv-seitenkopf">
   <div class="welcome-section">
     <h1 class="page-title">Dashboard</h1>
   </div>
@@ -110,7 +112,9 @@
       </button>
     </div>
   </div>
+ </div>
 
+ <div class="tv-rollfeld" data-scroll-root>
   <!-- Weiterschauen (prominent, direkt nach Download-Bar) -->
   {#if continueWatching.length > 0}
     <div class="section continue-section">
@@ -223,14 +227,15 @@
       <p>Füge eine YouTube-URL oben ein, um dein erstes Video herunterzuladen.</p>
     </div>
   {/if}
+ </div>
 </div>
 
 <style>
-  .dashboard { padding: 24px; max-width: none; }
   .page-title { font-size: 1.6rem; font-weight: 700; color: var(--text-primary); margin: 0; }
   .page-subtitle { color: var(--text-secondary); margin: 4px 0 0; font-size: 0.9rem; }
 
-  .download-bar { margin: 20px 0; }
+  /* Unten kein Abstand: den Übergang zum Rollfeld geben Kopf und Rollfeld */
+  .download-bar { margin: 20px 0 0; }
   .download-input-wrap {
     display: flex; align-items: center; gap: 10px;
     background: var(--bg-secondary); border: 1px solid var(--border-primary);

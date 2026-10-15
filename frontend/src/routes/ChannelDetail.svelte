@@ -4,6 +4,8 @@
 
   Kanal-Übersicht mit Banner, Tabs (Videos/Shorts/Live),
   Sortierung, Debug-Panel, erweiterte Statistiken.
+  Fester Kopf mit Kanal, Aktionen, Reitern und Filtern; darunter rollen
+  Banner, Beschreibung und Kennzahlen zusammen mit der gewählten Ansicht.
 -->
 <script>
   import { api } from '../lib/api/client.js';
@@ -434,19 +436,12 @@
   $effect(() => { loadChannel(); });
 </script>
 
-<div class="page">
+<div class="tv-seite">
   {#if loading}
-    <div class="loading">Lade Kanal…</div>
+    <div class="tv-rollfeld" data-scroll-root><div class="loading">Lade Kanal…</div></div>
   {:else if channel}
-
-    <!-- Banner -->
-    {#if channel.banner_url}
-      <div class="channel-banner">
-        <img src={api.bannerUrl($route.id)} alt="Kanalbanner"
-             onerror={(e) => e.target.parentElement.style.display='none'} />
-      </div>
-    {/if}
-
+   <!-- Fester Kopf: Kanal, Aktionen, Reiter und die Steuerung der gewählten Ansicht -->
+   <div class="tv-seitenkopf">
     <!-- Header -->
     <div class="channel-header">
       <button class="back-btn" onclick={goBack}>
@@ -502,6 +497,131 @@
         {/if}
       </div>
     </div>
+
+    <!-- Scan-Bar -->
+    <div class="scan-bar">
+      <button class="btn-scan" onclick={scanChannel} disabled={scanning}>
+        {#if scanning}
+          <i class="fa-solid fa-spinner fa-spin"></i> Scanne…
+        {:else}
+          <i class="fa-solid fa-satellite-dish"></i> Kanal scannen
+        {/if}
+      </button>
+      {#if scanning}
+        <span class="scan-hint">{scanLabel}</span>
+        <button class="btn-scan-cancel" onclick={cancelScan} title="Scan abbrechen - bereits Gefundenes bleibt erhalten">
+          <i class="fa-solid fa-stop"></i> Abbrechen
+        </button>
+      {:else if channel.needs_scan}
+        <span class="scan-hint">Noch nicht gescannt - klicke, um alle Inhalte zu laden</span>
+      {:else if channel.last_scanned}
+        <span class="scan-hint">Letzter Scan: {formatDateRelative(channel.last_scanned)}</span>
+      {/if}
+      <button class="short-exempt" class:on={channel.short_exempt} onclick={toggleShortExempt}
+              title={channel.short_exempt
+                ? 'Videos dieses Kanals gelten nie als Short. Klick hebt den Schutz auf (bestehende Videos bleiben Videos).'
+                : 'Videos dieses Kanals nie als Short führen - z.B. kurze, aber vollwertige Videos.'}>
+        <i class="fa-solid fa-shield-halved"></i> {channel.short_exempt ? 'Nie Shorts' : 'Shorts normal'}
+      </button>
+      <button class="short-exempt" class:on={channel.music_channel} onclick={toggleMusicChannel}
+              title={channel.music_channel
+                ? 'Alle Videos dieses Kanals gelten als Musik, auch künftige. Einzelne Ausnahmen am Video festlegen. Klick hebt die Markierung auf.'
+                : 'Ganzen Kanal als Musikkanal markieren: alle Videos gelten sofort als Musik, Ausnahmen einzeln abwählen.'}>
+        <i class="fa-solid fa-music"></i> {channel.music_channel ? 'Musikkanal' : 'Kein Musikkanal'}
+      </button>
+      {#if channel.download_quality}
+        <span class="quality-tag">Qualität: {channel.download_quality}</span>
+      {/if}
+      {#if channel.audio_only}
+        <span class="audio-tag"><i class="fa-solid fa-music"></i> Nur Audio</span>
+      {/if}
+      <button class="btn-debug" onclick={toggleDebug} title="Debug-Infos"><i class="fa-solid fa-bug"></i></button>
+    </div>
+
+    <!-- Type Tabs -->
+    <div class="type-tabs">
+      {#each [
+        ['all', 'Alle', channel.rss_entry_count || 0],
+        ['video', 'Videos', channel.type_counts?.video || 0],
+        ['short', 'Shorts', channel.type_counts?.short || 0],
+        ['live', 'Live', channel.type_counts?.live || 0],
+        ['playlists', 'Playlists', channelPlaylists.length + localPlaylists.length],
+        ['meta', 'Meta', 0]
+      ] as [key, label, count]}
+        {#if (key === 'all' || key === 'playlists' || key === 'meta' || count > 0) && !(key === 'short' && $settings['shorts.exclude'] === 'true')}
+          <button class="type-tab" class:active={videoType === key} onclick={() => changeType(key)}>
+            {label} {#if count > 0}<span class="tab-count">{count}</span>{/if}
+          </button>
+        {/if}
+      {/each}
+    </div>
+
+    {#if videoType === 'playlists'}
+    <div class="pl-toolbar">
+      <button class="btn-sm btn-primary" onclick={fetchPlaylists} disabled={loadingPlaylists}>
+        <i class="fa-solid fa-rotate"></i> {loadingPlaylists ? 'Lade…' : 'Playlist-Liste abrufen'}
+      </button>
+      <span class="pl-hint">Holt die Playlist-Namen und Beschreibungen von YouTube (kein Download, keine Video-Inhalte)</span>
+    </div>
+    {:else if videoType !== 'meta'}
+    <!-- Filter + Sort Row -->
+    <div class="filter-sort-row">
+      <div class="filter-bar">
+        {#each [['all','Alle'],['rss','Katalog'],['downloaded','Lokal']] as [key, label]}
+          <button class="filter-chip" class:active={source===key} onclick={() => changeSource(key)}>
+            {label} <span class="chip-count">{sourceCounts[key] ?? ''}</span>
+          </button>
+        {/each}
+      </div>
+      <div class="sort-wrap">
+        <select class="sort-select" value={sortBy} onchange={(e) => changeSort(e.target.value)}>
+          <option value="newest">Neueste</option>
+          <option value="oldest">Älteste</option>
+          <option value="popular">Beliebteste</option>
+          <option value="longest">Längste</option>
+          <option value="shortest">Kürzeste</option>
+        </select>
+      </div>
+      <div class="search-wrap">
+        <input type="text" class="search-input" placeholder="Videos filtern…" bind:value={searchQuery} />
+        {#if searchQuery}
+          <button class="search-clear" onclick={() => searchQuery = ''} title="Suche leeren"><i class="fa-solid fa-xmark"></i></button>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Batch Download Bar -->
+    {#if missingCount > 0}
+      <div class="batch-bar">
+        <span class="batch-label">
+          <i class="fa-solid fa-cloud-arrow-down"></i>
+          {missingCount} {videoType === 'short' ? 'Shorts' : videoType === 'live' ? 'Live' : videoType === 'video' ? 'Videos' : 'Videos/Shorts/Live'} nicht lokal
+        </span>
+        <div class="batch-btns">
+          {#each [5, 10, 20, 50] as n}
+            {#if missingCount >= n || n === 5}
+              <button class="btn-sm btn-accent" onclick={() => batchDownload(n)}
+                disabled={batchLoading}
+                title="{n} fehlende Videos in die Warteschlange">
+                {batchLoading ? '…' : n}
+              </button>
+            {/if}
+          {/each}
+        </div>
+      </div>
+    {/if}
+    {/if}
+   </div>
+
+   <!-- Darunter rollt alles: Banner, Beschreibung und Kennzahlen oben, dann die Ansicht -->
+   <div class="tv-rollfeld" data-scroll-root>
+    <!-- Banner -->
+    {#if channel.banner_url}
+      <div class="channel-banner">
+        <img src={api.bannerUrl($route.id)} alt="Kanalbanner"
+             onerror={(e) => e.target.parentElement.style.display='none'} />
+      </div>
+    {/if}
 
     <!-- Channel Description -->
     {#if channel.channel_description}
@@ -577,46 +697,6 @@
       {/if}
     </div>
 
-    <!-- Scan-Bar -->
-    <div class="scan-bar">
-      <button class="btn-scan" onclick={scanChannel} disabled={scanning}>
-        {#if scanning}
-          <i class="fa-solid fa-spinner fa-spin"></i> Scanne…
-        {:else}
-          <i class="fa-solid fa-satellite-dish"></i> Kanal scannen
-        {/if}
-      </button>
-      {#if scanning}
-        <span class="scan-hint">{scanLabel}</span>
-        <button class="btn-scan-cancel" onclick={cancelScan} title="Scan abbrechen - bereits Gefundenes bleibt erhalten">
-          <i class="fa-solid fa-stop"></i> Abbrechen
-        </button>
-      {:else if channel.needs_scan}
-        <span class="scan-hint">Noch nicht gescannt – klicke um alle Inhalte zu laden</span>
-      {:else if channel.last_scanned}
-        <span class="scan-hint">Letzter Scan: {formatDateRelative(channel.last_scanned)}</span>
-      {/if}
-      <button class="short-exempt" class:on={channel.short_exempt} onclick={toggleShortExempt}
-              title={channel.short_exempt
-                ? 'Videos dieses Kanals gelten nie als Short. Klick hebt den Schutz auf (bestehende Videos bleiben Videos).'
-                : 'Videos dieses Kanals nie als Short führen - z.B. kurze, aber vollwertige Videos.'}>
-        <i class="fa-solid fa-shield-halved"></i> {channel.short_exempt ? 'Nie Shorts' : 'Shorts normal'}
-      </button>
-      <button class="short-exempt" class:on={channel.music_channel} onclick={toggleMusicChannel}
-              title={channel.music_channel
-                ? 'Alle Videos dieses Kanals gelten als Musik, auch künftige. Einzelne Ausnahmen am Video festlegen. Klick hebt die Markierung auf.'
-                : 'Ganzen Kanal als Musikkanal markieren: alle Videos gelten sofort als Musik, Ausnahmen einzeln abwählen.'}>
-        <i class="fa-solid fa-music"></i> {channel.music_channel ? 'Musikkanal' : 'Kein Musikkanal'}
-      </button>
-      {#if channel.download_quality}
-        <span class="quality-tag">Qualität: {channel.download_quality}</span>
-      {/if}
-      {#if channel.audio_only}
-        <span class="audio-tag"><i class="fa-solid fa-music"></i> Nur Audio</span>
-      {/if}
-      <button class="btn-debug" onclick={toggleDebug} title="Debug-Infos"><i class="fa-solid fa-bug"></i></button>
-    </div>
-
     <!-- Error Banner -->
     {#if channel.error_count > 0 || !channel.enabled}
       <div class="error-banner">
@@ -635,34 +715,9 @@
       </div>
     {/if}
 
-    <!-- Type Tabs -->
-    <div class="type-tabs">
-      {#each [
-        ['all', 'Alle', channel.rss_entry_count || 0],
-        ['video', 'Videos', channel.type_counts?.video || 0],
-        ['short', 'Shorts', channel.type_counts?.short || 0],
-        ['live', 'Live', channel.type_counts?.live || 0],
-        ['playlists', 'Playlists', channelPlaylists.length + localPlaylists.length],
-        ['meta', 'Meta', 0]
-      ] as [key, label, count]}
-        {#if (key === 'all' || key === 'playlists' || key === 'meta' || count > 0) && !(key === 'short' && $settings['shorts.exclude'] === 'true')}
-          <button class="type-tab" class:active={videoType === key} onclick={() => changeType(key)}>
-            {label} {#if count > 0}<span class="tab-count">{count}</span>{/if}
-          </button>
-        {/if}
-      {/each}
-    </div>
-
     {#if videoType === 'playlists'}
     <!-- Playlists View -->
     <div class="playlists-section">
-      <div class="pl-toolbar">
-        <button class="btn-sm btn-primary" onclick={fetchPlaylists} disabled={loadingPlaylists}>
-          <i class="fa-solid fa-rotate"></i> {loadingPlaylists ? 'Lade…' : 'Playlist-Liste abrufen'}
-        </button>
-        <span class="pl-hint">Holt die Playlist-Namen und Beschreibungen von YouTube (kein Download, keine Video-Inhalte)</span>
-      </div>
-
       {#if channelPlaylists.length === 0}
         <div class="empty">
           <i class="fa-solid fa-list-ul" style="font-size:2.5rem; color:var(--text-tertiary)"></i>
@@ -949,53 +1004,6 @@
     </div>
 
     {:else}
-    <!-- Filter + Sort Row -->
-    <div class="filter-sort-row">
-      <div class="filter-bar">
-        {#each [['all','Alle'],['rss','Katalog'],['downloaded','Lokal']] as [key, label]}
-          <button class="filter-chip" class:active={source===key} onclick={() => changeSource(key)}>
-            {label} <span class="chip-count">{sourceCounts[key] ?? ''}</span>
-          </button>
-        {/each}
-      </div>
-      <div class="sort-wrap">
-        <select class="sort-select" value={sortBy} onchange={(e) => changeSort(e.target.value)}>
-          <option value="newest">Neueste</option>
-          <option value="oldest">Älteste</option>
-          <option value="popular">Beliebteste</option>
-          <option value="longest">Längste</option>
-          <option value="shortest">Kürzeste</option>
-        </select>
-      </div>
-      <div class="search-wrap">
-        <input type="text" class="search-input" placeholder="Videos filtern…" bind:value={searchQuery} />
-        {#if searchQuery}
-          <button class="search-clear" onclick={() => searchQuery = ''} title="Suche leeren"><i class="fa-solid fa-xmark"></i></button>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Batch Download Bar -->
-    {#if missingCount > 0}
-      <div class="batch-bar">
-        <span class="batch-label">
-          <i class="fa-solid fa-cloud-arrow-down"></i>
-          {missingCount} {videoType === 'short' ? 'Shorts' : videoType === 'live' ? 'Live' : videoType === 'video' ? 'Videos' : 'Videos/Shorts/Live'} nicht lokal
-        </span>
-        <div class="batch-btns">
-          {#each [5, 10, 20, 50] as n}
-            {#if missingCount >= n || n === 5}
-              <button class="btn-sm btn-accent" onclick={() => batchDownload(n)}
-                disabled={batchLoading}
-                title="{n} fehlende Videos in die Warteschlange">
-                {batchLoading ? '…' : n}
-              </button>
-            {/if}
-          {/each}
-        </div>
-      </div>
-    {/if}
-
     <!-- Debug Panel -->
     {#if showDebug}
       <div class="debug-panel">
@@ -1181,11 +1189,13 @@
       </div>
     {/if}
     {/if}
+   </div>
   {/if}
 </div>
 
 <style>
-  .page { padding: 24px; max-width: none; }
+  /* Die letzte Zeile im Kopf braucht keinen Abstand nach unten - den geben Kopf und Rollfeld */
+  .tv-seitenkopf > :last-child { margin-bottom: 0; }
   .loading { text-align: center; padding: 60px; color: var(--text-tertiary); }
 
   .channel-banner {
@@ -1283,7 +1293,7 @@
 
   .error-banner {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px 14px; margin-bottom: 4px;
+    padding: 10px 14px; margin-bottom: 16px;
     background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25);
     border-radius: 8px;
   }
@@ -1575,7 +1585,6 @@
   :global(.channel-desc a:hover) { text-decoration: underline; }
   :global(.channel-desc p) { margin: 0 0 6px; }
   :global(.channel-desc p:last-child) { margin: 0; }
-  .playlists-section { margin-top: 16px; }
   .pl-toolbar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
   .pl-hint { font-size: 0.7rem; color: var(--text-tertiary); font-style: italic; }
   .pl-workflow-hint {

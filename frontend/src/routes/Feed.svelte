@@ -350,7 +350,9 @@
   let totalAll = $derived(typeCounts.video + typeCounts.short + typeCounts.live);
 </script>
 
-<div class="page">
+<div class="tv-seite">
+ <!-- Fester Kopf: Prüfstand, Titel, Aktionen, Reiter, Filter, Auswahlleiste -->
+ <div class="tv-seitenkopf">
   <!-- Scheduler-Status -->
   {#if scheduler}
     <div class="scheduler-bar">
@@ -454,7 +456,10 @@
       {/if}
     </div>
   {/if}
+ </div>
 
+ <!-- Nur die Liste rollt; das Nachladen beobachtet dieses Rollfeld -->
+ <div class="tv-rollfeld" data-scroll-root>
   {#if list.loading}
     <div class="loading-state">Feed wird geladen…</div>
   {:else if list.items.length > 0}
@@ -620,6 +625,7 @@
       {/if}
     </div>
   {/if}
+ </div>
 </div>
 
 <!-- Stream-Auswahl Dialog -->
@@ -634,7 +640,10 @@
 />
 
 <style>
-  .page { padding: 24px; max-width: none; }
+  /* Ränder kommen von .tv-seitenkopf und .tv-rollfeld. Das letzte Element im Kopf
+     braucht keinen eigenen Abstand nach unten, sonst addiert er sich zum Kopfrand.
+     :global, weil das letzte Element auch die Filterleiste (MultiFilter) sein kann. */
+  .tv-seitenkopf > :global(:last-child) { margin-bottom: 0; }
 
   /* Scheduler Bar */
   .scheduler-bar {

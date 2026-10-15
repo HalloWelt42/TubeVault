@@ -79,9 +79,13 @@
   $effect(() => { load(); });
 </script>
 
-<div class="stats-page">
+<div class="tv-seite">
+ <div class="tv-seitenkopf">
   <h1 class="page-title">Statistiken & Verwaltung</h1>
+ </div>
 
+ <!-- Kennzahlen-Kacheln und Bereiche rollen unter dem festen Titel -->
+ <div class="tv-rollfeld" data-scroll-root>
   {#if loading}
     <div class="loading">Lade…</div>
   {:else if stats}
@@ -184,11 +188,11 @@
       {/if}
     </section>
   {/if}
+ </div>
 </div>
 
 <style>
-  .stats-page { padding: 24px; max-width: none; }
-  .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 20px; }
+  .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0; }
 
   .stats-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));

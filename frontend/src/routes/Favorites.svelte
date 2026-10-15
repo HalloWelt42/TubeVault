@@ -49,7 +49,9 @@
   $effect(() => onVideoMutation(() => { loadLists(); loadFavorites(); }));
 </script>
 
-<div class="page">
+<!-- Fester Kopf mit Titel und Listen-Reitern; darunter rollen nur die Videos -->
+<div class="tv-seite">
+ <div class="tv-seitenkopf">
   <div class="page-header">
     <h1 class="title">Favoriten</h1>
     <span class="subtitle">{favorites.length} Videos</span>
@@ -68,7 +70,9 @@
       {/each}
     </div>
   {/if}
+ </div>
 
+ <div class="tv-rollfeld" data-scroll-root>
   {#if loading}
     <div class="loading">Wird geladen…</div>
   {:else if favorites.length > 0}
@@ -113,10 +117,12 @@
       <button class="btn-ghost" onclick={() => navigate('/library')}>Zur Bibliothek</button>
     </div>
   {/if}
+ </div>
 </div>
 
 <style>
-  .page { padding: 24px; max-width: none; }
+  /* Abstand zum Rollfeld kommt aus Kopf und Rollfeld, nicht vom letzten Element */
+  .tv-seitenkopf > :last-child { margin-bottom: 0; }
   .page-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
   .title { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0; }
   .subtitle { font-size: 0.82rem; color: var(--text-tertiary); }

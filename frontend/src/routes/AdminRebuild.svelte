@@ -94,7 +94,9 @@
   let rb = $derived(status?.rebuild);
 </script>
 
-<div class="page">
+<!-- Fester Kopf mit Titel und Aktualisieren; darunter rollen die drei Bereiche -->
+<div class="tv-seite">
+ <div class="tv-seitenkopf">
   <header class="head">
     <div>
       <h1><i class="fa-solid fa-life-ring"></i> Wiederaufbau</h1>
@@ -104,7 +106,9 @@
       <i class="fa-solid fa-arrows-rotate" class:fa-spin={loading}></i> Aktualisieren
     </button>
   </header>
+ </div>
 
+ <div class="tv-rollfeld" data-scroll-root>
   {#if loading && !status}
     <div class="empty">Lade Status…</div>
   {:else if status}
@@ -200,13 +204,14 @@
       {/if}
     </section>
   {/if}
+ </div>
 </div>
 
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .page { padding: 32px 40px; width: 100%; }
-  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  /* Unten kein Abstand: den Übergang zum Rollfeld geben Kopf und Rollfeld */
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .head h1 { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
   .head h1 i { color: var(--accent-primary); }
   .subtitle { color: var(--text-tertiary); font-size: 0.86rem; margin: 0; }

@@ -202,7 +202,9 @@
   $effect(() => { loadChannels(); loadExempt(); list.load(true); });
 </script>
 
-<div class="cleanup">
+<!-- Fester Kopf mit Sichten, Kanalwahl und Auswahlleiste; darunter rollen nur die Kacheln -->
+<div class="tv-seite">
+ <div class="tv-seitenkopf">
   <header class="head">
     <h1><i class="fa-solid fa-broom"></i> Aufräumen</h1>
     <div class="views">
@@ -258,7 +260,9 @@
       <i class="fa-regular fa-trash-can"></i> {busy || 'Restlos löschen'}
     </button>
   </div>
+ </div>
 
+ <div class="tv-rollfeld" data-scroll-root>
   {#if list.loading}
     <div class="empty"><i class="fa-solid fa-spinner fa-spin"></i> Laden…</div>
   {:else if view === 'channel' && !channelId}
@@ -303,12 +307,12 @@
     <div use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
     {#if list.loadingMore}<div class="empty small"><i class="fa-solid fa-spinner fa-spin"></i></div>{/if}
   {/if}
+ </div>
 </div>
 
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .cleanup { padding: 24px 32px; }
   .head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 8px; }
   .head h1 { margin: 0; font-size: 1.4rem; display: flex; gap: 10px; align-items: center; }
   .head h1 i { color: var(--accent-primary); }
@@ -329,8 +333,9 @@
   .channel.on { border-color: var(--accent-primary); color: var(--accent-primary); }
   .cmeta { color: var(--text-tertiary); }
 
-  .bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-         padding: 10px 12px; margin: 0 -12px 14px; background: var(--bg-primary); border-bottom: 1px solid var(--border-primary); }
+  /* Die Auswahlleiste steht im festen Kopf und braucht kein eigenes Haften mehr */
+  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+         padding: 10px 12px; margin: 0 -12px; background: var(--bg-primary); border-bottom: 1px solid var(--border-primary); }
   .sum { font-size: 0.82rem; color: var(--text-secondary); }
   .sel { font-size: 0.82rem; font-weight: 700; color: var(--accent-primary); }
   .spacer { flex: 1; }

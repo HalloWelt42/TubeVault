@@ -365,7 +365,9 @@
   .tv-reiter .schmal { display: none; }
 
   .musik { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
-  .jetzt-spalte { border-left: 1px solid var(--tv-rand); background: var(--tv-leiste); min-height: 0; }
+  /* Eigene Höhe als Maß für "Läuft gerade" (Bildgröße), nichts ragt heraus */
+  .jetzt-spalte { border-left: 1px solid var(--tv-rand); background: var(--tv-leiste); min-height: 0;
+                  overflow: hidden; container-type: size; }
   @media (max-width: 1100px) {
     .musik { grid-template-columns: minmax(0, 1fr); }
     .jetzt-spalte { display: none; }

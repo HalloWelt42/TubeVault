@@ -90,7 +90,9 @@
   $effect(() => onVideoMutation(() => { list.load(true); loadTags(); }));
 </script>
 
-<div class="library">
+<div class="tv-seite">
+ <!-- Fester Kopf: Titel, Auswahl, Filter, Schlagwörter, Sortierung -->
+ <div class="tv-seitenkopf">
   <PageHeader title="Archiv" icon="fa-solid fa-box-archive" count={list.total} hasFilter={filters.hasActive} onClearFilter={clearFilters}>
     <button class="btn-select" class:active={selectMode} onclick={() => { selectMode = !selectMode; selected = new Set(); }}>
       <i class="fa-solid {selectMode ? 'fa-xmark' : 'fa-check-double'}"></i>
@@ -121,7 +123,10 @@
       {/each}
     </div>
   </div>
+ </div>
 
+ <!-- Nur die Liste rollt -->
+ <div class="tv-rollfeld" data-scroll-root>
   {#if list.loading}
     <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Laden…</div>
   {:else if list.items.length > 0}
@@ -158,14 +163,15 @@
       {/if}
     </div>
   {/if}
+ </div>
 </div>
 
 <style>
-  .library { padding: 24px; max-width: none; }
   .btn-select { padding: 5px 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-secondary); font-size: 0.78rem; cursor: pointer; display: flex; align-items: center; gap: 5px; }
   .btn-select.active { border-color: var(--accent-primary); color: var(--accent-primary); }
 
-  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  /* Letzte Zeile im Kopf: den Abstand zur Liste geben Kopf und Rollfeld */
+  .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .toolbar-label { font-size: 0.8rem; color: var(--text-tertiary); }
   .sort-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .sort-btn { display: flex; align-items: center; gap: 4px; padding: 5px 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; transition: all 0.15s; }

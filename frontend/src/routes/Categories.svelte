@@ -216,9 +216,10 @@
   $effect(() => { load(); loadUnassigned(); });
 </script>
 
-<div class="categories-page">
+<div class="tv-seite">
   {#if selectedCat}
-    <!-- Category Detail -->
+   <!-- Category Detail: fester Kopf mit Zurück, Zuordnen, Suche und Sortierung -->
+   <div class="tv-seitenkopf">
     <div class="detail-header">
       <button class="btn-back" onclick={back}><i class="fa-solid fa-arrow-left"></i> Zurück</button>
       <div class="detail-info">
@@ -268,7 +269,10 @@
         <i class="fa-solid {catSortOrder === 'desc' ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-short-wide'}"></i>
       </button>
     </div>
+   </div>
 
+   <!-- Nur die Videos der Kategorie rollen -->
+   <div class="tv-rollfeld" data-scroll-root>
     {#if catVideos.length === 0}
       <div class="empty">
         <i class="fa-solid fa-folder-open empty-icon"></i>
@@ -314,9 +318,11 @@
         {/each}
       </div>
     {/if}
+   </div>
 
   {:else}
-    <!-- Category List -->
+   <!-- Category List: fester Kopf mit Titel, Zuordnungshinweis und Anlegen -->
+   <div class="tv-seitenkopf">
     <h1 class="page-title"><i class="fa-solid fa-list-ul"></i> Kategorien</h1>
 
     {#if unassignedStats && unassignedStats.unassigned > 0}
@@ -346,6 +352,32 @@
       </div>
     {/if}
 
+    <!-- Create Form -->
+    <div class="add-card">
+      <div class="add-top">
+        <input type="text" class="input" placeholder="Neue Kategorie…" bind:value={newName}
+               onkeydown={(e) => e.key === 'Enter' && addCategory()} />
+        <input type="text" class="input desc-input" placeholder="Beschreibung (optional)" bind:value={newDesc} />
+        <button class="btn-primary" onclick={addCategory} disabled={!newName.trim()}>
+          <i class="fa-solid fa-plus"></i> Erstellen
+        </button>
+      </div>
+      <!-- Color Palette -->
+      <div class="color-palette">
+        <span class="palette-label">Farbe:</span>
+        {#each MD_COLORS as c}
+          <button class="color-swatch" class:selected={newColor === c.hex}
+                  style="background: {c.hex}" title={c.name}
+                  onclick={() => newColor = c.hex}>
+            {#if newColor === c.hex}<i class="fa-solid fa-check swatch-check"></i>{/if}
+          </button>
+        {/each}
+      </div>
+    </div>
+   </div>
+
+   <!-- Nur die Kategorien darunter rollen -->
+   <div class="tv-rollfeld" data-scroll-root>
     {#if debugStats}
       <div class="debug-panel">
         <div class="debug-header">
@@ -374,29 +406,6 @@
         {/if}
       </div>
     {/if}
-
-    <!-- Create Form -->
-    <div class="add-card">
-      <div class="add-top">
-        <input type="text" class="input" placeholder="Neue Kategorie…" bind:value={newName}
-               onkeydown={(e) => e.key === 'Enter' && addCategory()} />
-        <input type="text" class="input desc-input" placeholder="Beschreibung (optional)" bind:value={newDesc} />
-        <button class="btn-primary" onclick={addCategory} disabled={!newName.trim()}>
-          <i class="fa-solid fa-plus"></i> Erstellen
-        </button>
-      </div>
-      <!-- Color Palette -->
-      <div class="color-palette">
-        <span class="palette-label">Farbe:</span>
-        {#each MD_COLORS as c}
-          <button class="color-swatch" class:selected={newColor === c.hex}
-                  style="background: {c.hex}" title={c.name}
-                  onclick={() => newColor = c.hex}>
-            {#if newColor === c.hex}<i class="fa-solid fa-check swatch-check"></i>{/if}
-          </button>
-        {/each}
-      </div>
-    </div>
 
     {#if loading}
       <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Laden…</div>
@@ -447,11 +456,13 @@
         {/each}
       </div>
     {/if}
+   </div>
   {/if}
 </div>
 
 <style>
-  .categories-page { padding: 24px; max-width: none; }
+  /* Den Abstand zum Rollfeld gibt der Seitenkopf vor, nicht das letzte Element darin */
+  .tv-seitenkopf > :last-child { margin-bottom: 0; }
   .page-title {
     font-size: 1.4rem; font-weight: 700; color: var(--text-primary);
     margin: 0 0 20px; display: flex; align-items: center; gap: 10px;

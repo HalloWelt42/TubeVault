@@ -2,6 +2,7 @@
   TubeVault – Admin-Hauptseite v1.0.0
   Eigener Bereich für Datenmanagement, Sync-Jobs, System-Inspektion.
   Fullsize-Layout (kein max-width). Kein Login, aber eigene Menü-Gruppe.
+  Fester Kopf mit Titel, darunter rollen nur die Karten.
 -->
 <script>
   import { navigate } from '../lib/router/router.js';
@@ -31,36 +32,41 @@
   ];
 </script>
 
-<div class="admin-page">
-  <header class="admin-header">
-    <div>
-      <h1><i class="fa-solid fa-screwdriver-wrench"></i> Admin</h1>
-      <p class="subtitle">Datenmanagement, Inspektion, manuelle Jobs</p>
-    </div>
-  </header>
+<div class="tv-seite">
+  <div class="tv-seitenkopf">
+    <header class="admin-header">
+      <div>
+        <h1><i class="fa-solid fa-screwdriver-wrench"></i> Admin</h1>
+        <p class="subtitle">Datenmanagement, Inspektion, manuelle Jobs</p>
+      </div>
+    </header>
+  </div>
 
-  <div class="admin-grid">
-    {#each cards as card}
-      <button
-        class="admin-card"
-        class:disabled={!card.ready}
-        disabled={!card.ready}
-        onclick={() => card.path && navigate(card.path)}
-      >
-        <div class="card-icon"><i class={card.icon}></i></div>
-        <div class="card-body">
-          <h3>{card.title}</h3>
-          <p>{card.desc}</p>
-        </div>
-        <i class="fa-solid fa-arrow-right card-arrow"></i>
-      </button>
-    {/each}
+  <!-- Nur die Karten rollen, der Kopf bleibt stehen -->
+  <div class="tv-rollfeld" data-scroll-root>
+    <div class="admin-grid">
+      {#each cards as card}
+        <button
+          class="admin-card"
+          class:disabled={!card.ready}
+          disabled={!card.ready}
+          onclick={() => card.path && navigate(card.path)}
+        >
+          <div class="card-icon"><i class={card.icon}></i></div>
+          <div class="card-body">
+            <h3>{card.title}</h3>
+            <p>{card.desc}</p>
+          </div>
+          <i class="fa-solid fa-arrow-right card-arrow"></i>
+        </button>
+      {/each}
+    </div>
   </div>
 </div>
 
 <style>
-  .admin-page { padding: 32px 40px; width: 100%; }
-  .admin-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+  /* Ränder kommen von .tv-seitenkopf und .tv-rollfeld; der Rest ergibt etwa den alten Abstand zum Raster */
+  .admin-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
   .admin-header h1 { margin: 0; font-size: 1.8rem; color: var(--text-primary); display: flex; align-items: center; gap: 14px; }
   .admin-header h1 i { color: var(--accent-primary); }
   .subtitle { margin: 6px 0 0; color: var(--text-tertiary); font-size: 0.92rem; }

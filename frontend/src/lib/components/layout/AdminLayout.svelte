@@ -54,10 +54,12 @@
 </div>
 
 <style>
+  /* Füllt den Platz unter Versions- und Offline-Leiste, ohne darüber hinauszuragen */
   .admin-layout {
     display: flex;
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: 100%;
     background: var(--bg-primary);
   }
 

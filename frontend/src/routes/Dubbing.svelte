@@ -93,7 +93,9 @@
   });
 </script>
 
-<div class="dubbing">
+<div class="tv-seite">
+ <!-- Fester Kopf: Titel, Kennzahlen und Reiter der Auftragsliste -->
+ <div class="tv-seitenkopf">
   <PageHeader title="Nachvertonung" icon="fa-solid fa-language" count={counts.queued + counts.working}
               unit="offener Auftrag" unitPlural="offene Aufträge" />
 
@@ -106,17 +108,21 @@
     {#if counts.skipped > 0}<div class="dstat canc"><span><span class="k num">{counts.skipped}</span><span class="l">übersprungen</span></span></div>{/if}
   </div>
 
-  <div class="dgrid">
+  <div class="tabs">
+    {#each TABS as [id, label]}
+      {@const n = id === 'all' ? requests.length : counts[id] || 0}
+      <button class="tab" class:on={tab === id} onclick={() => tab = id}>{label}{#if n > 0}<span class="c">{n}</span>{/if}</button>
+    {/each}
+  </div>
+ </div>
+
+ <!-- Zwei Spalten, die jede für sich rollen: links die Aufträge, rechts Nachvertoner und Ablauf -->
+ <div class="tv-spalten">
+  <div class="tv-rollfeld" data-scroll-root>
     <main class="panel">
       <div class="panel-h">
         <h2>Aufträge</h2>
         <span class="panel-sub">· {visible.length} sichtbar</span>
-      </div>
-      <div class="tabs">
-        {#each TABS as [id, label]}
-          {@const n = id === 'all' ? requests.length : counts[id] || 0}
-          <button class="tab" class:on={tab === id} onclick={() => tab = id}>{label}{#if n > 0}<span class="c">{n}</span>{/if}</button>
-        {/each}
       </div>
 
       {#if loading}
@@ -182,7 +188,9 @@
         </div>
       {/if}
     </main>
+  </div>
 
+  <div class="tv-rollfeld" data-scroll-root>
     <aside class="daside">
       <section class="panel">
         <div class="panel-h"><h2>Nachvertoner</h2></div>
@@ -212,10 +220,10 @@
       </section>
     </aside>
   </div>
+ </div>
 </div>
 
 <style>
-  .dubbing { padding: 24px; }
   .dstats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
   .dstat { display:flex; align-items:center; gap:10px; padding:10px 14px; min-width:112px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:12px; }
   .dstat .k { font-size:22px; font-weight:700; letter-spacing:-0.02em; line-height:1; display:block; }
@@ -227,14 +235,12 @@
   .dstat.canc .k { color:var(--text-tertiary); }
   .num { font-variant-numeric: tabular-nums; }
 
-  .dgrid { display:grid; grid-template-columns: minmax(0,1.618fr) minmax(280px,1fr); gap:24px; align-items:start; }
-  @media (max-width: 1024px) { .dgrid { grid-template-columns:1fr; } }
   .daside { display:flex; flex-direction:column; gap:18px; }
   .panel { background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:14px; }
   .panel-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--border-primary); }
   .panel-h h2 { margin:0; font-size:14px; font-weight:700; color:var(--text-primary); }
   .panel-sub { font-size:12px; color:var(--text-tertiary); }
-  .tabs { display:flex; gap:3px; padding:10px 12px; border-bottom:1px solid var(--border-primary); flex-wrap:wrap; }
+  .tabs { display:flex; gap:3px; flex-wrap:wrap; }
   .tab { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:999px; border:1px solid transparent; background:none; color:var(--text-secondary); font-size:12.5px; font-weight:600; cursor:pointer; }
   .tab:hover { background:var(--bg-hover); color:var(--text-primary); }
   .tab.on { background:var(--accent-muted); color:var(--accent-primary); border-color:color-mix(in srgb, var(--accent-primary) 35%, transparent); }

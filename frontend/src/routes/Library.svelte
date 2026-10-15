@@ -144,12 +144,12 @@
     {/each}
   </div>
 
+  <!-- Die Leiste zeigt nur die häufigsten Schlagwörter (zwei Zeilen), der Rest über die Suche -->
+  <TagFilterBar {allTags} activeTags={filters.activeTags} onToggle={filters.toggleTag} />
  </div>
 
- <!-- Nur die Liste rollt; Schlagwörter stehen am Anfang der Liste, weil sie
-      sehr viele werden können und den festen Kopf sonst zu hoch machten -->
+ <!-- Nur die Liste rollt -->
  <div class="tv-rollfeld" data-scroll-root>
-  <TagFilterBar {allTags} activeTags={filters.activeTags} onToggle={filters.toggleTag} />
 
   {#if list.loading}
     <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>

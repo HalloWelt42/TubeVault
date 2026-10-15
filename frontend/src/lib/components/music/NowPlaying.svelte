@@ -52,7 +52,7 @@
       {#if player.title}<div class="tv-schwach tv-klein">aus: {player.title}</div>{/if}
     </div>
     <div class="tv-reiter">
-      <button class:aktiv={view === 'schlange'} onclick={() => view = 'schlange'}><i class="fa-solid fa-list-ol"></i> Als Nächstes</button>
+      <button class:aktiv={view === 'schlange'} onclick={() => view = 'schlange'}><i class="fa-solid fa-list-ol"></i> Nächste</button>
       <button class:aktiv={view === 'liedtext'} onclick={() => view = 'liedtext'}><i class="fa-solid fa-align-left"></i> Liedtext</button>
       <button class:aktiv={view === 'infos'} onclick={() => view = 'infos'}><i class="fa-solid fa-circle-info"></i> Infos</button>
     </div>
@@ -115,13 +115,23 @@
 </div>
 
 <style>
-  .jetzt { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+  .jetzt { display: flex; flex-direction: column; min-height: 0; height: 100%; overflow: hidden; }
+  /* Kopf und Reiter behalten ihre Höhe; den Rest bekommt die Liste. Das Bild
+     richtet sich nach der Fensterhöhe, damit für die Liste Platz bleibt. */
+  .kopf, .tv-reiter { flex: none; }
   .kopf { padding: var(--tv-a4); }
-  .kopf img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--tv-ecke); background: var(--tv-mulde); }
+  .kopf img { display: block; width: min(100%, 40cqh); aspect-ratio: 1; margin: 0 auto; object-fit: cover;
+              border-radius: var(--tv-ecke); background: var(--tv-mulde); }
+  /* Niedrige Spalte (Maß aus Music.svelte): ohne Bild, die Liste braucht den Platz */
+  @container (max-height: 480px) {
+    .kopf img { display: none; }
+    .titel { margin-top: 0; }
+  }
   .titel { margin-top: var(--tv-a3); font-weight: 700; font-size: 19px; }
   .interpret { padding: 0; border: 0; background: none; color: var(--tv-text-2); font: inherit; cursor: pointer; }
   .interpret:hover { color: var(--tv-akzent); text-decoration: underline; }
-  .tv-reiter { padding: 0 var(--tv-a4); }
+  .tv-reiter { flex-wrap: nowrap; padding: 0 var(--tv-a4); }
+  .tv-reiter button { padding: 0 10px; }
   .schlange, .liedtext { flex: 1; min-height: 0; overflow-y: auto; padding: var(--tv-a2) var(--tv-a3) var(--tv-a4); }
   .eintrag { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto 28px; gap: var(--tv-a2); align-items: center;
              padding: 4px 6px; border-radius: var(--tv-ecke); font-size: var(--tv-gr-klein); }
