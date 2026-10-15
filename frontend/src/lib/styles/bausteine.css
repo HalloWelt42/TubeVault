@@ -93,3 +93,58 @@
   .tv-rollfeld { overflow-y: visible; }
   .tv-spalten { grid-template-columns: 1fr; }
 }
+
+/* ═══ Weitere Bausteine aus den Entwürfen ═══ */
+
+/* Zustandsmarke: tv-zustand + laeuft | wartet | fertig | fehler */
+.tv-zustand {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; white-space: nowrap;
+  font-size: var(--tv-gr-marke); font-weight: 700; border-radius: var(--tv-ecke-klein);
+  background: var(--tv-karte-2); color: var(--tv-text-2);
+}
+.tv-zustand.laeuft { background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent); }
+.tv-zustand.fertig { background: rgba(var(--tv-erfolg-rgb), 0.14); color: var(--tv-erfolg); }
+.tv-zustand.fehler { background: rgba(var(--tv-gefahr-rgb), 0.14); color: var(--tv-gefahr); }
+.tv-zustand.wartet { background: rgba(var(--tv-info-rgb), 0.12); color: var(--tv-info); }
+.tv-zustand.warnung { background: rgba(var(--tv-warnung-rgb), 0.14); color: var(--tv-warnung); }
+button.tv-zustand { border: 0; cursor: pointer; font-family: inherit; }
+
+/* Reiter: gewählter ist eine Fläche mit Kante, kein Strich an einer Seite */
+.tv-reiter { display: flex; gap: var(--tv-a1); flex-wrap: wrap; }
+.tv-reiter button {
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 var(--tv-a4);
+  background: transparent; border: 1px solid transparent; border-radius: var(--tv-ecke);
+  color: var(--tv-text-2); font-family: inherit; font-weight: 600; font-size: var(--tv-gr-klein); cursor: pointer;
+}
+.tv-reiter button:hover { background: var(--tv-flaeche); color: var(--tv-text); }
+.tv-reiter button.aktiv { background: var(--tv-flaeche); border-color: var(--tv-rand-stark); color: var(--tv-text); }
+.tv-reiter button.aktiv i { color: var(--tv-akzent); }
+
+/* Kennzahlen im Seitenkopf */
+.tv-kennzahlen { display: flex; gap: var(--tv-a3); flex-wrap: wrap; }
+.tv-kennzahl { min-width: 128px; padding: var(--tv-a2) var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke); }
+.tv-kennzahl b { display: block; font-family: var(--tv-schrift-zahl); font-size: 26px; font-weight: 600; line-height: 1.2; }
+.tv-kennzahl span { font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+.tv-kennzahl.laeuft b { color: var(--tv-akzent); }
+.tv-kennzahl.fehler b { color: var(--tv-gefahr); }
+
+/* Karte in einer Seitenspalte */
+.tv-karte { background: var(--tv-flaeche); border-radius: var(--tv-ecke); padding: var(--tv-a4); }
+.tv-karte + .tv-karte { margin-top: var(--tv-a3); }
+.tv-karte > h3 { display: flex; align-items: center; gap: var(--tv-a2); margin: 0 0 var(--tv-a3); font-size: var(--tv-gr-text); }
+.tv-karte > h3 > i { color: var(--tv-akzent); }
+
+/* Hinweis- und Fehlerzeile */
+.tv-fehlertext { display: flex; gap: var(--tv-a2); align-items: flex-start; font-size: var(--tv-gr-klein); color: var(--tv-gefahr); }
+
+/* Schalter (an/aus), kantig */
+.tv-schalter { width: 46px; height: 26px; flex: none; border-radius: var(--tv-ecke); background: var(--tv-karte-3); position: relative; border: 0; cursor: pointer; }
+.tv-schalter::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: var(--tv-ecke-klein); background: var(--tv-text-2); transition: left var(--tv-schnell); }
+.tv-schalter.an { background: var(--tv-akzent); }
+.tv-schalter.an::after { left: 23px; background: var(--tv-akzent-text); }
+.tv-schalter:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Text zurückgenommen bzw. klein */
+.tv-leise { color: var(--tv-text-2); }
+.tv-schwach { color: var(--tv-text-3); }
+.tv-klein { font-size: var(--tv-gr-klein); }
