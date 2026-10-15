@@ -6,7 +6,7 @@ chapters_fts) sowie Teilwörtern in Titel und Kanal.
 Ordnung "passend": wo das Wort steht, entscheidet zuerst (Titel vor Kanal vor
 Kapitel vor Schlagwort, Notiz, Liedtext, Beschreibung, dann Wörter auf
 mehrere Felder verteilt, zuletzt Teilwörter); danach ganze Wörter vor
-Wortanfängen, dann die Relevanz des Index. Eine eingetippte Video-Kennung
+Wortanfängen, dann wer an mehr Stellen trifft, dann die Relevanz des Index. Eine eingetippte Video-Kennung
 steht immer vorn.
 """
 import json
@@ -102,8 +102,10 @@ async def word_hits(query: Query) -> WordHits:
 
     def rank(video_id: str):
         if video_id == typed_id:
-            return (-1, 0, 0.0)
-        return (tiers[video_id], 0 if video_id in exact else 1, scores.get(video_id, 0.0))
+            return (-1, 0, 0, 0.0)
+        # Gleiches Feld: ganze Wörter vor Wortanfängen, dann wer das Wort an mehr Stellen trägt
+        # (Titel, Kapitel und Beschreibung: das Thema des Videos), dann die Relevanz des Index
+        return (tiers[video_id], 0 if video_id in exact else 1, -len(found[video_id]), scores.get(video_id, 0.0))
 
     order = sorted(candidates, key=lambda video_id: (rank(video_id), video_id))
     named = in_field["kanal"] - excluded

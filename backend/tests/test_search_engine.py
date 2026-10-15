@@ -103,6 +103,13 @@ async def test_titel_vor_kapitel_vor_beschreibung(test_db):
     assert found["chap0000001"] == ["kapitel"] and found["desc0000001"] == ["beschreibung"]
 
 
+async def test_mehr_fundstellen_vor_kurzem_titel(test_db):
+    await _video(test_db, "kurz0000001", "Brauchen wir die Kernfusion")
+    await _video(test_db, "voll0000001", "Kernfusion: Löst sie alle Probleme?", description="Alles über Kernfusion")
+    await test_db.execute("INSERT INTO chapters (video_id, title, start_time) VALUES ('voll0000001', 'Wie effizient ist Kernfusion?', 10)")
+    assert await _ids("Kernfusion") == ["voll0000001", "kurz0000001"]
+
+
 async def test_ganzes_wort_vor_wortanfang(test_db):
     await _video(test_db, "anf00000001", "Fusionskraftwerk gebaut")
     await _video(test_db, "gnz00000001", "Fusion verstehen")
