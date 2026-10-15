@@ -11,6 +11,17 @@
   import { formatDuration } from '../../utils/format.js';
 
   let track = $derived(player.current);
+  let barEl = $state(null);
+
+  // Höhe der Leiste als --tv-spielerleiste auf :root (0px, wenn sie fehlt):
+  // fest oder haftend platzierte Bereiche ziehen sie ab und verschwinden nie darunter
+  $effect(() => {
+    const root = document.documentElement.style;
+    if (!barEl) { root.setProperty('--tv-spielerleiste', '0px'); return; }
+    const observer = new ResizeObserver(() => root.setProperty('--tv-spielerleiste', `${Math.round(barEl.offsetHeight)}px`));
+    observer.observe(barEl);
+    return () => { observer.disconnect(); root.setProperty('--tv-spielerleiste', '0px'); };
+  });
   let progress = $derived(player.duration ? player.time / player.duration : 0);
   const REPEAT_TITLES = { off: 'Wiederholen aus', all: 'Alle wiederholen', one: 'Diesen Titel wiederholen' };
 
@@ -54,7 +65,7 @@
 </script>
 
 {#if track}
-  <div class="spieler">
+  <div class="spieler" bind:this={barEl}>
     <div class="links">
       <button class="cover" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Läuft gerade">
         <img src={api.thumbnailUrl(track.id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />

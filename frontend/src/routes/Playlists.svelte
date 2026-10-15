@@ -1,508 +1,592 @@
 <!--
-  TubeVault – Playlists v1.6.0
-  Playlist-Verwaltung: Erstellen, Abspielen, Videos hinzufügen, Drag&Drop Sortieren.
-  v1.6.0: Hover-Buttons im Feed-Stil (zentral, gross, weiss) via global.css
-  © HalloWelt42 – Private Nutzung
+  Playlists (Entwurf mockups/playlists.html)
+  Übersicht: Kacheln mit Bild aus den ersten Videos, Fortschritt, Abspielen,
+  Zufällig und Menü; Suche, Sortierung, Stand; Serien erkennen, neu anlegen.
+  Playlist: Weiter mit der nächsten Folge, Zufällig, Von vorn, Menü
+  (Umbenennen, Quick-Playlist, Wiederholen, Ton, ZIP, Kopie, Löschen),
+  Steuerleiste, Umordnen per Ziehen, Auswahl, Videos aus der Bibliothek
+  hinzufügen. Geöffnet wird über ?open=<id> (&play=1 spielt gleich ab).
 -->
 <script>
+  import { onMount, untrack } from 'svelte';
   import { api } from '../lib/api/client.js';
-  import SeriesProposals from '../lib/components/common/SeriesProposals.svelte';
-  import { route, navigate } from '../lib/router/router.js';
+  import { route, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { formatDuration, formatSize, formatDateRelative, formatViews } from '../lib/utils/format.js';
-  import { startQueue } from '../lib/stores/playlistQueue.js';
+  import { playlistQueue } from '../lib/stores/playlistQueue.js';
+  import { musicPlayer } from '../lib/stores/musicPlayer.svelte.js';
   import { quickPlaylist, pinPlaylist, unpinPlaylist } from '../lib/stores/quickPlaylist.js';
-  import LikeBar from '../lib/components/common/LikeBar.svelte';
-  import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
-  import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
+  import { formatDuration } from '../lib/utils/format.js';
+  import { onVideoMutation } from '../lib/utils/videoMutations.js';
+  import { stateChips, filterItems, sortItems, moveItem, continueIndex, totalTime } from '../lib/utils/collection.js';
+  import { playCollection, continueCollection, listenCollection, playAfterCurrent } from '../lib/utils/collectionPlay.js';
+  import PageHeader from '../lib/components/common/PageHeader.svelte';
+  import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
+  import ActionMenu from '../lib/components/common/ActionMenu.svelte';
+  import SeriesProposals from '../lib/components/common/SeriesProposals.svelte';
+  import CollectionBar from '../lib/components/collection/CollectionBar.svelte';
+  import VideoRow from '../lib/components/collection/VideoRow.svelte';
 
-  function togglePin(pl) {
-    if ($quickPlaylist?.id === pl.id) {
-      unpinPlaylist();
-      toast.info(`📌 „${pl.name}" losgelöst`);
-    } else {
-      pinPlaylist(pl.id, pl.name);
-      toast.success(`📌 „${pl.name}" als Quick-Playlist`);
-    }
-  }
+  const OVERVIEW_SORTS = [
+    { key: 'zuletzt', label: 'Zuletzt gespielt' }, { key: 'neu', label: 'Neu angelegt' },
+    { key: 'name', label: 'Name' }, { key: 'groesse', label: 'Größe' },
+  ];
+  const DETAIL_SORTS = [
+    { key: 'eigene', label: 'Eigene Reihenfolge', title: 'Wie angeordnet - per Ziehen änderbar' },
+    { key: 'titel', label: 'Titel' }, { key: 'dauer', label: 'Dauer' }, { key: 'kanal', label: 'Kanal' },
+  ];
+  const OVERVIEW_ORDER = {
+    zuletzt: (a, b) => (b.last_played || '').localeCompare(a.last_played || '') || (b.created_at || '').localeCompare(a.created_at || ''),
+    neu: (a, b) => (b.created_at || '').localeCompare(a.created_at || ''),
+    name: (a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' }),
+    groesse: (a, b) => (b.video_count || 0) - (a.video_count || 0),
+  };
+  const progressOf = (pl) => {
+    const count = pl.video_count || 0, done = pl.finished_count || 0, started = pl.started_count || 0;
+    return { count, done, started, key: !count ? '' : done >= count ? 'fertig' : done || started ? 'angefangen' : 'ungesehen' };
+  };
 
+  // ── Übersicht ──
   let playlists = $state([]);
-  let selectedPl = $state(null);
-  let plVideos = $state([]);
   let loading = $state(true);
-
-  // Create
-  let showCreate = $state(false);
+  let overSearch = $state('');
+  let overSort = $state('zuletzt');
+  let overState = $state('');
   let showSeries = $state(false);
+  let creating = $state(false);
   let newName = $state('');
   let newDesc = $state('');
 
-  // Edit
-  let editingPl = $state(null);
-  let editName = $state('');
-  let editDesc = $state('');
-
-  // Add Video
-  let showAddVideo = $state(false);
-  let addSearch = $state('');
+  // ── Playlist ──
+  let openId = $state(null);
+  let detail = $state(null);           // Sammlung playlist:<id>
+  let meta = $state(null);             // Eintrag aus der Übersicht (Beschreibung ...)
+  let search = $state('');
+  let stateFilter = $state('');
+  let sort = $state('eigene');
+  let repeat = $state(false);
+  let selecting = $state(false);
+  let selected = $state(new Set());
+  let editing = $state(null);          // { name, description }
+  let adding = $state(false);
+  let addQuery = $state('');
   let addResults = $state([]);
-  let addSearching = $state(false);
-  let addSearchTimer = null;
+  let addTimer = null;
+  let dragFrom = $state(null);
+  let dropAt = $state(null);
+  let menu;
 
-  // Drag & Drop
-  let dragIdx = $state(null);
-  let dragOverIdx = $state(null);
+  let overview = $derived(playlists
+    .filter(pl => (!overSearch.trim() || `${pl.name} ${pl.description || ''}`.toLocaleLowerCase('de').includes(overSearch.trim().toLocaleLowerCase('de')))
+      && (!overState || progressOf(pl).key === overState))
+    .sort(OVERVIEW_ORDER[overSort]));
+  let overCounts = $derived(playlists.reduce((acc, pl) => { const k = progressOf(pl).key; if (k) acc[k] = (acc[k] || 0) + 1; return acc; }, {}));
+  let overInfo = $derived(`${playlists.length} Playlists · ${playlists.reduce((s, pl) => s + (pl.video_count || 0), 0).toLocaleString('de-DE')} Videos`);
+
+  let source = $derived(openId ? `playlist:${openId}` : null);
+  let items = $derived(detail?.items || []);
+  let shown = $derived(sortItems(filterItems(items, { search, state: stateFilter }), sort));
+  let canOrder = $derived(sort === 'eigene' && !search && !stateFilter && !selecting);
+  let selectedIds = $derived(shown.filter(i => selected.has(i.id)).map(i => i.id));
+  let nextIndex = $derived(continueIndex(items));
+  let queueActive = $derived($playlistQueue.active);
+  let detailInfo = $derived(detail ? [
+    `${items.length} ${items.length === 1 ? 'Video' : 'Videos'}`,
+    detail.duration ? totalTime(detail.duration) : null,
+    detail.counts.finished ? `${detail.counts.finished} gesehen` : null,
+  ].filter(Boolean).join(' · ') : null);
 
   async function loadPlaylists() {
-    loading = true;
-    try {
-      const res = await api.getPlaylists();
-      playlists = res.playlists || res || [];
-    } catch { toast.error('Playlists laden fehlgeschlagen'); }
+    try { playlists = await api.getPlaylists(); } catch { toast.error('Playlists laden fehlgeschlagen'); }
     loading = false;
+    if (openId) meta = playlists.find(pl => pl.id === openId) || meta;
   }
 
-  async function selectPlaylist(pl) {
-    selectedPl = pl;
-    showAddVideo = false;
-    addSearch = '';
-    addResults = [];
-    try {
-      const res = await api.getPlaylist(pl.id);
-      plVideos = res.videos || [];
-    } catch (e) { toast.error(e.message); plVideos = []; }
+  async function loadDetail() {
+    if (!openId) return;
+    try { detail = await api.getCollection(`playlist:${openId}`); }
+    catch (e) { toast.error(e.message); close(); }
   }
 
+  async function openPlaylist(id, { play = false } = {}) {
+    if (openId !== Number(id)) {
+      openId = Number(id);
+      detail = null;
+      search = ''; stateFilter = ''; sort = 'eigene'; selecting = false; selected = new Set(); adding = false; editing = null;
+    }
+    meta = playlists.find(pl => pl.id === Number(id)) || null;
+    await loadDetail();
+    if (play && items.length) playCollection(source, detail.title, items);
+  }
+
+  function open(pl) { updateParams({ open: pl.id, play: null }); }
+  function close() { updateParams({ open: null, play: null }); }
+
+  // ── Abspielen ──
+  const playAt = (item) => playCollection(source, detail.title, shown, shown.indexOf(item), { resume: item.state === 'started', repeat });
+  const playFromStart = () => playCollection(source, detail.title, shown, 0, { repeat });
+  const playShuffled = () => playCollection(source, detail.title, shown, 0, { shuffle: true, repeat });
+  const playNext = () => continueCollection(source, detail.title, items, { repeat });
+
+  async function quickPlay(pl, how) {
+    const collection = await api.getCollection(`playlist:${pl.id}`).catch((e) => { toast.error(e.message); return null; });
+    if (!collection) return;
+    if (!collection.items.length) { toast.info('Die Playlist ist leer'); return; }
+    const src = `playlist:${pl.id}`;
+    if (how === 'zufall') playCollection(src, collection.title, collection.items, 0, { shuffle: true });
+    else if (how === 'weiter') continueCollection(src, collection.title, collection.items);
+    else playCollection(src, collection.title, collection.items);
+  }
+
+  function download(url) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '';
+    link.click();
+  }
+
+  // ── Playlists verwalten ──
   async function createPlaylist() {
-    if (!newName.trim()) return;
+    const name = newName.trim();
+    if (!name) return;
     try {
-      await api.createPlaylist({ name: newName.trim(), description: newDesc.trim() || undefined });
-      toast.success(`"${newName}" erstellt`);
-      newName = ''; newDesc = ''; showCreate = false;
+      const created = await api.createPlaylist({ name, description: newDesc.trim() || undefined });
+      newName = ''; newDesc = ''; creating = false;
+      await loadPlaylists();
+      open({ id: created.id });
+    } catch (e) { toast.error(e.message); }
+  }
+
+  async function saveEdit() {
+    if (!editing?.name.trim()) return;
+    try {
+      await api.updatePlaylist(openId, { name: editing.name.trim(), description: editing.description.trim() || null });
+      editing = null;
+      await loadPlaylists();
+      await loadDetail();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  function togglePin(pl) {
+    if ($quickPlaylist?.id === pl.id) { unpinPlaylist(); toast.info(`"${pl.name}" ist nicht mehr Quick-Playlist`); }
+    else { pinPlaylist(pl.id, pl.name); toast.success(`"${pl.name}" ist jetzt Quick-Playlist`); }
+  }
+
+  async function copyPlaylist(pl) {
+    try {
+      const copy = await api.copyPlaylist(pl.id);
+      toast.success(`"${copy.name}" angelegt`);
       await loadPlaylists();
     } catch (e) { toast.error(e.message); }
   }
 
-  async function deletePlaylist(id) {
+  // Löschen mit Rückgängig: die Playlist entsteht mit Namen und Reihenfolge neu
+  async function deletePlaylist(pl) {
+    const content = await api.getCollection(`playlist:${pl.id}`).catch(() => null);
     try {
-      await api.deletePlaylist(id);
-      if (selectedPl?.id === id) { selectedPl = null; plVideos = []; }
-      if ($quickPlaylist?.id === id) { unpinPlaylist(); }
-      toast.success('Playlist gelöscht');
+      await api.deletePlaylist(pl.id);
+      if ($quickPlaylist?.id === pl.id) unpinPlaylist();
+      if (openId === pl.id) close();
       await loadPlaylists();
-    } catch (e) { toast.error(e.message); }
-  }
-
-  function startEditPl(pl) {
-    editingPl = pl.id;
-    editName = pl.name;
-    editDesc = pl.description || '';
-  }
-
-  async function saveEditPl() {
-    if (!editName.trim() || !editingPl) return;
-    try {
-      await api.updatePlaylist(editingPl, { name: editName.trim(), description: editDesc.trim() || null });
-      toast.success('Aktualisiert');
-      const eid = editingPl;
-      editingPl = null;
+    } catch (e) { toast.error(e.message); return; }
+    toast.undo(`"${pl.name}" gelöscht`, async () => {
+      const created = await api.createPlaylist({ name: pl.name, description: pl.description || undefined });
+      for (const item of content?.items || []) await api.addToPlaylist(created.id, item.id).catch(() => {});
       await loadPlaylists();
-      if (selectedPl?.id === eid) selectedPl = { ...selectedPl, name: editName, description: editDesc };
-    } catch (e) { toast.error(e.message); }
+    });
   }
 
-  async function removeVideo(videoId) {
-    if (!selectedPl) return;
+  // ── Videos der Playlist ──
+  async function saveOrder(ids) {
+    detail = { ...detail, items: ids.map(id => items.find(i => i.id === id)) };
+    try { await api.reorderPlaylist(openId, ids); } catch { toast.error('Reihenfolge speichern fehlgeschlagen'); loadDetail(); }
+  }
+
+  async function removeItems(ids) {
+    const before = items.map(i => i.id);
+    const plId = openId;
+    try { for (const id of ids) await api.removeFromPlaylist(plId, id); } catch (e) { toast.error(e.message); }
+    selected = new Set();
+    await Promise.all([loadDetail(), loadPlaylists()]);
+    toast.undo(ids.length === 1 ? 'Video aus der Playlist entfernt' : `${ids.length} Videos aus der Playlist entfernt`, async () => {
+      for (const id of ids) await api.addToPlaylist(plId, id).catch(() => {});
+      await api.reorderPlaylist(plId, before);
+      await Promise.all([loadDetail(), loadPlaylists()]);
+    });
+  }
+
+  async function setWatched(ids, watched) {
+    try { await api.setWatched(ids, watched); } catch (e) { toast.error(e.message); }
+    selected = new Set();
+    await Promise.all([loadDetail(), loadPlaylists()]);
+  }
+
+  async function addToOther(ids, pl) {
+    let added = 0;
+    for (const id of ids) { try { await api.addToPlaylist(pl.id, id); added++; } catch { /* schon drin */ } }
+    toast.success(`${added} zu "${pl.name}" hinzugefügt`);
+    loadPlaylists();
+  }
+
+  async function addFavorites(ids) {
+    for (const id of ids) await api.addFavorite({ video_id: id, list_name: 'Standard' }).catch(() => {});
+    toast.success(ids.length === 1 ? 'Zu den Favoriten' : `${ids.length} Videos zu den Favoriten`);
+  }
+
+  const otherPlaylists = (ids) => playlists.filter(pl => pl.id !== openId)
+    .map(pl => ({ icon: 'fa-list-ul', label: pl.name, hint: String(pl.video_count ?? ''), run: () => addToOther(ids, pl) }));
+
+  // ── Hinzufügen aus der Bibliothek ──
+  function onAddInput() {
+    clearTimeout(addTimer);
+    if (!addQuery.trim()) { addResults = []; return; }
+    addTimer = setTimeout(async () => {
+      try {
+        const res = await api.searchLocal(addQuery, { per_page: 30 });
+        const present = new Set(items.map(i => i.id));
+        addResults = (res.videos || []).filter(v => !present.has(v.id));
+      } catch { addResults = []; }
+    }, 300);
+  }
+
+  async function addVideo(video) {
     try {
-      await api.removeFromPlaylist(selectedPl.id, videoId);
-      plVideos = plVideos.filter(v => v.id !== videoId);
-      toast.info('Video entfernt');
-    } catch (e) { toast.error(e.message); }
+      await api.addToPlaylist(openId, video.id);
+      addResults = addResults.filter(v => v.id !== video.id);
+      await Promise.all([loadDetail(), loadPlaylists()]);
+    } catch (e) { toast.error(e.message?.includes('bereits') ? 'Schon in der Playlist' : e.message); }
   }
 
-  function playVideo(id) {
-    navigate(`/watch/${id}`);
+  // ── Menüs ──
+  function playlistMenu(event, pl) {
+    const pinned = $quickPlaylist?.id === pl.id;
+    menu.open(event, pl.name, [
+      { icon: 'fa-folder-open', label: 'Öffnen', run: () => open(pl) },
+      { icon: 'fa-play', label: 'Von vorn abspielen', run: () => quickPlay(pl, 'vorn') },
+      { icon: 'fa-rotate-left', label: 'Weiterschauen', run: () => quickPlay(pl, 'weiter') },
+      { icon: 'fa-shuffle', label: 'Zufällig', run: () => quickPlay(pl, 'zufall') },
+      { icon: 'fa-headphones', label: 'Als Ton hören', run: () => listenCollection(`playlist:${pl.id}`) },
+      { icon: 'fa-file-zipper', label: 'Ton als ZIP herunterladen', run: () => download(api.musicZipUrl(`playlist:${pl.id}`)) },
+      { trenner: true },
+      { icon: 'fa-thumbtack', label: pinned ? 'Nicht mehr Quick-Playlist' : 'Als Quick-Playlist anheften', run: () => togglePin(pl) },
+      { icon: 'fa-copy', label: 'Kopie anlegen', run: () => copyPlaylist(pl) },
+      { trenner: true },
+      { icon: 'fa-trash-can', label: 'Playlist löschen', danger: true, run: () => deletePlaylist(pl) },
+    ]);
   }
 
-  function playAll(startIdx = 0) {
-    if (plVideos.length === 0) return;
-    startQueue(selectedPl.id, selectedPl.name, plVideos, startIdx);
-    navigate(`/watch/${plVideos[startIdx].id}`);
+  function detailMenu(event) {
+    const pl = meta || { id: openId, name: detail.title };
+    const pinned = $quickPlaylist?.id === openId;
+    menu.open(event, detail.title, [
+      { icon: 'fa-pen', label: 'Umbenennen und beschreiben', run: () => { editing = { name: detail.title, description: meta?.description || '' }; } },
+      { icon: 'fa-thumbtack', label: pinned ? 'Nicht mehr Quick-Playlist' : 'Als Quick-Playlist anheften', run: () => togglePin(pl) },
+      { icon: 'fa-repeat', label: 'Endlos wiederholen', hint: repeat ? 'an' : 'aus', run: () => { repeat = !repeat; } },
+      { icon: 'fa-headphones', label: 'Als Ton hören', run: () => listenCollection(source) },
+      { icon: 'fa-file-zipper', label: 'Ton als ZIP herunterladen', run: () => download(api.musicZipUrl(source)) },
+      { icon: 'fa-copy', label: 'Kopie anlegen', run: () => copyPlaylist(pl) },
+      { trenner: true },
+      { icon: 'fa-eye-slash', label: 'Alles als ungesehen', run: () => setWatched(items.map(i => i.id), false) },
+      { icon: 'fa-trash-can', label: 'Playlist löschen', danger: true, run: () => deletePlaylist(pl) },
+    ]);
   }
 
-  function back() { selectedPl = null; plVideos = []; showAddVideo = false; }
-
-  // ─── Drag & Drop Reorder ───
-  function onDragStart(e, idx) {
-    dragIdx = idx;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', idx.toString());
-  }
-  function onDragOver(e, idx) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragOverIdx = idx; }
-  function onDragLeave() { dragOverIdx = null; }
-  async function onDrop(e, idx) {
-    e.preventDefault();
-    if (dragIdx === null || dragIdx === idx) { dragIdx = null; dragOverIdx = null; return; }
-    const moved = plVideos.splice(dragIdx, 1)[0];
-    plVideos.splice(idx, 0, moved);
-    plVideos = [...plVideos];
-    dragIdx = null; dragOverIdx = null;
-    try { await api.reorderPlaylist(selectedPl.id, plVideos.map(v => v.id)); }
-    catch { toast.error('Sortierung speichern fehlgeschlagen'); }
-  }
-  function onDragEnd() { dragIdx = null; dragOverIdx = null; }
-
-  // ─── Add Video Search ───
-  function onAddSearchInput() {
-    clearTimeout(addSearchTimer);
-    if (!addSearch.trim()) { addResults = []; return; }
-    addSearchTimer = setTimeout(searchVideos, 300);
-  }
-  async function searchVideos() {
-    if (!addSearch.trim()) return;
-    addSearching = true;
-    try {
-      const res = await api.searchLocal(addSearch, { per_page: 20 });
-      const existing = new Set(plVideos.map(v => v.id));
-      addResults = (res.videos || []).filter(v => !existing.has(v.id));
-    } catch { addResults = []; }
-    addSearching = false;
-  }
-  async function addVideoToPlaylist(videoId) {
-    if (!selectedPl) return;
-    try {
-      await api.addToPlaylist(selectedPl.id, videoId);
-      addResults = addResults.filter(v => v.id !== videoId);
-      toast.success('Hinzugefügt');
-      const res = await api.getPlaylist(selectedPl.id);
-      plVideos = res.videos || [];
-    } catch (e) {
-      if (e.message?.includes('bereits')) toast.info('Bereits in Playlist');
-      else toast.error(e.message);
-    }
+  function itemMenu(event, item) {
+    const ids = [item.id];
+    const index = items.indexOf(item);
+    menu.open(event, item.title, [
+      { icon: item.state === 'started' ? 'fa-rotate-left' : 'fa-play', label: item.state === 'started' ? 'Weiterschauen' : 'Abspielen', run: () => playAt(item) },
+      ...(queueActive ? [{ icon: 'fa-forward', label: 'Als Nächstes', run: () => playAfterCurrent(item) }] : []),
+      { icon: 'fa-headphones', label: 'Ab hier als Ton hören', run: () => musicPlayer.playSource(`sammlung:${source}`, { start: item.id }) },
+      { trenner: true },
+      { icon: 'fa-list-ul', label: 'Zu anderer Playlist', items: otherPlaylists(ids) },
+      { icon: 'fa-heart', label: 'Zu den Favoriten', run: () => addFavorites(ids) },
+      ...(canOrder && index > 0 ? [{ icon: 'fa-arrow-up', label: 'Ganz nach oben', run: () => saveOrder(moveItem(items.map(i => i.id), index, 0)) }] : []),
+      ...(canOrder && index < items.length - 1 ? [{ icon: 'fa-arrow-down', label: 'Ganz nach unten', run: () => saveOrder(moveItem(items.map(i => i.id), index, items.length)) }] : []),
+      item.state === 'finished'
+        ? { icon: 'fa-eye-slash', label: 'Als neu markieren', run: () => setWatched(ids, false) }
+        : { icon: 'fa-check', label: 'Als gesehen markieren', run: () => setWatched(ids, true) },
+      { trenner: true },
+      { icon: 'fa-xmark', label: 'Aus der Playlist entfernen', danger: true, run: () => removeItems(ids) },
+    ]);
   }
 
-  let totalDuration = $derived(plVideos.reduce((s, v) => s + (v.duration || 0), 0));
+  function toggle(item) {
+    const next = new Set(selected);
+    next.has(item.id) ? next.delete(item.id) : next.add(item.id);
+    selected = next;
+  }
 
-  $effect(() => { loadPlaylists(); });
+  function onDrop(index) {
+    if (dragFrom !== null && dragFrom !== index) saveOrder(moveItem(items.map(i => i.id), dragFrom, index));
+    dragFrom = null; dropAt = null;
+  }
 
-  // Auto-open Playlist aus URL ?open=id
+  // Geöffnete Playlist folgt der Adresse (?open=<id>&play=1)
   $effect(() => {
-    const openId = $route.params.open;
-    const autoPlay = $route.params.play === '1';
-    if (openId && playlists.length >= 0 && !loading) {
-      let pl = playlists.find(p => String(p.id) === String(openId));
-      if (pl && selectedPl?.id !== pl.id) {
-        (async () => {
-          await selectPlaylist(pl);
-          if (autoPlay && plVideos.length > 0) playAll(0);
-        })();
-      } else if (!pl && selectedPl?.id !== Number(openId)) {
-        // Playlist nicht in Liste (z.B. channel-only) – direkt laden
-        (async () => {
-          try {
-            const res = await api.getPlaylist(openId);
-            if (res) {
-              const fakePl = { id: Number(openId), name: res.name || res.title || 'Playlist', ...res };
-              await selectPlaylist(fakePl);
-              if (autoPlay && plVideos.length > 0) playAll(0);
-            }
-          } catch { /* Playlist nicht gefunden */ }
-        })();
-      }
-    }
+    const id = $route.params.open;
+    const play = $route.params.play === '1';
+    untrack(() => {
+      if (id) openPlaylist(id, { play });
+      else { openId = null; detail = null; }
+    });
+  });
+
+  onMount(() => {
+    loadPlaylists();
+    return onVideoMutation(() => { loadPlaylists(); loadDetail(); });
   });
 </script>
 
-<!-- Beide Ansichten: fester Kopf mit Titel und Steuerung, darunter rollt nur die Liste -->
 <div class="tv-seite">
-  {#if selectedPl}
-   <!-- ═══ Playlist Detail ═══ -->
-   <div class="tv-seitenkopf">
-    <div class="detail-header">
-      <button class="btn-back" onclick={back}><i class="fa-solid fa-arrow-left"></i></button>
-      <div class="detail-info">
-        <h1>{selectedPl.name}</h1>
-        {#if selectedPl.description}<p class="detail-desc">{selectedPl.description}</p>{/if}
-        <span class="detail-meta">
-          {plVideos.length} Video{plVideos.length !== 1 ? 's' : ''}
-          {#if totalDuration > 0} · {formatDuration(totalDuration)}{/if}
-        </span>
-      </div>
-      <div class="detail-actions">
-        {#if plVideos.length > 0}
-          <button class="btn-play-all" onclick={() => playAll(0)}><i class="fa-solid fa-play"></i> Alle abspielen</button>
-          <a class="btn-add-video" href={api.musicZipUrl(`playlist:${selectedPl.id}`)} download
-             title="Alle Videos der Playlist nur als Ton in einem ZIP (wie geladen, ohne Werbestellen)">
-            <i class="fa-solid fa-file-zipper"></i> Ton als ZIP</a>
+  {#if openId}
+    <!-- ═══ Eine Playlist ═══ -->
+    <div class="tv-seitenkopf">
+      <PageHeader title={detail?.title || meta?.name || 'Playlist'} info={detailInfo} onBack={close}>
+        {#if items.length}
+          {#if nextIndex > 0}
+            <button class="tv-knopf" onclick={playNext} title="An der gemerkten Stelle bzw. mit dem ersten ungesehenen Video">
+              <i class="fa-solid fa-rotate-left"></i> Weiter mit Folge <span class="zahl">{nextIndex + 1}</span></button>
+          {/if}
+          <button class="tv-knopf" onclick={playShuffled}><i class="fa-solid fa-shuffle"></i> Zufällig</button>
+          <button class="tv-knopf haupt" onclick={playFromStart}><i class="fa-solid fa-play"></i> {nextIndex > 0 ? 'Von vorn' : 'Abspielen'}</button>
         {/if}
-        <button class="btn-add-video" onclick={() => showAddVideo = !showAddVideo}>
-          <i class="fa-solid fa-plus"></i> Video hinzufügen
-        </button>
-      </div>
+        {#if detail}
+          <button class="tv-knopf symbol" class:aktiv={repeat} onclick={detailMenu}
+                  title="Mehr: Umbenennen, Quick-Playlist, Wiederholen, Ton, Kopie, Löschen">
+            <i class="fa-solid fa-ellipsis"></i></button>
+        {/if}
+      </PageHeader>
+
+      {#if editing}
+        <form class="tv-filter bearbeiten" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
+          <input class="tv-eingabe name" bind:value={editing.name} placeholder="Name" maxlength="120" />
+          <input class="tv-eingabe beschreibung" bind:value={editing.description} placeholder="Beschreibung (optional)" />
+          <button class="tv-knopf klein haupt" disabled={!editing.name.trim()}>Speichern</button>
+          <button type="button" class="tv-knopf klein ohne" onclick={() => editing = null}>Abbrechen</button>
+        </form>
+      {:else if meta?.description}
+        <p class="beschreibung">{meta.description}</p>
+      {/if}
+
+      {#if selecting}
+        <BatchToolbar selectedCount={selectedIds.length} totalCount={shown.length}
+                      onSelectAll={() => selected = new Set(shown.map(i => i.id))} onDone={() => { selecting = false; selected = new Set(); }}>
+          <button class="tv-knopf klein" onclick={() => playCollection(source, detail.title, shown.filter(i => selected.has(i.id)))}>
+            <i class="fa-solid fa-play"></i> Abspielen</button>
+          <button class="tv-knopf klein" onclick={(e) => menu.open(e, 'Zu anderer Playlist', otherPlaylists(selectedIds))}>
+            <i class="fa-solid fa-list-ul"></i> Zu anderer Playlist</button>
+          <button class="tv-knopf klein" onclick={() => setWatched(selectedIds, true)}><i class="fa-solid fa-check"></i> Als gesehen</button>
+          <button class="tv-knopf klein" onclick={() => setWatched(selectedIds, false)}><i class="fa-solid fa-eye-slash"></i> Als neu</button>
+          <button class="tv-knopf klein gefahr" onclick={() => removeItems(selectedIds)}><i class="fa-solid fa-xmark"></i> Aus der Playlist</button>
+        </BatchToolbar>
+      {:else if detail}
+        <CollectionBar bind:search placeholder="In der Playlist suchen"
+                       states={stateChips(detail.counts, items.length)} bind:state={stateFilter}
+                       sorts={DETAIL_SORTS} bind:sort onSelect={items.length ? () => { selecting = true; adding = false; } : null}>
+          {#snippet rechts()}
+            <button class="tv-knopf klein" class:aktiv={adding} onclick={() => { adding = !adding; addQuery = ''; addResults = []; }}>
+              <i class="fa-solid fa-plus"></i> Videos hinzufügen</button>
+          {/snippet}
+        </CollectionBar>
+      {/if}
     </div>
 
-    <!-- Add Video Panel -->
-    {#if showAddVideo}
-      <div class="add-video-panel">
-        <div class="av-search-box">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" placeholder="Video in Bibliothek suchen…" bind:value={addSearch} oninput={onAddSearchInput} />
-          {#if addSearching}<i class="fa-solid fa-spinner fa-spin"></i>{/if}
-        </div>
-        {#if addResults.length > 0}
-          <div class="av-results">
-            {#each addResults as v (v.id)}
-              <div class="av-row">
-                <div class="av-thumb">
-                  <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" onerror={(e) => e.target.style.display='none'} />
-                </div>
-                <div class="av-info">
-                  <span class="av-title">{v.title}</span>
-                  <span class="av-channel">{v.channel_name || '–'}</span>
-                </div>
-                <button class="av-add-btn" onclick={() => addVideoToPlaylist(v.id)} title="Hinzufügen">
-                  <i class="fa-solid fa-plus"></i>
-                </button>
-              </div>
+    <div class="inhalt" class:tv-spalten={adding}>
+      <div class="tv-rollfeld" data-scroll-root>
+        {#if !detail}
+          <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+        {:else if !items.length}
+          <div class="leer-gross">
+            <i class="fa-solid fa-list-ul"></i>
+            <h2>Noch keine Videos</h2>
+            <p>Über "Videos hinzufügen" in der Bibliothek suchen und mit + anfügen.</p>
+            {#if !adding}<button class="tv-knopf" onclick={() => adding = true}><i class="fa-solid fa-plus"></i> Videos hinzufügen</button>{/if}
+          </div>
+        {:else if !shown.length}
+          <div class="tv-leer">Nichts gefunden.</div>
+        {:else}
+          <div class="zeilen" role="list">
+            {#each shown as item, i (item.id)}
+              {#if dropAt === i && dragFrom !== null && dragFrom !== i && dragFrom !== i - 1}<div class="einfuegen"></div>{/if}
+              <VideoRow {item} nr={i + 1} mode={selecting ? 'auswahl' : canOrder ? 'ordnen' : null}
+                        selected={selected.has(item.id)} lifted={dragFrom === i}
+                        playing={queueActive && $playlistQueue.source === source && $playlistQueue.videos[$playlistQueue.currentIndex]?.id === item.id}
+                        onPlay={playAt} onNext={queueActive ? playAfterCurrent : null} onMenu={itemMenu} onToggle={toggle}
+                        draggable={canOrder}
+                        ondragstart={() => dragFrom = i}
+                        ondragover={(e) => { if (dragFrom !== null) { e.preventDefault(); dropAt = i; } }}
+                        ondrop={() => onDrop(i)}
+                        ondragend={() => { dragFrom = null; dropAt = null; }} />
             {/each}
+            {#if canOrder}
+              <div class="ende" role="presentation"
+                   ondragover={(e) => { if (dragFrom !== null) { e.preventDefault(); dropAt = shown.length; } }}
+                   ondrop={() => onDrop(shown.length)}>
+                {#if dropAt === shown.length && dragFrom !== null}<div class="einfuegen"></div>{/if}
+              </div>
+            {/if}
           </div>
-        {:else if addSearch.trim() && !addSearching}
-          <div class="av-empty">Keine passenden Videos gefunden.</div>
         {/if}
       </div>
-    {/if}
-   </div>
 
-   <!-- Video Liste mit Drag & Drop -->
-   <div class="tv-rollfeld" data-scroll-root>
-    {#if plVideos.length === 0}
-      <div class="empty">
-        <i class="fa-solid fa-music empty-icon"></i>
-        <p>Keine Videos in dieser Playlist.</p>
-        <p class="empty-hint">Klicke „Video hinzufügen" oder nutze <i class="fa-solid fa-list-ul"></i> im Player.</p>
-      </div>
-    {:else}
-      <div class="pl-video-list">
-        {#each plVideos as v, i (v.id)}
-          <div class="pl-video-item" class:dragging={dragIdx === i} class:drag-over={dragOverIdx === i}
-            draggable="true"
-            ondragstart={(e) => onDragStart(e, i)}
-            ondragover={(e) => onDragOver(e, i)}
-            ondragleave={onDragLeave}
-            ondrop={(e) => onDrop(e, i)}
-            ondragend={onDragEnd}>
-            <span class="pl-drag-handle" title="Zum Sortieren ziehen"><i class="fa-solid fa-grip-vertical"></i></span>
-            <span class="pl-index">{i + 1}</span>
-            <button class="pl-video-thumb" onclick={() => playAll(i)}>
-              <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" onerror={(e) => e.target.style.display='none'} />
-              {#if v.duration}<span class="duration">{formatDuration(v.duration)}</span>{/if}
-              {#if v.like_count && v.dislike_count != null}
-                <LikeBar likes={v.like_count} dislikes={v.dislike_count} mode="thumbnail" />
-              {/if}
-            </button>
-            <div class="pl-video-info">
-              <button class="pl-video-title" onclick={() => playAll(i)}>{v.title}</button>
-              <span class="pl-video-channel">{v.channel_name || 'Unbekannt'}</span>
-              <div class="pl-video-meta">
-                {#if v.view_count}<span>{formatViews(v.view_count)} Aufrufe</span>{/if}
-                {#if v.file_size}<span>{formatSize(v.file_size)}</span>{/if}
-                {#if v.like_count && v.dislike_count != null}
-                  <LikeBar likes={v.like_count} dislikes={v.dislike_count} mode="compact" />
-                {/if}
+      {#if adding}
+        <div class="tv-rollfeld hinzu" data-scroll-root>
+          <div class="tv-etikett">Aus der Bibliothek hinzufügen</div>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="tv-eingabe" type="search" bind:value={addQuery} oninput={onAddInput} placeholder="Titel oder Kanal suchen" autofocus />
+          {#each addResults as video (video.id)}
+            <div class="treffer">
+              <img src={api.thumbnailUrl(video.id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+              <div class="text">
+                <div class="t">{video.title}</div>
+                <div class="tv-leise tv-klein">{video.channel_name || ''}{#if video.duration} · <span class="zahl">{formatDuration(video.duration)}</span>{/if}</div>
               </div>
-            </div>
-            <button class="btn-remove" onclick={() => removeVideo(v.id)} title="Entfernen"><i class="fa-solid fa-xmark"></i></button>
-          </div>
-        {/each}
-      </div>
-    {/if}
-   </div>
-
-  {:else}
-   <!-- ═══ Playlist-Übersicht ═══ -->
-   <div class="tv-seitenkopf">
-    <div class="page-header">
-      <h1 class="page-title"><i class="fa-solid fa-list-ul"></i> Playlists</h1>
-      <button class="btn-create" onclick={() => showSeries = !showSeries}
-              title="Nummerierte Folgen in den Titeln finden und als Playlists anlegen">
-        <i class="fa-solid fa-layer-group"></i> Serien erkennen
-      </button>
-      <button class="btn-create" onclick={() => showCreate = !showCreate}><i class="fa-solid fa-plus"></i> Neue Playlist</button>
-    </div>
-
-    {#if showCreate}
-      <div class="create-form">
-        <input type="text" placeholder="Name" bind:value={newName} onkeydown={(e) => e.key === 'Enter' && createPlaylist()} />
-        <input type="text" placeholder="Beschreibung (optional)" bind:value={newDesc} />
-        <div class="create-actions">
-          <button class="btn-save" onclick={createPlaylist} disabled={!newName.trim()}>Erstellen</button>
-          <button class="btn-cancel" onclick={() => showCreate = false}>Abbrechen</button>
-        </div>
-      </div>
-    {/if}
-   </div>
-
-   <!-- Erkannte Serien sind eine lange Liste und rollen mit den Playlists -->
-   <div class="tv-rollfeld" data-scroll-root>
-    {#if showSeries}
-      <SeriesProposals onchange={loadPlaylists} />
-    {/if}
-
-    {#if loading}
-      <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Laden…</div>
-    {:else if playlists.length === 0}
-      <div class="empty">
-        <div class="empty-icon"><i class="fa-solid fa-music"></i></div>
-        <p>Noch keine Playlists erstellt.</p>
-      </div>
-    {:else}
-      <div class="playlist-grid">
-        {#each playlists as pl (pl.id)}
-          {#if editingPl === pl.id}
-            <div class="playlist-card editing">
-              <div class="pl-edit-form">
-                <input type="text" class="pl-edit-input" bind:value={editName} placeholder="Name" />
-                <input type="text" class="pl-edit-input" bind:value={editDesc} placeholder="Beschreibung" />
-                <div class="pl-edit-actions">
-                  <button class="btn-xs save" onclick={saveEditPl}><i class="fa-solid fa-check"></i></button>
-                  <button class="btn-xs" onclick={() => editingPl = null}><i class="fa-solid fa-xmark"></i></button>
-                </div>
-              </div>
+              <button class="tv-knopf klein haupt symbol" onclick={() => addVideo(video)} title="Hinten anfügen"><i class="fa-solid fa-plus"></i></button>
             </div>
           {:else}
-            <div class="playlist-card">
-              <div class="pl-cover">
-                {#if pl.cover_video_id}
-                  <img src={api.thumbnailUrl(pl.cover_video_id)} alt="" onerror={(e) => e.target.style.display='none'} />
-                {:else}
-                  <div class="pl-cover-fallback"><i class="fa-solid fa-music"></i></div>
+            <p class="tv-schwach tv-klein">{addQuery.trim() ? 'Keine weiteren Treffer.' : 'Gefundene Videos lassen sich mit + hinten anfügen.'}</p>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+  {:else}
+    <!-- ═══ Übersicht ═══ -->
+    <div class="tv-seitenkopf">
+      <PageHeader title="Playlists" icon="fa-solid fa-list-ul" info={loading ? null : overInfo}>
+        <button class="tv-knopf" class:aktiv={showSeries} onclick={() => showSeries = !showSeries}
+                title="Nummerierte Folgen in den Titeln finden und als Playlists anlegen">
+          <i class="fa-solid fa-layer-group"></i> Serien erkennen</button>
+        <button class="tv-knopf haupt" onclick={() => { creating = !creating; newName = ''; newDesc = ''; }}>
+          <i class="fa-solid fa-plus"></i> Neue Playlist</button>
+      </PageHeader>
+
+      {#if creating}
+        <form class="tv-filter bearbeiten" onsubmit={(e) => { e.preventDefault(); createPlaylist(); }}>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="tv-eingabe name" bind:value={newName} placeholder="Name der Playlist" maxlength="120" autofocus />
+          <input class="tv-eingabe beschreibung" bind:value={newDesc} placeholder="Beschreibung (optional)" />
+          <button class="tv-knopf klein haupt" disabled={!newName.trim()}>Anlegen</button>
+          <button type="button" class="tv-knopf klein ohne" onclick={() => creating = false}>Abbrechen</button>
+        </form>
+      {:else if playlists.length}
+        <CollectionBar bind:search={overSearch} placeholder="Playlists suchen"
+                       states={[{ key: '', label: 'Alle', count: playlists.length },
+                                { key: 'angefangen', label: 'Angefangen', count: overCounts.angefangen || 0 },
+                                { key: 'ungesehen', label: 'Ungesehen', count: overCounts.ungesehen || 0 },
+                                { key: 'fertig', label: 'Alles gesehen', count: overCounts.fertig || 0 }]}
+                       bind:state={overState} sorts={OVERVIEW_SORTS} bind:sort={overSort} />
+      {/if}
+    </div>
+
+    <div class="tv-rollfeld" data-scroll-root>
+      {#if showSeries}<div class="serien"><SeriesProposals onchange={loadPlaylists} /></div>{/if}
+
+      {#if loading}
+        <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+      {:else if !playlists.length}
+        <div class="leer-gross">
+          <i class="fa-solid fa-list-ul"></i>
+          <h2>Noch keine Playlists</h2>
+          <p>Eine neue Playlist anlegen oder Serien in den Titeln erkennen lassen.</p>
+        </div>
+      {:else if !overview.length}
+        <div class="tv-leer">Nichts gefunden.</div>
+      {:else}
+        <div class="pl-raster">
+          {#each overview as pl (pl.id)}
+            {@const p = progressOf(pl)}
+            <div class="pl-kachel">
+              <div class="pl-bild">
+                <button class="flaeche" onclick={() => open(pl)} aria-label="{pl.name} öffnen"></button>
+                {#each (pl.cover_ids || []).slice(0, 3) as id, i (id)}
+                  <img class:gross={i === 0} src={api.thumbnailUrl(id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+                {/each}
+                {#if !pl.cover_ids?.length}<i class="fa-solid fa-list-ul platzhalter"></i>{/if}
+                <div class="menge"><b class="zahl">{p.count}</b><span>Videos</span></div>
+                {#if $quickPlaylist?.id === pl.id}<span class="stift" title="Quick-Playlist"><i class="fa-solid fa-thumbtack"></i></span>{/if}
+                <button class="mehr" onclick={(e) => playlistMenu(e, pl)} title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
+                {#if p.count}
+                  <div class="los">
+                    {#if p.key === 'angefangen'}
+                      <button class="spielen" onclick={() => quickPlay(pl, 'weiter')}><i class="fa-solid fa-rotate-left"></i> Weiter</button>
+                    {:else}
+                      <button class="spielen" onclick={() => quickPlay(pl, 'vorn')}><i class="fa-solid fa-play"></i> Abspielen</button>
+                    {/if}
+                    <button onclick={() => quickPlay(pl, 'zufall')} title="Zufällig"><i class="fa-solid fa-shuffle"></i></button>
+                  </div>
                 {/if}
-                <HoverActionOverlay>
-                  <HoverActionBtn variant="success" onclick={() => selectPlaylist(pl)} title="Öffnen">
-                    <i class="fa-solid fa-play"></i>
-                  </HoverActionBtn>
-                  <HoverActionBtn variant={$quickPlaylist?.id === pl.id ? 'pinned' : 'later'}
-                                  onclick={() => togglePin(pl)}
-                                  title={$quickPlaylist?.id === pl.id ? 'Quick-Playlist lösen' : 'Als Quick-Playlist pinnen'}>
-                    <i class="fa-solid fa-thumbtack"></i>
-                  </HoverActionBtn>
-                  <HoverActionBtn variant="later" onclick={() => startEditPl(pl)} title="Bearbeiten">
-                    <i class="fa-solid fa-pen"></i>
-                  </HoverActionBtn>
-                  <HoverActionBtn variant="danger" onclick={() => deletePlaylist(pl.id)} title="Löschen">
-                    <i class="fa-solid fa-trash-can"></i>
-                  </HoverActionBtn>
-                </HoverActionOverlay>
               </div>
-              <button class="pl-card-info" onclick={() => selectPlaylist(pl)}>
-                <h3 class="pl-name">{pl.name}</h3>
-                {#if pl.description}<p class="pl-desc">{pl.description}</p>{/if}
-                <div class="pl-card-meta">
-                  <span>{pl.video_count || 0} Videos</span>
-                  {#if pl.total_duration}<span>· {formatDuration(pl.total_duration)}</span>{/if}
-                  {#if pl.source === 'youtube'}<span class="pl-yt-badge">YouTube</span>{/if}
-                </div>
+              <button class="pl-text" onclick={() => open(pl)}>
+                <span class="pl-name">{pl.name}</span>
+                <span class="pl-meta">
+                  {#if pl.total_duration}<span class="zahl">{totalTime(pl.total_duration)}</span>{/if}
+                  <span>{p.key === 'fertig' ? 'alles gesehen' : p.done ? `${p.done} von ${p.count} gesehen` : p.started ? `${p.started} angefangen` : p.count ? 'noch nichts gesehen' : 'leer'}</span>
+                </span>
               </button>
+              <div class="pl-fort"><b style:width="{p.count ? Math.round(p.done / p.count * 100) : 0}%"></b></div>
             </div>
-          {/if}
-        {/each}
-      </div>
-    {/if}
-   </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 
+<ActionMenu bind:this={menu} />
+
 <style>
-  /* Abstand zum Rollfeld kommt aus Kopf und Rollfeld, nicht vom letzten Element */
-  .tv-seitenkopf > :last-child { margin-bottom: 0; }
-  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-  .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 10px; }
-  .page-title i { color: var(--accent-primary); }
-  .btn-create { padding: 7px 18px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .bearbeiten { margin-bottom: var(--tv-a3); }
+  .bearbeiten .name { width: 320px; }
+  .bearbeiten .beschreibung { flex: 1; min-width: 240px; }
+  .beschreibung { margin: calc(-1 * var(--tv-a3)) 0 var(--tv-a3); color: var(--tv-text-2); font-size: var(--tv-gr-klein); max-width: 820px; }
+  .inhalt { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .inhalt.tv-spalten { display: grid; }
+  .zeilen { display: flex; flex-direction: column; gap: 2px; }
+  .einfuegen { height: 3px; margin: 0 0 0 30px; background: var(--tv-akzent); border-radius: 1px; }
+  .ende { min-height: 40px; }
+  .hinzu { display: flex; flex-direction: column; gap: var(--tv-a2); background: var(--tv-flaeche); border-radius: var(--tv-ecke);
+           padding: var(--tv-a3); margin: var(--tv-a2) 0 var(--tv-a4); }
+  .treffer { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: center; padding: 4px;
+             border-radius: var(--tv-ecke); }
+  .treffer:hover { background: var(--tv-karte); }
+  .treffer img { width: 112px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); background: var(--tv-mulde); }
+  .treffer .t { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .serien { margin-bottom: var(--tv-a5); }
 
-  .create-form { display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; margin-bottom: 20px; }
-  .create-form input { padding: 8px 14px; background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-primary); font-size: 0.88rem; outline: none; }
-  .create-form input:focus { border-color: var(--accent-primary); }
-  .create-actions { display: flex; gap: 8px; }
-  .btn-save { padding: 7px 18px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
-  .btn-save:disabled { opacity: 0.4; }
-  .btn-cancel { padding: 7px 18px; background: none; border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); font-size: 0.82rem; cursor: pointer; }
+  .pl-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--tv-a5) var(--tv-a4); }
+  .pl-kachel { position: relative; min-width: 0; }
+  .pl-bild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde);
+             display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; }
+  .pl-bild img { width: 100%; height: 100%; min-height: 0; object-fit: cover; display: block; }
+  .pl-bild img.gross { grid-row: 1 / 3; }
+  .flaeche { position: absolute; inset: 0; z-index: 1; border: 0; padding: 0; background: none; cursor: pointer; }
+  .platzhalter { grid-row: 1 / 3; align-self: center; justify-self: center; font-size: 36px; color: var(--tv-text-3); }
+  .menge { position: absolute; right: 0; top: 0; bottom: 0; width: 33.4%; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; gap: 2px; background: rgba(8, 13, 16, 0.78); font-weight: 700; pointer-events: none; }
+  .menge b { font-size: 24px; }
+  .menge span { font-size: var(--tv-gr-marke); color: var(--tv-text-2); letter-spacing: 0.06em; text-transform: uppercase; }
+  .stift { position: absolute; left: 8px; top: 8px; z-index: 2; width: 28px; height: 28px; display: grid; place-items: center;
+           background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); color: var(--tv-akzent); font-size: 13px; }
+  .mehr { position: absolute; right: calc(33.4% + 8px); top: 8px; z-index: 2; width: 34px; height: 34px; border: 0; display: grid;
+          place-items: center; background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); color: var(--tv-text); opacity: 0; cursor: pointer; }
+  .los { position: absolute; left: 10px; bottom: 10px; z-index: 2; display: flex; gap: 6px; opacity: 0; transform: translateY(6px);
+         transition: opacity var(--tv-schnell), transform var(--tv-schnell); }
+  .pl-kachel:hover .mehr, .pl-kachel:focus-within .mehr, .pl-kachel:hover .los, .pl-kachel:focus-within .los { opacity: 1; transform: none; }
+  .los button { height: 40px; padding: 0 12px; border: 0; border-radius: var(--tv-ecke); cursor: pointer; font: inherit; font-weight: 700;
+                background: var(--tv-schleier); color: var(--tv-text); display: inline-flex; align-items: center; gap: 6px; }
+  .los button.spielen { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+  .pl-text { display: block; width: 100%; margin-top: var(--tv-a2); padding: 0; border: 0; background: none; color: var(--tv-text);
+             font: inherit; text-align: left; cursor: pointer; }
+  .pl-name { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pl-text:hover .pl-name { color: var(--tv-akzent); }
+  .pl-meta { display: flex; gap: var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .pl-meta .zahl { color: var(--tv-text-3); }
+  .pl-fort { margin-top: 6px; height: 4px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+  .pl-fort b { display: block; height: 100%; background: var(--tv-akzent); }
 
-  /* Playlist Grid */
-  .playlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-  .playlist-card { position: relative; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 12px; overflow: hidden; transition: all 0.15s; display: flex; flex-direction: column; }
-  .playlist-card:hover { border-color: var(--accent-primary); }
-  .playlist-card.editing { padding: 14px; }
-  .pl-cover { position: relative; aspect-ratio: 16/9; background: var(--bg-tertiary); overflow: hidden; }
-  .pl-cover img { width: 100%; height: 100%; object-fit: cover; }
-  .pl-cover-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: var(--text-tertiary); }
-  /* .card-hover-actions / .hover-action-btn – zentral in global.css (Feed-Stil) */
-  .pl-card-info { padding: 12px 14px; background: none; border: none; cursor: pointer; text-align: left; width: 100%; color: inherit; display: flex; flex-direction: column; gap: 3px; }
-  .pl-name { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); margin: 0 0 2px; }
-  .pl-desc { font-size: 0.76rem; color: var(--text-tertiary); margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pl-card-meta { display: flex; gap: 4px; font-size: 0.72rem; color: var(--text-tertiary); }
-  .pl-yt-badge { padding: 0 5px; background: var(--status-error); color: #fff; font-size: 0.6rem; border-radius: 3px; font-weight: 600; }
-  .pl-edit-form { display: flex; flex-direction: column; gap: 8px; }
-  .pl-edit-input { padding: 6px 10px; background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font-size: 0.85rem; }
-  .pl-edit-actions { display: flex; gap: 4px; }
-  .btn-xs { padding: 4px 10px; background: none; border: 1px solid var(--border-primary); border-radius: 6px; cursor: pointer; font-size: 0.82rem; color: var(--text-secondary); }
-  .btn-xs.save { color: var(--status-success); border-color: var(--status-success); }
-
-  /* Detail */
-  .detail-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-  .btn-back { width: 36px; height: 36px; border-radius: 8px; background: none; border: 1px solid var(--border-primary); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-  .btn-back:hover { border-color: var(--accent-primary); }
-  .detail-info { flex: 1; }
-  .detail-info h1 { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); margin: 0 0 2px; }
-  .detail-desc { font-size: 0.82rem; color: var(--text-secondary); margin: 0 0 2px; }
-  .detail-meta { font-size: 0.78rem; color: var(--text-tertiary); }
-  .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .btn-play-all { padding: 8px 20px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-  .btn-add-video { padding: 8px 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; font-size: 0.82rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
-  .btn-add-video:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
-  a.btn-add-video { text-decoration: none; }
-
-  /* Add Video Panel */
-  .add-video-panel { padding: 12px 14px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; margin-bottom: 14px; }
-  .av-search-box { display: flex; align-items: center; gap: 8px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 6px 12px; }
-  .av-search-box:focus-within { border-color: var(--accent-primary); }
-  .av-search-box i { color: var(--text-tertiary); font-size: 0.8rem; }
-  .av-search-box input { flex: 1; background: none; border: none; color: var(--text-primary); font-size: 0.85rem; outline: none; }
-  .av-results { margin-top: 8px; max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-  .av-row { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 6px; transition: background 0.1s; }
-  .av-row:hover { background: var(--bg-tertiary); }
-  .av-thumb { width: 64px; min-width: 64px; aspect-ratio: 16/9; border-radius: 4px; overflow: hidden; background: var(--bg-tertiary); }
-  .av-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .av-info { flex: 1; min-width: 0; }
-  .av-title { font-size: 0.82rem; font-weight: 500; color: var(--text-primary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .av-channel { font-size: 0.72rem; color: var(--text-tertiary); }
-  .av-add-btn { width: 30px; height: 30px; border-radius: 6px; background: var(--accent-primary); color: var(--accent-text); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0; }
-  .av-empty { padding: 12px; text-align: center; font-size: 0.82rem; color: var(--text-tertiary); }
-
-  /* Video List */
-  .pl-video-list { display: flex; flex-direction: column; gap: 2px; }
-  .pl-video-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; transition: all 0.1s; border: 1px solid transparent; }
-  .pl-video-item:hover { background: var(--bg-secondary); }
-  .pl-video-item.dragging { opacity: 0.4; }
-  .pl-video-item.drag-over { border-color: var(--accent-primary); background: rgba(var(--tv-akzent-rgb), 0.05); }
-  .pl-drag-handle { cursor: grab; color: var(--text-tertiary); font-size: 0.82rem; padding: 4px; opacity: 0.3; transition: opacity 0.1s; }
-  .pl-video-item:hover .pl-drag-handle { opacity: 1; }
-  .pl-drag-handle:active { cursor: grabbing; }
-  .pl-index { font-size: 0.78rem; color: var(--text-tertiary); width: 22px; text-align: center; flex-shrink: 0; }
-  .pl-video-thumb { position: relative; width: 110px; min-width: 110px; aspect-ratio: 16/9; border-radius: 6px; overflow: hidden; background: var(--bg-tertiary); border: none; cursor: pointer; }
-  .pl-video-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .duration { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.8); color: #fff; font-size: 0.62rem; padding: 1px 4px; border-radius: 3px; }
-  .pl-video-info { flex: 1; min-width: 0; }
-  .pl-video-title { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); background: none; border: none; cursor: pointer; text-align: left; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
-  .pl-video-title:hover { color: var(--accent-primary); }
-  .pl-video-channel { font-size: 0.74rem; color: var(--text-tertiary); }
-  .pl-video-meta { display: flex; gap: 6px; font-size: 0.68rem; color: var(--text-tertiary); align-items: center; margin-top: 2px; }
-  .btn-remove { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 0.82rem; opacity: 0; transition: opacity 0.1s; padding: 4px 8px; }
-  .pl-video-item:hover .btn-remove { opacity: 0.7; }
-  .btn-remove:hover { opacity: 1; color: var(--status-error); }
-
-  .loading, .empty { padding: 50px 20px; text-align: center; color: var(--text-tertiary); font-size: 0.9rem; }
-  .empty-icon { font-size: 2.5rem; color: var(--text-tertiary); margin-bottom: 12px; display: block; }
-  .empty-hint { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 4px; }
+  .leer-gross { padding: 72px var(--tv-a5); text-align: center; color: var(--tv-text-2); }
+  .leer-gross i { font-size: 44px; color: var(--tv-text-3); margin-bottom: var(--tv-a4); }
+  .leer-gross h2 { margin: 0 0 var(--tv-a2); color: var(--tv-text); }
+  .leer-gross p { margin: 0 auto var(--tv-a4); max-width: 520px; }
 </style>

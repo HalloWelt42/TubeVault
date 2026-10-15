@@ -110,13 +110,18 @@ async def test_verlauf_nach_stand_und_zeitraum(test_db):
     await _verlauf(test_db)
     angefangen = await metadata_service.get_watch_history(state="started")
     assert [v["id"] for v in angefangen["videos"]] == ["angef000001"] and angefangen["total"] == 1
+    assert angefangen["videos"][0]["state"] == "started" and angefangen["videos"][0]["progress"] == 0.5
     neuer = await metadata_service.get_watch_history(since="2026-10-01 00:00:00")
     assert [v["id"] for v in neuer["videos"]] == ["angef000001", "fertig00001"] and neuer["total"] == 2
 
 
 async def test_verlauf_entfernen_und_leeren_behaelt_stellen(test_db):
     await _verlauf(test_db)
-    assert await metadata_service.remove_from_history("fertig00001") == 1
+    entfernt = await metadata_service.remove_from_history("fertig00001")
+    assert [e["watched_at"] for e in entfernt] == ["2026-10-01 20:00:00"]
+    assert await metadata_service.restore_history("fertig00001", entfernt) == 1
+    assert (await metadata_service.get_watch_history())["total"] == 3
+    await metadata_service.remove_from_history("fertig00001")
     assert await metadata_service.clear_watch_history(older_than_days=30) == 1      # nur der von 2020
     assert [v["id"] for v in (await metadata_service.get_watch_history())["videos"]] == ["angef000001"]
     await metadata_service.clear_watch_history()

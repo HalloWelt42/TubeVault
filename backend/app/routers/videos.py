@@ -122,10 +122,24 @@ async def clear_watch_history(older_than_days: Optional[int] = Query(None, ge=1)
     return {"removed": removed}
 
 
+class HistoryEntry(BaseModel):
+    watched_at: str
+    position: int = 0
+    completed: int = 0
+
+
 @router.delete("/history/{video_id}")
 async def remove_from_history(video_id: str):
-    """Ein Video aus dem Verlauf nehmen."""
-    return {"removed": await metadata_service.remove_from_history(video_id)}
+    """Ein Video aus dem Verlauf nehmen; die Antwort enthält die entfernten
+    Einträge für Rückgängig."""
+    entries = await metadata_service.remove_from_history(video_id)
+    return {"removed": len(entries), "entries": entries}
+
+
+@router.post("/history/{video_id}/restore")
+async def restore_history(video_id: str, entries: list[HistoryEntry]):
+    """Entfernte Verlaufseinträge wiederherstellen (Rückgängig)."""
+    return {"restored": await metadata_service.restore_history(video_id, [e.model_dump() for e in entries])}
 
 
 @router.get("/info")

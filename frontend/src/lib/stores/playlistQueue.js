@@ -1,53 +1,68 @@
 /**
- * TubeVault – Playlist Queue Store v1.5.91
- * Verwaltet die aktuelle Wiedergabe-Queue (Playlist → Autoplay nächstes Video).
+ * TubeVault - Warteschlange der Videowiedergabe
+ * Eine Reihe von Videos, die nacheinander laufen (Playlist, Favoriten, Feed,
+ * Kanal ...). Die Quelle (z.B. "playlist:59", "favorites:Standard") erlaubt
+ * es, die Warteschlange nach dem Neuladen der Seite wiederherzustellen;
+ * ohne Quelle gilt sie nur bis dahin.
  * © HalloWelt42 – Private Nutzung
  */
 import { writable, get } from 'svelte/store';
 
-// Queue-State
-export const playlistQueue = writable({
-  active: false,        // Queue aktiv?
-  playlistId: null,     // Playlist-ID
-  playlistName: '',     // Playlist-Name
-  videos: [],           // Video-Liste [{ id, title, channel_name, duration, ... }]
-  currentIndex: 0,      // Aktueller Index in der Liste
-});
+const EMPTY = {
+  active: false,
+  source: null,         // Sammlung, aus der die Reihe stammt (oder null)
+  playlistId: null,     // Kennung, wenn die Quelle eine Playlist ist
+  playlistName: '',     // Anzeigename der Reihe
+  videos: [],           // [{ id, title, channel_name, duration, ... }]
+  currentIndex: 0,
+  resume: false,        // an der gemerkten Stelle fortsetzen statt von vorn
+  repeat: false,        // nach dem letzten Video wieder von vorn
+};
+
+export const playlistQueue = writable({ ...EMPTY });
+
+/** Quelle vereinheitlichen: eine Zahl ist eine Playlist (ältere Aufrufe und Adressen). */
+export function queueSource(source) {
+  if (source === null || source === undefined || source === '') return null;
+  return /^\d+$/.test(String(source)) ? `playlist:${source}` : String(source);
+}
 
 /**
- * Queue starten: Playlist laden und erstes (oder gewähltes) Video abspielen.
+ * Warteschlange starten.
+ *   source   Quelle (siehe queueSource) oder null
+ *   options  { resume, repeat }
  */
-export function startQueue(playlistId, playlistName, videos, startIndex = 0) {
+export function startQueue(source, name, videos, startIndex = 0, { resume = false, repeat = false } = {}) {
+  const normalized = queueSource(source);
   playlistQueue.set({
     active: true,
-    playlistId,
-    playlistName,
+    source: normalized,
+    playlistId: normalized?.startsWith('playlist:') ? Number(normalized.slice(9)) : null,
+    playlistName: name,
     videos,
     currentIndex: Math.max(0, Math.min(startIndex, videos.length - 1)),
+    resume,
+    repeat,
   });
 }
 
-/**
- * Queue stoppen.
- */
 export function stopQueue() {
-  playlistQueue.set({ active: false, playlistId: null, playlistName: '', videos: [], currentIndex: 0 });
+  playlistQueue.set({ ...EMPTY });
 }
 
-/**
- * Nächstes Video in der Queue. Gibt video_id zurück oder null wenn am Ende.
- */
+/** Nächstes Video (bei "Wiederholen" nach dem letzten wieder das erste); null am Ende. */
 export function nextInQueue() {
   const q = get(playlistQueue);
-  if (!q.active || q.currentIndex >= q.videos.length - 1) return null;
-  const nextIdx = q.currentIndex + 1;
+  if (!q.active || !q.videos.length) return null;
+  let nextIdx = q.currentIndex + 1;
+  if (nextIdx >= q.videos.length) {
+    if (!q.repeat) return null;
+    nextIdx = 0;
+  }
   playlistQueue.update(s => ({ ...s, currentIndex: nextIdx }));
   return q.videos[nextIdx]?.id || null;
 }
 
-/**
- * Vorheriges Video in der Queue.
- */
 export function prevInQueue() {
   const q = get(playlistQueue);
   if (!q.active || q.currentIndex <= 0) return null;
@@ -56,9 +71,6 @@ export function prevInQueue() {
   return q.videos[prevIdx]?.id || null;
 }
 
-/**
- * Video an bestimmtem Index abspielen.
- */
 export function playAtIndex(index) {
   const q = get(playlistQueue);
   if (!q.active || index < 0 || index >= q.videos.length) return null;
@@ -66,15 +78,35 @@ export function playAtIndex(index) {
   return q.videos[index]?.id || null;
 }
 
-/**
- * Prüfen ob es ein nächstes Video gibt.
- */
 export function hasNext() {
   const q = get(playlistQueue);
-  return q.active && q.currentIndex < q.videos.length - 1;
+  return q.active && q.videos.length > 0 && (q.repeat || q.currentIndex < q.videos.length - 1);
 }
 
 export function hasPrev() {
   const q = get(playlistQueue);
   return q.active && q.currentIndex > 0;
+}
+
+/** Video direkt nach dem laufenden einreihen (nur bei aktiver Warteschlange). */
+export function queueNext(video) {
+  playlistQueue.update(s => {
+    if (!s.active) return s;
+    const videos = s.videos.filter((v, i) => v.id !== video.id || i === s.currentIndex);
+    const current = videos.findIndex(v => v.id === s.videos[s.currentIndex]?.id);
+    videos.splice(current + 1, 0, video);
+    return { ...s, videos, currentIndex: current };
+  });
+}
+
+/** Video ans Ende der Warteschlange stellen (nur bei aktiver Warteschlange). */
+export function queueAppend(video) {
+  playlistQueue.update(s => {
+    if (!s.active || s.videos.some(v => v.id === video.id)) return s;
+    return { ...s, videos: [...s.videos, video] };
+  });
+}
+
+export function setRepeat(repeat) {
+  playlistQueue.update(s => ({ ...s, repeat }));
 }

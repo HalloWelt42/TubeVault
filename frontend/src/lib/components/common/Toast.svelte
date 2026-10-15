@@ -14,6 +14,9 @@
     <div class="toast toast-{t.type}" role="alert">
       <span class="toast-icon">{@html icons[t.type] || icons.info}</span>
       <span class="toast-message">{t.message}</span>
+      {#if t.action}
+        <button class="toast-aktion" onclick={() => { toast.remove(t.id); t.action.run(); }}>{t.action.label}</button>
+      {/if}
       <button class="toast-close" title="Schließen" onclick={() => toast.remove(t.id)}><i class="fa-solid fa-xmark"></i></button>
     </div>
   {/each}
@@ -62,6 +65,9 @@
   .toast-info .toast-icon { color: var(--status-info); background: var(--status-info-bg); }
 
   .toast-message { flex: 1; }
+  .toast-aktion { flex: none; padding: 4px 10px; border: 1px solid var(--tv-rand-stark); border-radius: var(--tv-ecke);
+                  background: var(--tv-karte-2); color: var(--tv-akzent); font: inherit; font-weight: 700; cursor: pointer; }
+  .toast-aktion:hover { background: var(--tv-karte-3); }
 
   .toast-close {
     background: none;

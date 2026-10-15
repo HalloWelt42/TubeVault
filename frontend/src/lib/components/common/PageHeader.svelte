@@ -16,6 +16,8 @@
     unitPlural = null,
     hasFilter = false,
     onClearFilter = null,
+    info = null,           // freie Kennzahlen statt Anzahl, z.B. "41 Videos · 21:37 Std."
+    onBack = null,         // Zurück-Knopf vor dem Titel
     children,
   } = $props();
 
@@ -23,11 +25,16 @@
 </script>
 
 <div class="page-header">
+  {#if onBack}
+    <button class="tv-knopf ohne symbol zurueck" onclick={onBack} title="Zurück"><i class="fa-solid fa-arrow-left"></i></button>
+  {/if}
   <h1 class="page-title">
     {#if icon}<i class={icon}></i>{/if}
     {title}
   </h1>
-  {#if count !== null}
+  {#if info}
+    <span class="page-count zahl">{info}</span>
+  {:else if count !== null}
     <span class="page-count zahl">
       {count.toLocaleString('de-DE')} {unitLabel}{#if bytes}{' · '}{formatSize(bytes)}{/if}
     </span>
@@ -50,5 +57,6 @@
   }
   .page-title i { color: var(--tv-akzent); font-size: 0.8em; }
   .page-count { font-size: var(--tv-gr-titel); font-weight: 500; color: var(--tv-text-3); }
-  .header-actions { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; }
+  .header-actions { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; flex-wrap: wrap; }
+  .zurueck { align-self: center; }
 </style>

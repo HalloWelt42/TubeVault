@@ -151,7 +151,18 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return request(`/api/videos/history${q ? '?' + q : ''}`);
   },
-  clearHistory: () => request('/api/videos/history', { method: 'DELETE' }),
+  // Verlauf leeren: ganz oder nur Einträge älter als olderThanDays (gemerkte Stellen bleiben)
+  clearHistory: (olderThanDays = null) =>
+    request(`/api/videos/history${olderThanDays ? `?older_than_days=${olderThanDays}` : ''}`, { method: 'DELETE' }),
+  removeFromHistory: (videoId) => request(`/api/videos/history/${videoId}`, { method: 'DELETE' }),
+  // entries: die beim Entfernen gelieferten Einträge (Rückgängig)
+  restoreHistory: (videoId, entries) =>
+    request(`/api/videos/history/${videoId}/restore`, { method: 'POST', body: JSON.stringify(entries) }),
+
+  // Sammlungen (favorites:<Liste>, playlist:<id>) mit Stand je Video
+  getCollection: (source) => request(`/api/collections?source=${encodeURIComponent(source)}`),
+  setWatched: (videoIds, watched) =>
+    request('/api/collections/watched', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, watched }) }),
 
   // Tags
   getAllTags: (filters = {}) => {
@@ -185,6 +196,7 @@ export const api = {
   addToPlaylist: (id, videoId, meta = {}) => request(`/api/playlists/${id}/videos`, { method: 'POST', body: JSON.stringify({ video_id: videoId, ...meta }) }),
   removeFromPlaylist: (id, videoId) => request(`/api/playlists/${id}/videos/${videoId}`, { method: 'DELETE' }),
   reorderPlaylist: (id, videoIds) => request(`/api/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ video_ids: videoIds }) }),
+  copyPlaylist: (id) => request(`/api/playlists/${id}/copy`, { method: 'POST' }),
 
   // Import
 
@@ -241,7 +253,13 @@ export const api = {
   },
   getFavoriteLists: () => request('/api/favorites/lists'),
   addFavorite: (data) => request('/api/favorites', { method: 'POST', body: JSON.stringify(data) }),
-  removeFavorite: (videoId) => request(`/api/favorites/video/${videoId}`, { method: 'DELETE' }),
+  // Ohne Liste: aus allen Favoritenlisten
+  removeFavorite: (videoId, listName = null) =>
+    request(`/api/favorites/video/${videoId}${listName ? `?list_name=${encodeURIComponent(listName)}` : ''}`, { method: 'DELETE' }),
+  reorderFavorites: (listName, videoIds) =>
+    request(`/api/favorites/reorder?list_name=${encodeURIComponent(listName)}`, { method: 'PUT', body: JSON.stringify(videoIds) }),
+  moveFavorites: (videoIds, fromList, toList) =>
+    request('/api/favorites/move', { method: 'PUT', body: JSON.stringify({ video_ids: videoIds, from_list: fromList, to_list: toList }) }),
   checkFavorite: (videoId) => request(`/api/favorites/check/${videoId}`),
 
   // Categories

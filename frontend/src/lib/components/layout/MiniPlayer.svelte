@@ -201,7 +201,8 @@
   function onEnded() {
     isPlaying = false;
     const vid = $miniPlayer.videoId;
-    if (vid) api.savePosition(vid, 0).catch(() => {});
+    // Bis zum Ende gesehen: Stelle ans Ende, zählt als gesehen (Fortsetzen überspringt das Ende)
+    if (vid) api.savePosition(vid, Math.floor(videoEl?.duration || 0)).catch(() => {});
 
     // Audio/Musik: automatisch weiter. Video: stoppen.
     if (audioOnly) {

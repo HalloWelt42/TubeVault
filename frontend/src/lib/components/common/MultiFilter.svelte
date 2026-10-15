@@ -75,8 +75,15 @@
     { id: '3600-0', label: '> 1 Std', min: 3600, max: 0 },
   ];
 
-  // Einmalig laden – KEIN $effect (verhindert Reset bei Parent-Rerender)
-  onMount(async () => {
+  // Einmalig laden - KEIN $effect (verhindert Reset bei Parent-Rerender).
+  // onMount bleibt synchron, sonst ginge die Abmeldung des Klick-Lauschers verloren
+  onMount(() => {
+    document.addEventListener('click', onClickOutside);
+    loadChoices();
+    return () => document.removeEventListener('click', onClickOutside);
+  });
+
+  async function loadChoices() {
     if (showChannels) {
       try {
         // Im Feed-Modus: Kanäle aus Subscriptions/RSS, sonst aus Videos
@@ -93,9 +100,7 @@
     if (showTags) {
       try { tags = await api.getFeedTags(feedTab) || []; } catch { tags = []; }
     }
-    document.addEventListener('click', onClickOutside);
-    return () => document.removeEventListener('click', onClickOutside);
-  });
+  }
 
   // Tags neu laden (von aussen aufrufbar)
   export async function reloadTags(tab) {

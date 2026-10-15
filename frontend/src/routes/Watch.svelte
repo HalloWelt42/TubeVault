@@ -25,7 +25,7 @@
   import VideoLinkDialog from '../lib/components/watch/VideoLinkDialog.svelte';
   import LikeBar from '../lib/components/common/LikeBar.svelte';
   import AddToPlaylistDialog from '../lib/components/common/AddToPlaylistDialog.svelte';
-  import { playlistQueue, nextInQueue, prevInQueue, hasNext, hasPrev, stopQueue, playAtIndex, startQueue } from '../lib/stores/playlistQueue.js';
+  import { playlistQueue, nextInQueue, prevInQueue, hasNext, hasPrev, stopQueue, playAtIndex, startQueue, queueSource } from '../lib/stores/playlistQueue.js';
   import { activateMiniPlayer, deactivateMiniPlayer, getMiniPlayerState } from '../lib/stores/miniPlayer.js';
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
@@ -171,15 +171,15 @@
         // Auto-Enrich: SponsorBlock, Kapitel, Untertitel, Thumbnail nachladen
         autoEnrichVideo(id);
 
-        // Playlist aus URL wiederherstellen
-        const urlPl = params.pl;
+        // Warteschlange aus der Adresse wiederherstellen (Playlist, Favoritenliste ...)
+        const urlPl = queueSource(params.pl);
         const urlIdx = parseInt(params.idx) || 0;
         if (urlPl && !$playlistQueue.active) {
           try {
-            const plData = await api.getPlaylist(urlPl);
-            if (plData.videos?.length) {
-              startQueue(parseInt(urlPl), plData.name || 'Playlist', plData.videos, urlIdx);
-            }
+            const collection = await api.getCollection(urlPl);
+            // Beim laufenden Video weitermachen, auch wenn die Reihe gemischt war
+            const here = collection.items?.findIndex(v => v.id === id) ?? -1;
+            if (collection.items?.length) startQueue(urlPl, collection.title, collection.items, here >= 0 ? here : urlIdx);
           } catch {}
         }
 
@@ -331,7 +331,7 @@
     // URL-Zeitstempel hat Vorrang
     if (urlTime > 0 && videoEl) {
       videoEl.currentTime = urlTime;
-    } else if (q.active) {
+    } else if (q.active && !q.resume) {
       if (videoEl) videoEl.currentTime = 0;
     } else if (lastPos > 5 && videoEl && video.duration && lastPos < video.duration - 10) {
       videoEl.currentTime = lastPos;
@@ -374,7 +374,9 @@
 
   function onEnded() {
     stopPositionSaving();
-    if (video) api.savePosition(video.id, 0).catch(() => {});
+    // Bis zum Ende gesehen: Stelle ans Ende (zählt als gesehen); das Fortsetzen
+    // überspringt das Ende, beim nächsten Mal beginnt das Video also vorn
+    if (video) api.savePosition(video.id, Math.floor(video.duration || videoEl?.duration || 0)).catch(() => {});
 
     // Playlist-Queue: Nächstes Video abspielen (auch im Fullscreen)
     if (hasNext()) {
@@ -405,7 +407,7 @@
     const q = $playlistQueue;
     updateParams({
       t: videoEl && videoEl.currentTime > 5 ? Math.floor(videoEl.currentTime) : null,
-      pl: q.active ? q.playlistId : null,
+      pl: q.active ? q.source : null,
       idx: q.active ? q.currentIndex : null,
       lyrics: activeSidePanel === 'lyrics' ? '1' : null,
     });
@@ -1320,7 +1322,7 @@
   /* ─── Seiten-Panel + Playlist (in-flow, sticky, einklappbar) ─── */
   .side-panel, .playlist-sidebar, .side-rail {
     position: sticky; top: 12px;
-    height: calc(100vh - 56px - var(--activity-panel-height, 34px) - 24px);
+    height: calc(100vh - 56px - var(--activity-panel-height, 34px) - var(--tv-spielerleiste, 0px) - 24px);
     background: var(--bg-secondary);
     border: 1px solid var(--border-primary); border-radius: 12px;
     display: flex; flex-direction: column;
@@ -1458,7 +1460,7 @@
     overflow: hidden; aspect-ratio: 16/9; margin: 0 auto 20px;
     /* Flexibel: so breit wie möglich, aber nie höher als der Viewport
        (sonst ragt das Video auf breiten Monitoren unter den Rand). */
-    width: min(100%, calc((100vh - 240px) * 16 / 9));
+    width: min(100%, calc((100vh - 240px - var(--tv-spielerleiste, 0px)) * 16 / 9));
   }
   .video-player { width: 100%; height: 100%; display: block; }
   /* invert(1) dreht hell↔dunkel, hue-rotate(180) holt die Farbtöne

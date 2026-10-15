@@ -1,186 +1,307 @@
+<!--
+  Favoriten (Entwurf mockups/favoriten.html): Listen als Reiter, Abspielen,
+  Zufällig, Weiterschauen und Als Ton hören im festen Kopf, Steuerleiste mit
+  Stand und Sortierung, Liste oder Kacheln, Umordnen per Ziehen, Auswahl mit
+  Stapelaktionen, Menü je Video, Entfernen mit Rückgängig.
+-->
 <script>
   import { api } from '../lib/api/client.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { navigate } from '../lib/router/router.js';
-  import { formatDuration, formatDateRelative } from '../lib/utils/format.js';
+  import { playlistQueue } from '../lib/stores/playlistQueue.js';
+  import { musicPlayer } from '../lib/stores/musicPlayer.svelte.js';
+  import { formatDateRelative } from '../lib/utils/format.js';
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
+  import { onMount } from 'svelte';
+  import { stateChips, filterItems, sortItems, moveItem, totalTime } from '../lib/utils/collection.js';
+  import { playCollection, continueCollection, listenCollection, playAfterCurrent } from '../lib/utils/collectionPlay.js';
+  import PageHeader from '../lib/components/common/PageHeader.svelte';
+  import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
+  import ActionMenu from '../lib/components/common/ActionMenu.svelte';
+  import CollectionBar from '../lib/components/collection/CollectionBar.svelte';
+  import VideoRow from '../lib/components/collection/VideoRow.svelte';
+  import VideoCard from '../lib/components/video/VideoCard.svelte';
 
-  let lists = $state([]);
-  let activeList = $state('Standard');
-  let favorites = $state([]);
-  let loading = $state(false);
+  const STANDARD = 'Standard';
+  const SORTS = [
+    { key: 'eigene', label: 'Eigene Reihenfolge', title: 'Wie du sie angeordnet hast - per Ziehen änderbar' },
+    { key: 'hinzugefuegt', label: 'Hinzugefügt' }, { key: 'titel', label: 'Titel' },
+    { key: 'dauer', label: 'Dauer' }, { key: 'kanal', label: 'Kanal' },
+  ];
+
+  let lists = $state([]);            // [{ name, count }]
+  let newLists = $state([]);         // angelegt, aber noch leer
+  let activeList = $state(STANDARD);
+  let collection = $state(null);
+  let loading = $state(true);
+
+  let search = $state('');
+  let stateFilter = $state('');
+  let sort = $state('eigene');
+  let view = $state('liste');
+  let selecting = $state(false);
+  let selected = $state(new Set());
+  let naming = $state(null);         // { ids } beim Anlegen einer neuen Liste
+  let newName = $state('');
+  let dragFrom = $state(null);
+  let dropAt = $state(null);
+  let playlists = null;
+  let menu;
+
+  let source = $derived(`favorites:${activeList}`);
+  let items = $derived(collection?.items || []);
+  let shown = $derived(sortItems(filterItems(items, { search, state: stateFilter }), sort));
+  let canOrder = $derived(sort === 'eigene' && !search && !stateFilter && !selecting);
+  let allLists = $derived([...lists, ...newLists.filter(n => !lists.some(l => l.name === n)).map(name => ({ name, count: 0 }))]);
+  let info = $derived(collection ? [
+    `${items.length} ${items.length === 1 ? 'Video' : 'Videos'}`,
+    collection.duration ? totalTime(collection.duration) : null,
+    collection.counts.started ? `${collection.counts.started} angefangen` : null,
+  ].filter(Boolean).join(' · ') : null);
+  let queueActive = $derived($playlistQueue.active);
 
   async function loadLists() {
-    try {
-      lists = await api.getFavoriteLists();
-      if (lists.length > 0 && !lists.find(l => l.name === activeList)) {
-        activeList = lists[0].name;
-      }
-    } catch (e) { toast.error(e.message); }
+    try { lists = await api.getFavoriteLists(); } catch (e) { toast.error(e.message); }
+    if (!allLists.some(l => l.name === activeList)) activeList = lists[0]?.name || STANDARD;
   }
 
-  async function loadFavorites() {
-    loading = true;
-    try {
-      favorites = await api.getFavorites(activeList);
-    } catch (e) { toast.error(e.message); }
+  async function load() {
+    loading = !collection;
+    try { collection = await api.getCollection(source); }
+    catch (e) { toast.error(e.message); }
     finally { loading = false; }
   }
 
-  function playVideo(id) {
-    navigate(`/watch/${id}`);
+  function chooseList(name) {
+    activeList = name;
+    collection = null;
+    selected = new Set();
+    load();
   }
 
-  async function removeFavorite(video) {
+  // ── Abspielen ──
+  const playAt = (item) => playCollection(source, collection.title, shown, shown.indexOf(item), { resume: item.state === 'started' });
+  const playAll = () => playCollection(source, collection.title, shown);
+  const playShuffled = () => playCollection(source, collection.title, shown, 0, { shuffle: true });
+  const playContinue = () => continueCollection(source, collection.title, shown);
+  const listen = () => listenCollection(source);
+
+  // ── Ändern ──
+  async function removeItems(ids) {
+    const before = items.map(i => i.id);
+    const titles = items.filter(i => ids.includes(i.id)).map(i => i.title);
     try {
-      await api.removeFavorite(video.id);
-      favorites = favorites.filter(f => f.id !== video.id);
-      const listIdx = lists.findIndex(l => l.name === activeList);
-      if (listIdx >= 0) {
-        lists[listIdx] = { ...lists[listIdx], count: lists[listIdx].count - 1 };
-        lists = [...lists];
-      }
-      toast.info(`"${video.title?.substring(0, 40)}" entfernt`);
+      for (const id of ids) await api.removeFavorite(id, activeList);
     } catch (e) { toast.error(e.message); }
+    selected = new Set();
+    await refresh();
+    toast.undo(ids.length === 1 ? `"${titles[0]?.slice(0, 50)}" aus den Favoriten entfernt` : `${ids.length} Videos aus den Favoriten entfernt`,
+      async () => {
+        for (const id of ids) await api.addFavorite({ video_id: id, list_name: activeList }).catch(() => {});
+        await api.reorderFavorites(activeList, before);
+        await refresh();
+      });
   }
 
-  $effect(() => { loadLists(); });
-  $effect(() => { activeList; loadFavorites(); });
-  $effect(() => onVideoMutation(() => { loadLists(); loadFavorites(); }));
+  async function moveTo(ids, target) {
+    try {
+      await api.moveFavorites(ids, activeList, target);
+      newLists = newLists.filter(n => n !== target);
+      toast.success(`${ids.length === 1 ? '1 Video' : `${ids.length} Videos`} nach "${target}" verschoben`);
+    } catch (e) { toast.error(e.message); }
+    selected = new Set();
+    await refresh();
+  }
+
+  async function setWatched(ids, watched) {
+    try { await api.setWatched(ids, watched); } catch (e) { toast.error(e.message); }
+    selected = new Set();
+    await load();
+  }
+
+  async function saveOrder(ids) {
+    collection = { ...collection, items: ids.map(id => items.find(i => i.id === id)) };
+    try { await api.reorderFavorites(activeList, ids); } catch (e) { toast.error(e.message); load(); }
+  }
+
+  async function addToPlaylist(ids, pl) {
+    let added = 0;
+    for (const id of ids) {
+      try { await api.addToPlaylist(pl.id, id); added++; } catch { /* schon drin */ }
+    }
+    toast.success(`${added} zu "${pl.name}" hinzugefügt`);
+  }
+
+  async function refresh() { await Promise.all([loadLists(), load()]); }
+
+  // ── Menüs ──
+  async function playlistItems(ids) {
+    playlists ??= await api.getPlaylists().catch(() => []);
+    return playlists.map(pl => ({ icon: 'fa-list-ul', label: pl.name, hint: String(pl.video_count ?? ''), run: () => addToPlaylist(ids, pl) }));
+  }
+
+  function listItems(ids) {
+    return [
+      ...allLists.filter(l => l.name !== activeList).map(l => ({ icon: 'fa-heart', label: l.name, hint: String(l.count), run: () => moveTo(ids, l.name) })),
+      { icon: 'fa-plus', label: 'Neue Liste ...', run: () => { naming = { ids }; newName = ''; } },
+    ];
+  }
+
+  async function openMenu(event, item) {
+    const ids = [item.id];
+    const index = items.indexOf(item);
+    menu.open(event, item.title, [
+      { icon: item.state === 'started' ? 'fa-rotate-left' : 'fa-play', label: item.state === 'started' ? 'Weiterschauen' : 'Abspielen', run: () => playAt(item) },
+      ...(queueActive ? [{ icon: 'fa-forward', label: 'Als Nächstes', run: () => playAfterCurrent(item) }] : []),
+      { icon: 'fa-headphones', label: 'Ab hier als Ton hören', run: () => musicPlayer.playSource(`sammlung:${source}`, { start: item.id }) },
+      { trenner: true },
+      { icon: 'fa-list-ul', label: 'Zur Playlist hinzufügen', items: await playlistItems(ids) },
+      { icon: 'fa-arrow-right-arrow-left', label: 'In Liste verschieben', items: listItems(ids) },
+      ...(canOrder && index > 0 ? [{ icon: 'fa-arrow-up', label: 'Ganz nach oben', run: () => saveOrder(moveItem(items.map(i => i.id), index, 0)) }] : []),
+      ...(canOrder && index < items.length - 1 ? [{ icon: 'fa-arrow-down', label: 'Ganz nach unten', run: () => saveOrder(moveItem(items.map(i => i.id), index, items.length)) }] : []),
+      item.state === 'finished'
+        ? { icon: 'fa-eye-slash', label: 'Als neu markieren', run: () => setWatched(ids, false) }
+        : { icon: 'fa-check', label: 'Als gesehen markieren', run: () => setWatched(ids, true) },
+      { trenner: true },
+      { icon: 'fa-heart-crack', label: 'Aus Favoriten entfernen', danger: true, run: () => removeItems(ids) },
+    ]);
+  }
+
+  // ── Auswahl ──
+  function toggle(item) {
+    const next = new Set(selected);
+    next.has(item.id) ? next.delete(item.id) : next.add(item.id);
+    selected = next;
+  }
+  function stopSelecting() { selecting = false; selected = new Set(); }
+  let selectedIds = $derived(shown.filter(i => selected.has(i.id)).map(i => i.id));
+
+  // ── Ziehen ──
+  function onDrop(index) {
+    if (dragFrom !== null && dragFrom !== index) saveOrder(moveItem(items.map(i => i.id), dragFrom, index));
+    dragFrom = null; dropAt = null;
+  }
+
+  function createList() {
+    const name = newName.trim();
+    if (!name) return;
+    if (naming?.ids?.length) moveTo(naming.ids, name);
+    else { newLists = [...newLists, name]; chooseList(name); }
+    naming = null;
+  }
+
+  // Laden nur beim Öffnen und bei Listenwechsel - ein $effect würde sich über
+  // das gelesene collection selbst neu auslösen
+  onMount(() => {
+    refresh();
+    return onVideoMutation(() => refresh());
+  });
 </script>
 
-<!-- Fester Kopf mit Titel und Listen-Reitern; darunter rollen nur die Videos -->
 <div class="tv-seite">
- <div class="tv-seitenkopf">
-  <div class="page-header">
-    <h1 class="title">Favoriten</h1>
-    <span class="subtitle">{favorites.length} Videos</span>
+  <div class="tv-seitenkopf">
+    <PageHeader title="Favoriten" {info}>
+      {#if items.length}
+        <button class="tv-knopf" onclick={playContinue} title="Das zuletzt angefangene Video an der gemerkten Stelle">
+          <i class="fa-solid fa-rotate-left"></i> Weiterschauen</button>
+        <button class="tv-knopf" onclick={listen} title="Alle Videos der Liste nur als Ton im Musikspieler">
+          <i class="fa-solid fa-headphones"></i> Als Ton hören</button>
+        <button class="tv-knopf" onclick={playShuffled}><i class="fa-solid fa-shuffle"></i> Zufällig</button>
+        <button class="tv-knopf haupt" onclick={playAll}><i class="fa-solid fa-play"></i> Alle abspielen</button>
+      {/if}
+    </PageHeader>
+
+    <div class="tv-reiter">
+      {#each allLists as list (list.name)}
+        <button class:aktiv={activeList === list.name} onclick={() => chooseList(list.name)}>
+          <i class="fa-solid fa-heart"></i> {list.name} <span class="tv-zaehler">{list.count}</span></button>
+      {/each}
+      {#if naming}
+        <form class="neu" onsubmit={(e) => { e.preventDefault(); createList(); }}>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="tv-eingabe" bind:value={newName} placeholder="Name der neuen Liste" maxlength="80" autofocus />
+          <button class="tv-knopf klein haupt" disabled={!newName.trim()}>{naming.ids?.length ? 'Anlegen und verschieben' : 'Anlegen'}</button>
+          <button type="button" class="tv-knopf klein ohne" onclick={() => naming = null}>Abbrechen</button>
+        </form>
+      {:else}
+        <button onclick={() => { naming = { ids: [] }; newName = ''; }} title="Neue Liste anlegen"><i class="fa-solid fa-plus"></i> Neue Liste</button>
+      {/if}
+    </div>
+
+    {#if selecting}
+      <BatchToolbar selectedCount={selectedIds.length} totalCount={shown.length}
+                    onSelectAll={() => selected = new Set(shown.map(i => i.id))} onDone={stopSelecting}>
+        <button class="tv-knopf klein" onclick={() => playCollection(source, collection.title, shown.filter(i => selected.has(i.id)))}>
+          <i class="fa-solid fa-play"></i> Abspielen</button>
+        <button class="tv-knopf klein" onclick={async (e) => menu.open(e, 'Zur Playlist', await playlistItems(selectedIds))}>
+          <i class="fa-solid fa-list-ul"></i> Zur Playlist</button>
+        <button class="tv-knopf klein" onclick={(e) => menu.open(e, 'In Liste verschieben', listItems(selectedIds))}>
+          <i class="fa-solid fa-arrow-right-arrow-left"></i> In Liste verschieben</button>
+        <button class="tv-knopf klein" onclick={() => setWatched(selectedIds, true)}><i class="fa-solid fa-check"></i> Als gesehen</button>
+        <button class="tv-knopf klein" onclick={() => setWatched(selectedIds, false)}><i class="fa-solid fa-eye-slash"></i> Als neu</button>
+        <button class="tv-knopf klein gefahr" onclick={() => removeItems(selectedIds)}><i class="fa-solid fa-heart-crack"></i> Aus Favoriten</button>
+      </BatchToolbar>
+    {:else if items.length}
+      <CollectionBar bind:search placeholder="In den Favoriten suchen"
+                     states={stateChips(collection.counts, items.length)} bind:state={stateFilter}
+                     sorts={SORTS} bind:sort bind:view onSelect={() => { selecting = true; view = 'liste'; }} />
+    {/if}
   </div>
 
-  {#if lists.length > 0}
-    <div class="list-tabs">
-      {#each lists as list}
-        <button
-          class="tab-btn"
-          class:active={activeList === list.name}
-          onclick={() => activeList = list.name}
-        >
-          {list.name} ({list.count})
-        </button>
-      {/each}
-    </div>
-  {/if}
- </div>
-
- <div class="tv-rollfeld" data-scroll-root>
-  {#if loading}
-    <div class="loading">Wird geladen…</div>
-  {:else if favorites.length > 0}
-    <div class="video-grid">
-      {#each favorites as fav (fav.id)}
-        <div class="video-card">
-          <button class="card-thumb" onclick={() => playVideo(fav.id)}>
-            <img
-              class="thumb"
-              src={api.thumbnailUrl(fav.id)}
-              alt={fav.title}
-              loading="lazy"
-              onerror={(e) => e.target.style.display = 'none'}
-            />
-            {#if fav.duration}
-              <span class="duration">{formatDuration(fav.duration)}</span>
-            {/if}
-            <div class="play-overlay"><i class="fa-solid fa-play"></i></div>
-          </button>
-          <div class="card-body">
-            <div class="card-text">
-              <button class="card-title" onclick={() => playVideo(fav.id)}>
-                {fav.title || fav.id}
-              </button>
-              <span class="card-channel">{fav.channel_name || 'Unbekannt'}</span>
-              {#if fav.added_at}
-                <span class="card-meta">Hinzugefügt {formatDateRelative(fav.added_at)}</span>
-              {/if}
-            </div>
-            <button class="remove-btn" onclick={() => removeFavorite(fav)} title="Aus Favoriten entfernen">
-              <i class="fa-solid fa-heart" style="color:var(--status-error); font-size:0.9rem"></i>
-            </button>
+  <div class="tv-rollfeld" data-scroll-root>
+    {#if loading}
+      <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+    {:else if !items.length}
+      <div class="leer-gross">
+        <i class="fa-regular fa-heart"></i>
+        <h2>Diese Liste ist leer</h2>
+        <p>Mit dem Herz an jedem Video landet es hier. Videos aus anderen Listen lassen sich auch hierher verschieben.</p>
+      </div>
+    {:else if !shown.length}
+      <div class="tv-leer">Nichts gefunden.</div>
+    {:else if view === 'kacheln'}
+      <div class="tv-raster">
+        {#each shown as item (item.id)}
+          <VideoCard video={{ ...item, last_position: item.position }} showArchiveBtn={false} onPlay={() => playAt(item)} />
+        {/each}
+      </div>
+    {:else}
+      <div class="zeilen" role="list">
+        {#each shown as item, i (item.id)}
+          {#if dropAt === i && dragFrom !== null && dragFrom !== i && dragFrom !== i - 1}<div class="einfuegen"></div>{/if}
+          <VideoRow {item} nr={i + 1} meta={item.added_at ? formatDateRelative(item.added_at) : null}
+                    mode={selecting ? 'auswahl' : canOrder ? 'ordnen' : null}
+                    selected={selected.has(item.id)} lifted={dragFrom === i}
+                    playing={queueActive && $playlistQueue.source === source && $playlistQueue.videos[$playlistQueue.currentIndex]?.id === item.id}
+                    onPlay={playAt} onNext={queueActive ? playAfterCurrent : null} onMenu={openMenu} onToggle={toggle}
+                    draggable={canOrder}
+                    ondragstart={() => dragFrom = i}
+                    ondragover={(e) => { if (dragFrom !== null) { e.preventDefault(); dropAt = i; } }}
+                    ondrop={() => onDrop(i)}
+                    ondragend={() => { dragFrom = null; dropAt = null; }} />
+        {/each}
+        {#if canOrder}
+          <div class="ende" role="presentation"
+               ondragover={(e) => { if (dragFrom !== null) { e.preventDefault(); dropAt = shown.length; } }}
+               ondrop={() => onDrop(shown.length)}>
+            {#if dropAt === shown.length && dragFrom !== null}<div class="einfuegen"></div>{/if}
           </div>
-        </div>
-      {/each}
-    </div>
-  {:else}
-    <div class="empty">
-      <i class="fa-regular fa-heart" style="font-size:3.5rem; color:var(--text-tertiary)"></i>
-      <h3>Keine Favoriten</h3>
-      <p>Markiere Videos als Favorit über die Watch-Seite.</p>
-      <button class="btn-ghost" onclick={() => navigate('/library')}>Zur Bibliothek</button>
-    </div>
-  {/if}
- </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </div>
 
+<ActionMenu bind:this={menu} />
+
 <style>
-  /* Abstand zum Rollfeld kommt aus Kopf und Rollfeld, nicht vom letzten Element */
-  .tv-seitenkopf > :last-child { margin-bottom: 0; }
-  .page-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
-  .title { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0; }
-  .subtitle { font-size: 0.82rem; color: var(--text-tertiary); }
-
-  .list-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
-  .tab-btn {
-    padding: 7px 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-radius: 8px; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; transition: all 0.15s;
-  }
-  .tab-btn:hover { border-color: var(--accent-primary); }
-  .tab-btn.active { background: var(--accent-muted); color: var(--accent-primary); border-color: var(--accent-primary); }
-
-  .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-
-  .video-card {
-    background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-radius: 12px; overflow: hidden; transition: all 0.2s;
-  }
-  .video-card:hover { border-color: var(--accent-primary); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
-
-  .card-thumb {
-    position: relative; aspect-ratio: 16/9; background: var(--bg-tertiary);
-    overflow: hidden; cursor: pointer; display: block; width: 100%; border: none; padding: 0;
-  }
-  .thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .duration {
-    position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8);
-    color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;
-  }
-  .play-overlay {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.3); color: #fff; font-size: 2rem; opacity: 0; transition: opacity 0.2s;
-  }
-  .card-thumb:hover .play-overlay { opacity: 1; }
-
-  .card-body { display: flex; gap: 8px; padding: 12px; align-items: flex-start; }
-  .card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-  .card-title {
-    font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin: 0;
-    background: none; border: none; padding: 0; cursor: pointer; text-align: left;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3;
-  }
-  .card-title:hover { color: var(--accent-primary); }
-  .card-channel { font-size: 0.8rem; color: var(--text-secondary); }
-  .card-meta { font-size: 0.72rem; color: var(--text-tertiary); }
-
-  .remove-btn {
-    flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px;
-    border: 1px solid transparent; background: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0.4; transition: all 0.15s;
-  }
-  .remove-btn:hover { opacity: 1; background: rgba(239,68,68,0.1); border-color: var(--status-error); }
-
-  .loading { padding: 60px; text-align: center; color: var(--text-tertiary); }
-  .empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; color: var(--text-tertiary); }
-  .empty h3 { margin: 16px 0 8px; color: var(--text-secondary); }
-  .empty p { margin-bottom: 16px; font-size: 0.88rem; max-width: 380px; }
-  .btn-ghost { padding: 7px 16px; background: transparent; border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); font-size: 0.82rem; cursor: pointer; }
-  .btn-ghost:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+  .tv-reiter { margin: 0 0 var(--tv-a3); align-items: center; }
+  .neu { display: flex; gap: var(--tv-a2); align-items: center; }
+  .neu .tv-eingabe { width: 240px; }
+  .zeilen { display: flex; flex-direction: column; gap: 2px; }
+  .einfuegen { height: 3px; margin: 0 0 0 30px; background: var(--tv-akzent); border-radius: 1px; }
+  .ende { min-height: 40px; }
+  .leer-gross { padding: 72px var(--tv-a5); text-align: center; color: var(--tv-text-2); }
+  .leer-gross i { font-size: 44px; color: var(--tv-text-3); margin-bottom: var(--tv-a4); }
+  .leer-gross h2 { margin: 0 0 var(--tv-a2); color: var(--tv-text); }
+  .leer-gross p { margin: 0 auto; max-width: 520px; }
 </style>

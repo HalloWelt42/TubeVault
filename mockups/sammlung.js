@@ -53,7 +53,7 @@ export const VERLAUF = [
     { id: 'OT4TNJSn83c', titel: '50.000 russische VERLUSTE - und Ukraine rückt vor! Was nun?', kanal: 'Konstantin Flemig - Kriegsreporter', dauer: 1062, pos: 1062, uhr: '21:16' },
     { id: 'pvaVVmo-sao', titel: 'Kein Vibe-Coding: Wie der Open-Source Photoshop Nachbau Photopea entstand', kanal: 'predic8', dauer: 836, pos: 621, uhr: '00:09' },
   ] },
-  { tag: 'Montag, 13.10.', eintraege: [
+  { tag: 'Dienstag, 13.10.', eintraege: [
     { id: 'UPpDtgep9z8', titel: 'Iran’s masterclass has seen UK embarrassed and US frightened', kanal: 'The Sun', dauer: 663, pos: 159, uhr: '23:58' },
     { id: '-NhxILGhvt8', titel: 'Britain has a huge gap in its air defences, an Iron Dome would fix it', kanal: 'The Sun', dauer: 682, pos: 681, uhr: '23:48' },
     { id: '0snlFMRTgko', titel: "The droids being built to kill Russian troops, but that's not all", kanal: 'The Sun', dauer: 811, pos: 810, uhr: '22:52' },

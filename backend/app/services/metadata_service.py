@@ -497,8 +497,16 @@ class MetadataService:
         )
 
         total_pages = max(1, (total + per_page - 1) // per_page)
+        videos = []
+        for r in rows:
+            video = self._row_to_dict(r)
+            # Stand wie überall (watch_state), für Fortschritt und "Zu Ende"
+            video["position"] = video.get("last_position") or 0
+            video["progress"] = watch_state.progress(video["position"], video.get("duration"))
+            video["state"] = watch_state.state_of(video["position"], video.get("duration"))
+            videos.append(video)
         return {
-            "videos": [self._row_to_dict(r) for r in rows],
+            "videos": videos,
             "total": total,
             "page": page,
             "per_page": per_page,
@@ -515,10 +523,21 @@ class MetadataService:
             cursor = await db.execute("DELETE FROM watch_history")
         return cursor.rowcount
 
-    async def remove_from_history(self, video_id: str) -> int:
-        """Ein Video aus dem Verlauf nehmen (seine gemerkte Stelle bleibt)."""
-        cursor = await db.execute("DELETE FROM watch_history WHERE video_id = ?", (video_id,))
-        return cursor.rowcount
+    async def remove_from_history(self, video_id: str) -> list[dict]:
+        """Ein Video aus dem Verlauf nehmen (seine gemerkte Stelle bleibt).
+        Liefert die entfernten Einträge, damit es sich rückgängig machen lässt."""
+        rows = [dict(r) for r in await db.fetch_all(
+            "SELECT watched_at, position, completed FROM watch_history WHERE video_id = ?", (video_id,))]
+        await db.execute("DELETE FROM watch_history WHERE video_id = ?", (video_id,))
+        return rows
+
+    async def restore_history(self, video_id: str, entries: list[dict]) -> int:
+        """Entfernte Einträge wiederherstellen (Rückgängig)."""
+        for entry in entries:
+            await db.execute(
+                "INSERT INTO watch_history (video_id, watched_at, position, completed) VALUES (?, ?, ?, ?)",
+                (video_id, entry["watched_at"], entry.get("position") or 0, entry.get("completed") or 0))
+        return len(entries)
 
     async def get_all_tags(
         self,

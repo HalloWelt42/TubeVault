@@ -16,7 +16,8 @@
   import HoverActionOverlay from '../common/HoverActionOverlay.svelte';
   import HoverActionBtn from '../common/HoverActionBtn.svelte';
 
-  let { video, showArchiveBtn = true, onUpdate = null } = $props();
+  // onPlay: statt einfach zu öffnen, z.B. in einer Warteschlange abspielen
+  let { video, showArchiveBtn = true, onUpdate = null, onPlay = null } = $props();
   let hidden = $state(false);
 
   // Gesehener Anteil: erst ab ein paar Sekunden, damit Antippen nicht zählt
@@ -26,7 +27,8 @@
       ? Math.min(1, video.last_position / video.duration) : 0);
 
   function play() {
-    navigate(`/watch/${video.id}`);
+    if (onPlay) onPlay(video);
+    else navigate(`/watch/${video.id}`);
   }
 
   async function archiveVideo(e) {

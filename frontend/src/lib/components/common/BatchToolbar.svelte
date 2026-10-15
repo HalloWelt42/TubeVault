@@ -9,19 +9,27 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
-  let { selectedCount = 0, totalCount = 0, onSelectAll = null, children } = $props();
+  // onDone: Auswahl-Modus mit "Fertig"; die Leiste steht dann auch ohne Auswahl
+  let { selectedCount = 0, totalCount = 0, onSelectAll = null, onDone = null, children } = $props();
 </script>
 
-{#if selectedCount > 0}
+{#if selectedCount > 0 || onDone}
   <div class="bulk-bar">
-    <span class="bulk-count zahl">{selectedCount.toLocaleString('de-DE')} ausgewählt</span>
+    {#if selectedCount > 0}
+      <span class="bulk-count zahl">{selectedCount.toLocaleString('de-DE')} ausgewählt</span>
+    {:else}
+      <span class="bulk-hinweis">Videos antippen, um sie auszuwählen</span>
+    {/if}
     {#if onSelectAll}
       <button class="tv-knopf klein" onclick={onSelectAll}>
         <i class="fa-solid fa-check-double"></i> Alle <span class="zahl">({totalCount.toLocaleString('de-DE')})</span>
       </button>
       <span class="tv-trenner"></span>
     {/if}
-    {@render children?.()}
+    {#if selectedCount > 0}{@render children?.()}{/if}
+    {#if onDone}
+      <button class="tv-knopf klein ohne fertig" onclick={onDone}><i class="fa-solid fa-xmark"></i> Fertig</button>
+    {/if}
   </div>
 {/if}
 
@@ -33,6 +41,8 @@
     background: var(--tv-flaeche); border: 1px solid rgba(var(--tv-akzent-rgb), 0.55); border-radius: var(--tv-ecke);
   }
   .bulk-count { font-weight: 600; color: var(--tv-akzent); margin-right: var(--tv-a2); }
+  .bulk-hinweis { color: var(--tv-text-2); margin-right: var(--tv-a2); }
+  .fertig { margin-left: auto; }
   /* Ältere Seiten reichen noch .bulk-btn / .bulk-sep herein: gleiche Gestalt wie tv-knopf klein */
   .bulk-bar :global(.bulk-btn) {
     display: inline-flex; align-items: center; gap: var(--tv-a2); height: 34px; padding: 0 var(--tv-a3);
