@@ -1,6 +1,6 @@
 <!--
   TubeVault – SearchDropdown v1.5.98
-  Zentrale Suche: Lokal, RSS, YouTube, Favoriten, Playlists.
+  Zentrale Suche: Lokal, RSS, Quelle, Favoriten, Playlists, Eigene, Musik.
   URL-Erkennung: YouTube-URLs → Downloads-Seite mit Auto-Resolve.
   © HalloWelt42 – Private Nutzung
 -->
@@ -15,6 +15,7 @@
   let confirmRef;
   import LikeBar from '../common/LikeBar.svelte';
   import QuickPlaylistBtn from '../common/QuickPlaylistBtn.svelte';
+  import { musicPlayer } from '../../stores/musicPlayer.svelte.js';
 
   let query = $state('');
   let open = $state(false);
@@ -32,6 +33,7 @@
   let favResults = $state([]);
   let plResults = $state([]);
   let ownResults = $state([]);
+  let musicResults = $state([]);   // Titel der Musik (Interpret, Song, Album)
 
   // YouTube-Paginierung
   let ytPage = $state(1);
@@ -78,6 +80,7 @@
     { id: 'favorites', label: 'Favoriten', icon: 'fa-solid fa-heart', color: 'var(--tv-symbol-rot)' },
     { id: 'playlists', label: 'Playlists', icon: 'fa-solid fa-list-ul', color: 'var(--tv-art-musik)' },
     { id: 'own', label: 'Eigene', icon: 'fa-solid fa-film', color: 'var(--tv-warnung)' },
+    { id: 'music', label: 'Musik', icon: 'fa-solid fa-music', color: 'var(--tv-art-musik)' },
   ];
 
   function loadScopes() {
@@ -85,7 +88,7 @@
       const s = JSON.parse(localStorage.getItem('tv_search_scopes'));
       if (s && typeof s === 'object') return s;
     } catch {}
-    return { local: true, rss: true, youtube: true, favorites: false, playlists: false, own: true };
+    return { local: true, rss: true, youtube: true, favorites: false, playlists: false, own: true, music: true };
   }
   function saveScopes() { localStorage.setItem('tv_search_scopes', JSON.stringify(scopes)); }
   function toggleScope(id) {
@@ -114,7 +117,7 @@
     const q = query.trim();
     if (q.length < 2) {
       searchRun++;   // laufende Antworten zu längeren Eingaben verwerfen
-      localResults = []; localTotal = 0; rssResults = []; favResults = []; plResults = []; ownResults = [];
+      localResults = []; localTotal = 0; rssResults = []; favResults = []; plResults = []; ownResults = []; musicResults = [];
       searched = false;
       showHistory = q.length === 0;
       return;
@@ -191,6 +194,15 @@
           .catch(() => { if (current()) ownResults = []; })
       );
     } else { ownResults = []; }
+
+    // Musik: Titel, Interpret, Album; ein Klick spielt im Musikspieler
+    if (scopes.music) {
+      promises.push(
+        api.musicTracks({ q, limit: MAX_PER_SECTION + 1 })
+          .then(r => { if (current()) musicResults = r.items || []; })
+          .catch(() => { if (current()) musicResults = []; })
+      );
+    } else { musicResults = []; }
 
     await Promise.allSettled(promises);
     if (!current()) return;
@@ -322,7 +334,7 @@
   function clearSearch() {
     query = '';
     searchRun++;
-    localResults = []; localTotal = 0; rssResults = []; ytResults = []; ytPlaylists = []; ytChannels = []; favResults = []; plResults = []; ownResults = [];
+    localResults = []; localTotal = 0; rssResults = []; ytResults = []; ytPlaylists = []; ytChannels = []; favResults = []; plResults = []; ownResults = []; musicResults = [];
     searched = false; ytSearched = false;
     closeDropdown();
   }
@@ -601,6 +613,33 @@
                 </div>
                 <div class="sd-acts">
                   <span class="sd-act-btn play" title="Öffnen"><i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Musik -->
+        {#if scopes.music && musicResults.length > 0}
+          <div class="sd-section">
+            <div class="sd-sec-head">
+              <span class="sd-sec-dot" style="background: var(--tv-art-musik)"></span>
+              <span class="sd-sec-label">Musik</span>
+              <span class="sd-sec-count">{musicResults.length > MAX_PER_SECTION ? `${MAX_PER_SECTION}+` : musicResults.length}</span>
+              <button class="sd-all" onclick={() => { navigate('/music', { tab: 'titel', q: query.trim() }); closeDropdown(); }}>Alle in der Musik</button>
+            </div>
+            {#each musicResults.slice(0, MAX_PER_SECTION) as t, i (t.id)}
+              <button class="sd-row" onclick={() => { musicPlayer.playTracks(musicResults, i, `Suche: ${query.trim()}`); closeDropdown(); }}>
+                <div class="sd-thumb">
+                  <img src={api.thumbnailUrl(t.id)} alt="" loading="lazy" onerror={(e) => e.target.style.display='none'} />
+                  {#if t.duration}<span class="sd-dur">{formatDuration(t.duration)}</span>{/if}
+                </div>
+                <div class="sd-info">
+                  <span class="sd-title">{t.title}</span>
+                  <span class="sd-channel">{t.artist}{#if t.album} · {t.album}{/if}</span>
+                </div>
+                <div class="sd-acts">
+                  <span class="sd-act-btn play" title="Im Musikspieler abspielen"><i class="fa-solid fa-headphones"></i></span>
                 </div>
               </button>
             {/each}
