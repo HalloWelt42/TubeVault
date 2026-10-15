@@ -12,6 +12,7 @@ from app.config import THUMBNAILS_DIR
 from app.database import db
 from app.utils.file_utils import now_sqlite
 from app.utils.thumbnail_utils import download_yt_thumbnail, generate_ffmpeg_thumbnail
+from app.utils.video_ids import is_source_video
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def _fetch_metadata(video_id: str) -> dict:
 
 async def metadata_from_source(video_id: str) -> dict:
     """Titel, Kanal, Beschreibung, Dauer und Aufrufe von der Quelle übernehmen."""
-    if video_id.startswith("local_"):
+    if not is_source_video(video_id):
         raise RepairError("Eigenes Video ohne Quelle")
     video = await db.fetch_one("SELECT thumbnail_path FROM videos WHERE id = ?", (video_id,))
     if not video:

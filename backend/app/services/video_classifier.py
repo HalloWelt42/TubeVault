@@ -38,6 +38,7 @@ from app.utils import source_net
 from pydantic import BaseModel
 
 from app.database import db
+from app.utils.video_ids import is_source_video
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +148,7 @@ class Classification(BaseModel):
 
 
 def is_youtube_id(video_id: str) -> bool:
-    return len(video_id or "") == 11 and not video_id.startswith("local_")
+    return is_source_video(video_id)
 
 
 async def probe_short(video_id: str, client: Optional[httpx.AsyncClient] = None) -> Optional[bool]:

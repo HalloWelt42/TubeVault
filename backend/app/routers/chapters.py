@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.database import db
 from app.services.rate_limiter import rate_limiter
+from app.utils.video_ids import is_source_video
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chapters", tags=["Chapters"])
@@ -156,7 +157,7 @@ async def fetch_youtube_chapters(video_id: str):
         raise HTTPException(status_code=404, detail="Video nicht gefunden")
 
     # Prüfe ob gültige YouTube-ID (11 Zeichen, nicht local_)
-    if video_id.startswith("local_") or len(video_id) != 11:
+    if not is_source_video(video_id):
         raise HTTPException(status_code=400, detail="Keine gültige YouTube-ID")
 
     await rate_limiter.acquire("pytubefix")

@@ -126,7 +126,7 @@
   let addToPlaylistVideoId = $state(null);
 
   async function loadLikes(videoId) {
-    if (!videoId || videoId.startsWith('local_')) { likesData = null; return; }
+    if (!videoId || videoId.length !== 11) { likesData = null; return; }   // nur Videos der Quelle
     try {
       likesData = await api.getVideoLikes(videoId);
     } catch { likesData = null; }

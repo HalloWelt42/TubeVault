@@ -13,6 +13,7 @@ from app.services.download_service import download_service
 from app.services.metadata_service import metadata_service
 from app.database import db
 from app.utils.file_utils import now_sqlite
+from app.utils.video_ids import is_source_video
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/videos", tags=["Videos"])
@@ -648,7 +649,7 @@ async def upgrade_video(video_id: str, quality: Optional[str] = None):
         "SELECT id, source FROM videos WHERE id = ?", (video_id,))
     if not video:
         raise HTTPException(status_code=404, detail="Video nicht gefunden")
-    if video["source"] in ("local", "imported") or video_id.startswith("local_"):
+    if not is_source_video(video_id):
         raise HTTPException(
             status_code=400, detail="Eigene und importierte Videos haben keine Quelle zum erneuten Laden")
 
@@ -674,7 +675,7 @@ async def auto_enrich(video_id: str):
     video = dict(video)
 
     # Keine Enrichments für lokale Videos
-    if video_id.startswith("local_") or len(video_id) != 11:
+    if not is_source_video(video_id):
         return {"enriched": {}, "skipped": "Keine YouTube-ID"}
 
     results = {}

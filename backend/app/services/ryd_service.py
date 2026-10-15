@@ -12,6 +12,7 @@ import httpx
 
 from app.database import db
 from app.services.endpoint_service import get_service_url
+from app.utils.video_ids import is_source_video
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ async def fetch_votes(video_id: str, force: bool = False) -> dict | None:
     """Like/Dislike-Daten für ein Video abrufen + in DB speichern.
     Gibt dict mit likes, dislikes, ratio zurück oder None bei Fehler.
     """
-    if not video_id or video_id.startswith("local_"):
+    if not is_source_video(video_id):
         return None
 
     # Cache prüfen (außer force=True)

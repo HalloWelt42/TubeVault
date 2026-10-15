@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse, FileResponse, RedirectResponse
 from app.database import db
 from app.config import THUMBNAILS_DIR
 from app.services.archive_service import archive_service
+from app.utils.video_ids import is_source_video
 
 router = APIRouter(prefix="/api/player", tags=["Player"])
 
@@ -183,7 +184,7 @@ async def get_thumbnail(video_id: str):
     # rss-thumb-Endpoint umleiten (proxyt + cached YouTube-Thumbnail). Damit
     # zeigen auch nicht-heruntergeladene Videos (Feed/Verlauf/Vorschläge) ein
     # Bild und es gibt keine 404-Flut mehr in der Konsole.
-    if len(video_id) == 11 and not video_id.startswith("local_"):
+    if is_source_video(video_id):
         return RedirectResponse(
             url=f"/api/subscriptions/rss-thumb/{video_id}", status_code=307
         )

@@ -6,6 +6,7 @@ Zentrale Funktionen für YouTube-Thumbnail-Downloads und ffmpeg-Generierung.
 
 import logging
 import subprocess
+from app.utils.video_ids import is_source_video
 from pathlib import Path
 from typing import Optional
 
@@ -38,7 +39,7 @@ async def download_yt_thumbnail(
     Returns:
         Path zur gespeicherten Datei oder None
     """
-    if not video_id or video_id.startswith("local_") or len(video_id) != 11:
+    if not is_source_video(video_id):
         return None
 
     dest = dest_dir / (filename or f"{video_id}.jpg")

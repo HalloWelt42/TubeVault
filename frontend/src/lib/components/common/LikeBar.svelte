@@ -12,9 +12,13 @@
    */
   let { likes = 0, dislikes = 0, mode = 'bar' } = $props();
 
-  let total = $derived(likes + dislikes);
-  let ratio = $derived(total > 0 ? likes / total : 0);
-  let pct = $derived((ratio * 100).toFixed(1));
+  // Als Zahl rechnen: kommt ein Wert als Text an, würde "+" sonst aneinanderhängen
+  let up = $derived(Math.max(0, Number(likes) || 0));
+  let down = $derived(Math.max(0, Number(dislikes) || 0));
+  let total = $derived(up + down);
+  let ratio = $derived(total > 0 ? up / total : 0);
+  let pct = $derived((ratio * 100).toFixed(1));                       // für die Breite
+  let pctText = $derived(`${(ratio * 100).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`);
   let pctInt = $derived(Math.round(ratio * 100));
   let color = $derived(ratio >= 0.8 ? 'var(--status-success)' : ratio >= 0.5 ? '#f59e0b' : 'var(--status-error)');
 </script>
@@ -24,13 +28,13 @@
     <!-- Variante A: Voller Balken mit Daumen + Zahlen -->
     <div class="lb-bar">
       <div class="lb-counts">
-        <span class="lb-like"><i class="fa-solid fa-thumbs-up"></i> {formatViews(likes)}</span>
-        <span class="lb-dislike"><i class="fa-solid fa-thumbs-down"></i> {formatViews(dislikes)}</span>
+        <span class="lb-like"><i class="fa-solid fa-thumbs-up"></i> {formatViews(up)}</span>
+        <span class="lb-dislike"><i class="fa-solid fa-thumbs-down"></i> {formatViews(down)}</span>
       </div>
       <div class="lb-track">
         <div class="lb-fill" style="width: {pct}%; background: {color}"></div>
       </div>
-      <span class="lb-pct" style="color: {color}">{pct}%</span>
+      <span class="lb-pct" style="color: {color}">{pctText}</span>
     </div>
 
   {:else if mode === 'compact'}
@@ -38,7 +42,7 @@
     <span class="lb-compact">
       <i class="fa-solid fa-thumbs-up lb-c-icon" style="color: {color}"></i>
       <span class="lb-c-track"><span class="lb-c-fill" style="width: {pct}%; background: {color}"></span></span>
-      <span class="lb-c-pct" style="color: {color}">{pctInt}%</span>
+      <span class="lb-c-pct" style="color: {color}">{pctInt} %</span>
     </span>
 
   {:else if mode === 'thumbnail'}
@@ -59,14 +63,14 @@
   .lb-like { color: var(--status-success); display: flex; align-items: center; gap: 4px; }
   .lb-dislike { color: var(--status-error); display: flex; align-items: center; gap: 4px; }
   .lb-track { flex: 1; max-width: 200px; height: 5px; background: var(--status-error); border-radius: 3px; overflow: hidden; }
-  .lb-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+  .lb-fill { height: 100%; transition: width 0.4s; }
   .lb-pct { font-size: 0.82rem; font-weight: 700; min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
 
   /* ═══ MODE: compact (Card-Meta) ═══ */
   .lb-compact { display: inline-flex; align-items: center; gap: 4px; }
   .lb-c-icon { font-size: 0.58rem; }
-  .lb-c-track { width: 36px; height: 3px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
-  .lb-c-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+  .lb-c-track { width: 36px; height: 3px; background: var(--status-error); border-radius: 2px; overflow: hidden; }
+  .lb-c-fill { height: 100%; transition: width 0.4s; }
   .lb-c-pct { font-size: 0.62rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
   /* ═══ MODE: thumbnail (Variante E) ═══ */

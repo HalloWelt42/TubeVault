@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from app.database import db
 from app.services.endpoint_service import get_service_url
 from app.services.subtitle_segments import Segment
+from app.utils.video_ids import is_source_video
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ async def background_rebuild() -> None:
 
 def has_source(video_id: str) -> bool:
     """Nur Videos der Quelle haben Marken beim Dienst (keine eigenen/importierten)."""
-    return len(video_id) == 11 and not video_id.startswith("local_")
+    return is_source_video(video_id)
 
 
 # ─── Zeitabschnitte ───────────────────────────────────────────────────
