@@ -20,6 +20,7 @@
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   import CollectionBar from '../lib/components/collection/CollectionBar.svelte';
   import ChannelSettingsSheet from '../lib/components/channel/ChannelSettingsSheet.svelte';
+  import { MISSING_BATCH, createChannelActions } from '../lib/components/channel/channelActions.js';
   import LanguageChips from '../lib/components/common/LanguageChips.svelte';
   import LanguageLabel from '../lib/components/common/LanguageLabel.svelte';
   import {
@@ -29,9 +30,7 @@
   } from '../lib/components/channel/channelView.js';
 
   const PAGE = 'subscriptions';                  // Merker für Ansicht und Sortierung
-  const MISSING_BATCH = 5;                       // "5 fehlende laden" im Menü
   const REFRESH_AFTER_ADD_MS = 8000;             // Kanalbild und erste Videos kommen nach
-  const REFRESH_AFTER_FIX_MS = 800;
   const DISK_LOW_BYTES = 50 * 1024 ** 3;
   const CHANNEL_ID = /UC[0-9A-Za-z_-]{22}/;
   const COLUMNS = [
@@ -44,6 +43,7 @@
     { cls: 'sp-mehr', label: '' },
   ];
   const plural = (count, one, many) => (count === 1 ? one : many);
+  const onOff = (on) => (on ? 'an' : 'aus');
 
   // ── Daten ──
   let subs = $state([]);
@@ -76,7 +76,7 @@
   let subscribing = $state(false);
   let importing = $state(false);
 
-  let menu, confirmRef, refreshTimer;
+  let menu, confirmRef;
 
   let counts = $derived(filterCounts(subs));
   let shown = $derived(sortChannels(filterChannels(subs, { filter, search, languages }), sort));
@@ -169,45 +169,11 @@
     try { prognosis = await api.getDripPrognosis(); } catch { prognosis = null; }
   }
 
-  function refreshSoon(ms = REFRESH_AFTER_FIX_MS) {
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(loadSubs, ms);
-  }
-
-  // ── Ein Kanal: Einstellungen ──
-
-  const onOff = (on) => (on ? 'an' : 'aus');
+  // ── Ein Kanal: Einstellungen und Aktionen (gemeinsam mit der Kanalseite) ──
 
   function replaceSub(id, changes) {
     const i = subs.findIndex((s) => s.id === id);
     if (i >= 0) subs[i] = { ...subs[i], ...changes };
-  }
-
-  /** Speichern; scheitert es, bleibt die Anzeige beim alten Wert und der Grund erscheint. */
-  async function save(sub, changes) {
-    try { await api.updateSubscription(sub.id, changes); }
-    catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); return false; }
-    replaceSub(sub.id, changes);
-    return true;
-  }
-
-  async function change(sub, changes, message) {
-    const ok = await save(sub, changes);
-    if (ok) toast.info(`${channelName(sub)}: ${message}`);
-    return ok;
-  }
-
-  const setAuto = (sub, on) => change(sub, { auto_download: on }, `Auto-Download ${onOff(on)}`);
-  const setDripCount = (sub, count) => change(sub, { drip_count: count }, `Drip ${count} am Tag`);
-  const setArchive = (sub, on) => change(sub, { drip_auto_archive: on }, on ? 'neue Videos gleich ins Archiv' : 'neue Videos in die Bibliothek');
-  const setAudioOnly = (sub, on) => change(sub, { audio_only: on }, on ? 'nur Ton' : 'Video und Ton');
-  const setEnabled = (sub, on) => change(sub, { enabled: on }, on ? 'Prüfung an' : 'Prüfung abgeschaltet');
-  const setQuality = (sub, value) => change(sub, { download_quality: value || null },
-    value ? `Qualität ${qualityShort(value)}` : 'Qualität aus den Einstellungen');
-
-  async function setDrip(sub, on) {
-    const ok = await change(sub, { drip_enabled: on }, on ? `Drip an, ${dripCount(sub)} am Tag` : 'Drip aus');
-    if (ok) refreshDrip();
   }
 
   // Nächster Lauf, Abschluss und Prognose kommen vom Server
@@ -216,111 +182,25 @@
     loadPrognosis();
   }
 
-  async function setSuggest(sub, included) {
-    const ok = await change(sub, { suggest_exclude: !included }, included ? 'wieder in Vorschlägen' : 'aus Vorschlägen ausgeschlossen');
-    // Beim Einschließen gelten die Ausnahmen einzelner Videos nicht mehr
-    if (ok && included) {
-      try { await api.resetSuggestOverrides(sub.id); } catch (e) { toast.error(e.message); }
-    }
-  }
-
-  async function saveMusic(sub, on) {
-    try {
-      const result = await api.setMusicChannel(sub.channel_id, on);
-      replaceSub(sub.id, { music_channel: on });
-      return result;
-    } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); return null; }
-  }
-
-  async function setMusic(sub, on) {
-    const result = await saveMusic(sub, on);
-    if (!result) return;
-    toast.success(on ? `${channelName(sub)}: Musikkanal, ${num(result.changed)} Videos jetzt Musik`
-                     : `${channelName(sub)}: kein Musikkanal mehr, ${num(result.changed)} Videos zurückgesetzt`);
-  }
-
-  // ── Ein Kanal: Aktionen ──
+  const actions = createChannelActions({
+    patch: (sub, changes) => replaceSub(sub.id, changes),
+    reload: refreshDrip,
+    confirm: (...args) => confirmRef.ask(...args),
+    removed: (sub) => {
+      subs = subs.filter((s) => s.id !== sub.id);
+      total--;
+      if (sheet?.id === sub.id) sheet = null;
+    },
+    checking,
+  });
+  const { save, saveMusic, runCheck, queueMissing, setAuto, setDrip, setMusic, setEnabled, checkNow, refreshSoon } = actions;
 
   const openChannel = (sub) => navigate(`/channel/${sub.channel_id}`);
   const openNew = (sub) => navigate(`/feed?channels=${encodeURIComponent(sub.channel_id)}`);
 
-  async function runCheck(sub) {
-    if (checking[sub.id]) return null;
-    checking[sub.id] = true;
-    try { return await api.checkChannelNow(sub.id); }
-    catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); return null; }
-    finally { checking[sub.id] = false; }
-  }
-
-  async function checkNow(sub) {
-    const result = await runCheck(sub);
-    if (result) {
-      toast.success(result.new_videos > 0 ? `${channelName(sub)}: ${num(result.new_videos)} neue Videos` : `${channelName(sub)}: nichts Neues`);
-    }
-    loadSubs();
-  }
-
-  async function scanFully(sub) {
-    try {
-      await api.fetchAllChannelVideos(sub.channel_id);
-      toast.success(`${channelName(sub)}: Scan läuft, Fortschritt in der Aktivitätenleiste`);
-    } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
-  }
-
-  async function loadMissing(sub) {
-    try {
-      const missing = await api.getMissingVideos(sub.channel_id, MISSING_BATCH, 'video');
-      if (!missing.video_ids?.length) { toast.info(`${channelName(sub)}: nichts Ladbares offen`); return; }
-      const urls = missing.video_ids.map((id) => `https://www.youtube.com/watch?v=${id}`);
-      const result = await api.addBatchDownload({ urls });
-      const queued = result.results?.filter((r) => r.status === 'queued').length ?? urls.length;
-      toast.success(`${channelName(sub)}: ${num(queued)} Videos in die Warteschlange`);
-    } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
-  }
-
-  // ── Abo beenden ──
-
-  /** Abos beenden; mit geladenen Videos fragt der Dialog, ob sie mitgehen. */
   async function removeSubs(list) {
-    const deleteVideos = await askRemoval(list);
-    if (deleteVideos === null) return;
-    let removed = 0;
-    let videos = 0;
-    for (const sub of list) {
-      try {
-        const result = await api.removeSubscription(sub.id, { deleteVideos });
-        removed++;
-        videos += result.videos_deleted || 0;
-        subs = subs.filter((s) => s.id !== sub.id);
-        total--;
-      } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
-    }
+    await actions.removeChannels(list);
     selected = new Set();
-    if (list.some((s) => s.id === sheet?.id)) sheet = null;
-    if (removed) toast.info(removalMessage(list, removed, deleteVideos, videos));
-  }
-
-  /** true = samt Videos, false = nur das Abo, null = abgebrochen. */
-  async function askRemoval(list) {
-    const one = list.length === 1;
-    const what = one ? `Kanal "${channelName(list[0])}"` : `${num(list.length)} Kanäle`;
-    const count = list.reduce((sum, s) => sum + (s.downloaded_count || 0), 0);
-    if (!count) {
-      const ok = await confirmRef.ask(`${what} entfernen?`, `Zu ${one ? 'diesem Kanal' : 'diesen Kanälen'} sind keine Videos geladen.`,
-        { confirmLabel: one ? 'Kanal entfernen' : 'Kanäle entfernen' });
-      return ok ? false : null;
-    }
-    const choice = await confirmRef.ask(`${what} entfernen?`,
-      `Zu ${one ? 'diesem Kanal' : 'diesen Kanälen'} sind ${num(count)} Videos geladen. Sollen sie mit gelöscht werden? `
-      + 'Gelöschte Videos sind restlos weg (Dateien, Notizen, Verlauf).',
-      { confirmLabel: `${one ? 'Kanal' : 'Kanäle'} und ${num(count)} Videos löschen`, alternativeLabel: one ? 'Nur Kanal entfernen' : 'Nur Kanäle entfernen' });
-    if (choice === false) return null;
-    return choice === true;
-  }
-
-  function removalMessage(list, removed, deleteVideos, videos) {
-    if (list.length === 1) return deleteVideos ? `"${channelName(list[0])}" und ${num(videos)} Videos gelöscht` : `"${channelName(list[0])}" entfernt`;
-    return deleteVideos ? `${channelCount(removed)} und ${num(videos)} Videos gelöscht` : `${channelCount(removed)} entfernt`;
   }
 
   // ── Alle Kanäle ──
@@ -394,7 +274,7 @@
     menu.open(event, channelName(sub), [
       { icon: 'fa-folder-open', label: 'Kanal öffnen', run: () => openChannel(sub) },
       { icon: 'fa-rotate', label: 'Jetzt prüfen', run: () => checkNow(sub) },
-      ...(missing ? [{ icon: 'fa-download', label: `${missing} fehlende laden`, run: () => loadMissing(sub) }] : []),
+      ...(missing ? [{ icon: 'fa-download', label: `${missing} fehlende laden`, run: () => queueMissing(sub) }] : []),
       { trenner: true },
       { icon: 'fa-bolt', label: 'Auto-Download', hint: onOff(sub.auto_download), run: () => setAuto(sub, !sub.auto_download) },
       { icon: 'fa-droplet', label: `Drip, ${dripCount(sub)} am Tag`, hint: onOff(sub.drip_enabled), run: () => setDrip(sub, !sub.drip_enabled) },
@@ -409,10 +289,7 @@
   }
 
   /** Einzel-Aktionen für das Seitenblatt. */
-  const sheetActions = {
-    setAuto, setDrip, setDripCount, setArchive, setQuality, setAudioOnly, setMusic, setSuggest, setEnabled,
-    checkNow, scanFully, remove: (sub) => removeSubs([sub]), refreshSoon: () => refreshSoon(),
-  };
+  const sheetActions = { ...actions, remove: (sub) => removeSubs([sub]) };
 
   /** Schalter in der Liste: Merkmal, Zustand, Umschalten. */
   const LIST_TOGGLES = [
@@ -482,7 +359,7 @@
   onMount(() => {
     loadSubs();
     loadPrognosis();
-    return () => clearTimeout(refreshTimer);
+    return actions.dispose;
   });
 </script>
 

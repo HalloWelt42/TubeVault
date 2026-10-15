@@ -137,8 +137,8 @@ describe('Endpoint URLs', () => {
   });
 
   it('getChannelVideos mit allen Filtern', async () => {
-    await api.getChannelVideos('UC123', 'rss', 2, 'short', 'popular');
-    expect(lastUrl).toBe('/api/subscriptions/channel/UC123/videos?source=rss&page=2&video_type=short&sort=popular');
+    await api.getChannelVideos('UC123', 'missing', 2, 'short', 'popular', 'Brüche kürzen');
+    expect(lastUrl).toBe('/api/subscriptions/channel/UC123/videos?source=missing&page=2&video_type=short&sort=popular&q=Br%C3%BCche%20k%C3%BCrzen');
   });
 
   it('getChannelVideos Default-Werte', async () => {
@@ -146,9 +146,9 @@ describe('Endpoint URLs', () => {
     expect(lastUrl).toBe('/api/subscriptions/channel/UC123/videos?source=all&page=1&video_type=all&sort=newest');
   });
 
-  it('getChannelDebug URL', async () => {
-    await api.getChannelDebug('UC123');
-    expect(lastUrl).toBe('/api/subscriptions/channel/UC123/debug');
+  it('getChannelDiagnosis URL', async () => {
+    await api.getChannelDiagnosis('UC123');
+    expect(lastUrl).toBe('/api/subscriptions/channel/UC123/diagnosis');
   });
 
   it('fetchAllChannelVideos sendet POST', async () => {
@@ -310,7 +310,7 @@ describe('API Endpoint Vollständigkeit', () => {
     'triggerRSSPoll', 'getRSSStats', 'channelAvatarUrl',
     // Channel Detail
     'getChannelDetail', 'getChannelVideos',
-    'fetchAllChannelVideos', 'getChannelDebug',
+    'fetchAllChannelVideos', 'getChannelDiagnosis',
     // Archives
     'getArchives', 'addArchive', 'removeArchive', 'scanArchive', 'checkMounts',
   ];

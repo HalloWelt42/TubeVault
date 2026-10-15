@@ -1097,31 +1097,52 @@ class RSSService:
         language_counts = await language_assign.counts("FROM subscriptions s", (), "s.language")
         total = await db.fetch_val(f"SELECT COUNT(*) FROM subscriptions s {language_where}", language_params)
         offset = (page - 1) * per_page
+        return {
+            "subscriptions": await self._subscription_rows(language_where, tuple(language_params), per_page, offset),
+            "total": total or 0,
+            "page": page,
+            "per_page": per_page,
+            "language_counts": [count.model_dump() for count in language_counts],
+        }
+
+    async def get_subscription(self, channel_id: str) -> Optional[dict]:
+        """Ein Abo mit denselben Zählern wie in der Liste (Kanalseite); None ohne Abo."""
+        rows = await self._subscription_rows("WHERE s.channel_id = ?", (channel_id,), channel_id=channel_id)
+        return rows[0] if rows else None
+
+    async def _subscription_rows(self, where: str = "", params: tuple = (), limit: int = -1, offset: int = 0,
+                                 channel_id: Optional[str] = None) -> list[dict]:
+        """Abos samt Zählern, Abdeckung und Medaille - die eine Stelle für
+        Kanalübersicht und Kanalseite. Mit channel_id zählen die Teilabfragen
+        nur diesen Kanal."""
         # Zähler je Kanal in einem Durchgang je Tabelle (statt vier Unterabfragen
         # je Kanal - bei hunderten Kanälen dauerte die Liste sonst Sekunden).
         # Ausgeschlossene Shorts zählen nirgends mit.
+        scope_r = " AND r.channel_id = ?" if channel_id else ""
+        scope_v = " AND v.channel_id = ?" if channel_id else ""
+        scope = (channel_id,) if channel_id else ()
         rows = await db.fetch_all(
             f"""WITH feed AS (
                    SELECT r.channel_id,
                           COUNT(*) AS rss_count,
                           SUM({feed_scope.new_entry("r")}) AS new_videos
-                   FROM rss_entries r WHERE 1=1{await video_classifier.without_shorts("r")}
+                   FROM rss_entries r WHERE 1=1{await video_classifier.without_shorts("r")}{scope_r}
                    GROUP BY r.channel_id),
                  loaded AS (
                    SELECT v.channel_id, COUNT(*) AS downloaded_count
-                   FROM videos v WHERE v.status = 'ready'{await video_classifier.without_shorts("v")}
+                   FROM videos v WHERE v.status = 'ready'{await video_classifier.without_shorts("v")}{scope_v}
                    GROUP BY v.channel_id),
                  coverage AS (
                    SELECT r.channel_id, COUNT(*) AS wanted_count,
                           SUM({channel_coverage.have_sql("r")}) AS have_count
                    FROM rss_entries r
-                   WHERE {channel_coverage.wanted_sql("r")}
+                   WHERE {channel_coverage.wanted_sql("r")}{scope_r}
                    GROUP BY r.channel_id),
                  problems AS (
                    SELECT r.channel_id, COUNT(*) AS problem_count
                    FROM jobs j
                    JOIN rss_entries r ON r.video_id = json_extract(j.metadata, '$.video_id')
-                   WHERE j.type = 'download' AND j.status = 'parked'
+                   WHERE j.type = 'download' AND j.status = 'parked'{scope_r}
                    GROUP BY r.channel_id)
                SELECT s.*,
                       COALESCE(feed.new_videos, 0) AS new_videos,
@@ -1130,16 +1151,17 @@ class RSSService:
                       COALESCE(problems.problem_count, 0) AS problem_count,
                       COALESCE(coverage.wanted_count, 0) AS wanted_count,
                       COALESCE(coverage.have_count, 0) AS have_count,
-                      EXISTS (SELECT 1 FROM music_channels m WHERE m.channel_id = s.channel_id) AS music_channel
+                      EXISTS (SELECT 1 FROM music_channels m WHERE m.channel_id = s.channel_id) AS music_channel,
+                      EXISTS (SELECT 1 FROM short_exempt_channels x WHERE x.channel_id = s.channel_id) AS short_exempt
                FROM subscriptions s
                LEFT JOIN feed ON feed.channel_id = s.channel_id
                LEFT JOIN coverage ON coverage.channel_id = s.channel_id
                LEFT JOIN loaded ON loaded.channel_id = s.channel_id
                LEFT JOIN problems ON problems.channel_id = s.channel_id
-               {language_where}
+               {where}
                ORDER BY s.channel_name COLLATE NOCASE ASC, s.id
                LIMIT ? OFFSET ?""",
-            (*language_params, per_page, offset)
+            (*scope, *scope, *scope, *scope, *params, limit, offset)
         )
         subscriptions = []
         for row in rows:
@@ -1147,14 +1169,9 @@ class RSSService:
             item["medal"] = channel_coverage.medal(item["wanted_count"], item["have_count"],
                                                    scanned=bool(item.get("last_scanned")))
             item["music_channel"] = bool(item["music_channel"])
+            item["short_exempt"] = bool(item["short_exempt"])
             subscriptions.append(item)
-        return {
-            "subscriptions": subscriptions,
-            "total": total or 0,
-            "page": page,
-            "per_page": per_page,
-            "language_counts": [count.model_dump() for count in language_counts],
-        }
+        return subscriptions
 
     async def get_problem_videos(self, channel_id: str) -> list[dict]:
         """Alle geparkten Downloads eines Kanals mit Fehler-Info.

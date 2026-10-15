@@ -4,7 +4,7 @@ YouTube-Playlist-Abruf und Import – Job-basiert mit Fortschritt.
 © HalloWelt42 – Private Nutzung
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 import json
 import logging
 
@@ -141,6 +141,31 @@ async def fetch_playlist_videos(playlist_id: str, background_tasks: BackgroundTa
 
     background_tasks.add_task(_run)
     return {"status": "started", "job_id": job["id"], "playlist_id": playlist_id}
+
+
+@router.post("/playlists/{playlist_id}/queue-missing")
+async def queue_missing_playlist_videos(playlist_id: str, limit: int = Query(20, ge=1, le=50)):
+    """Die nächsten noch ladbaren Videos einer Kanal-Playlist in ihrer
+    Reihenfolge in die Warteschlange. Ladbar bestimmt services/loadable
+    (nicht schon geladen, nicht gesperrt, nicht schon in der Warteschlange)."""
+    from app.services import loadable
+    from app.services.download_service import download_service
+
+    row = await db.fetch_one("SELECT video_ids FROM channel_playlists WHERE playlist_id = ?", (playlist_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
+    ids = json.dumps(json.loads(row["video_ids"] or "[]"))
+    candidates = [r["video_id"] for r in await db.fetch_all(
+        f"""SELECT j.value AS video_id FROM json_each(?) j
+            WHERE {loadable.condition("j.value")} ORDER BY CAST(j.key AS INTEGER)""", (ids,))]
+    queued = 0
+    for video_id in candidates[:limit]:
+        try:
+            result = await download_service.add_to_queue(url=f"https://www.youtube.com/watch?v={video_id}")
+            queued += result.get("status") == "queued"
+        except Exception as e:
+            logger.warning(f"Playlist {playlist_id}: {video_id} nicht eingereiht: {e}")
+    return {"queued": queued, "remaining": max(0, len(candidates) - queued)}
 
 
 @router.post("/playlists/{playlist_id}/import")

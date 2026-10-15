@@ -2,7 +2,7 @@
   Seitenblatt "Alle Einstellungen" eines Kanals (Entwurf mockups/kanaele.html,
   Zustand Einstellungen): Abdeckung mit Medaille und Weg zur nächsten,
   Laden (Auto-Download, Drip mit Menge, Archiv, Qualität, Nur Ton),
-  Einordnen (Musikkanal, Vorschläge), Prüfen, Problem-Videos zum Aufklappen,
+  Einordnen (Musikkanal, nie Shorts, Vorschläge), Prüfen, Problem-Videos zum Aufklappen,
   im Fuß Jetzt prüfen, Ganz scannen und Abo beenden.
   Gespeichert wird über die Aktionen der Seite (eine Stelle für alle Wege);
   die Problem-Videos verwaltet das Blatt selbst.
@@ -20,7 +20,7 @@
   let {
     sub,                    // Abo wie aus api.getSubscriptions
     actions,                // Einzel-Aktionen der Seite: setAuto, setDrip, setDripCount, setArchive,
-                            // setQuality, setAudioOnly, setMusic, setSuggest, setEnabled,
+                            // setQuality, setAudioOnly, setMusic, setShortExempt, setSuggest, setEnabled,
                             // checkNow, scanFully, remove, refreshSoon
     checking = false,       // Prüfung dieses Kanals läuft
     showProblems = false,   // Problem-Videos gleich aufgeklappt
@@ -180,6 +180,10 @@
       <div class="zeile">
         <div class="t">Musikkanal<div class="e">Alle Videos zählen als Musik, Ausnahmen einzeln</div></div>
         {@render toggle(sub.music_channel, 'Alle Videos dieses Kanals als Musik führen', (on) => actions.setMusic(sub, on))}
+      </div>
+      <div class="zeile">
+        <div class="t">Nie als Short führen<div class="e">Kurze, aber vollwertige Videos bleiben Videos</div></div>
+        {@render toggle(sub.short_exempt, 'Videos dieses Kanals nie als Short führen; beim Abschalten bleiben bestehende Videos Videos', (on) => actions.setShortExempt(sub, on))}
       </div>
       <div class="zeile">
         <div class="t">In Vorschlägen<div class="e">Videos tauchen im Zufallsvorschlag auf</div></div>

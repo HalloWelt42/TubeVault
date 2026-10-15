@@ -501,12 +501,15 @@ export const api = {
   fetchChannelPlaylists: (channelId) => request(`/api/subscriptions/channel/${channelId}/fetch-playlists`, { method: 'POST' }),
   fetchPlaylistVideos: (playlistId) => request(`/api/subscriptions/playlists/${playlistId}/fetch-videos`, { method: 'POST' }),
   importPlaylistToLocal: (playlistId) => request(`/api/subscriptions/playlists/${playlistId}/import`, { method: 'POST' }),
+  // Die nächsten noch ladbaren Videos einer Kanal-Playlist (in ihrer Reihenfolge) in die Warteschlange
+  queueMissingPlaylistVideos: (playlistId, limit = 20) =>
+    request(`/api/subscriptions/playlists/${playlistId}/queue-missing?limit=${limit}`, { method: 'POST' }),
   togglePlaylistVisibility: (playlistId, visibility) => request(`/api/subscriptions/playlists/local/${playlistId}/visibility`, { method: 'POST', body: JSON.stringify({ visibility }) }),
 
   // Kanal-Detail
   getChannelDetail: (channelId) => request(`/api/subscriptions/channel/${channelId}`),
-  getChannelVideos: (channelId, source = 'all', page = 1, videoType = 'all', sort = 'newest') =>
-    request(`/api/subscriptions/channel/${channelId}/videos?source=${source}&page=${page}&video_type=${videoType}&sort=${sort}`),
+  getChannelVideos: (channelId, source = 'all', page = 1, videoType = 'all', sort = 'newest', q = '') =>
+    request(`/api/subscriptions/channel/${channelId}/videos?source=${source}&page=${page}&video_type=${videoType}&sort=${sort}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   getMissingVideos: (channelId, limit = 50, videoType = 'all') =>
     request(`/api/subscriptions/channel/${channelId}/missing-videos?limit=${limit}&video_type=${videoType}`),
   getChannelProblemVideos: (channelId) =>
@@ -519,10 +522,9 @@ export const api = {
     request(`/api/downloads/${jobId}/priority?priority=${priority}`, { method: 'PATCH' }),
   fetchAllChannelVideos: (channelId) =>
     request(`/api/subscriptions/channel/${channelId}/fetch-all`, { method: 'POST' }),
-  getChannelDebug: (channelId) =>
-    request(`/api/subscriptions/channel/${channelId}/debug`),
-  getChannelFilesystem: (channelId) =>
-    request(`/api/subscriptions/channel/${channelId}/filesystem`),
+  // Dateien aller geladenen Videos samt Begleitdateien, Vollständigkeit des Katalogs
+  getChannelDiagnosis: (channelId) =>
+    request(`/api/subscriptions/channel/${channelId}/diagnosis`),
   resetAllErrors: () =>
     request('/api/subscriptions/reset-errors', { method: 'POST' }),
   resetChannelError: (channelId) =>

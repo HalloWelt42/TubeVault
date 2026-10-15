@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import AVATARS_DIR, RSS_THUMBS_DIR
 from app.database import db
-from app.services import channel_coverage, channel_reference, deleted_videos, feed_scope, loadable, music_flag, video_classifier
+from app.services import channel_reference, deleted_videos, feed_scope, loadable, music_flag, video_classifier
 from app.services.rss_service import rss_service, ChannelNotFound
 from app.routers.jobs import activity_ws
 
@@ -91,9 +91,8 @@ async def add_subscriptions_batch(batch: SubscriptionBatchCreate):
 @router.get("/channel/{channel_id}")
 async def get_channel_detail(channel_id: str):
     """Kanal-Detailinfos: Abo-Daten + Statistiken + Typ-Counts."""
-    sub = await db.fetch_one(
-        "SELECT * FROM subscriptions WHERE channel_id = ?", (channel_id,)
-    )
+    # Abo mit denselben Zählern, derselben Medaille und denselben Merkmalen wie in der Kanalübersicht
+    sub = await rss_service.get_subscription(channel_id)
     if not sub:
         # Nicht abonniert → Basisdaten aus videos/rss oder Stub
         downloaded_count = await db.fetch_val(
@@ -175,8 +174,6 @@ async def get_channel_detail(channel_id: str):
 
     result = dict(sub)
     result["subscribed"] = True
-    result["short_exempt"] = await video_classifier.is_channel_exempt(channel_id)
-    result["music_channel"] = await music_flag.is_music_channel(channel_id)
     result["rss_entry_count"] = rss_count
     result["new_video_count"] = new_count
     result["downloaded_count"] = downloaded_count
@@ -185,10 +182,13 @@ async def get_channel_detail(channel_id: str):
     result["total_known_duration"] = total_known_duration
     result["total_views"] = total_views
     result["needs_scan"] = not result.get("last_scanned")
-    result.update((await channel_coverage.of_channel(channel_id, scanned=bool(result.get("last_scanned")))).model_dump())
     result["type_counts"] = type_counts
     result["channel_tags_parsed"] = channel_tags
     return result
+
+
+# Katalogeintrag ohne lokale Kopie (Alias re)
+_NOT_LOCAL = "NOT EXISTS (SELECT 1 FROM videos nl WHERE nl.id = re.video_id AND nl.status = 'ready')"
 
 
 @router.get("/channel/{channel_id}/videos")
@@ -200,16 +200,18 @@ async def get_channel_videos(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     include_dismissed: bool = False,
+    q: str = Query("", max_length=200),
 ):
-    """Alle Videos eines Kanals – mit Typ-Filter und Sortierung.
+    """Alle Videos eines Kanals – mit Typ-Filter, Titelfilter und Sortierung.
 
-    source: all | rss | downloaded
+    source: all | downloaded | missing (Katalog ohne lokale Kopie)
     video_type: all | video | short | live
     sort: newest | oldest | popular | longest | shortest
+    q: jedes Wort muss im Titel stehen (über alle Videos, nicht nur die geladene Seite)
     """
     try:
         return await _get_channel_videos_impl(
-            channel_id, source, video_type, sort, page, per_page, include_dismissed
+            channel_id, source, video_type, sort, page, per_page, include_dismissed, q
         )
     except HTTPException:
         raise
@@ -218,12 +220,19 @@ async def get_channel_videos(
         raise HTTPException(status_code=500, detail=f"Interner Fehler: {str(e)[:200]}")
 
 
+def _title_filter(q: str, column: str) -> tuple[str, list]:
+    """SQL-Zusatz (mit führendem AND): jedes Wort aus q steht im Titel."""
+    words = q.split()
+    pattern = lambda word: "%" + word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    return "".join(f" AND {column} LIKE ? ESCAPE '\\'" for _ in words), [pattern(word) for word in words]
+
+
 async def _get_channel_videos_impl(
     channel_id: str, source: str, video_type: str, sort: str,
-    page: int, per_page: int, include_dismissed: bool,
+    page: int, per_page: int, include_dismissed: bool, q: str = "",
 ):
     offset = (page - 1) * per_page
-    if source not in ("all", "rss", "downloaded"):
+    if source not in ("all", "downloaded", "missing"):
         source = "all"
     if video_type not in ("all", "video", "short", "live"):
         video_type = "all"
@@ -242,6 +251,9 @@ async def _get_channel_videos_impl(
     # Shorts global ausgeschlossen: auch die Kanalseite zeigt sie nicht
     from app.services import video_classifier
     type_filter += await video_classifier.without_shorts("re")
+    title_sql, title_params = _title_filter(q, "re.title")
+    type_filter += title_sql
+    type_params = [*type_params, *title_params]
 
     # Sort-Mapping
     sort_map = {
@@ -266,6 +278,9 @@ async def _get_channel_videos_impl(
                 dl_type_filter = "AND re2.video_type = ?"
                 dl_type_params = [video_type]
         dl_type_filter += await video_classifier.without_shorts("v")
+        title_sql, title_params = _title_filter(q, "v.title")
+        dl_type_filter += title_sql
+        dl_type_params = [*dl_type_params, *title_params]
 
         # Sort für downloaded
         dl_sort_map = {
@@ -307,9 +322,10 @@ async def _get_channel_videos_impl(
         ) or 0
         videos = [dict(r) for r in rows]
 
-    elif source == "rss":
-        # Nur RSS-Einträge (mit Download-Status angereichert)
+    elif source == "missing":
+        # Katalog ohne lokale Kopie; je Eintrag, warum (wartet, gelöscht, gesperrt)
         dismiss_filter = "" if include_dismissed else "AND COALESCE(re.feed_status, 'active') IN ('active', 'later')"
+        dismiss_filter += f" AND {_NOT_LOCAL}"
         rows = await db.fetch_all(
             f"""SELECT re.video_id, re.title, re.published, re.thumbnail_url,
                        re.status as rss_status, re.description as rss_description,
@@ -325,6 +341,7 @@ async def _get_channel_videos_impl(
                        v.thumbnail_path,
                        v.suggest_override,
                        COALESCE((SELECT j.status FROM jobs j WHERE j.type='download' AND json_extract(j.metadata, '$.video_id') = re.video_id AND j.status IN ('queued','active') LIMIT 1), '') as queue_status,
+                       (SELECT i.reason FROM ignored_videos i WHERE i.video_id = re.video_id) as blocked_reason,
                        'rss' as source
                 FROM rss_entries re
                 LEFT JOIN videos v ON re.video_id = v.id
@@ -383,6 +400,7 @@ async def _get_channel_videos_impl(
 
         # 2) Nur heruntergeladene Videos OHNE RSS-Eintrag (nur wenn kein Typ-Filter)
         if video_type == "all":
+            local_title_sql, local_title_params = _title_filter(q, "title")
             if seen_ids:
                 placeholders = ",".join(["?"] * len(seen_ids))
                 extra_rows = await db.fetch_all(
@@ -394,22 +412,22 @@ async def _get_channel_videos_impl(
                         FROM videos
                         WHERE status = 'ready'
                           AND (channel_id = ? OR id IN (SELECT video_id FROM rss_entries WHERE channel_id = ?))
-                          AND id NOT IN ({placeholders})
+                          AND id NOT IN ({placeholders}){local_title_sql}
                         ORDER BY upload_date DESC""",
-                    (channel_id, channel_id, *seen_ids)
+                    (channel_id, channel_id, *seen_ids, *local_title_params)
                 )
             else:
                 extra_rows = await db.fetch_all(
-                    """SELECT id as video_id, title, channel_name, duration, file_size,
+                    f"""SELECT id as video_id, title, channel_name, duration, file_size,
                               thumbnail_path, upload_date, upload_date as published,
                               status as video_status, view_count, description, language, language_source,
                               1 as is_downloaded, 0 as is_in_queue,
                               'downloaded' as source, 'video' as video_type
                        FROM videos
                        WHERE status = 'ready'
-                         AND (channel_id = ? OR id IN (SELECT video_id FROM rss_entries WHERE channel_id = ?))
+                         AND (channel_id = ? OR id IN (SELECT video_id FROM rss_entries WHERE channel_id = ?)){local_title_sql}
                        ORDER BY upload_date DESC""",
-                    (channel_id, channel_id)
+                    (channel_id, channel_id, *local_title_params)
                 )
             for r in extra_rows:
                 videos.append(dict(r))
@@ -454,6 +472,11 @@ async def _get_channel_videos_impl(
             WHERE re.channel_id = ? AND COALESCE(re.feed_status, 'active') IN ('active','later')
             {vt_filter_rss}""",
         tuple(vt_params_rss)) or 0
+    missing_count = await db.fetch_val(
+        f"""SELECT COUNT(*) FROM rss_entries re
+            WHERE re.channel_id = ? AND COALESCE(re.feed_status, 'active') IN ('active','later')
+            AND {_NOT_LOCAL} {vt_filter_rss}""",
+        tuple(vt_params_rss)) or 0
     dl_count = await db.fetch_val(
         f"""SELECT COUNT(DISTINCT v.id) FROM videos v
             LEFT JOIN rss_entries re2 ON v.id = re2.video_id AND re2.channel_id = ?
@@ -461,7 +484,7 @@ async def _get_channel_videos_impl(
             {vt_filter_dl}""",
         tuple(vt_params_dl)) or 0
 
-    source_counts = {"all": rss_count, "rss": rss_count, "downloaded": dl_count}
+    source_counts = {"all": rss_count, "downloaded": dl_count, "missing": missing_count}
 
     return {"videos": videos, "total": total, "page": page, "channel_id": channel_id,
             "source_counts": source_counts}
@@ -576,292 +599,14 @@ async def get_missing_videos(
     }
 
 
-@router.get("/channel/{channel_id}/debug")
-async def get_channel_debug(channel_id: str):
-    """Debug-Infos für Kanal-Diagnose – zeigt DB-Zustand und Scan-Details."""
-    import json
-
-    sub = await db.fetch_one(
-        "SELECT * FROM subscriptions WHERE channel_id = ?", (channel_id,)
-    )
-    if not sub:
+@router.get("/channel/{channel_id}/diagnosis")
+async def get_channel_diagnosis(channel_id: str):
+    """Diagnose eines Kanals: Dateien aller geladenen Videos samt Begleitdateien
+    und die Vollständigkeit des Katalogs (services/channel_diagnosis)."""
+    from app.services import channel_diagnosis
+    if not await db.fetch_val("SELECT 1 FROM subscriptions WHERE channel_id = ?", (channel_id,)):
         raise HTTPException(status_code=404, detail="Kanal nicht abonniert")
-
-    # Typ-Verteilung
-    type_dist = {}
-    for vtype in ("video", "short", "live"):
-        type_dist[vtype] = await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND video_type = ?",
-            (channel_id, vtype)
-        ) or 0
-    type_dist["unknown"] = await db.fetch_val(
-        "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND (video_type IS NULL OR video_type = '')",
-        (channel_id,)
-    ) or 0
-
-    # Duration-Statistiken
-    duration_stats = {}
-    for vtype in ("video", "short", "live"):
-        row = await db.fetch_one(
-            """SELECT
-                COUNT(*) as count,
-                COALESCE(MIN(duration), 0) as min_dur,
-                COALESCE(MAX(duration), 0) as max_dur,
-                COALESCE(AVG(duration), 0) as avg_dur,
-                COALESCE(SUM(duration), 0) as total_dur
-               FROM rss_entries WHERE channel_id = ? AND video_type = ? AND duration IS NOT NULL""",
-            (channel_id, vtype)
-        )
-        if row:
-            duration_stats[vtype] = {
-                "count": row["count"],
-                "min": row["min_dur"],
-                "max": row["max_dur"],
-                "avg": round(row["avg_dur"], 1),
-                "total": row["total_dur"],
-            }
-
-    # Letzte Jobs für diesen Kanal
-    jobs = await db.fetch_all(
-        """SELECT id, type, status, progress, result, error_message, created_at, completed_at
-           FROM jobs WHERE type = 'channel_scan' AND metadata LIKE ?
-           ORDER BY created_at DESC LIMIT 5""",
-        (f'%{channel_id}%',)
-    )
-
-    # Fehlende Daten
-    missing = {
-        "no_duration": await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND duration IS NULL",
-            (channel_id,)
-        ) or 0,
-        "no_views": await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND views IS NULL",
-            (channel_id,)
-        ) or 0,
-        "no_thumbnail": await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND thumbnail_url IS NULL",
-            (channel_id,)
-        ) or 0,
-        "no_description": await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND (description IS NULL OR description = '')",
-            (channel_id,)
-        ) or 0,
-        "no_title": await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND (title IS NULL OR title = '')",
-            (channel_id,)
-        ) or 0,
-    }
-
-    # Keywords Statistik
-    kw_count = await db.fetch_val(
-        "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND keywords != '[]' AND keywords IS NOT NULL",
-        (channel_id,)
-    ) or 0
-
-    # Subscription-Rohdaten
-    sub_dict = dict(sub)
-    # Tags parsen
-    try:
-        sub_dict["channel_tags_parsed"] = json.loads(sub_dict.get("channel_tags") or "[]")
-    except Exception:
-        sub_dict["channel_tags_parsed"] = []
-
-    return {
-        "subscription": sub_dict,
-        "type_distribution": type_dist,
-        "duration_stats": duration_stats,
-        "missing_data": missing,
-        "keywords_count": kw_count,
-        "recent_jobs": [dict(j) for j in jobs],
-        "total_entries": sum(type_dist.values()),
-    }
-
-
-@router.get("/channel/{channel_id}/filesystem")
-async def get_channel_filesystem(channel_id: str):
-    """Filesystem-Audit: Zeigt alle Datenpfade und deren Existenz für einen Kanal."""
-    import os
-    from app.config import (
-        DATA_DIR, AVATARS_DIR, BANNERS_DIR, THUMBNAILS_DIR,
-        SUBTITLES_DIR, TEXTS_DIR, VIDEOS_DIR, AUDIO_DIR, RSS_THUMBS_DIR,
-    )
-
-    HOST_DATA = os.getenv("TUBEVAULT_HOST_DATA", "/mnt/data/tubevault/data")
-
-    def check(path: Path) -> dict:
-        """Prüft ob Datei/Ordner existiert und gibt Info zurück."""
-        try:
-            exists = path.exists()
-        except (OSError, ValueError):
-            exists = False
-        docker_path = str(path)
-        host_path = docker_path.replace(str(DATA_DIR), HOST_DATA)
-        result = {"docker": docker_path, "host": host_path, "exists": exists}
-        try:
-            if exists and path.is_file():
-                result["size"] = path.stat().st_size
-            elif exists and path.is_dir():
-                files = list(path.iterdir())
-                result["file_count"] = len(files)
-        except (OSError, PermissionError):
-            pass
-        return result
-
-    sub = await db.fetch_one(
-        "SELECT * FROM subscriptions WHERE channel_id = ?", (channel_id,))
-    if not sub:
-        raise HTTPException(status_code=404, detail="Kanal nicht abonniert")
-    sub = dict(sub)
-
-    # ─── Kanal-Dateien ───
-    channel_files = {
-        "avatar": check(AVATARS_DIR / f"{channel_id}.jpg"),
-        "banner": check(BANNERS_DIR / f"{channel_id}.jpg"),
-    }
-
-    # ─── DB-Only Kanal-Daten (noch nicht als Datei) ───
-    channel_db_fields = {
-        "channel_name": sub["channel_name"],
-        "channel_description": bool(sub.get("channel_description")),
-        "subscriber_count": sub.get("subscriber_count"),
-        "channel_tags": bool(sub.get("channel_tags") and sub["channel_tags"] != "[]"),
-        "auto_download": bool(sub.get("auto_download")),
-        "check_interval": sub.get("check_interval"),
-    }
-
-    rss_count = await db.fetch_val(
-        "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ?", (channel_id,)) or 0
-    pl_count = await db.fetch_val(
-        "SELECT COUNT(*) FROM channel_playlists WHERE channel_id = ?", (channel_id,)) or 0
-
-    channel_db_only = {
-        "rss_entries": {"count": rss_count, "has_file": False},
-        "channel_playlists": {"count": pl_count, "has_file": False},
-        "subscription_settings": {"has_file": False, "fields": channel_db_fields},
-    }
-
-    # ─── Geplante Dateistruktur (Zukunft) ───
-    planned_channel_dir = DATA_DIR / "channels" / channel_id
-    planned_files = {
-        "channel_json": check(planned_channel_dir / "channel.json"),
-        "catalog_jsonl": check(planned_channel_dir / "catalog.jsonl"),
-        "playlists_dir": check(planned_channel_dir / "playlists"),
-    }
-
-    # ─── Video-Dateien dieses Kanals ───
-    dl_videos = await db.fetch_all(
-        """SELECT v.id, v.title, v.file_path, v.thumbnail_path, v.video_type,
-                  v.description IS NOT NULL as has_description,
-                  v.tags IS NOT NULL AND v.tags != '[]' as has_tags,
-                  v.duration, v.view_count, v.notes IS NOT NULL as has_notes,
-                  v.rating, v.play_count
-           FROM videos v
-           WHERE v.status = 'ready' AND (
-               v.channel_id = ?
-               OR v.id IN (SELECT video_id FROM rss_entries WHERE channel_id = ?)
-           )
-           ORDER BY v.upload_date DESC""",
-        (channel_id, channel_id))
-
-    video_audit = []
-    totals = {"video": 0, "thumb": 0, "subs": 0, "lyrics": 0, "chapters": 0,
-              "meta_json": 0, "total_videos": len(dl_videos)}
-
-    for v in dl_videos[:100]:  # Max 100 für Performance
-        vid = v["id"]
-        entry = {"id": vid, "title": v["title"], "type": v["video_type"] or "video", "files": {}}
-
-        try:
-            # Video-Datei
-            fp = v["file_path"]
-            if fp and fp.strip():
-                vpath = Path(fp)
-            else:
-                vpath = VIDEOS_DIR / f"{vid}.mp4"
-            entry["files"]["video"] = check(vpath)
-            if entry["files"]["video"]["exists"]:
-                totals["video"] += 1
-
-            # Thumbnail
-            entry["files"]["thumbnail"] = check(THUMBNAILS_DIR / f"{vid}.jpg")
-            if entry["files"]["thumbnail"]["exists"]:
-                totals["thumb"] += 1
-
-            # RSS-Thumbnail
-            entry["files"]["rss_thumb"] = check(RSS_THUMBS_DIR / f"{vid}.jpg")
-
-            # Untertitel
-            sub_dir = SUBTITLES_DIR / vid
-            entry["files"]["subtitles"] = check(sub_dir)
-            if entry["files"]["subtitles"]["exists"] and entry["files"]["subtitles"].get("file_count", 0) > 0:
-                totals["subs"] += 1
-
-            # Lyrics
-            lyrics_dir = TEXTS_DIR / vid
-            entry["files"]["lyrics"] = check(lyrics_dir)
-            if entry["files"]["lyrics"]["exists"] and entry["files"]["lyrics"].get("file_count", 0) > 0:
-                totals["lyrics"] += 1
-
-            # Chapters
-            ch_dir = DATA_DIR / "chapter_thumbs" / vid
-            ch_count = await db.fetch_val(
-                "SELECT COUNT(*) FROM chapters WHERE video_id = ?", (vid,)) or 0
-            entry["files"]["chapter_thumbs"] = check(ch_dir)
-            entry["db_chapters"] = ch_count
-            if ch_count > 0:
-                totals["chapters"] += 1
-
-            # Geplant: meta.json
-            entry["files"]["meta_json"] = check(DATA_DIR / "videos" / vid / "meta.json")
-            if entry["files"]["meta_json"]["exists"]:
-                totals["meta_json"] += 1
-
-            # DB-Only Felder (noch nicht als Datei)
-            entry["db_only"] = {
-                "description": bool(v["has_description"]),
-                "tags": bool(v["has_tags"]),
-                "notes": bool(v["has_notes"]),
-                "rating": v["rating"] or 0,
-                "play_count": v["play_count"] or 0,
-                "duration": v["duration"],
-                "view_count": v["view_count"],
-            }
-        except Exception as e:
-            entry["error"] = str(e)[:200]
-
-        video_audit.append(entry)
-
-    return {
-        "channel_id": channel_id,
-        "channel_name": sub["channel_name"],
-        "paths": {
-            "data_dir": {"docker": str(DATA_DIR), "host": HOST_DATA},
-            "videos_dir": check(VIDEOS_DIR),
-            "thumbnails_dir": check(THUMBNAILS_DIR),
-            "subtitles_dir": check(SUBTITLES_DIR),
-            "texts_dir": check(TEXTS_DIR),
-            "rss_thumbs_dir": check(RSS_THUMBS_DIR),
-            "avatars_dir": check(AVATARS_DIR),
-            "banners_dir": check(BANNERS_DIR),
-        },
-        "channel_files": channel_files,
-        "channel_db_only": channel_db_only,
-        "planned_structure": planned_files,
-        "video_totals": totals,
-        "videos": video_audit,
-    }
-
-
-
-# /channel/{channel_id}/banner entfernt v1.8.91 — war Dead Code
-# Frontend nutzt /banner/{channel_id} (Zeile ~1126)
-
-
-# --- (Reclassify entfernt v1.6.21 — ersetzt durch Thumbnail-AI) ---
-
-
-# --- Abo CRUD ---
+    return await channel_diagnosis.diagnose(channel_id)
 
 
 @router.get("/drip-prognosis")
