@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TubeVault - App-Symbol</title>
+<link rel="stylesheet" href="stil.css">
+<style>
+  body { margin: 0; padding: 32px; background: var(--tv-grund); color: var(--tv-text); font-family: var(--tv-schrift); font-size: 17px; }
+  h1 { margin: 0 0 6px; font-size: 26px; }
+  p.hinweis { margin: 0 0 28px; color: var(--tv-text-2); max-width: 900px; }
+  .varianten { display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); gap: 24px; }
+  .variante { background: var(--tv-flaeche); border-radius: 3px; padding: 20px; }
+  .variante h2 { margin: 0 0 4px; font-size: 20px; }
+  .variante .idee { margin: 0 0 16px; color: var(--tv-text-2); font-size: 15px; }
+  .reihe { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+  .groesse { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--tv-text-3); font-size: 13px; }
+  /* iOS rundet Symbole selbst ab (etwa 22 % der Kante) - so sieht es auf dem Telefon aus */
+  .ios svg { display: block; border-radius: 22.4%; }
+  .tab svg { display: block; }
+  .homescreens { display: grid; gap: 10px; margin-top: 18px; }
+  .homescreen { flex: 1; padding: 14px; border-radius: 3px; display: flex; gap: 14px; justify-content: center; }
+  .homescreen.hell { background: linear-gradient(135deg, #e9eef2, #b9c8d4); }
+  .homescreen.dunkel { background: linear-gradient(135deg, #2b1f4a, #0b1d2c); }
+  .homescreen .app { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; }
+  .homescreen.hell .app { color: #1b2830; }
+  .homescreen.dunkel .app { color: #fff; }
+  .homescreen .nachbar { width: 60px; height: 60px; border-radius: 13px; }
+</style>
+</head>
+<body>
+<h1>App-Symbol</h1>
+<p class="hinweis">Gewählt: G (Kastengerät), Quelle frontend/public/favicon.svg. Vier Entwürfe in den Farben der neuen Oberfläche. Gezeigt in Originalgröße fürs Telefon (180 px),
+  in Homescreen-Größe (60 px) mit iOS-Abrundung, als Tab-Symbol (32 und 16 px) und neben fremden Symbolen
+  auf hellem und dunklem Hintergrund.</p>
+<div class="varianten" id="varianten"></div>
+
+<script>
+  const MINZE = '#4dffd2', DUNKEL = '#0e1b20';
+  const GRUND = `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#26343c"/><stop offset="1" stop-color="#0d1418"/></linearGradient></defs>
+    <rect width="512" height="512" fill="url(#g)"/>`;
+
+  // Achteck um (256, 256) mit Radius r, Spitzen um 22,5 Grad gedreht
+  const achteck = (r) => Array.from({ length: 8 }, (_, k) => {
+    const a = (22.5 + 45 * k) * Math.PI / 180;
+    return `${(256 + r * Math.cos(a)).toFixed(1)},${(256 + r * Math.sin(a)).toFixed(1)}`;
+  }).join(' ');
+
+  const VARIANTEN = [
+    {
+      name: 'E · Röhrengerät',
+      idee: 'Kantiger Fernseher mit Antenne und Füßen als Rahmen, im Bild das Abspielzeichen.',
+      svg: `${GRUND}
+        <path d="M186,74 L256,146 L326,74" fill="none" stroke="${MINZE}" stroke-width="18" stroke-linecap="square" stroke-linejoin="miter"/>
+        <rect x="86" y="150" width="340" height="248" fill="none" stroke="${MINZE}" stroke-width="30"/>
+        <rect x="122" y="398" width="44" height="36" fill="${MINZE}"/>
+        <rect x="346" y="398" width="44" height="36" fill="${MINZE}"/>
+        <polygon points="222,216 222,332 322,274" fill="${MINZE}"/>`,
+    },
+    {
+      name: 'F · Flachbild',
+      idee: 'Flacher Bildschirm auf Standfuß, im Bild das Abspielzeichen. Ruhig und modern.',
+      svg: `${GRUND}
+        <rect x="66" y="104" width="380" height="240" fill="none" stroke="${MINZE}" stroke-width="28"/>
+        <rect x="240" y="344" width="32" height="44" fill="${MINZE}"/>
+        <rect x="166" y="384" width="180" height="26" fill="${MINZE}"/>
+        <polygon points="222,166 222,282 322,224" fill="${MINZE}"/>`,
+    },
+    {
+      name: 'G · Kastengerät',
+      idee: 'Gefüllter Fernseher mit Bild links und Drehknöpfen rechts, Antenne oben. Am meisten "Fernseher".',
+      svg: `${GRUND}
+        <path d="M196,72 L256,136 L316,72" fill="none" stroke="${MINZE}" stroke-width="16" stroke-linecap="square" stroke-linejoin="miter"/>
+        <rect x="70" y="140" width="372" height="262" fill="${MINZE}"/>
+        <rect x="100" y="170" width="228" height="202" fill="${DUNKEL}"/>
+        <polygon points="182,222 182,320 268,271" fill="${MINZE}"/>
+        <rect x="370" y="186" width="32" height="32" fill="${DUNKEL}"/>
+        <rect x="370" y="236" width="32" height="32" fill="${DUNKEL}"/>
+        <rect x="358" y="298" width="56" height="9" fill="${DUNKEL}"/>
+        <rect x="358" y="317" width="56" height="9" fill="${DUNKEL}"/>
+        <rect x="358" y="336" width="56" height="9" fill="${DUNKEL}"/>
+        <rect x="110" y="402" width="40" height="28" fill="${MINZE}"/>
+        <rect x="362" y="402" width="40" height="28" fill="${MINZE}"/>`,
+    },
+    {
+      name: 'H · Minzfläche',
+      idee: 'Wie E, aber umgekehrt: Minzgrund, dunkler Fernseher, Abspielzeichen in Minze. Fällt auf dem Homescreen am meisten auf.',
+      svg: `<rect width="512" height="512" fill="${MINZE}"/>
+        <path d="M190,84 L256,152 L322,84" fill="none" stroke="${DUNKEL}" stroke-width="18" stroke-linecap="square" stroke-linejoin="miter"/>
+        <rect x="96" y="156" width="320" height="232" fill="${DUNKEL}"/>
+        <rect x="132" y="388" width="40" height="32" fill="${DUNKEL}"/>
+        <rect x="340" y="388" width="40" height="32" fill="${DUNKEL}"/>
+        <polygon points="224,214 224,330 324,272" fill="${MINZE}"/>`,
+    },
+  ];
+
+  const svg = (v, px) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="${px}" height="${px}">${v.svg}</svg>`;
+
+  document.getElementById('varianten').innerHTML = VARIANTEN.map(v => `
+    <section class="variante">
+      <h2>${v.name}</h2>
+      <p class="idee">${v.idee}</p>
+      <div class="reihe">
+        <div class="groesse ios">${svg(v, 180)}<span>180 px</span></div>
+        <div class="groesse ios">${svg(v, 60)}<span>60 px</span></div>
+        <div class="groesse tab">${svg(v, 32)}<span>32 px</span></div>
+        <div class="groesse tab">${svg(v, 16)}<span>16 px</span></div>
+      </div>
+      <div class="homescreens">
+        ${['hell', 'dunkel'].map(art => `
+          <div class="homescreen ${art}">
+            <div class="app"><div class="nachbar" style="background:#ff9f0c"></div>Fotos</div>
+            <div class="app ios">${svg(v, 60)}TubeVault</div>
+            <div class="app"><div class="nachbar" style="background:#58b8f0"></div>Wetter</div>
+          </div>`).join('')}
+      </div>
+    </section>`).join('');
+</script>
+</body>
+</html>
