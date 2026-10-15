@@ -32,3 +32,10 @@ async def test_videos_ausserhalb_des_feeds_gleichen_nichts_aus(test_db):
     await test_db.execute("INSERT INTO videos (id, title, channel_id, status) VALUES ('feed0000004', 'T', 'UCk', 'ready')")
     [sub] = (await rss_service.get_subscriptions())["subscriptions"]
     assert (sub["wanted_count"], sub["have_count"], sub["medal"]) == (3, 3, "gold")
+
+
+async def test_musikkanal_steht_in_der_liste(test_db):
+    await test_db.execute("INSERT INTO subscriptions (channel_id, channel_name) VALUES ('UCm', 'Band'), ('UCt', 'Technik')")
+    await test_db.execute("INSERT INTO music_channels (channel_id) VALUES ('UCm')")
+    flags = {s["channel_id"]: s["music_channel"] for s in (await rss_service.get_subscriptions())["subscriptions"]}
+    assert flags == {"UCm": True, "UCt": False}

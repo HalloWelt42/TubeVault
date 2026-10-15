@@ -1114,7 +1114,8 @@ class RSSService:
                       COALESCE(loaded.downloaded_count, 0) AS downloaded_count,
                       COALESCE(problems.problem_count, 0) AS problem_count,
                       COALESCE(coverage.wanted_count, 0) AS wanted_count,
-                      COALESCE(coverage.have_count, 0) AS have_count
+                      COALESCE(coverage.have_count, 0) AS have_count,
+                      EXISTS (SELECT 1 FROM music_channels m WHERE m.channel_id = s.channel_id) AS music_channel
                FROM subscriptions s
                LEFT JOIN feed ON feed.channel_id = s.channel_id
                LEFT JOIN coverage ON coverage.channel_id = s.channel_id
@@ -1128,6 +1129,7 @@ class RSSService:
         for row in rows:
             item = dict(row)
             item["medal"] = channel_coverage.medal(item["wanted_count"], item["have_count"])
+            item["music_channel"] = bool(item["music_channel"])
             subscriptions.append(item)
         return {
             "subscriptions": subscriptions,

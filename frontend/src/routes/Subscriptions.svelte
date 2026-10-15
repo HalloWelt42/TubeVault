@@ -354,6 +354,8 @@
       filterMode === 'errors' ? subs.filter(s => s.error_count > 0) :
       filterMode === 'unchecked' ? subs.filter(s => !s.last_checked) :
       filterMode === 'disabled' ? subs.filter(s => !s.enabled) :
+      filterMode === 'music' ? subs.filter(s => s.music_channel) :
+      filterMode === 'no-music' ? subs.filter(s => !s.music_channel) :
       filterMode === 'gold'          ? subs.filter(s => medalLevel(s) === 'gold') :
       filterMode === 'silver'        ? subs.filter(s => medalLevel(s) === 'silver') :
       filterMode === 'bronze'        ? subs.filter(s => medalLevel(s) === 'bronze') :
@@ -397,6 +399,14 @@
         <strong>{count}</strong> {label}
       </button>
     {/each}
+    <button class="filter-chip" class:active={filterMode==='music'} onclick={()=>filterMode='music'}
+            title="Musikkanäle: alle Videos gelten als Musik (Schalter auf der Kanalseite)">
+      <strong>{subs.filter(s => s.music_channel).length}</strong> <i class="fa-solid fa-music"></i> Musik
+    </button>
+    <button class="filter-chip" class:active={filterMode==='no-music'} onclick={()=>filterMode='no-music'}
+            title="Alle Kanäle außer den Musikkanälen">
+      <strong>{subs.filter(s => !s.music_channel).length}</strong> Ohne Musik
+    </button>
     {#if goldCount > 0}
       <button class="filter-chip medal-gold-chip" class:active={filterMode==='gold'}
               onclick={()=>filterMode='gold'}
