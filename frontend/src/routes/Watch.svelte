@@ -30,6 +30,7 @@
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
   import { skipTarget } from '../lib/utils/adSkip.js';
+  import { scrollWithin } from '../lib/utils/scrollRoot.js';
 
   marked.setOptions({ breaks: true, gfm: true });
   function renderMarkdown(text) {
@@ -700,7 +701,7 @@
     const idx = $playlistQueue.currentIndex;
     if (plListEl && $playlistQueue.active) {
       const el = plListEl.children[idx];
-      if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (el) scrollWithin(plListEl, el, 'nearest');   // nur die Playlist-Leiste rollt
     }
   });
 </script>

@@ -17,3 +17,24 @@ export function activeScrollRoot() {
   const page = document.querySelector(PAGE_SCROLLERS);
   return page?.querySelector('[data-scroll-root]') || page;
 }
+
+/**
+ * Ein Element in seinem Behälter sichtbar machen, ohne andere Rollfelder zu
+ * bewegen. scrollIntoView rollt alle Vorfahren mit - beim Mitlaufen der
+ * Untertitel sprang dadurch die ganze Seite.
+ *   block: 'center' (mittig) oder 'nearest' (nur so weit wie nötig)
+ */
+export function scrollWithin(container, el, block = 'center') {
+  if (!container || !el) return;
+  const box = container.getBoundingClientRect();
+  const item = el.getBoundingClientRect();
+  const top = item.top - box.top + container.scrollTop;
+  let target;
+  if (block === 'center') {
+    target = top - (container.clientHeight - item.height) / 2;
+  } else {
+    if (item.top >= box.top && item.bottom <= box.bottom) return;   // schon ganz sichtbar
+    target = item.top < box.top ? top : top - container.clientHeight + item.height;
+  }
+  container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+}

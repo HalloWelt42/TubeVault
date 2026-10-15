@@ -9,6 +9,7 @@
   import { toast } from '../../stores/notifications.js';
   import { formatSize } from '../../utils/format.js';
   import { withoutAds } from '../../utils/adSkip.js';
+  import { scrollWithin } from '../../utils/scrollRoot.js';
 
   let {
     videoId,
@@ -126,7 +127,7 @@
   function scrollToCurrent() {
     if (!cueListEl || currentIdx < 0) return;
     const el = cueListEl.children[currentIdx];
-    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (el) scrollWithin(cueListEl, el, 'center');   // nur die Liste rollt, nicht die Seite
   }
 
   function seekTo(sec) {
