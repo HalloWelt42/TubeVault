@@ -8,6 +8,7 @@
   import NowPlaying from '../../lib/components/music/NowPlaying.svelte';
   import { back, go } from '../router.js';
   import { api } from '../../lib/api/client.js';
+  import { downloadUrl, isFile } from '../../lib/utils/musicTrack.js';
 
   let progress = $derived(player.duration ? player.time / player.duration : 0);
 
@@ -42,8 +43,10 @@
           <button class="m-btn" onclick={() => player.undoDelete()}><i class="fa-solid fa-rotate-left"></i> Löschen rückgängig</button>
         {:else}
           <button onclick={() => player.removeFromList()} aria-label="Aus der Liste nehmen"><i class="fa-solid fa-circle-minus"></i></button>
-          <button onclick={() => player.deleteTrack()} aria-label="Gefällt nicht: löschen"><i class="fa-solid fa-trash-can"></i></button>
-          <a href={api.audioDownloadUrl(player.current.id, 'original')} download aria-label="Ton herunterladen"><i class="fa-solid fa-download"></i></a>
+          {#if !isFile(player.current)}
+            <button onclick={() => player.deleteTrack()} aria-label="Gefällt nicht: löschen"><i class="fa-solid fa-trash-can"></i></button>
+          {/if}
+          <a href={downloadUrl(player.current)} download aria-label="Ton herunterladen"><i class="fa-solid fa-download"></i></a>
         {/if}
       </div>
     </div>

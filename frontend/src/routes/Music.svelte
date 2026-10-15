@@ -11,6 +11,7 @@
   import { untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { api } from '../lib/api/client.js';
+  import { coverUrl } from '../lib/utils/musicTrack.js';
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
   import { musicPlayer as player } from '../lib/stores/musicPlayer.svelte.js';
@@ -66,6 +67,34 @@
   });
 
   const counts = $derived(overview?.counts || {});
+
+  // Quelle der Musik (gilt global für Seite und Spieler): alle | sammlung | videos
+  const SOURCES = [
+    { key: 'alle', label: 'Alles', icon: 'fa-layer-group' },
+    { key: 'sammlung', label: 'Eigene Sammlung', icon: 'fa-compact-disc', count: 'sammlung' },
+    { key: 'videos', label: 'Musikvideos', icon: 'fa-film', count: 'videos' },
+  ];
+  let scanning = $state(false);
+
+  async function chooseSource(key) {
+    if (overview?.source === key) return;
+    try {
+      await api.updateSetting('music.source', key);
+      await loadOverview();
+      await loadTab();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  async function scanCollection() {
+    scanning = true;
+    try {
+      const r = await api.musicFilesScan();
+      toast.success(`${r.files.toLocaleString('de-DE')} Dateien, ${r.read.toLocaleString('de-DE')} neu gelesen, ${r.removed} entfernt`);
+      await loadOverview();
+      await loadTab();
+    } catch (e) { toast.error(e.message); }
+    finally { scanning = false; }
+  }
 
   async function loadOverview() {
     try { overview = await api.musicOverview(); } catch (e) { toast.error(e.message); }
@@ -172,6 +201,16 @@
       <h1>Musik</h1>
       {#if overview}
         <span class="tv-schwach zahl">{counts.tracks} Titel · {counts.artists} Interpreten · {formatDurationLong(counts.duration)}</span>
+        <div class="quellen" role="group" aria-label="Quelle der Musik">
+          {#each SOURCES as q (q.key)}
+            <button class:an={overview.source === q.key} onclick={() => chooseSource(q.key)}
+                    title={q.key === 'alle' ? 'Sammlung und Musikvideos; doppelte Songs nur einmal (die Datei gilt)' : ''}>
+              <i class="fa-solid {q.icon}"></i> {q.label}{#if q.count}<span class="zahl">{(overview.sources[q.count] || 0).toLocaleString('de-DE')}</span>{/if}
+            </button>
+          {/each}
+          <button class="einlesen" onclick={scanCollection} disabled={scanning} title="Eigene Sammlung neu einlesen (nur Neues und Geändertes)">
+            <i class="fa-solid fa-rotate" class:fa-spin={scanning}></i></button>
+        </div>
       {/if}
       <div class="aktionen">
         <input class="tv-eingabe suche" bind:value={query} oninput={onSearch} placeholder="Titel, Interpret, Album" />
@@ -235,7 +274,7 @@
           {#if player.active}
             <section class="abschnitt">
               <div class="weiter">
-                <img src={api.thumbnailUrl(player.current.id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+                <img src={coverUrl(player.current)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
                 <div class="text">
                   <span class="tv-etikett">{player.playing ? 'Läuft gerade' : 'Weiterhören'}</span>
                   <div class="titel">{player.current.title}</div>
@@ -360,6 +399,13 @@
 <style>
   .kopfzeile { display: flex; align-items: baseline; gap: var(--tv-a4); margin-bottom: var(--tv-a4); flex-wrap: wrap; }
   .kopfzeile h1 { margin: 0; font-size: var(--tv-gr-seite); }
+  .quellen { display: inline-flex; align-items: center; gap: 2px; padding: 2px; background: var(--tv-mulde); border-radius: var(--tv-ecke);
+             align-self: center; }
+  .quellen button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 0; background: none;
+                    color: var(--tv-text-2); border-radius: var(--tv-ecke-klein); font: inherit; font-size: var(--tv-gr-klein); cursor: pointer; }
+  .quellen button.an { background: var(--tv-karte-3); color: var(--tv-akzent); font-weight: 700; }
+  .quellen button .zahl { color: var(--tv-text-3); font-size: var(--tv-gr-marke); }
+  .quellen .einlesen { width: 32px; padding: 0; justify-content: center; }
   .aktionen { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; flex-wrap: wrap; }
   .suche { width: 240px; }
   .tv-reiter .schmal { display: none; }

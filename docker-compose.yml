@@ -36,6 +36,9 @@ services:
       # leere Ordner scan im Datenverzeichnis, mit TUBEVAULT_SCAN_SOURCE in der
       # .env z.B. eine externe Platte. Ohne Sammlung bleibt die Seite einfach leer.
       - ${TUBEVAULT_SCAN_SOURCE:-/mnt/data/tubevault/data/scan}:/app/data/scan
+      # Eigene Musiksammlung (FLAC usw.) als zweite Quelle der Musik, nur lesend:
+      # mit TUBEVAULT_MUSIC_SOURCE in der .env der Musikordner, sonst ein leerer Ordner.
+      - ${TUBEVAULT_MUSIC_SOURCE:-/mnt/data/tubevault/data/musik}:/app/data/musik:ro
     environment:
       - PYTHONUNBUFFERED=1
       # Zeitzone für Tageszähler und das nächtliche Drip-Fenster. Zeitstempel in

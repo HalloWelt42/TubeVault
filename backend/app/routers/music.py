@@ -2,16 +2,19 @@
 TubeVault – Musik
 
 Übersicht, Titel, Interpreten, Alben, Musikkanäle und dynamische
-Wiedergabelisten für die Musikseite und den Musikspieler.
+Wiedergabelisten für die Musikseite und den Musikspieler; dazu die eigenen
+Musikdateien (Abspielen, Cover, Liedtext, Wiedergaben, Lieblingssongs).
 """
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from app.services import ad_free_export, audio_export, music_library
+from app.database import db
+from app.services import ad_free_export, audio_export, music_files, music_library
+from app.utils.range_file import range_response
 from app.services.music_library import Group, PlayList, Track
 
 router = APIRouter(prefix="/api/music", tags=["Musik"])
@@ -26,8 +29,16 @@ class Counts(BaseModel):
     duration: int
 
 
+class SourceCounts(BaseModel):
+    """Titel je Quelle, unabhängig von der gewählten (für den Quellen-Filter)."""
+    videos: int
+    sammlung: int
+
+
 class Overview(BaseModel):
     counts: Counts
+    source: str                      # gewählte Quelle: alle | sammlung | videos
+    sources: SourceCounts
     artists: list[Group]             # meiste Titel zuerst
     new: list[Track]
     often: list[Track]
@@ -46,6 +57,10 @@ async def overview():
     albums = music_library.albums(items)
     channels = music_library.channels(items)
     return Overview(
+        source=await music_library.source_setting(),
+        sources=SourceCounts(videos=len(await music_library.video_tracks()),
+                             sammlung=await db.fetch_val(
+                                 "SELECT COUNT(*) FROM music_files WHERE COALESCE(category, 'musik') = 'musik'") or 0),
         counts=Counts(tracks=len(items), artists=len(artists), albums=len(albums), channels=len(channels),
                       favorites=sum(1 for t in items if t.favorite), duration=sum(t.duration or 0 for t in items)),
         artists=sorted(artists, key=lambda g: g.count, reverse=True)[:12],
@@ -94,6 +109,88 @@ async def play(source: str = Query(..., min_length=3), shuffle: bool = False, st
         raise HTTPException(status_code=400, detail=str(e))
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/cover/{item_id}")
+async def cover(item_id: str):
+    """Bild eines Titels: Cover der Musikdatei oder Vorschaubild des Videos."""
+    if not music_files.is_file_id(item_id):
+        return RedirectResponse(f"/api/player/{item_id}/thumbnail")
+    path = await music_files.cover_path(item_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Kein Cover")
+    return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.get("/files/status")
+async def files_status():
+    """Eigene Musiksammlung: eingehängt?, Anzahl, letztes Einlesen."""
+    return await music_files.status()
+
+
+@router.post("/files/scan", response_model=music_files.ScanResult)
+async def files_scan():
+    """Sammlung jetzt einlesen (nur Neues und Geändertes wird gelesen)."""
+    if not music_files.available():
+        raise HTTPException(status_code=404, detail="Kein Musikordner eingehängt")
+    return await music_files.scan()
+
+
+async def _file_or_404(item_id: str) -> music_files.FileInfo:
+    found = await music_files.get(item_id) if music_files.is_file_id(item_id) else None
+    if not found:
+        raise HTTPException(status_code=404, detail="Musikdatei unbekannt")
+    return found
+
+
+@router.get("/files/{item_id}", response_model=music_files.FileInfo)
+async def file_info(item_id: str):
+    return await _file_or_404(item_id)
+
+
+@router.get("/files/{item_id}/stream")
+async def file_stream(item_id: str, request: Request):
+    await _file_or_404(item_id)
+    path = await music_files.path_of(item_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Datei nicht erreichbar")
+    return range_response(str(path), request, media_type=music_files.mime_of(path))
+
+
+@router.get("/files/{item_id}/download")
+async def file_download(item_id: str):
+    """Die Datei unverändert, benannt "Interpret - Titel.flac"."""
+    found = await _file_or_404(item_id)
+    path = await music_files.path_of(item_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Datei nicht erreichbar")
+    name = audio_export.safe_name(f"{found.artist} - {found.title}" if found.artist else found.title)
+    return FileResponse(str(path), media_type=music_files.mime_of(path), filename=f"{name}{path.suffix.lower()}")
+
+
+@router.get("/files/{item_id}/lyrics")
+async def file_lyrics(item_id: str):
+    """Liedtext wie bei Videos: {plain, synced, offset} (.lrc neben der Datei oder Tag)."""
+    await _file_or_404(item_id)
+    return await music_files.lyrics(item_id)
+
+
+@router.post("/files/{item_id}/played")
+async def file_played(item_id: str):
+    await _file_or_404(item_id)
+    await music_files.record_play(item_id)
+    return {"recorded": True}
+
+
+class FavoriteRequest(BaseModel):
+    favorite: bool
+
+
+@router.put("/files/{item_id}/favorite")
+async def file_favorite(item_id: str, req: FavoriteRequest):
+    await _file_or_404(item_id)
+    await music_files.set_favorite(item_id, req.favorite)
+    return {"favorite": req.favorite}
 
 
 @router.get("/audio-info/{video_id}", response_model=audio_export.AudioInfo)

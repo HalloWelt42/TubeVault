@@ -1,10 +1,15 @@
 """
 TubeVault – Musiksammlung
 
-Ordnet die Videos, die als Musik gekennzeichnet sind (music_flag), wie eine
-Musiksammlung: Titel, Interpreten, Alben, Musikkanäle - und macht aus jeder
-Gruppe eine dynamische Wiedergabeliste ("alle Titel von ABBA", "alles aus
-dem Kanal", "Lieblingssongs", "ähnliche Titel"), wahlweise zufällig.
+Ordnet die Videos, die als Musik gekennzeichnet sind (music_flag), und die
+eigenen Musikdateien (music_files, FLAC usw.) wie eine Musiksammlung:
+Titel, Interpreten, Alben, Musikkanäle - und macht aus jeder Gruppe eine
+dynamische Wiedergabeliste ("alle Titel von ABBA", "alles aus dem Kanal",
+"Lieblingssongs", "ähnliche Titel"), wahlweise zufällig.
+
+Welche Quellen gelten, legt die Einstellung music.source fest (alle,
+sammlung = nur Dateien, videos). Gibt es einen Song als Datei und als Video,
+gilt bei "alle" die Datei (bessere Tonqualität).
 
 Interpret und Songtitel: was am Video festgelegt ist (music_artist,
 music_title), sonst aus "Interpret - Titel" im Videotitel, sonst der Kanal.
@@ -19,7 +24,12 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.database import db
+from app.services import music_files, setting_values
 from app.services.lyrics_service import suggest_artist_title
+
+MUSIC_SOURCE = "music.source"
+VIDEO = "video"
+FILE = "datei"
 
 # Zusätze an Kanalnamen von Musikkanälen
 _CHANNEL_NOISE = re.compile(r"(?:\s*-\s*Topic|VEVO|\s+Official|\s+Music)$", re.IGNORECASE)
@@ -43,6 +53,7 @@ class Track(BaseModel):
     added: Optional[str] = None
     favorite: bool = False
     has_lyrics: bool = False
+    kind: str = VIDEO                # video | datei (music_files)
 
 
 class Group(BaseModel):
@@ -52,7 +63,7 @@ class Group(BaseModel):
     subtitle: Optional[str] = None
     count: int
     duration: int
-    covers: list[str]                # bis zu vier Video-Kennungen für die Collage
+    covers: list[str]                # bis zu vier Titel-Kennungen für die Collage (Bild über /api/music/cover)
 
 
 class PlayList(BaseModel):
@@ -103,10 +114,38 @@ def _track(row) -> Track:
                  has_lyrics=bool(row["has_lyrics"]))
 
 
-async def tracks() -> list[Track]:
-    """Alle Musiktitel der Bibliothek (neueste zuerst)."""
+def _file_track(f: music_files.FileInfo) -> Track:
+    artist = (f.artist or f.album_artist or "Unbekannt").strip()
+    return Track(id=f.id, title=f.title, artist=artist, artist_source=f"artist:{group_key(artist)}",
+                 album=f.album, duration=int(f.duration) if f.duration else None, play_count=f.play_count,
+                 last_played=f.last_played, added=f.added_at, favorite=f.favorite, has_lyrics=f.has_lyrics, kind=FILE)
+
+
+async def video_tracks() -> list[Track]:
     rows = await db.fetch_all(f"{_TRACK_SQL} AND v.is_music = 1 ORDER BY v.download_date DESC, v.id")
     return [_track(row) for row in rows]
+
+
+async def file_tracks() -> list[Track]:
+    return [_file_track(f) for f in await music_files.all_files()]
+
+
+async def source_setting() -> str:
+    return await setting_values.get(MUSIC_SOURCE)
+
+
+async def tracks() -> list[Track]:
+    """Alle Musiktitel der gewählten Quellen (neueste zuerst)."""
+    source = await source_setting()
+    videos = await video_tracks() if source != "sammlung" else []
+    files = await file_tracks() if source != "videos" else []
+    if videos and files:
+        # Doppelte Songs: die Datei gilt (bessere Tonqualität)
+        have = {(group_key(t.artist), group_key(t.title)) for t in files}
+        videos = [t for t in videos if (group_key(t.artist), group_key(t.title)) not in have]
+    merged = [*videos, *files]
+    merged.sort(key=lambda t: t.added or "", reverse=True)
+    return merged
 
 
 async def tracks_of(video_ids: list[str]) -> list[Track]:

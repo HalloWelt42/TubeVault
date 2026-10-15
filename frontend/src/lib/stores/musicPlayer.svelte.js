@@ -9,6 +9,7 @@
 // Versionswache laufende Wiedergabe und lädt nicht mitten im Titel neu.
 // Startet ein Video, hält die Musik an - und umgekehrt.
 import { api } from '../api/client.js';
+import { audioSrc, coverUrl, isFile, recordPlay, setFavorite } from '../utils/musicTrack.js';
 import { loadSkipRanges, skipTarget } from '../utils/adSkip.js';
 import { emitVideoMutation } from '../utils/videoMutations.js';
 
@@ -145,7 +146,7 @@ class MusicPlayer {
     this.time = at;
     this.duration = track.duration || 0;
     this.#counted = null;
-    audio.src = api.streamUrl(track.id);
+    audio.src = audioSrc(track);
     audio.currentTime = at;
     this.#updateMetadata();
     this.#save();
@@ -153,7 +154,8 @@ class MusicPlayer {
     this.audioInfo = null;
     api.musicAudioInfo(track.id).then((info) => { if (this.current?.id === track.id) this.audioInfo = info; }).catch(() => {});
     this.#skipRanges = [];
-    loadSkipRanges(track.id).then((ranges) => { if (this.current?.id === track.id) this.#skipRanges = ranges; });
+    // Werbestellen gibt es nur in Videos
+    if (!isFile(track)) loadSkipRanges(track.id).then((ranges) => { if (this.current?.id === track.id) this.#skipRanges = ranges; });
   }
 
   /** Weiterhören: gespeicherte Warteschlange an der gemerkten Stelle fortsetzen */
@@ -329,8 +331,7 @@ class MusicPlayer {
   /** Lieblingssong an- oder abwählen (Favoriten der Bibliothek) */
   async toggleFavorite(track = this.current) {
     if (!track) return;
-    if (track.favorite) await api.removeFavorite(track.id);
-    else await api.addFavorite({ video_id: track.id });
+    await setFavorite(track, !track.favorite);
     const favorite = !track.favorite;
     this.queue = this.queue.map(t => t.id === track.id ? { ...t, favorite } : t);
     return favorite;
@@ -344,7 +345,7 @@ class MusicPlayer {
     if (target !== null) audio.currentTime = target;
     if (this.current && this.#counted !== this.current.id && audio.currentTime >= COUNT_AFTER_S) {
       this.#counted = this.current.id;
-      api.recordPlay(this.current.id, 0).catch(() => {});
+      recordPlay(this.current).catch(() => {});
     }
     clearTimeout(this.#saveTimer);
     this.#saveTimer = setTimeout(() => this.#save(), 3000);
@@ -358,7 +359,7 @@ class MusicPlayer {
   #onEnded() {
     if (this.current && this.#counted !== this.current.id) {
       this.#counted = this.current.id;
-      api.recordPlay(this.current.id, 0).catch(() => {});
+      recordPlay(this.current).catch(() => {});
     }
     if (this.repeat === 'one') return this.#start(this.index);
     this.next();
@@ -383,7 +384,7 @@ class MusicPlayer {
   #updateMetadata() {
     const track = this.current;
     if (!track || !('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
-    const artwork = new URL(api.thumbnailUrl(track.id), location.href).href;
+    const artwork = new URL(coverUrl(track), location.href).href;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title, artist: track.artist, album: track.album || this.title || 'TubeVault',
       artwork: [{ src: artwork, sizes: '480x360', type: 'image/jpeg' }],

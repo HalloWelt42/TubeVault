@@ -4,6 +4,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { coverUrl } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../utils/format.js';
 
@@ -24,8 +25,8 @@
         {#if current && player.playing}<i class="fa-solid fa-volume-high"></i>
         {:else}<span class="ziffer">{numbered ? i + 1 : ''}</span><i class="fa-solid fa-play spielen"></i>{/if}
       </span>
-      <img src={api.thumbnailUrl(track.id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-      <span class="t" title={track.title}>{track.title}</span>
+      <img src={coverUrl(track)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+      <span class="t" title={track.title}>{#if track.kind === 'datei'}<i class="fa-solid fa-compact-disc sammlung" title="Aus der eigenen Sammlung"></i> {/if}{track.title}</span>
       <span class="w" title={track.artist}>{track.artist}</span>
       {#if showPlays}<span class="zahl w">{track.play_count}x</span>{/if}
       <span class="zahl w">{formatDuration(track.duration || 0)}</span>
@@ -37,6 +38,7 @@
 </div>
 
 <style>
+  .sammlung { color: var(--tv-art-musik); font-size: 0.85em; }
   .zeile { display: grid; grid-template-columns: 32px 48px minmax(0, 2fr) minmax(0, 1fr) 64px 34px 34px; gap: var(--tv-a3);
            align-items: center; padding: 6px var(--tv-a2); border-radius: var(--tv-ecke); cursor: pointer; }
   .zeile.mit-zahl { grid-template-columns: 32px 48px minmax(0, 2fr) minmax(0, 1fr) 70px 64px 34px 34px; }

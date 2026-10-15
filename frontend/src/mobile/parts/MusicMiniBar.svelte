@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../lib/api/client.js';
+  import { coverUrl } from '../../lib/utils/musicTrack.js';
   import { musicPlayer as player } from '../../lib/stores/musicPlayer.svelte.js';
   import { go } from '../router.js';
 
@@ -16,7 +17,7 @@
   <div class="mini">
     <span class="fortschritt" style:width="{progress * 100}%"></span>
     <button class="info" onclick={() => go('/jetzt')}>
-      <img src={api.thumbnailUrl(track.id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+      <img src={coverUrl(track)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
       <span class="text"><span class="t">{track.title}</span><span class="w">{track.artist}</span></span>
     </button>
     <button class="taste" onclick={() => player.toggle()} aria-label={player.playing ? 'Pause' : 'Abspielen'}>

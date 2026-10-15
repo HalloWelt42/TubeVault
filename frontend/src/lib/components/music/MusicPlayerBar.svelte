@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { coverUrl, downloadUrl, isFile } from '../../utils/musicTrack.js';
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
@@ -68,7 +69,7 @@
   <div class="spieler" bind:this={barEl}>
     <div class="links">
       <button class="cover" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Läuft gerade">
-        <img src={api.thumbnailUrl(track.id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+        <img src={coverUrl(track)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
       </button>
       <div class="text">
         <div class="t" title={track.title}>{track.title}</div>
@@ -79,8 +80,11 @@
       <button class="taste weg" onclick={removeFromList}
               title={player.playlistId ? 'Aus der Wiedergabeliste nehmen und weiter' : 'Aus der Warteschlange nehmen und weiter'}>
         <i class="fa-solid fa-circle-minus"></i></button>
-      <button class="taste weg" onclick={() => player.deleteTrack()} title="Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück">
-        <i class="fa-solid fa-trash-can"></i></button>
+      {#if !isFile(track)}
+        <!-- Dateien der eigenen Sammlung werden nie gelöscht, nur aus der Liste genommen -->
+        <button class="taste weg" onclick={() => player.deleteTrack()} title="Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück">
+          <i class="fa-solid fa-trash-can"></i></button>
+      {/if}
     </div>
 
     <div class="mitte">
@@ -122,7 +126,7 @@
         <i class="fa-solid fa-align-left"></i></button>
       <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Warteschlange">
         <i class="fa-solid fa-list-ol"></i></button>
-      <a class="taste" href={api.audioDownloadUrl(track.id, 'original')} download title="Ton herunterladen (wie geladen, ohne Neukodierung)">
+      <a class="taste" href={downloadUrl(track)} download title="Ton herunterladen (wie geladen, ohne Neukodierung)">
         <i class="fa-solid fa-download"></i></a>
       <button class="taste" onclick={() => { player.pause(); navigate(`/watch/${track.id}`); }} title="Als Video ansehen">
         <i class="fa-solid fa-display"></i></button>

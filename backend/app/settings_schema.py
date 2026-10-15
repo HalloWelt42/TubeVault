@@ -124,6 +124,13 @@ SETTINGS: list[SettingDef] = [
                label="KI-Transkripte erstellen",
                description="Der Rechner mit der Spracherkennung holt sich laufend das nächste Video. "
                            "Angehalten wird nach dem Video, das gerade bearbeitet wird."),
+    SettingDef(key="music.source", default="alle", kind="select", category="music",
+               options=["alle", "sammlung", "videos"],
+               option_labels={"alle": "Alles", "sammlung": "Eigene Sammlung", "videos": "Musikvideos"},
+               label="Quelle der Musik",
+               description="Was Musikseite und Musikspieler zeigen und spielen: die eigene Sammlung "
+                           "(FLAC und andere Dateien), die Musikvideos oder beides. Gibt es einen Song "
+                           "doppelt, gilt bei 'Alles' die Datei."),
     SettingDef(key="history.paused", default="false", kind="toggle", category="history",
                label="Verlauf pausiert",
                description="Solange an, schreibt TubeVault keinen Verlauf mit. Gemerkte Stellen "

@@ -4,6 +4,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { coverUrl } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
 
   let { track, onPlay = () => {}, onMenu = () => {} } = $props();
@@ -15,7 +16,7 @@
      onclick={() => current ? player.toggle() : onPlay()} onkeydown={(e) => e.key === 'Enter' && onPlay()}
      oncontextmenu={(e) => onMenu(e, track)}>
   <div class="cover">
-    <img src={api.thumbnailUrl(track.id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+    <img src={coverUrl(track)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
     {#if current && player.playing}<div class="wellen"><b></b><b></b><b></b><b></b></div>{/if}
     <button class="mehr" onclick={(e) => onMenu(e, track)} title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
     <span class="spielen"><i class="fa-solid {current && player.playing ? 'fa-pause' : 'fa-play'}"></i></span>

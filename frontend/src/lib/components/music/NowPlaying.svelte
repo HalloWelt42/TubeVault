@@ -4,6 +4,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { coverUrl, isFile, loadLyrics } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../utils/format.js';
   import { parseLrc, lineAt } from '../../utils/lrc.js';
@@ -22,7 +23,7 @@
     const id = track?.id;
     if (!id || lyrics.id === id) return;
     lyrics = { id, plain: '', synced: [], offset: 0 };
-    api.getLyrics(id).then((res) => {
+    loadLyrics(track).then((res) => {
       if (player.current?.id !== id) return;
       lyrics = { id, plain: res.plain || '', synced: parseLrc(res.synced), offset: res.offset || 0 };
     }).catch(() => {});
@@ -44,7 +45,7 @@
 <div class="jetzt">
   {#if track}
     <div class="kopf">
-      <img src={api.thumbnailUrl(track.id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+      <img src={coverUrl(track)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
       <div class="titel">{track.title}</div>
       {#if onOpenArtist}
         <button class="interpret" onclick={() => onOpenArtist(track)}>{track.artist}</button>
@@ -65,7 +66,7 @@
                  ondragstart={() => dragFrom = i} ondragover={(e) => e.preventDefault()} ondrop={() => drop(i)}>
               <i class="fa-solid {i === player.index ? 'fa-volume-high' : 'fa-grip-vertical'} griff"></i>
               <button class="eintrag-text" onclick={() => player.jump(i)} title="Abspielen">
-                <img src={api.thumbnailUrl(item.id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+                <img src={coverUrl(item)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
                 <span class="text"><span class="t">{item.title}</span><span class="tv-leise">{item.artist}</span></span>
               </button>
               <span class="zahl tv-leise">{formatDuration(item.duration || 0)}</span>
@@ -89,7 +90,8 @@
         {:else if lyrics.plain}
           <pre>{lyrics.plain}</pre>
         {:else}
-          <div class="tv-leer tv-klein">Kein Liedtext. Suchen und festlegen lässt er sich in der Videoansicht.</div>
+          <div class="tv-leer tv-klein">{isFile(track) ? 'Kein Liedtext in der Datei und keine .lrc daneben.'
+            : 'Kein Liedtext. Suchen und festlegen lässt er sich in der Videoansicht.'}</div>
         {/if}
       </div>
     {:else}

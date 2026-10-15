@@ -10,6 +10,8 @@ TubeVault – Tonspuren: messen und ausgeben
   wie bei jedem Download herausgeschnitten - dann muss auch "original" neu
   kodiert werden, in derselben Art bei hoher Bitrate.
 - ZIP: mehrere Tonspuren als ein Archiv (Wiedergabelisten, Interpreten ...).
+- Musikdateien der eigenen Sammlung (music_files) gehen genauso: "original"
+  kopiert die Datei unverändert, andere Formate kodieren neu.
 
 Alles mit ffmpeg/ffprobe als eigener Prozess, die Dateiarbeit im eigenen
 Strang - der Server bleibt währenddessen frei.
@@ -17,6 +19,7 @@ Strang - der Server bleibt währenddessen frei.
 import asyncio
 import json
 import re
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -24,7 +27,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import ad_free_export, ad_segments
+from app.services import ad_free_export, ad_segments, music_files
 
 ORIGINAL = "original"
 FORMATS = (ORIGINAL, *ad_free_export.AUDIO_CODECS)
@@ -56,6 +59,7 @@ class AudioInfo(BaseModel):
     bitrate: Optional[int] = None
     sample_rate: Optional[int] = None
     channels: Optional[int] = None
+    bit_depth: Optional[int] = None
 
 
 async def install_schema(connection) -> None:
@@ -77,7 +81,12 @@ async def _probe(path: Path) -> AudioInfo:
 
 
 async def info(video_id: str) -> Optional[AudioInfo]:
-    """Angaben zur Tonspur eines geladenen Videos (gemerkt je Dateigröße)."""
+    """Angaben zur Tonspur eines geladenen Videos (gemerkt je Dateigröße) oder
+    einer Musikdatei (aus ihren Tags)."""
+    if music_files.is_file_id(video_id):
+        f = await music_files.get(video_id)
+        return AudioInfo(codec=(f.codec or "").lower() or None, bitrate=f.bitrate, sample_rate=f.sample_rate,
+                         channels=f.channels, bit_depth=f.bit_depth) if f else None
     video = await db.fetch_one("SELECT file_path, file_size FROM videos WHERE id = ? AND status = 'ready'", (video_id,))
     if not video or not video["file_path"]:
         return None
@@ -102,10 +111,28 @@ def safe_name(text: str) -> str:
     return re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", text).strip(" .")[:120] or "Titel"
 
 
+async def _export_file(file_id: str, fmt: str, folder: Path, name: Optional[str]) -> Path:
+    src = await music_files.path_of(file_id)
+    if not src:
+        raise LookupError("Datei nicht vorhanden")
+    f = await music_files.get(file_id)
+    label = safe_name(name or (f"{f.artist} - {f.title}" if f.artist else f.title))
+    if fmt == ORIGINAL:
+        out = folder / f"{label}{src.suffix.lower()}"
+        await asyncio.to_thread(shutil.copy2, src, out)
+        return out
+    out = folder / f"{label}.{fmt}"
+    await ad_free_export.run_tool("ffmpeg", "-v", "error", "-y", "-i", str(src), "-vn", "-map", "0:a:0",
+                                  *ad_free_export.AUDIO_CODECS[fmt], str(out))
+    return out
+
+
 async def export(video_id: str, fmt: str, folder: Path, name: Optional[str] = None) -> Path:
-    """Tonspur eines Videos als Datei in folder (ohne Werbestellen)."""
+    """Tonspur eines Videos (ohne Werbestellen) oder eine Musikdatei als Datei in folder."""
     if fmt not in FORMATS:
         raise ValueError("Unbekanntes Format")
+    if music_files.is_file_id(video_id):
+        return await _export_file(video_id, fmt, folder, name)
     video = await db.fetch_one("SELECT title, file_path FROM videos WHERE id = ? AND status = 'ready'", (video_id,))
     if not video or not video["file_path"] or not Path(video["file_path"]).is_file():
         raise LookupError("Datei nicht vorhanden")

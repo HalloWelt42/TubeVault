@@ -526,6 +526,16 @@ export const api = {
   musicAlbums: () => request('/api/music/albums'),
   musicChannels: () => request('/api/music/channels'),
   musicAudioInfo: (videoId) => request(`/api/music/audio-info/${videoId}`),
+  // Eigene Musiksammlung (Dateien) - welche Art ein Titel ist, weiß utils/musicTrack.js
+  musicCoverUrl: (id) => `${API_BASE}/api/music/cover/${id}`,
+  musicFileStreamUrl: (id) => `${API_BASE}/api/music/files/${id}/stream`,
+  musicFileDownloadUrl: (id) => `${API_BASE}/api/music/files/${id}/download`,
+  musicFileLyrics: (id) => request(`/api/music/files/${id}/lyrics`),
+  musicFilePlayed: (id) => request(`/api/music/files/${id}/played`, { method: 'POST' }),
+  musicFileFavorite: (id, favorite) =>
+    request(`/api/music/files/${id}/favorite`, { method: 'PUT', body: JSON.stringify({ favorite }) }),
+  musicFilesStatus: () => request('/api/music/files/status'),
+  musicFilesScan: () => request('/api/music/files/scan', { method: 'POST' }),
   musicZipUrl: (source, format = 'original') => `${API_BASE}/api/music/export.zip?source=${encodeURIComponent(source)}&format=${format}`,
   musicPlay: (source, { shuffle = false, start = null } = {}) => {
     const params = new URLSearchParams({ source, shuffle });

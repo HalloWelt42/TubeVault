@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { downloadUrl, isFile } from '../../utils/musicTrack.js';
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
@@ -47,12 +48,12 @@
       } },
     { icon: 'fa-download', label: 'Ton herunterladen', run: (t) => {
         const link = document.createElement('a');
-        link.href = api.audioDownloadUrl(t.id, 'original');
+        link.href = downloadUrl(t);
         link.download = '';
         link.click();
       } },
-    { icon: 'fa-display', label: 'Als Video ansehen', run: (t) => { player.pause(); navigate(`/watch/${t.id}`); } },
-    { icon: 'fa-ban', label: 'Keine Musik', run: async (t) => {
+    { icon: 'fa-display', label: 'Als Video ansehen', video: true, run: (t) => { player.pause(); navigate(`/watch/${t.id}`); } },
+    { icon: 'fa-ban', label: 'Keine Musik', video: true, run: async (t) => {
         await api.setMusicBatch([t.id], false);
         onChanged(t, { removed: true });
         toast.success('Aus der Musik genommen (von Hand, bleibt so)');
@@ -66,7 +67,8 @@
   <div class="hintergrund" role="presentation" onclick={close} oncontextmenu={(e) => { e.preventDefault(); close(); }}></div>
   <div class="menue" style:left="{x}px" style:top="{y}px" role="menu">
     <div class="kopf"><div class="t">{track.title}</div><div class="tv-leise tv-klein">{track.artist}</div></div>
-    {#each actions as action}
+    <!-- Was nur ein Video kann, fehlt bei Dateien der eigenen Sammlung -->
+    {#each actions.filter(a => !a.video || !isFile(track)) as action}
       {#if action.trenner}<hr />
       {:else}
         <button role="menuitem" onclick={() => act(action.run)}>

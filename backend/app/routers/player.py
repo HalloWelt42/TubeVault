@@ -5,21 +5,19 @@ Subtitles, Audio-Extraktion
 © HalloWelt42 – Private Nutzung
 """
 
-import os
 import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse, FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from app.database import db
 from app.config import THUMBNAILS_DIR
 from app.services.archive_service import archive_service
+from app.utils.range_file import range_response
 from app.utils.video_ids import is_source_video
 
 router = APIRouter(prefix="/api/player", tags=["Player"])
-
-CHUNK_SIZE = 1024 * 1024  # 1MB
 
 
 @router.get("/{video_id}")
@@ -44,64 +42,7 @@ async def stream_video(video_id: str, request: Request):
             )
         raise HTTPException(status_code=404, detail="Video-Datei nicht gefunden")
 
-    file_path = resolved["path"]
-
-    file_size = os.path.getsize(file_path)
-    mime_type = mimetypes.guess_type(file_path)[0] or "video/mp4"
-
-    # Range Request Header parsen
-    range_header = request.headers.get("range")
-
-    if range_header:
-        # Range: bytes=start-end
-        range_str = range_header.replace("bytes=", "")
-        parts = range_str.split("-")
-        start = int(parts[0]) if parts[0] else 0
-        end = int(parts[1]) if parts[1] else file_size - 1
-
-        # Grenzen prüfen
-        if start >= file_size:
-            raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-        end = min(end, file_size - 1)
-        content_length = end - start + 1
-
-        async def generate():
-            with open(file_path, "rb") as f:
-                f.seek(start)
-                remaining = content_length
-                while remaining > 0:
-                    chunk = f.read(min(CHUNK_SIZE, remaining))
-                    if not chunk:
-                        break
-                    remaining -= len(chunk)
-                    yield chunk
-
-        return StreamingResponse(
-            generate(),
-            status_code=206,
-            media_type=mime_type,
-            headers={
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                "Content-Length": str(content_length),
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "no-cache",
-            },
-        )
-    else:
-        # Kein Range Request → komplette Datei
-        async def generate_full():
-            with open(file_path, "rb") as f:
-                while chunk := f.read(CHUNK_SIZE):
-                    yield chunk
-
-        return StreamingResponse(
-            generate_full(),
-            media_type=mime_type,
-            headers={
-                "Content-Length": str(file_size),
-                "Accept-Ranges": "bytes",
-            },
-        )
+    return range_response(resolved["path"], request, fallback_type="video/mp4")
 
 
 @router.get("/{video_id}/stream/{stream_id}")
@@ -118,41 +59,7 @@ async def stream_specific(video_id: str, stream_id: int, request: Request):
     if not file_path or not Path(file_path).exists():
         raise HTTPException(status_code=404, detail="Stream-Datei nicht gefunden")
 
-    file_size = os.path.getsize(file_path)
-    mime_type = stream["mime_type"] or "application/octet-stream"
-
-    range_header = request.headers.get("range")
-    if range_header:
-        range_str = range_header.replace("bytes=", "")
-        parts = range_str.split("-")
-        start = int(parts[0]) if parts[0] else 0
-        end = int(parts[1]) if parts[1] else file_size - 1
-        end = min(end, file_size - 1)
-        content_length = end - start + 1
-
-        async def generate():
-            with open(file_path, "rb") as f:
-                f.seek(start)
-                remaining = content_length
-                while remaining > 0:
-                    chunk = f.read(min(CHUNK_SIZE, remaining))
-                    if not chunk:
-                        break
-                    remaining -= len(chunk)
-                    yield chunk
-
-        return StreamingResponse(
-            generate(),
-            status_code=206,
-            media_type=mime_type,
-            headers={
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                "Content-Length": str(content_length),
-                "Accept-Ranges": "bytes",
-            },
-        )
-
-    return FileResponse(file_path, media_type=mime_type)
+    return range_response(file_path, request, media_type=stream["mime_type"] or None)
 
 
 @router.get("/{video_id}/thumbnail")
@@ -467,36 +374,7 @@ async def audiofix_preview(video_id: str, request: Request):
     fixed = audio_fix._staging_dir(video_id) / "fixed.mp4"
     if not fixed.exists():
         raise HTTPException(status_code=404, detail="Kein gebautes Video")
-    file_size = fixed.stat().st_size
-    range_header = request.headers.get("range")
-    if range_header and range_header.startswith("bytes="):
-        rng = range_header.replace("bytes=", "").split("-")
-        start = int(rng[0]) if rng[0] else 0
-        end = int(rng[1]) if len(rng) > 1 and rng[1] else file_size - 1
-        end = min(end, file_size - 1)
-        length = end - start + 1
-
-        async def gen():
-            with open(fixed, "rb") as f:
-                f.seek(start)
-                remaining = length
-                while remaining > 0:
-                    chunk = f.read(min(CHUNK_SIZE, remaining))
-                    if not chunk:
-                        break
-                    remaining -= len(chunk)
-                    yield chunk
-
-        return StreamingResponse(
-            gen(), status_code=206,
-            headers={
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(length),
-                "Content-Type": "video/mp4",
-            },
-        )
-    return FileResponse(str(fixed), media_type="video/mp4")
+    return range_response(str(fixed), request, media_type="video/mp4")
 
 
 @router.post("/{video_id}/audiofix/commit")

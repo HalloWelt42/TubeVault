@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { coverUrl } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDurationLong } from '../../utils/format.js';
 
@@ -18,7 +19,7 @@
 <div class="gruppe" class:laeuft={current} role="button" tabindex="0" onclick={onOpen}
      onkeydown={(e) => e.key === 'Enter' && onOpen()} title="{group.name} - öffnen">
   <div class="cover" class:collage={covers.length}>
-    {#each covers as id, i (i)}<img src={api.thumbnailUrl(id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />{/each}
+    {#each covers as id, i (i)}<img src={coverUrl(id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />{/each}
     {#if !covers.length}<i class="fa-solid {icon || 'fa-music'} zeichen"></i>{/if}
     <div class="tasten">
       <button class="taste" onclick={(e) => { e.stopPropagation(); player.playSource(group.key); }} title="Abspielen">

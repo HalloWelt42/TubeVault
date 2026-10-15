@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../lib/api/client.js';
+  import { coverUrl } from '../../lib/utils/musicTrack.js';
   import { musicPlayer as player } from '../../lib/stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../lib/utils/format.js';
 
@@ -74,7 +75,7 @@
       {#each artists as group (group.key)}
         <div class="gruppe">
           <button class="oeffnen" onclick={() => open(group.key)}>
-            <img src={api.thumbnailUrl(group.covers[0])} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+            <img src={coverUrl(group.covers[0])} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
             <span class="text"><span class="t">{group.name}</span><span class="w zahl">{group.count} Titel</span></span>
           </button>
           <button class="taste" onclick={() => play(group.key, true)} aria-label="Zufällig"><i class="fa-solid fa-shuffle"></i></button>
@@ -86,7 +87,7 @@
         {#each overview.channels as group (group.key)}
           <div class="gruppe">
             <button class="oeffnen" onclick={() => open(group.key)}>
-              <img src={api.thumbnailUrl(group.covers[0])} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+              <img src={coverUrl(group.covers[0])} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
               <span class="text"><span class="t">{group.name}</span><span class="w zahl">{group.count} Titel</span></span>
             </button>
             <button class="taste" onclick={() => play(group.key, true)} aria-label="Zufällig"><i class="fa-solid fa-shuffle"></i></button>
@@ -104,7 +105,7 @@
 
 {#snippet titelZeile(track, onplay)}
   <button class="zeile" class:laeuft={player.current?.id === track.id} onclick={onplay}>
-    <img src={api.thumbnailUrl(track.id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+    <img src={coverUrl(track)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
     <span class="text"><span class="t">{track.title}</span><span class="w">{track.artist}</span></span>
     <span class="zahl w">{formatDuration(track.duration || 0)}</span>
   </button>

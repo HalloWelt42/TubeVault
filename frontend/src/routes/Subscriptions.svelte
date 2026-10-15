@@ -1,130 +1,147 @@
+<!--
+  Kanäle (Entwurf mockups/kanaele.html): Abos als Kacheln oder dichte Liste
+  mit haftendem Tabellenkopf, Prüfstand und Drip-Prognose im festen Kopf,
+  Hinzufügen einzeln oder als Liste, Filter, Medaillen, Suche, Sortierung,
+  Menü je Kanal, Seitenblatt mit allen Einstellungen, Auswahl mit
+  Stapelaktionen, Abo beenden mit der Frage nach den Videos.
+  Alle Wege (Kachel, Liste, Menü, Seitenblatt, Stapel) ändern einen Kanal
+  über dieselben Einzel-Aktionen dieser Seite.
+-->
 <script>
+  import { onMount } from 'svelte';
   import { api } from '../lib/api/client.js';
-  import { parseServerTime } from '../lib/utils/format.js';
-  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
-  let confirmRef;
   import { toast } from '../lib/stores/notifications.js';
   import { navigate } from '../lib/router/router.js';
-  import { formatDateRelative } from '../lib/utils/format.js';
-  import { VIDEO_QUALITIES } from '../lib/constants/qualities.js';
+  import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
+  import { formatSize } from '../lib/utils/format.js';
+  import PageHeader from '../lib/components/common/PageHeader.svelte';
+  import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
+  import ActionMenu from '../lib/components/common/ActionMenu.svelte';
+  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  import CollectionBar from '../lib/components/collection/CollectionBar.svelte';
+  import ChannelSettingsSheet from '../lib/components/channel/ChannelSettingsSheet.svelte';
+  import {
+    FILTERS, MEDAL_FILTERS, SORTS, channelBadges, channelName, coveragePercent, coverageShare, coverageTitle,
+    dayText, dripCount, filterChannels, filterCounts, medalOf, medalStyle, missingCount, momentText, num,
+    qualityItems, qualityShort, sortChannels,
+  } from '../lib/components/channel/channelView.js';
 
-  function fmtInterval(seconds) {
-    if (!seconds) return '?';
-    if (seconds < 3600) return `${Math.round(seconds / 60)}min`;
-    if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
-    return `${Math.round(seconds / 86400)}d`;
-  }
+  const PAGE = 'subscriptions';                  // Merker für Ansicht und Sortierung
+  const MISSING_BATCH = 5;                       // "5 fehlende laden" im Menü
+  const REFRESH_AFTER_ADD_MS = 8000;             // Kanalbild und erste Videos kommen nach
+  const REFRESH_AFTER_FIX_MS = 800;
+  const DISK_LOW_BYTES = 50 * 1024 ** 3;
+  const CHANNEL_ID = /UC[0-9A-Za-z_-]{22}/;
+  const COLUMNS = [
+    { cls: 'sp-kanal', label: 'Kanal', sort: 'name' },
+    { cls: 'sp-abdeckung', label: 'Abdeckung', sort: 'abdeckung' },
+    { cls: 'sp-neu', label: 'Neu', sort: 'neu' },
+    { cls: 'sp-video', label: 'Neuestes Video', sort: 'hochgeladen' },
+    { cls: 'sp-geprueft', label: 'Geprüft' },
+    { cls: 'sp-merkmale', label: 'Merkmale' },
+    { cls: 'sp-mehr', label: '' },
+  ];
 
-  function openChannel(sub) {
-    navigate(`/channel/${sub.channel_id}`);
-  }
-
+  // ── Daten ──
   let subs = $state([]);
-  let loaded = $state(false);   // bis zur ersten Antwort "Lädt", nie "Noch keine Kanäle"
   let total = $state(0);
+  let loaded = $state(false);          // bis zur ersten Antwort "Lädt", nie "Noch keine Kanäle"
   let rssStats = $state(null);
-  let showImport = $state(false);
+  let scheduler = $state(null);
+  let prognosis = $state(null);
+
+  // ── Ansicht ──
+  let search = $state('');
+  let filter = $state('');
+  let sort = $state(savedChoice('sort', SORTS.map((s) => s.key), 'name'));
+  let view = $state(savedChoice('view', ['kacheln', 'liste'], 'kacheln'));
+  let selecting = $state(false);
+  let selected = $state(new Set());    // Abo-IDs
+  let batchBusy = $state(false);
+  let sheet = $state(null);            // { id, problems } des offenen Seitenblatts
+  let checking = $state({});           // Abo-ID -> Prüfung läuft
+
+  // ── Hinzufügen ──
+  let adding = $state(false);
+  let listOpen = $state(false);
   let channelInput = $state('');
   let batchInput = $state('');
   let autoDownload = $state(false);
-  // leer = Kanal erbt die Qualität aus den Einstellungen
-  let defaultQuality = $state('');
-  let loading = $state(false);
+  let newQuality = $state('');         // leer = Qualität aus den Einstellungen
+  let subscribing = $state(false);
   let importing = $state(false);
-  let filterMode = $state('all');
-  let searchQuery = $state('');
-  let prognosis = $state(null);
-  let scheduler = $state(null);
-  let checking = $state({});   // Abo-ID -> Einzelprüfung läuft
-  // Problem-Videos-Sektion: pro Abo-ID: { open: bool, loading: bool, videos: [...] }
-  let problemState = $state({});
 
-  async function loadPrognosis() {
-    try { prognosis = await api.getDripPrognosis(); } catch { prognosis = null; }
-  }
+  let menu, confirmRef, refreshTimer;
 
-  async function toggleProblems(sub) {
-    const id = sub.id;
-    const cur = problemState[id] || { open: false, loading: false, videos: [] };
-    if (cur.open) {
-      problemState[id] = { ...cur, open: false };
-      return;
+  let counts = $derived(filterCounts(subs));
+  let shown = $derived(sortChannels(filterChannels(subs, { filter, search }), sort));
+  let visibleFilters = $derived(FILTERS.filter((f) => !f.optional || counts[f.key] > 0 || filter === f.key));
+  let selectedSubs = $derived(shown.filter((s) => selected.has(s.id)));
+  let batchAll = $derived({
+    auto: selectedSubs.length > 0 && selectedSubs.every((s) => s.auto_download),
+    drip: selectedSubs.length > 0 && selectedSubs.every((s) => s.drip_enabled),
+    music: selectedSubs.length > 0 && selectedSubs.every((s) => s.music_channel),
+  });
+  let sheetSub = $derived(sheet ? subs.find((s) => s.id === sheet.id) : null);
+  let batchLines = $derived(batchInput.split('\n').filter((line) => line.trim()).length);
+
+  let info = $derived.by(() => {
+    if (!loaded) return null;
+    const count = shown.length === subs.length
+      ? `${num(total)} ${total === 1 ? 'Kanal' : 'Kanäle'}`
+      : `${num(shown.length)} von ${num(total)} Kanälen`;
+    const medals = MEDAL_FILTERS.filter((f) => counts[f.key]).map((f) => `${num(counts[f.key])} ${f.label}`);
+    return [count, ...medals].join(' · ');
+  });
+
+  /** Stand der automatischen Prüfung: { icon, warn, parts: [{ before, count, after }] } */
+  let schedulerState = $derived.by(() => {
+    if (!scheduler) return null;
+    if (!scheduler.rss_enabled) {
+      return { icon: 'fa-circle-pause', parts: [{ before: 'Die automatische Prüfung ist in den Einstellungen abgeschaltet.' }] };
     }
-    problemState[id] = { ...cur, open: true, loading: true };
-    try {
-      const res = await api.getChannelProblemVideos(sub.channel_id);
-      problemState[id] = { open: true, loading: false, videos: res.videos || [] };
-    } catch (e) {
-      toast.error(`Problem-Videos laden fehlgeschlagen: ${e.message}`);
-      problemState[id] = { open: true, loading: false, videos: [] };
+    if (scheduler.disturbance?.active) {
+      const minutes = Math.ceil(scheduler.disturbance.pause_seconds_left / 60);
+      return { icon: 'fa-triangle-exclamation', warn: true, parts: [
+        { before: 'Quelle gestört: die Prüfung pausiert noch', count: minutes, after: `Min. (${scheduler.disturbance.reason})` }] };
     }
+    const parts = scheduler.polling ? [{ before: 'Eine Prüfung läuft gerade' }] : [{ count: scheduler.feeds_pending, after: 'Kanäle sind fällig' }];
+    if (scheduler.last_tick?.status === 'skipped') parts.push({ before: `letzter Anstoß ausgesetzt: ${scheduler.last_tick.message}` });
+    if (scheduler.auto_download?.pending > 0) {
+      parts.push({ count: scheduler.auto_download.pending, after: 'Videos für Auto-Download vorgemerkt' });
+      if (scheduler.auto_download.daily_limit) parts.push({ before: 'Tageslimit', count: scheduler.auto_download.daily_limit });
+    }
+    if (counts.ungeprueft) parts.push({ count: counts.ungeprueft, after: 'Kanäle warten auf ihre erste Prüfung' });
+    return { icon: scheduler.polling ? 'fa-rotate fa-spin' : 'fa-circle-check', parts };
+  });
+
+  /** Drip-Prognose für alle Kanäle mit Drip, Teile wie oben. */
+  let prognosisState = $derived.by(() => {
+    const p = prognosis;
+    if (!(p?.drip_channels > 0)) return null;
+    const parts = [{ before: 'Drip:', count: p.drip_channels, after: 'Kanäle' }, { count: p.total_missing, after: 'Videos fehlen' }];
+    if (p.avg_video_size > 0) {
+      parts.push({ before: 'etwa', count: formatSize(p.estimated_bytes) }, { before: 'noch etwa', count: remainingText(p.days_remaining) });
+    }
+    if (p.disk_free > 0) {
+      parts.push({ count: formatSize(p.disk_free), after: p.disk_total > 0 ? `frei von ${formatSize(p.disk_total)}` : 'frei',
+                   warn: p.disk_free < DISK_LOW_BYTES });
+    }
+    if (p.unscanned_channels > 0) parts.push({ count: p.unscanned_channels, after: 'Kanäle ohne Scan' });
+    return { icon: 'fa-droplet', parts };
+  });
+
+  function remainingText(days) {
+    if (days > 365) return `${(days / 365).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Jahre`;
+    return `${num(days)} ${days === 1 ? 'Tag' : 'Tage'}`;
   }
 
-  async function retryProblemVideo(sub, problem) {
-    try {
-      await api.retryDownload(problem.job_id);
-      toast.success(`"${problem.title}" zurück in Warteschlange`);
-      // Aus der lokalen Liste entfernen
-      const st = problemState[sub.id];
-      if (st) {
-        problemState[sub.id] = {
-          ...st,
-          videos: st.videos.filter(v => v.job_id !== problem.job_id),
-        };
-      }
-      // Karte mit aktueller Count neu holen
-      setTimeout(loadSubs, 800);
-    } catch (e) {
-      toast.error(`Zurück-in-Queue fehlgeschlagen: ${e.message}`);
-    }
+  function savedChoice(key, allowed, fallback) {
+    const value = getFilter(PAGE, key, fallback);
+    return allowed.includes(value) ? value : fallback;
   }
 
-  async function dismissProblemVideo(sub, problem) {
-    try {
-      await api.cancelDownload(problem.job_id);
-      toast.info('Problem-Video entfernt');
-      const st = problemState[sub.id];
-      if (st) {
-        problemState[sub.id] = {
-          ...st,
-          videos: st.videos.filter(v => v.job_id !== problem.job_id),
-        };
-      }
-      setTimeout(loadSubs, 800);
-    } catch (e) {
-      toast.error(`Entfernen fehlgeschlagen: ${e.message}`);
-    }
-  }
-
-  async function retryAllProblems(sub) {
-    const st = problemState[sub.id];
-    if (!st || !st.videos.length) return;
-    const n = st.videos.length;
-    try {
-      for (const v of st.videos) {
-        await api.retryDownload(v.job_id);
-      }
-      toast.success(`${n} Videos zurück in Warteschlange`);
-      problemState[sub.id] = { open: true, loading: false, videos: [] };
-      setTimeout(loadSubs, 800);
-    } catch (e) {
-      toast.error(`Sammel-Retry fehlgeschlagen: ${e.message}`);
-    }
-  }
-
-  function friendlyError(msg) {
-    if (!msg) return 'Unbekannter Fehler';
-    const m = msg.toLowerCase();
-    if (m.includes('members-only') || m.includes('members only')) return 'Nur für Mitglieder';
-    if (m.includes('age-restricted') || m.includes('sign in to confirm your age')) return 'Altersbeschränkt';
-    if (m.includes('private')) return 'Privat';
-    if (m.includes('removed') || m.includes('terminated')) return 'Entfernt';
-    if (m.includes('copyright')) return 'Urheberrecht';
-    if (m.includes('unavailable')) return 'Nicht verfügbar';
-    if (m.includes('retries') || m.includes('retry')) return 'Retries erschöpft';
-    if (m.includes('bot')) return 'Bot-Erkennung';
-    return msg.substring(0, 80);
-  }
+  // ── Laden ──
 
   async function loadSubs() {
     try {
@@ -132,817 +149,693 @@
       subs = result.subscriptions || [];
       total = result.total || 0;
       loaded = true;
-      rssStats = await api.getRSSStats();
-      scheduler = await api.getSchedulerStatus();
+      [rssStats, scheduler] = await Promise.all([api.getRSSStats(), api.getSchedulerStatus()]);
     } catch (e) { toast.error(e.message); }
   }
 
-  // Stand der automatischen Prüfung in einem Satz
-  let schedulerLine = $derived.by(() => {
-    if (!scheduler) return '';
-    if (!scheduler.rss_enabled) return 'Die automatische Prüfung ist in den Einstellungen abgeschaltet.';
-    if (scheduler.disturbance?.active) {
-      const minutes = Math.ceil(scheduler.disturbance.pause_seconds_left / 60);
-      return `Quelle gestört – die Prüfung pausiert noch ${minutes} Min. (${scheduler.disturbance.reason})`;
-    }
-    if (scheduler.polling) return 'Eine Prüfung läuft gerade.';
-    const parts = [`${scheduler.feeds_pending} Kanäle sind fällig`];
-    if (scheduler.last_tick?.status === 'skipped') parts.push(`letzter Anstoß ausgesetzt: ${scheduler.last_tick.message}`);
-    if (scheduler.auto_download?.pending > 0) {
-      parts.push(`${scheduler.auto_download.pending} Videos für Auto-Download vorgemerkt (Tageslimit ${scheduler.auto_download.daily_limit})`);
-    }
-    return parts.join(' · ') + '.';
-  });
-
-  async function addSingle() {
-    const input = channelInput.trim();
-    if (!input) return;
-    loading = true;
-    try {
-      // Der Server löst Kanal-ID, Kanal-Adresse, Handle und Video-Adresse auf
-      const added = await api.addSubscription({
-        channel_id: input,
-        auto_download: autoDownload,
-        download_quality: defaultQuality || null,
-      });
-      if (added.already_subscribed) toast.info(`"${added.channel_name}" ist bereits abonniert`);
-      else toast.success(`"${added.channel_name}" hinzugefügt – Kanalbild und erste Prüfung laufen`);
-      channelInput = '';
-      await loadSubs();
-      setTimeout(loadSubs, 8000);   // Kanalbild und erste Videos nachziehen
-    } catch (e) { toast.error(e.message); }
-    finally { loading = false; }
+  async function loadPrognosis() {
+    try { prognosis = await api.getDripPrognosis(); } catch { prognosis = null; }
   }
 
-  async function addBatch() {
-    // Je Zeile eine Kanal-ID, auch aus einer Kanal-Adresse herausgelesen
-    const ids = batchInput.split('\n')
-      .map(line => (line.match(/UC[0-9A-Za-z_-]{22}/) || [])[0])
-      .filter(Boolean);
-    if (!ids.length) { toast.error('Keine Kanal-ID gefunden (beginnt mit UC, 24 Zeichen)'); return; }
-    importing = true;
-    try {
-      const result = await api.addSubscriptionsBatch({ channel_ids: ids, auto_download: autoDownload });
-      toast.success(`${result.added} Abos importiert, ${result.skipped} übersprungen`);
-      batchInput = '';
-      showImport = false;
-      loadSubs();
-    } catch (e) { toast.error(e.message); }
-    finally { importing = false; }
+  function refreshSoon(ms = REFRESH_AFTER_FIX_MS) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(loadSubs, ms);
   }
 
-  // Eine Einstellung am Kanal ändern. Scheitert das Speichern, bleibt die
-  // Anzeige beim alten Wert und der Nutzer erfährt den Grund.
-  async function patchSub(sub, changes, message = '') {
-    try {
-      await api.updateSubscription(sub.id, changes);
-    } catch (e) {
-      toast.error(`${sub.channel_name}: ${e.message}`);
-      return false;
-    }
-    const i = subs.findIndex(s => s.id === sub.id);
-    if (i >= 0) { subs[i] = { ...subs[i], ...changes }; subs = [...subs]; }
-    if (message) toast.info(`${sub.channel_name}: ${message}`);
+  // ── Ein Kanal: Einstellungen ──
+
+  const onOff = (on) => (on ? 'an' : 'aus');
+
+  function replaceSub(id, changes) {
+    const i = subs.findIndex((s) => s.id === id);
+    if (i >= 0) subs[i] = { ...subs[i], ...changes };
+  }
+
+  /** Speichern; scheitert es, bleibt die Anzeige beim alten Wert und der Grund erscheint. */
+  async function save(sub, changes) {
+    try { await api.updateSubscription(sub.id, changes); }
+    catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); return false; }
+    replaceSub(sub.id, changes);
     return true;
   }
 
-  const toggleAutoDownload = (sub) => patchSub(sub, { auto_download: !sub.auto_download });
-  const toggleEnabled = (sub) => patchSub(sub, { enabled: !sub.enabled });
-
-  function updateQuality(sub, quality) {
-    const value = quality || null;   // leer = Standard aus den Einstellungen
-    return patchSub(sub, { download_quality: value },
-      `Qualität: ${value || 'Standard aus den Einstellungen'}`);
+  async function change(sub, changes, message) {
+    const ok = await save(sub, changes);
+    if (ok) toast.info(`${channelName(sub)}: ${message}`);
+    return ok;
   }
 
-  function toggleAudioOnly(sub) {
-    const val = !sub.audio_only;
-    return patchSub(sub, { audio_only: val }, val ? 'Nur Audio' : 'Video + Audio');
+  const setAuto = (sub, on) => change(sub, { auto_download: on }, `Auto-Download ${onOff(on)}`);
+  const setDripCount = (sub, count) => change(sub, { drip_count: count }, `Drip ${count} am Tag`);
+  const setArchive = (sub, on) => change(sub, { drip_auto_archive: on }, on ? 'neue Videos gleich ins Archiv' : 'neue Videos in die Bibliothek');
+  const setAudioOnly = (sub, on) => change(sub, { audio_only: on }, on ? 'nur Ton' : 'Video und Ton');
+  const setEnabled = (sub, on) => change(sub, { enabled: on }, on ? 'Prüfung an' : 'Prüfung abgeschaltet');
+  const setQuality = (sub, value) => change(sub, { download_quality: value || null },
+    value ? `Qualität ${qualityShort(value)}` : 'Qualität aus den Einstellungen');
+
+  async function setDrip(sub, on) {
+    const ok = await change(sub, { drip_enabled: on }, on ? `Drip an, ${dripCount(sub)} am Tag` : 'Drip aus');
+    if (ok) refreshDrip();
   }
 
-  async function toggleDrip(sub) {
-    const val = !sub.drip_enabled;
-    const ok = await patchSub(sub, { drip_enabled: val },
-      `+${sub.drip_count || 3} pro Tag ${val ? 'aktiviert' : 'deaktiviert'}`);
-    if (ok) loadSubs();   // nächster Lauf und Abschluss-Stand kommen vom Server
+  // Nächster Lauf, Abschluss und Prognose kommen vom Server
+  function refreshDrip() {
+    loadSubs();
+    loadPrognosis();
   }
 
-  function toggleDripArchive(sub) {
-    const val = !sub.drip_auto_archive;
-    return patchSub(sub, { drip_auto_archive: val }, `Auto-Archiv ${val ? 'an' : 'aus'}`);
-  }
-
-  async function toggleSuggestExclude(sub) {
-    const val = !sub.suggest_exclude;
-    const ok = await patchSub(sub, { suggest_exclude: val },
-      val ? 'Aus Vorschlägen ausgeschlossen' : 'In Vorschlägen eingeschlossen');
+  async function setSuggest(sub, included) {
+    const ok = await change(sub, { suggest_exclude: !included }, included ? 'wieder in Vorschlägen' : 'aus Vorschlägen ausgeschlossen');
     // Beim Einschließen gelten die Ausnahmen einzelner Videos nicht mehr
-    if (ok && !val) {
+    if (ok && included) {
       try { await api.resetSuggestOverrides(sub.id); } catch (e) { toast.error(e.message); }
     }
   }
 
-  async function checkNow(sub) {
-    if (checking[sub.id]) return;
+  async function saveMusic(sub, on) {
+    try {
+      const result = await api.setMusicChannel(sub.channel_id, on);
+      replaceSub(sub.id, { music_channel: on });
+      return result;
+    } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); return null; }
+  }
+
+  async function setMusic(sub, on) {
+    const result = await saveMusic(sub, on);
+    if (!result) return;
+    toast.success(on ? `${channelName(sub)}: Musikkanal, ${num(result.changed)} Videos jetzt Musik`
+                     : `${channelName(sub)}: kein Musikkanal mehr, ${num(result.changed)} Videos zurückgesetzt`);
+  }
+
+  // ── Ein Kanal: Aktionen ──
+
+  const openChannel = (sub) => navigate(`/channel/${sub.channel_id}`);
+  const openNew = (sub) => navigate(`/feed?channels=${encodeURIComponent(sub.channel_id)}`);
+
+  async function runCheck(sub) {
+    if (checking[sub.id]) return null;
     checking[sub.id] = true;
-    try {
-      const result = await api.checkChannelNow(sub.id);
-      toast.success(result.new_videos > 0
-        ? `${sub.channel_name}: ${result.new_videos} neue Videos`
-        : `${sub.channel_name}: nichts Neues`);
-    } catch (e) {
-      toast.error(`${sub.channel_name}: ${e.message}`);
-    } finally {
-      checking[sub.id] = false;
-      loadSubs();
+    try { return await api.checkChannelNow(sub.id); }
+    catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); return null; }
+    finally { checking[sub.id] = false; }
+  }
+
+  async function checkNow(sub) {
+    const result = await runCheck(sub);
+    if (result) {
+      toast.success(result.new_videos > 0 ? `${channelName(sub)}: ${num(result.new_videos)} neue Videos` : `${channelName(sub)}: nichts Neues`);
     }
+    loadSubs();
   }
 
-  /**
-   * Vollständigkeit eines Kanals: die Medaille rechnet das Backend
-   * (channel_coverage) an den normalen Videos des Kanals, Live und Shorts nie,
-   * ohne dauerhaft nicht Ladbares. Gold: lückenlos, Silber: ab 95 %,
-   * Bronze: ab 80 %. Ungescannte Kanäle bekommen keine (never-scanned).
-   */
-  const MEDALS = {
-    gold: { icon: '🥇', cls: 'medal-gold' },
-    silver: { icon: '🥈', cls: 'medal-silver' },
-    bronze: { icon: '🥉', cls: 'medal-bronze' },
-  };
-
-  function channelMedal(sub) {
-    const look = MEDALS[sub.medal];
-    if (!look || !sub.last_scanned) return null;
-    const missing = Math.max(0, sub.wanted_count - sub.have_count);
-    const pct = Math.floor(sub.have_count / sub.wanted_count * 100);
-    return { ...look, label: missing ? `${sub.have_count} von ${sub.wanted_count} Videos geladen (${pct} %) · ${missing} fehlen`
-                                     : `Lückenlos: alle ${sub.wanted_count} Videos geladen (ohne Live und Shorts)` };
-  }
-
-  function dripTooltip(sub) {
-    if (sub.drip_completed_at) return 'Komplett – alle Videos geladen';
-    const missing = (sub.rss_count||0) - (sub.downloaded_count||0);
-    const next = sub.drip_next_run ? parseServerTime(sub.drip_next_run).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) : '?';
-    return sub.drip_enabled
-      ? `Nächster Lauf: ${next} · ${missing} fehlen`
-      : `+${sub.drip_count||3} Videos/Tag laden · ${missing} fehlen`;
-  }
-
-  async function removeSub(sub) {
-    const count = sub.downloaded_count || 0;
-    let deleteVideos = false;
-    if (count > 0) {
-      // Kanal mit geladenen Videos: fragen, was mit ihnen geschehen soll
-      const choice = await confirmRef.ask(
-        `Kanal "${sub.channel_name}" entfernen?`,
-        `Zu diesem Kanal sind ${count} Videos geladen. Sollen sie mit gelöscht werden? `
-        + 'Gelöschte Videos sind restlos weg (Dateien, Notizen, Verlauf).',
-        { confirmLabel: `Kanal und ${count} Videos löschen`, alternativeLabel: 'Nur Kanal entfernen' });
-      if (choice === false) return;
-      deleteVideos = choice === true;
-    } else {
-      const ok = await confirmRef.ask(
-        `Kanal "${sub.channel_name}" entfernen?`, 'Zu diesem Kanal sind keine Videos geladen.',
-        { confirmLabel: 'Kanal entfernen' });
-      if (!ok) return;
-    }
+  async function scanFully(sub) {
     try {
-      const result = await api.removeSubscription(sub.id, { deleteVideos });
-      toast.info(deleteVideos
-        ? `"${sub.channel_name}" und ${result.videos_deleted} Videos gelöscht`
-        : `"${sub.channel_name}" entfernt`);
-      subs = subs.filter(s => s.id !== sub.id);
-      total--;
-    } catch (e) { toast.error(e.message); }
+      await api.fetchAllChannelVideos(sub.channel_id);
+      toast.success(`${channelName(sub)}: Scan läuft, Fortschritt in der Aktivitätenleiste`);
+    } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
   }
+
+  async function loadMissing(sub) {
+    try {
+      const missing = await api.getMissingVideos(sub.channel_id, MISSING_BATCH, 'video');
+      if (!missing.video_ids?.length) { toast.info(`${channelName(sub)}: nichts Ladbares offen`); return; }
+      const urls = missing.video_ids.map((id) => `https://www.youtube.com/watch?v=${id}`);
+      const result = await api.addBatchDownload({ urls });
+      const queued = result.results?.filter((r) => r.status === 'queued').length ?? urls.length;
+      toast.success(`${channelName(sub)}: ${num(queued)} Videos in die Warteschlange`);
+    } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
+  }
+
+  // ── Abo beenden ──
+
+  /** Abos beenden; mit geladenen Videos fragt der Dialog, ob sie mitgehen. */
+  async function removeSubs(list) {
+    const deleteVideos = await askRemoval(list);
+    if (deleteVideos === null) return;
+    let removed = 0;
+    let videos = 0;
+    for (const sub of list) {
+      try {
+        const result = await api.removeSubscription(sub.id, { deleteVideos });
+        removed++;
+        videos += result.videos_deleted || 0;
+        subs = subs.filter((s) => s.id !== sub.id);
+        total--;
+      } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
+    }
+    selected = new Set();
+    if (list.some((s) => s.id === sheet?.id)) sheet = null;
+    if (removed) toast.info(removalMessage(list, removed, deleteVideos, videos));
+  }
+
+  /** true = samt Videos, false = nur das Abo, null = abgebrochen. */
+  async function askRemoval(list) {
+    const one = list.length === 1;
+    const what = one ? `Kanal "${channelName(list[0])}"` : `${num(list.length)} Kanäle`;
+    const count = list.reduce((sum, s) => sum + (s.downloaded_count || 0), 0);
+    if (!count) {
+      const ok = await confirmRef.ask(`${what} entfernen?`, `Zu ${one ? 'diesem Kanal' : 'diesen Kanälen'} sind keine Videos geladen.`,
+        { confirmLabel: one ? 'Kanal entfernen' : 'Kanäle entfernen' });
+      return ok ? false : null;
+    }
+    const choice = await confirmRef.ask(`${what} entfernen?`,
+      `Zu ${one ? 'diesem Kanal' : 'diesen Kanälen'} sind ${num(count)} Videos geladen. Sollen sie mit gelöscht werden? `
+      + 'Gelöschte Videos sind restlos weg (Dateien, Notizen, Verlauf).',
+      { confirmLabel: `${one ? 'Kanal' : 'Kanäle'} und ${num(count)} Videos löschen`, alternativeLabel: one ? 'Nur Kanal entfernen' : 'Nur Kanäle entfernen' });
+    if (choice === false) return null;
+    return choice === true;
+  }
+
+  function removalMessage(list, removed, deleteVideos, videos) {
+    if (list.length === 1) return deleteVideos ? `"${channelName(list[0])}" und ${num(videos)} Videos gelöscht` : `"${channelName(list[0])}" entfernt`;
+    return deleteVideos ? `${num(removed)} Kanäle und ${num(videos)} Videos gelöscht` : `${num(removed)} Kanäle entfernt`;
+  }
+
+  // ── Alle Kanäle ──
 
   async function pollNow() {
     try {
       const result = await api.triggerRSSPoll();
-      if (result.triggered) {
-        toast.success(`Prüfung aller ${result.feed_count} Kanäle gestartet – Fortschritt in der Aktivitätenleiste`);
-      } else {
-        toast.info(result.message || 'Keine Prüfung gestartet');
-      }
+      if (result.triggered) toast.success(`Prüfung aller ${num(result.feed_count)} Kanäle gestartet, Fortschritt in der Aktivitätenleiste`);
+      else toast.info(result.message || 'Keine Prüfung gestartet');
       loadSubs();
     } catch (e) { toast.error(e.message); }
   }
 
   async function resetAllErrors() {
     try {
-      const res = await api.resetAllErrors();
-      toast.success(`Fehler von ${res.reset} Kanälen zurückgesetzt`);
+      const result = await api.resetAllErrors();
+      toast.success(`Fehler von ${num(result.reset)} Kanälen zurückgesetzt`);
       await loadSubs();
     } catch (e) { toast.error(e.message); }
   }
 
-  let uncheckedCount = $derived(subs.filter(s => !s.last_checked).length);
-  let disabledCount = $derived(subs.filter(s => !s.enabled).length);
+  // ── Hinzufügen ──
 
-  /** 'gold' | 'silver' | 'bronze' | 'none' | 'never-scanned' für Filter und Zähler */
-  function medalLevel(sub) {
-    return sub.medal || 'none';
+  function toggleAdding() {
+    adding = !adding;
+    listOpen = false;
   }
-  let goldCount    = $derived(subs.filter(s => medalLevel(s) === 'gold').length);
-  let silverCount  = $derived(subs.filter(s => medalLevel(s) === 'silver').length);
-  let bronzeCount  = $derived(subs.filter(s => medalLevel(s) === 'bronze').length);
-  let neverScannedCount = $derived(subs.filter(s => medalLevel(s) === 'never-scanned').length);
 
-  let filtered = $derived.by(() => {
-    let result = filterMode === 'all' ? subs :
-      filterMode === 'active' ? subs.filter(s => s.enabled) :
-      filterMode === 'auto' ? subs.filter(s => s.auto_download) :
-      filterMode === 'errors' ? subs.filter(s => s.error_count > 0) :
-      filterMode === 'unchecked' ? subs.filter(s => !s.last_checked) :
-      filterMode === 'disabled' ? subs.filter(s => !s.enabled) :
-      filterMode === 'music' ? subs.filter(s => s.music_channel) :
-      filterMode === 'no-music' ? subs.filter(s => !s.music_channel) :
-      filterMode === 'gold'          ? subs.filter(s => medalLevel(s) === 'gold') :
-      filterMode === 'silver'        ? subs.filter(s => medalLevel(s) === 'silver') :
-      filterMode === 'bronze'        ? subs.filter(s => medalLevel(s) === 'bronze') :
-      filterMode === 'never-scanned' ? subs.filter(s => medalLevel(s) === 'never-scanned') :
-      subs;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(s =>
-        (s.channel_name || '').toLowerCase().includes(q) ||
-        (s.channel_id || '').toLowerCase().includes(q)
-      );
-    }
-    return result;
+  async function addSingle() {
+    const input = channelInput.trim();
+    if (!input) return;
+    subscribing = true;
+    try {
+      // Der Server löst Kanal-ID, Kanal-Adresse, Handle und Video-Adresse auf
+      const added = await api.addSubscription({ channel_id: input, auto_download: autoDownload, download_quality: newQuality || null });
+      if (added.already_subscribed) toast.info(`"${added.channel_name}" ist bereits abonniert`);
+      else toast.success(`"${added.channel_name}" hinzugefügt, Kanalbild und erste Prüfung laufen`);
+      channelInput = '';
+      await loadSubs();
+      refreshSoon(REFRESH_AFTER_ADD_MS);
+    } catch (e) { toast.error(e.message); }
+    finally { subscribing = false; }
+  }
+
+  async function addBatch() {
+    // Je Zeile eine Kanal-ID, auch aus einer Kanal-Adresse herausgelesen
+    const ids = batchInput.split('\n').map((line) => (line.match(CHANNEL_ID) || [])[0]).filter(Boolean);
+    if (!ids.length) { toast.error('Keine Kanal-ID gefunden (beginnt mit UC, 24 Zeichen)'); return; }
+    importing = true;
+    try {
+      const result = await api.addSubscriptionsBatch({ channel_ids: ids, auto_download: autoDownload });
+      toast.success(`${num(result.added)} Abos importiert, ${num(result.skipped)} übersprungen`);
+      batchInput = '';
+      listOpen = false;
+      loadSubs();
+    } catch (e) { toast.error(e.message); }
+    finally { importing = false; }
+  }
+
+  // ── Ansicht, Menü, Seitenblatt ──
+
+  function setView(value) { view = value; saveFilters(PAGE, { view: value }); }
+  function setSort(key) { sort = key; saveFilters(PAGE, { sort: key }); }
+  const chooseFilter = (key) => { filter = filter === key ? '' : key; };
+  const showAll = () => { filter = ''; search = ''; };
+
+  function openSheet(sub, { problems = false } = {}) { sheet = { id: sub.id, problems }; }
+
+  function channelMenu(event, sub) {
+    const missing = Math.min(MISSING_BATCH, missingCount(sub));
+    menu.open(event, channelName(sub), [
+      { icon: 'fa-folder-open', label: 'Kanal öffnen', run: () => openChannel(sub) },
+      { icon: 'fa-rotate', label: 'Jetzt prüfen', run: () => checkNow(sub) },
+      ...(missing ? [{ icon: 'fa-download', label: `${missing} fehlende laden`, run: () => loadMissing(sub) }] : []),
+      { trenner: true },
+      { icon: 'fa-bolt', label: 'Auto-Download', hint: onOff(sub.auto_download), run: () => setAuto(sub, !sub.auto_download) },
+      { icon: 'fa-droplet', label: `Drip, ${dripCount(sub)} am Tag`, hint: onOff(sub.drip_enabled), run: () => setDrip(sub, !sub.drip_enabled) },
+      { icon: 'fa-music', label: 'Musikkanal', hint: onOff(sub.music_channel), run: () => setMusic(sub, !sub.music_channel) },
+      ...(sub.problem_count > 0
+        ? [{ icon: 'fa-circle-exclamation', label: 'Problem-Videos', hint: num(sub.problem_count), run: () => openSheet(sub, { problems: true }) }] : []),
+      { icon: 'fa-sliders', label: 'Alle Einstellungen ...', run: () => openSheet(sub) },
+      { trenner: true },
+      { icon: 'fa-power-off', label: sub.enabled ? 'Prüfung abschalten' : 'Prüfung einschalten', run: () => setEnabled(sub, !sub.enabled) },
+      { icon: 'fa-xmark', label: 'Abo beenden ...', danger: true, run: () => removeSubs([sub]) },
+    ]);
+  }
+
+  /** Einzel-Aktionen für das Seitenblatt. */
+  const sheetActions = {
+    setAuto, setDrip, setDripCount, setArchive, setQuality, setAudioOnly, setMusic, setSuggest, setEnabled,
+    checkNow, scanFully, remove: (sub) => removeSubs([sub]), refreshSoon: () => refreshSoon(),
+  };
+
+  /** Schalter in der Liste: Merkmal, Zustand, Umschalten. */
+  const LIST_TOGGLES = [
+    { key: 'auto', icon: 'fa-bolt', label: 'Auto-Download', on: (s) => s.auto_download, set: setAuto },
+    { key: 'drip', icon: 'fa-droplet', label: 'Drip', on: (s) => s.drip_enabled, set: setDrip },
+    { key: 'musik', icon: 'fa-music', label: 'Musikkanal', on: (s) => s.music_channel, set: setMusic, cls: 'musik' },
+    { key: 'pruefung', icon: 'fa-power-off', label: 'Prüfung', on: (s) => s.enabled, set: setEnabled },
+  ];
+
+  function badgeClick(sub, badge) {
+    if (badge.key === 'neu') openNew(sub);
+    else openSheet(sub);
+  }
+
+  // ── Auswahl und Stapel ──
+
+  function toggle(sub) {
+    const next = new Set(selected);
+    next.has(sub.id) ? next.delete(sub.id) : next.add(sub.id);
+    selected = next;
+  }
+  function startSelecting() { selecting = true; sheet = null; }
+  function stopSelecting() { selecting = false; selected = new Set(); }
+  const activate = (sub) => (selecting ? toggle(sub) : openChannel(sub));
+  const channelCount = (count, dative = false) => `${num(count)} ${count === 1 ? 'Kanal' : dative ? 'Kanälen' : 'Kanäle'}`;
+
+  /** Die Auswahl nacheinander über die Einzel-Schnittstelle; zählt die Erfolge. */
+  async function forEachSelected(run) {
+    batchBusy = true;
+    let ok = 0;
+    try {
+      for (const sub of selectedSubs) if (await run(sub)) ok++;
+    } finally { batchBusy = false; }
+    return ok;
+  }
+
+  async function batchSave(changes, what) {
+    const ok = await forEachSelected((sub) => save(sub, changes));
+    toast.success(`${what} bei ${channelCount(ok, true)}`);
+    if ('drip_enabled' in changes) refreshDrip();
+  }
+
+  async function batchMusic(on) {
+    const ok = await forEachSelected((sub) => saveMusic(sub, on));
+    toast.success(`${on ? 'Musikkanal' : 'Kein Musikkanal mehr'} bei ${channelCount(ok, true)}`);
+  }
+
+  async function batchCheck() {
+    let found = 0;
+    const ok = await forEachSelected(async (sub) => {
+      const result = await runCheck(sub);
+      found += result?.new_videos || 0;
+      return !!result;
+    });
+    toast.success(`${channelCount(ok)} geprüft, ${num(found)} neue Videos`);
+    loadSubs();
+  }
+
+  function batchQuality(event) {
+    menu.open(event, 'Qualität der Auswahl', qualityItems(null, (value) =>
+      batchSave({ download_quality: value || null }, value ? `Qualität ${qualityShort(value)}` : 'Qualität aus den Einstellungen')));
+  }
+
+  const hideImage = (event) => { event.currentTarget.style.visibility = 'hidden'; };
+
+  // Laden nur beim Öffnen - ein $effect würde sich über die gelesenen Abos selbst neu auslösen
+  onMount(() => {
+    loadSubs();
+    loadPrognosis();
+    return () => clearTimeout(refreshTimer);
   });
-
-  $effect(() => { loadSubs(); loadPrognosis(); });
 </script>
 
-<div class="tv-seite">
- <!-- Fester Kopf: Titel, Aktionen, Filter, Prüfstand, Hinzufügen, Suche, Drip-Kennzahlen -->
- <div class="tv-seitenkopf">
-  <div class="page-header">
-    <div>
-      <h1 class="title">Kanäle</h1>
-      <span class="subtitle">{filtered.length !== subs.length ? `${filtered.length} von ` : ''}{total} Kanäle</span>
-    </div>
-    <div class="actions">
-      <button class="btn-ghost" onclick={() => showImport = !showImport}>
-        {showImport ? 'Schließen' : 'Hinzufügen'}
-      </button>
-      <button class="btn-ghost" onclick={() => navigate('/feed')}>
-        <i class="fa-solid fa-rss"></i> Feed{#if rssStats?.new_videos > 0}<span class="badge-red">{rssStats.new_videos}</span>{/if}
-      </button>
-      <button class="btn-primary" onclick={pollNow} disabled={scheduler?.polling}
-              title="Alle aktiven Kanäle sofort auf neue Videos prüfen"><i class="fa-solid fa-rotate-right"></i> Alle jetzt prüfen</button>
-    </div>
+{#snippet statusLine(state)}
+  <div class="pruefstand" class:warnung={state.warn}>
+    <i class="fa-solid {state.icon}"></i>
+    <span>{#each state.parts as part, i (i)}{i ? ' · ' : ''}<span class:warnung={part.warn}>{part.before ? `${part.before}${part.count !== undefined ? ' ' : ''}` : ''}{#if part.count !== undefined}<span class="zahl">{typeof part.count === 'number' ? num(part.count) : part.count}</span>{/if}{part.after ? ` ${part.after}` : ''}</span>{/each}</span>
   </div>
+{/snippet}
 
-  {#if rssStats}
-  <div class="filter-bar">
-    {#each [['all','Alle',total],['active','Aktiv',rssStats.enabled_subscriptions],['auto','Auto-Download',rssStats.auto_download_subscriptions],['errors','Fehler',subs.filter(s=>s.error_count>0).length]] as [key,label,count]}
-      <button class="filter-chip" class:active={filterMode===key} onclick={()=>filterMode=key}>
-        <strong>{count}</strong> {label}
-      </button>
-    {/each}
-    <button class="filter-chip" class:active={filterMode==='music'} onclick={()=>filterMode='music'}
-            title="Musikkanäle: alle Videos gelten als Musik (Schalter auf der Kanalseite)">
-      <strong>{subs.filter(s => s.music_channel).length}</strong> <i class="fa-solid fa-music"></i> Musik
-    </button>
-    <button class="filter-chip" class:active={filterMode==='no-music'} onclick={()=>filterMode='no-music'}
-            title="Alle Kanäle außer den Musikkanälen">
-      <strong>{subs.filter(s => !s.music_channel).length}</strong> Ohne Musik
-    </button>
-    {#if goldCount > 0}
-      <button class="filter-chip medal-gold-chip" class:active={filterMode==='gold'}
-              onclick={()=>filterMode='gold'}
-              title="Gold: alle gewünschten Videos des Feeds geladen (ohne ausgeblendete, nicht ladbare und ausgeschlossene Shorts)">
-        <strong>{goldCount}</strong> 🥇 Gold
-      </button>
-    {/if}
-    {#if silverCount > 0}
-      <button class="filter-chip medal-silver-chip" class:active={filterMode==='silver'}
-              onclick={()=>filterMode='silver'}
-              title="Silber: mindestens 90 % der gewünschten Videos geladen">
-        <strong>{silverCount}</strong> 🥈 Silber
-      </button>
-    {/if}
-    {#if bronzeCount > 0}
-      <button class="filter-chip medal-bronze-chip" class:active={filterMode==='bronze'}
-              onclick={()=>filterMode='bronze'}
-              title="Bronze: mindestens 75 % der gewünschten Videos geladen">
-        <strong>{bronzeCount}</strong> 🥉 Bronze
-      </button>
-    {/if}
-    {#if neverScannedCount > 0}
-      <button class="filter-chip" class:active={filterMode==='never-scanned'}
-              onclick={()=>filterMode='never-scanned'}
-              title="Kanäle ohne vollständigen Kanal-Scan oder mit zu wenigen Videos für eine Wertung">
-        <strong>{neverScannedCount}</strong> 🔍 Ohne Kanal-Scan
-      </button>
-    {/if}
-    {#if uncheckedCount > 0}
-      <button class="filter-chip warn" class:active={filterMode==='unchecked'} onclick={()=>filterMode='unchecked'}>
-        <strong>{uncheckedCount}</strong> Noch nie geprüft
-      </button>
-    {/if}
-    {#if disabledCount > 0}
-      <button class="filter-chip" class:active={filterMode==='disabled'} onclick={()=>filterMode='disabled'}>
-        <strong>{disabledCount}</strong> Deaktiviert
-      </button>
-    {/if}
-    {#if subs.some(s => s.error_count > 0)}
-      <button class="filter-chip reset-chip" onclick={resetAllErrors}
-              title="Fehlerzähler löschen und die Kanäle bald wieder prüfen. Abgeschaltete Kanäle bleiben abgeschaltet.">
-        <i class="fa-solid fa-rotate-left"></i> Fehler zurücksetzen
-      </button>
-    {/if}
-    <button class="filter-chip highlight" onclick={()=>navigate('/feed')}>
-      <strong>{rssStats.new_videos}</strong> Neue Videos
-    </button>
-  </div>
+{#snippet avatar(sub)}
+  <span class="avatar">
+    <span>{channelName(sub)[0]?.toUpperCase()}</span>
+    {#if sub.avatar_path}<img src={api.channelAvatarUrl(sub.channel_id)} alt="" loading="lazy" onerror={hideImage} />{/if}
+  </span>
+{/snippet}
 
-  <!-- Info-Zeile: Scanner-Status -->
-  <div class="info-bar">
-    <span><i class="fa-solid fa-circle-info"></i>
-      {schedulerLine}
-      {#if uncheckedCount > 0}
-        {uncheckedCount} Kanäle warten noch auf ihre erste Prüfung.
-      {/if}
-    </span>
-  </div>
+{#snippet medalBadge(sub, withLabel)}
+  {@const medal = medalOf(sub)}
+  {#if medal}
+    <span class="medaille" style={medalStyle(sub)} title={coverageTitle(sub)}><i class="fa-solid fa-medal"></i>{withLabel ? ` ${medal.label}` : ''}</span>
   {/if}
+{/snippet}
 
-  {#if showImport}
-  <div class="import-panel">
-    <div class="import-row">
-      <h3>Kanal hinzufügen</h3>
-      <div class="input-row">
-        <input type="text" class="input" placeholder="Kanal-ID, Kanal-URL, @Handle oder Video-URL…" bind:value={channelInput} onkeydown={(e)=>e.key==='Enter'&&addSingle()} />
-        <button class="btn-primary" onclick={addSingle} disabled={loading||!channelInput.trim()}>{loading?'…':'Hinzufügen'}</button>
-      </div>
-    </div>
-    <div class="divider"></div>
-    <div class="import-row">
-      <h3>Batch Import</h3>
-      <p class="hint">Je Zeile eine Kanal-ID (beginnt mit UC) oder eine Kanal-Adresse, die sie enthält.</p>
-      <textarea class="textarea" placeholder="Eine Kanal-ID oder URL pro Zeile…" bind:value={batchInput} rows="5"></textarea>
-      <div class="import-actions">
-        <label class="check"><input type="checkbox" bind:checked={autoDownload}/> Auto-Download</label>
-        <select class="quality-select" bind:value={defaultQuality}>
-          <option value="">Standard (Einstellungen)</option>
-          {#each VIDEO_QUALITIES as q}
-            <option value={q.value}>{q.label}</option>
-          {/each}
-        </select>
-        <button class="btn-primary" onclick={addBatch} disabled={importing||!batchInput.trim()}>
-          {importing?'Importiere…':`${batchInput.split('\n').filter(l=>l.trim()).length} importieren`}
-        </button>
-      </div>
-    </div>
-  </div>
-  {/if}
+{#snippet coverageBar(sub)}
+  <span class="balken" style={medalStyle(sub)}><b style:width="{coverageShare(sub) * 100}%"></b></span>
+{/snippet}
 
-  <!-- Suche -->
-  <div class="search-bar">
-    <i class="fa-solid fa-magnifying-glass search-icon" style="font-size:0.85rem"></i>
-    <input type="text" class="search-input" placeholder="Abos durchsuchen…"
-           bind:value={searchQuery} />
-    {#if searchQuery}
-      <button class="search-clear" title="Suche leeren" onclick={() => searchQuery = ''}><i class="fa-solid fa-xmark"></i></button>
-    {/if}
-  </div>
+{#snippet filterChip(f, count)}
+  <button class="tv-chip" class:aktiv={filter === f.key} style={f.style} title={f.title} onclick={() => chooseFilter(f.key)}>
+    {#if f.icon}<i class="fa-solid {f.icon} chip-symbol"></i>{/if}{f.label}{#if count !== null}<span class="tv-zaehler">{num(count)}</span>{/if}
+  </button>
+{/snippet}
 
-  {#if prognosis && prognosis.drip_channels > 0}
-  <div class="prognosis-bar">
-    <i class="fa-solid fa-hourglass-half"></i>
-    <span>Drip-Feed: <b>{prognosis.drip_channels}</b> Kanäle · ~<b>{prognosis.total_missing.toLocaleString('de')}</b> Videos fehlen</span>
-    {#if prognosis.avg_video_size > 0}
-      <span>· ~<b>{(prognosis.estimated_bytes / 1073741824).toFixed(0)} GB</b> geschätzt</span>
-      <span>· ~<b>{prognosis.days_remaining > 365 ? (prognosis.days_remaining / 365).toFixed(1) + ' Jahre' : prognosis.days_remaining + ' Tage'}</b></span>
-    {/if}
-    {#if prognosis.disk_free > 0}
-      <span class="disk-free" class:disk-warn={prognosis.disk_free < 50 * 1073741824}>
-        · {prognosis.disk_free_human || (prognosis.disk_free / 1073741824).toFixed(0) + ' GB'} frei
-        {#if prognosis.disk_total > 0}/ {(prognosis.disk_total / 1099511627776).toFixed(1)} TB{/if}
-      </span>
-    {/if}
-    {#if prognosis.unscanned_channels > 0}
-      <span class="prognosis-note">· ⚠ {prognosis.unscanned_channels} Kanäle ohne Scan</span>
-    {/if}
-  </div>
-  {/if}
- </div>
+<div class="tv-seite kanaele">
+  <div class="tv-seitenkopf">
+    <PageHeader title="Kanäle" {info}>
+      <button class="tv-knopf ohne" onclick={() => navigate('/feed')} title="Neue Videos der abonnierten Kanäle">
+        <i class="fa-solid fa-rss"></i> Neu bei Abos{#if rssStats?.new_videos > 0}<span class="tv-zaehler akzent">{num(rssStats.new_videos)}</span>{/if}</button>
+      <button class="tv-knopf" class:aktiv={adding} onclick={toggleAdding} title="Kanäle abonnieren, einzeln oder als Liste">
+        <i class="fa-solid fa-plus"></i> Hinzufügen</button>
+      <button class="tv-knopf haupt" onclick={pollNow} disabled={scheduler?.polling} title="Alle eingeschalteten Kanäle sofort auf neue Videos prüfen">
+        <i class="fa-solid fa-rotate"></i> Alle jetzt prüfen</button>
+    </PageHeader>
 
- <!-- Nur die Kanalliste rollt -->
- <div class="tv-rollfeld" data-scroll-root>
-  {#if filtered.length > 0}
-  <div class="grid">
-    {#each filtered as sub (sub.id)}
-    <div class="card" class:off={!sub.enabled}>
-      <button class="card-top" onclick={() => openChannel(sub)} title="Kanal öffnen">
-        <div class="avatar-wrap">
-          {#if sub.avatar_path}
-            <img class="avatar" src={api.channelAvatarUrl(sub.channel_id)} alt="" onerror={(e)=>{e.target.style.display='none';e.target.nextElementSibling.style.display='flex'}} />
-          {/if}
-          <div class="avatar-fb" style={sub.avatar_path?'display:none':'display:flex'}>
-            {(sub.channel_name||'?')[0].toUpperCase()}
-          </div>
-          {#if sub.new_videos > 0}
-            <span class="new-dot">{sub.new_videos}</span>
-          {/if}
-          {#if sub.problem_count > 0}
-            <span class="problem-dot" title="{sub.problem_count} Problem-Video(s) – klicke unten aufs Dreieck">
-              <i class="fa-solid fa-triangle-exclamation"></i>{sub.problem_count}
-            </span>
-          {/if}
-        </div>
-        <div class="card-text">
-          <span class="card-name" title={sub.channel_name||sub.channel_id}>{sub.channel_name||sub.channel_id}</span>
-          <span class="card-sub">
-            {#if !sub.last_checked}
-              <span class="status-badge unchecked"><i class="fa-solid fa-clock"></i> Noch nie geprüft</span>
-            {:else}
-              {sub.rss_count > 0 ? `${sub.rss_count} bekannt` : 'Keine Videos bekannt'} ·
-              <span title="Zuletzt auf neue Videos geprüft">geprüft {formatDateRelative(sub.last_checked)}</span> ·
-              <span class="card-interval" title="Prüfabstand: richtet sich nach dem Alter des neuesten Videos (ein Viertel davon, mindestens Grundtakt, höchstens Längster Prüfabstand)"><i class="fa-solid fa-rotate"></i> {fmtInterval(sub.check_interval)}</span>
-            {/if}
-          </span>
-          {#if sub.error_count > 0}
-            <span class="card-err" title={sub.last_error}><i class="fa-solid fa-triangle-exclamation"></i> {sub.error_count}× Fehler</span>
-          {/if}
-        </div>
-      </button>
-      {#if sub.rss_count > 0}
-      {@const medal = channelMedal(sub)}
-      <div class="card-progress">
-        <div class="prog-bar"><div class="prog-fill" class:prog-complete={medal?.cls === 'medal-gold'} style="width:{Math.round((sub.downloaded_count||0)/(sub.rss_count)*100)}%"></div></div>
-        <span class="prog-text">{sub.downloaded_count||0}/{sub.rss_count}</span>
-        {#if medal}
-          <span class="medal {medal.cls}" title={medal.label}>{medal.icon}</span>
-        {/if}
-      </div>
-      {/if}
-      <div class="card-bottom">
-        <button class="tag" class:tag-on={sub.auto_download} onclick={()=>toggleAutoDownload(sub)} title="Auto-Download"><i class="fa-solid fa-download"></i> Auto</button>
-        <button class="tag" class:tag-on={sub.drip_enabled} class:tag-done={!!sub.drip_completed_at}
-                onclick={()=>toggleDrip(sub)} title={dripTooltip(sub)}>
-          {#if sub.drip_completed_at}<i class="fa-solid fa-check"></i> Fertig{:else}<i class="fa-solid fa-hourglass-half"></i> +{sub.drip_count||3}/Tag{/if}
-        </button>
-        <button class="tag" class:tag-on={sub.drip_auto_archive}
-                onclick={()=>toggleDripArchive(sub)}
-                title={sub.drip_auto_archive ? 'Neue Videos dieses Kanals landen direkt im Archiv statt in der Bibliothek - Klick schaltet aus' : 'Neue Videos landen in der Bibliothek - Klick: künftig direkt ins Archiv'}>
-          <i class="fa-solid fa-box-archive"></i> {sub.drip_auto_archive ? 'Direkt ins Archiv' : 'Bibliothek'}
-        </button>
-        <button class="tag" class:tag-warn={sub.suggest_exclude}
-                onclick={()=>toggleSuggestExclude(sub)} title={sub.suggest_exclude ? 'Aus Vorschlägen ausgeschlossen – Klick zum Einschließen' : 'In Vorschlägen – Klick zum Ausschließen'}>
-          <i class="fa-solid fa-dice" class:strikethrough={sub.suggest_exclude}></i>
-        </button>
-        <button class="tag" class:tag-on={sub.enabled} onclick={()=>toggleEnabled(sub)}
-                title={sub.enabled ? 'Kanal wird geprüft – Klick schaltet ihn ab' : 'Kanal ist abgeschaltet (keine Prüfung, kein Download) – Klick schaltet ihn ein'}>{sub.enabled?'An':'Aus'}</button>
-        <button class="tag tag-interval" onclick={() => checkNow(sub)} disabled={checking[sub.id]}
-                title="Diesen Kanal jetzt auf neue Videos prüfen">
-          <i class="fa-solid fa-rotate-right" class:fa-spin={checking[sub.id]}></i>
-        </button>
-        <button class="tag tag-del" title="Entfernen" onclick={()=>removeSub(sub)}><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      {#if sub.auto_download}
-        <div class="card-settings">
-          {#if !sub.audio_only}
-            <select class="quality-select" value={sub.download_quality || ''}
-                    title="Qualität für Downloads dieses Kanals"
-                    onchange={(e) => updateQuality(sub, e.target.value)}>
-              <option value="">Standard (Einstellungen)</option>
-              {#each VIDEO_QUALITIES as q}
-                <option value={q.value}>{q.label}</option>
-              {/each}
-            </select>
-          {/if}
-          <button class="tag" class:tag-on={sub.audio_only} onclick={() => toggleAudioOnly(sub)}
-                  title="Nur Audio herunterladen">
-            <i class="fa-solid fa-music"></i> Audio
-          </button>
+    {#if schedulerState}{@render statusLine(schedulerState)}{/if}
+    {#if prognosisState}{@render statusLine(prognosisState)}{/if}
+
+    {#if adding}
+      <form class="tv-filter hinzu" onsubmit={(e) => { e.preventDefault(); addSingle(); }}>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input class="tv-eingabe adresse" bind:value={channelInput} placeholder="Kanal-Adresse, @Name, Kanal-ID oder Video-Adresse" autofocus />
+        <button class="tv-knopf haupt" disabled={subscribing || !channelInput.trim()}>{subscribing ? 'Abonniert ...' : 'Abonnieren'}</button>
+        <span class="tv-trenner"></span>
+        <button type="button" class="tv-chip" class:aktiv={autoDownload} onclick={() => autoDownload = !autoDownload}
+                title="Neue Videos der hinzugefügten Kanäle gleich automatisch laden (gilt auch für die Liste)">
+          <i class="fa-solid fa-bolt"></i> Auto-Download</button>
+        <button type="button" class="tv-chip" onclick={(e) => menu.open(e, 'Qualität', qualityItems(newQuality, (value) => { newQuality = value; }))}
+                title="Qualität für die Downloads des einzeln abonnierten Kanals">
+          <i class="fa-solid fa-sliders"></i> {qualityShort(newQuality)}</button>
+        <span class="tv-trenner"></span>
+        <span class="tv-leise tv-klein">Mehrere auf einmal: eine Kanal-ID je Zeile</span>
+        <button type="button" class="tv-knopf klein" class:aktiv={listOpen} onclick={() => listOpen = !listOpen}
+                title="Je Zeile eine Kanal-ID (beginnt mit UC) oder eine Kanal-Adresse, die sie enthält">Liste einfügen ...</button>
+        <div class="rechts"><button type="button" class="tv-knopf klein ohne" onclick={toggleAdding}><i class="fa-solid fa-xmark"></i> Schließen</button></div>
+      </form>
+      {#if listOpen}
+        <div class="tv-filter liste-einfuegen">
+          <textarea class="tv-eingabe" bind:value={batchInput} rows="5" placeholder="Eine Kanal-ID oder Kanal-Adresse je Zeile"></textarea>
+          <button class="tv-knopf haupt" onclick={addBatch} disabled={importing || !batchLines}>
+            {#if importing}Importiert ...{:else}<span class="zahl">{num(batchLines)}</span> importieren{/if}</button>
         </div>
       {/if}
+    {/if}
 
-      {#if sub.problem_count > 0}
-        {@const ps = problemState[sub.id] || { open: false, loading: false, videos: [] }}
-        <div class="problem-section">
-          <button class="problem-header" onclick={() => toggleProblems(sub)}
-                  title="Videos, die wegen dauerhafter Fehler nicht geladen wurden">
-            <i class="fa-solid {ps.open ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            <span>{sub.problem_count} Problem-Video{sub.problem_count === 1 ? '' : 's'}</span>
-            <span class="problem-hint">({ps.open ? 'zuklappen' : 'anzeigen'})</span>
-          </button>
-
-          {#if ps.open}
-            <div class="problem-body">
-              {#if ps.loading}
-                <div class="problem-loading">
-                  <i class="fa-solid fa-spinner fa-spin"></i> Lade…
-                </div>
-              {:else if ps.videos.length === 0}
-                <div class="problem-empty">Keine Problem-Videos mehr</div>
-              {:else}
-                <div class="problem-actions">
-                  <button class="btn-sm btn-retry-all"
-                          onclick={() => retryAllProblems(sub)}
-                          title="Alle Problem-Videos erneut versuchen">
-                    <i class="fa-solid fa-rotate-right"></i> Alle erneut versuchen
-                  </button>
-                </div>
-                <ul class="problem-list">
-                  {#each ps.videos as v (v.job_id)}
-                    <li class="problem-item">
-                      {#if v.thumbnail_url}
-                        <img class="problem-thumb" src={v.thumbnail_url} alt="" loading="lazy" />
-                      {:else}
-                        <div class="problem-thumb placeholder"></div>
-                      {/if}
-                      <div class="problem-info">
-                        <a class="problem-title" href={v.url} target="_blank" rel="noopener"
-                           title={v.title}>{v.title || v.video_id}</a>
-                        <span class="problem-reason" title={v.error_message || ''}>
-                          <i class="fa-solid fa-circle-info"></i>
-                          {friendlyError(v.error_message)}
-                        </span>
-                      </div>
-                      <div class="problem-item-actions">
-                        <button class="btn-xs btn-retry"
-                                onclick={() => retryProblemVideo(sub, v)}
-                                title="Erneut versuchen">
-                          <i class="fa-solid fa-rotate-right"></i>
-                        </button>
-                        <button class="btn-xs btn-dismiss"
-                                onclick={() => dismissProblemVideo(sub, v)}
-                                title="Aus der Warteschlange entfernen">
-                          <i class="fa-solid fa-xmark"></i>
-                        </button>
-                      </div>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-            </div>
+    {#if selecting}
+      <BatchToolbar selectedCount={selectedSubs.length} totalCount={shown.length}
+                    onSelectAll={() => selected = new Set(shown.map((s) => s.id))} onDone={stopSelecting}>
+        <button class="tv-knopf klein" disabled={batchBusy} onclick={() => batchSave({ auto_download: !batchAll.auto }, `Auto-Download ${onOff(!batchAll.auto)}`)}>
+          <i class="fa-solid fa-bolt"></i> Auto-Download {onOff(!batchAll.auto)}</button>
+        <button class="tv-knopf klein" disabled={batchBusy} onclick={() => batchSave({ drip_enabled: !batchAll.drip }, `Drip ${onOff(!batchAll.drip)}`)}>
+          <i class="fa-solid fa-droplet"></i> Drip {onOff(!batchAll.drip)}</button>
+        <button class="tv-knopf klein" disabled={batchBusy} onclick={() => batchMusic(!batchAll.music)}>
+          <i class="fa-solid fa-music"></i> {batchAll.music ? 'Kein Musikkanal' : 'Als Musikkanal'}</button>
+        <button class="tv-knopf klein" disabled={batchBusy} onclick={batchQuality}><i class="fa-solid fa-sliders"></i> Qualität ...</button>
+        <button class="tv-knopf klein" disabled={batchBusy} onclick={batchCheck}>
+          <i class="fa-solid fa-rotate" class:fa-spin={batchBusy}></i> Jetzt prüfen</button>
+        <button class="tv-knopf klein gefahr" disabled={batchBusy} onclick={() => removeSubs(selectedSubs)}>
+          <i class="fa-solid fa-xmark"></i> Abo beenden</button>
+      </BatchToolbar>
+    {:else if subs.length}
+      <CollectionBar bind:search placeholder="Kanäle suchen" bind:view={() => view, setView} onSelect={startSelecting}>
+        <span class="tv-trenner"></span>
+        {#each visibleFilters as f (f.key)}{@render filterChip(f, f.noCount ? null : counts[f.key])}{/each}
+        <span class="tv-trenner"></span>
+        {#each MEDAL_FILTERS as f (f.key)}{@render filterChip(f, counts[f.key])}{/each}
+        <span class="tv-trenner"></span>
+        <span class="tv-etikett">Sortieren</span>
+        {#each SORTS as option (option.key)}
+          <button class="tv-chip" class:aktiv={sort === option.key} title={option.title} onclick={() => setSort(option.key)}>{option.label}</button>
+        {/each}
+        {#snippet rechts()}
+          {#if counts.fehler}
+            <button class="tv-knopf klein" onclick={resetAllErrors}
+                    title="Fehlerzähler löschen und die Kanäle bald wieder prüfen. Abgeschaltete Kanäle bleiben abgeschaltet.">
+              <i class="fa-solid fa-rotate-left"></i> Fehler zurücksetzen</button>
           {/if}
-        </div>
-      {/if}
-    </div>
-    {/each}
+        {/snippet}
+      </CollectionBar>
+    {/if}
   </div>
-  {:else}
-  <div class="empty">
+
+  <div class="tv-rollfeld" data-scroll-root>
     {#if !loaded}
-      <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; color:var(--text-tertiary)"></i>
-      <h3>Lädt ...</h3>
-    {:else if subs.length > 0}
-      <i class="fa-solid fa-filter" style="font-size:3.5rem; color:var(--text-tertiary)"></i>
-      <h3>Kein Kanal passt zu dieser Auswahl</h3>
-      <button class="btn-primary" onclick={()=>{filterMode='all';searchQuery='';}}>Alle Kanäle zeigen</button>
+      <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+    {:else if !subs.length}
+      <div class="leer-gross">
+        <i class="fa-solid fa-user-plus"></i>
+        <h2>Noch keine Kanäle</h2>
+        <p>Füge Kanäle hinzu, um neue Videos automatisch zu erkennen.</p>
+        <button class="tv-knopf haupt" onclick={() => adding = true}><i class="fa-solid fa-plus"></i> Kanäle hinzufügen</button>
+      </div>
+    {:else if !shown.length}
+      <div class="tv-leer">
+        <p>Kein Kanal passt zu dieser Auswahl.</p>
+        <button class="tv-knopf" onclick={showAll}>Alle Kanäle zeigen</button>
+      </div>
+    {:else if view === 'kacheln'}
+      <div class="k-raster" class:auswahl={selecting}>
+        {#each shown as sub (sub.id)}
+          {@const isSelected = selected.has(sub.id)}
+          <article class="k-kachel" class:aus={!sub.enabled} class:gewaehlt={isSelected || sheet?.id === sub.id}>
+            <button class="flaeche" onclick={() => activate(sub)} aria-label="{channelName(sub)} {selecting ? 'auswählen' : 'öffnen'}"></button>
+            <div class="banner">
+              {#if sub.banner_url}<img src={api.bannerUrl(sub.channel_id)} alt="" loading="lazy" onerror={hideImage} />{/if}
+            </div>
+            {#if selecting}
+              <span class="haken"><i class="fa-{isSelected ? 'solid fa-square-check' : 'regular fa-square'}"></i></span>
+            {:else}
+              <div class="k-tun">
+                <button onclick={() => checkNow(sub)} disabled={checking[sub.id]} title="Jetzt auf neue Videos prüfen">
+                  <i class="fa-solid fa-rotate" class:fa-spin={checking[sub.id]}></i></button>
+                <button onclick={() => openSheet(sub)} title="Alle Einstellungen"><i class="fa-solid fa-sliders"></i></button>
+                <button onclick={(e) => channelMenu(e, sub)} title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
+              </div>
+            {/if}
+            <div class="k-kopf">
+              {@render avatar(sub)}
+              <div class="k-name" title={channelName(sub)}>{channelName(sub)}</div>
+              <span class="vorn">{@render medalBadge(sub, true)}</span>
+            </div>
+            <div class="k-inhalt">
+              <button class="abdeckung vorn" onclick={() => openSheet(sub)} title={coverageTitle(sub)}>
+                {@render coverageBar(sub)}
+                <span><span class="zahl">{num(sub.have_count)}</span> von <span class="zahl">{num(sub.wanted_count)}</span></span>
+              </button>
+              <div class="k-meta">
+                {#if sub.last_video_date}<span>neuestes Video <span class="zahl">{dayText(sub.last_video_date)}</span></span>
+                {:else}<span>noch kein Video bekannt</span>{/if}
+                {#if sub.shorts_count}<span><span class="zahl">{num(sub.shorts_count)}</span> Shorts</span>{/if}
+              </div>
+              <div class="merkmale">
+                {#each channelBadges(sub) as badge (badge.key)}
+                  <button class="merkmal vorn {badge.cls || ''}" title={badge.title} onclick={() => badgeClick(sub, badge)}>
+                    {#if badge.icon}<i class="fa-solid {badge.icon}"></i>{/if}
+                    {#if badge.count !== undefined}<span class="zahl">{num(badge.count)}</span>{/if}
+                    {badge.text}</button>
+                {/each}
+                {#if sub.problem_count > 0}
+                  <button class="merkmal vorn warnung" onclick={() => openSheet(sub, { problems: true })}
+                          title="Videos, die sich dauerhaft nicht laden ließen - zeigt sie mit Erneut versuchen und Verwerfen">
+                    <i class="fa-solid fa-circle-exclamation"></i> <span class="zahl">{num(sub.problem_count)}</span> Probleme</button>
+                {/if}
+              </div>
+            </div>
+          </article>
+        {/each}
+      </div>
     {:else}
-      <i class="fa-solid fa-user-plus" style="font-size:3.5rem; color:var(--text-tertiary)"></i>
-      <h3>Noch keine Kanäle</h3>
-      <p>Füge Kanäle hinzu, um neue Videos automatisch zu erkennen.</p>
-      <button class="btn-primary" onclick={()=>showImport=true}>Kanäle hinzufügen</button>
+      <div class="liste">
+        <table class="k-tabelle">
+          <thead>
+            <tr>
+              {#if selecting}<th class="sp-haken"></th>{/if}
+              {#each COLUMNS as col (col.cls)}
+                <th class={col.cls}>
+                  {#if col.sort}
+                    <button class:sortiert={sort === col.sort} onclick={() => setSort(col.sort)}
+                            title={SORTS.find((s) => s.key === col.sort)?.title}>
+                      {col.label}{#if sort === col.sort} <i class="fa-solid fa-arrow-down-long"></i>{/if}</button>
+                  {:else}{col.label}{/if}
+                </th>
+              {/each}
+            </tr>
+          </thead>
+          <tbody>
+            {#each shown as sub (sub.id)}
+              {@const isSelected = selected.has(sub.id)}
+              <tr class:aus={!sub.enabled} class:gewaehlt={isSelected || sheet?.id === sub.id}>
+                {#if selecting}
+                  <td class="sp-haken"><button class="haken-knopf" onclick={() => toggle(sub)} aria-pressed={isSelected} title="Auswählen">
+                    <i class="fa-{isSelected ? 'solid fa-square-check' : 'regular fa-square'}"></i></button></td>
+                {/if}
+                <td class="sp-kanal">
+                  <button class="wer" onclick={() => activate(sub)} title={selecting ? 'Auswählen' : 'Kanal öffnen'}>
+                    {@render avatar(sub)}<span class="wer-name">{channelName(sub)}</span>{@render medalBadge(sub, false)}</button>
+                </td>
+                <td class="sp-abdeckung">
+                  <button class="abdeckung" onclick={() => openSheet(sub)} title={coverageTitle(sub)}>
+                    {@render coverageBar(sub)}<span class="zahl prozent">{sub.wanted_count ? `${coveragePercent(sub)} %` : ''}</span></button>
+                </td>
+                <td class="sp-neu">
+                  {#if sub.new_videos > 0}
+                    <button class="neu-zahl zahl" onclick={() => openNew(sub)} title="Neue Videos dieses Kanals bei den Abos zeigen">{num(sub.new_videos)}</button>
+                  {/if}
+                </td>
+                <td class="sp-video zahl">{dayText(sub.last_video_date)}</td>
+                <td class="sp-geprueft zahl tv-leise">{momentText(sub.last_checked)}</td>
+                <td class="sp-merkmale">
+                  <div class="schalter-reihe">
+                    {#each LIST_TOGGLES as t (t.key)}
+                      {@const on = t.on(sub)}
+                      <button class={t.cls} class:an={on} aria-pressed={!!on} onclick={() => t.set(sub, !on)}
+                              title="{t.label} {onOff(on)} - Klick schaltet {on ? 'aus' : 'ein'}"><i class="fa-solid {t.icon}"></i></button>
+                    {/each}
+                  </div>
+                </td>
+                <td class="sp-mehr">
+                  <button class="tv-knopf ohne symbol klein" onclick={(e) => channelMenu(e, sub)} title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     {/if}
   </div>
+
+  {#if sheetSub}
+    {#key sheet}
+      <ChannelSettingsSheet sub={sheetSub} actions={sheetActions} checking={!!checking[sheetSub.id]}
+                            showProblems={sheet.problems} onClose={() => sheet = null} />
+    {/key}
   {/if}
- </div>
 </div>
 
+<ActionMenu bind:this={menu} />
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  /* Ränder kommen von .tv-seitenkopf und .tv-rollfeld. Das letzte Element im Kopf
-     braucht keinen eigenen Abstand nach unten, sonst addiert er sich zum Kopfrand. */
-  .tv-seitenkopf > :last-child { margin-bottom: 0; }
-  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:12px; }
-  .title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
-  .subtitle { font-size:0.82rem; color:var(--text-tertiary); }
-  .actions { display:flex; gap:8px; flex-wrap:wrap; }
-  .badge-red { background:var(--status-error); color:#fff; font-size:0.65rem; padding:1px 6px; border-radius:8px; font-weight:700; margin-left:4px; }
+  .kanaele { position: relative; }   /* Bezug für das Seitenblatt */
 
-  .filter-bar { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
-  .filter-chip { padding:5px 14px; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:20px; font-size:0.78rem; color:var(--text-secondary); cursor:pointer; transition:all 0.15s; }
-  .filter-chip:hover { border-color:var(--accent-primary); }
-  .filter-chip.active { border-color:var(--accent-primary); background:var(--accent-muted); color:var(--accent-primary); }
-  .filter-chip strong { margin-right:3px; }
-  .filter-chip.highlight { border-color:var(--accent-primary); }
-  .filter-chip.reset-chip { border-color:rgba(34,197,94,0.4); color:var(--status-success); background:rgba(34,197,94,0.08); }
-  .filter-chip.reset-chip:hover { background:rgba(34,197,94,0.18); }
-  .filter-chip.highlight strong { color:var(--accent-primary); }
+  /* Prüfstand und Drip-Prognose unter dem Titel */
+  .pruefstand { display: flex; gap: var(--tv-a2); align-items: baseline; margin: -6px 0 var(--tv-a3);
+                font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .pruefstand + .pruefstand { margin-top: calc(-1 * var(--tv-a2)); }
+  .pruefstand > i { color: var(--tv-akzent); }
+  .pruefstand.warnung > i, .pruefstand .warnung { color: var(--tv-warnung); }
 
-  .import-panel { background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:12px; padding:20px; margin-bottom:22px; }
-  .import-row h3 { font-size:0.9rem; color:var(--text-primary); margin:0 0 8px; }
-  .hint { font-size:0.78rem; color:var(--text-tertiary); margin:0 0 8px; }
-  .input-row { display:flex; gap:8px; }
-  .input, .textarea { flex:1; padding:8px 14px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; color:var(--text-primary); font-size:0.85rem; outline:none; box-sizing:border-box; }
-  .textarea { width:100%; font-family:monospace; font-size:0.82rem; resize:vertical; }
-  .input:focus, .textarea:focus { border-color:var(--accent-primary); }
-  .divider { height:1px; background:var(--border-primary); margin:16px 0; }
-  .import-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap; }
-  .check { display:flex; align-items:center; gap:6px; font-size:0.82rem; color:var(--text-secondary); cursor:pointer; }
+  /* Hinzufügen */
+  .hinzu .adresse { width: 420px; max-width: 100%; }
+  .hinzu .rechts { margin-left: auto; }
+  .liste-einfuegen { align-items: flex-end; }
+  .liste-einfuegen textarea { flex: 1; min-width: 260px; height: auto; min-height: 132px; padding: var(--tv-a2) var(--tv-a3);
+                              resize: vertical; font-family: var(--tv-schrift-zahl); line-height: 1.5; }
 
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:16px; }
+  .chip-symbol { color: var(--medaille, currentColor); }
 
-  .search-bar {
-    position: relative; display: flex; align-items: center; margin-bottom: 16px;
-  }
-  .search-icon { position: absolute; left: 12px; color: var(--text-tertiary); pointer-events: none; }
-  .search-input {
-    width: 100%; padding: 9px 36px 9px 36px; background: var(--bg-secondary);
-    border: 1px solid var(--border-primary); border-radius: 10px; color: var(--text-primary);
-    font-size: 0.85rem; outline: none;
-  }
-  .search-input:focus { border-color: var(--accent-primary); }
-  .search-input::placeholder { color: var(--text-tertiary); }
-  .search-clear {
-    position: absolute; right: 10px; background: none; border: none; color: var(--text-tertiary);
-    cursor: pointer; font-size: 0.85rem; padding: 2px 4px;
-  }
-  .search-clear:hover { color: var(--text-primary); }
+  /* Gemeinsame Teile von Kachel und Liste */
+  .avatar { position: relative; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: var(--tv-ecke);
+            background: var(--tv-mulde); color: var(--tv-akzent); font-weight: 700; }
+  .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .medaille { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: var(--tv-ecke-klein);
+              font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.04em; background: var(--medaille-grund); color: var(--medaille); }
+  .abdeckung { display: flex; align-items: center; gap: var(--tv-a3); width: 100%; padding: 0; border: 0; background: none;
+               color: var(--tv-text-2); font: inherit; font-size: var(--tv-gr-klein); text-align: left; cursor: pointer; }
+  .abdeckung .zahl { color: var(--tv-text); font-weight: 600; }
+  .balken { flex: 1; min-width: 40px; height: 6px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+  .balken b { display: block; height: 100%; background: var(--medaille, var(--tv-akzent)); }
 
-  .card {
-    background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:14px;
-    padding:16px; display:flex; flex-direction:column; gap:12px; transition:all 0.2s;
-  }
-  .card:hover { border-color:var(--accent-primary); transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,0.1); }
-  .card.off { opacity:0.4; }
+  /* Kacheln: Banner, Bild, Medaille, Abdeckung, nur eingeschaltete Merkmale */
+  .k-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--tv-a4); }
+  .k-kachel { position: relative; min-width: 0; background: var(--tv-karte); border-radius: var(--tv-ecke); overflow: hidden;
+              outline: 1px solid var(--tv-rand); outline-offset: -1px; }
+  .k-kachel:hover { outline-color: var(--tv-rand-stark); }
+  .k-kachel.aus { opacity: 0.55; }
+  .k-kachel.gewaehlt { outline: 2px solid var(--tv-akzent); outline-offset: -2px; }
+  .flaeche { position: absolute; inset: 0; z-index: 1; padding: 0; border: 0; background: none; cursor: pointer; }
+  .vorn { position: relative; z-index: 2; }
+  .auswahl .flaeche { z-index: 3; }     /* in der Auswahl wählt jeder Klick */
+  .banner { height: 72px; background: linear-gradient(120deg, var(--tv-karte-2), var(--tv-grund)); }
+  .banner img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .k-tun { position: absolute; right: 8px; top: 8px; z-index: 2; display: flex; gap: 4px; opacity: 0; transition: opacity var(--tv-schnell); }
+  .k-kachel:hover .k-tun, .k-kachel:focus-within .k-tun { opacity: 1; }
+  .k-tun button { width: 34px; height: 34px; border: 0; border-radius: var(--tv-ecke-klein); background: var(--tv-schleier);
+                  color: var(--tv-text); cursor: pointer; }
+  .k-tun button:hover:not(:disabled) { color: var(--tv-akzent); }
+  .haken { position: absolute; left: 8px; top: 8px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center;
+           border-radius: var(--tv-ecke-klein); background: var(--tv-schleier); color: var(--tv-text-2); font-size: 18px; }
+  .gewaehlt .haken { color: var(--tv-akzent); }
+  .k-kopf { display: flex; gap: var(--tv-a3); align-items: flex-end; padding: 0 var(--tv-a4); margin-top: -28px; }
+  .k-kopf .avatar { width: 60px; height: 60px; outline: 3px solid var(--tv-karte); font-size: var(--tv-gr-titel); }
+  .k-name { flex: 1; min-width: 0; padding-bottom: 2px; font-weight: 700; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .k-kopf .vorn { margin-bottom: 4px; }
+  .k-inhalt { display: flex; flex-direction: column; gap: var(--tv-a2); padding: var(--tv-a3) var(--tv-a4) var(--tv-a4); }
+  .k-meta { display: flex; gap: var(--tv-a3); flex-wrap: wrap; font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .merkmale { display: flex; gap: 6px; flex-wrap: wrap; min-height: 24px; }
+  .merkmal { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 0; border-radius: var(--tv-ecke-klein);
+             background: var(--tv-karte-2); color: var(--tv-text-2); font: inherit; font-size: var(--tv-gr-marke); font-weight: 700; cursor: pointer; }
+  .merkmal:hover { color: var(--tv-text); }
+  .merkmal.neu { background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent); }
+  .merkmal.musik { color: var(--tv-art-musik); }
+  .merkmal.wartet { color: var(--tv-info); }
+  .merkmal.fehler { background: rgba(var(--tv-gefahr-rgb), 0.14); color: var(--tv-gefahr); }
+  .merkmal.warnung { background: rgba(var(--tv-warnung-rgb), 0.14); color: var(--tv-warnung); }
 
-  .card-top { display:flex; align-items:center; gap:12px; background:none; border:none; padding:0; cursor:pointer; width:100%; text-align:left; color:inherit; }
+  /* Dichte Liste: feste Spaltenbreiten, nichts rollt seitlich; schmal entfallen Spalten.
+     Die Linien zwischen den Zeilen sind der Zeilenabstand auf der Randfarbe. */
+  .liste { container-type: inline-size; }
+  .k-tabelle { width: 100%; margin-top: -1px; table-layout: fixed; border-collapse: separate; border-spacing: 0 1px; background: var(--tv-rand); }
+  .k-tabelle th { position: sticky; top: 0; z-index: 1; padding: 8px; background: var(--tv-grund); text-align: left; white-space: nowrap; overflow: hidden;
+                  font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tv-text-3); }
+  .k-tabelle th button { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit;
+                         text-transform: inherit; cursor: pointer; }
+  .k-tabelle th button:hover, .k-tabelle th button.sortiert { color: var(--tv-akzent); }
+  .k-tabelle td { padding: 8px; background: var(--tv-grund); vertical-align: middle; font-size: var(--tv-gr-klein);
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .k-tabelle tr:hover td { background: var(--tv-flaeche); }
+  .k-tabelle tr.gewaehlt td { background: var(--tv-karte); }
+  .k-tabelle tr.aus td { color: var(--tv-text-3); }
+  .k-tabelle tr.aus td > * { opacity: 0.55; }
+  .sp-haken { width: 44px; }
+  .sp-abdeckung { width: 24%; }
+  .sp-neu { width: 72px; }
+  .sp-video { width: 140px; }
+  .sp-geprueft { width: 130px; }
+  .sp-merkmale { width: 156px; }
+  .sp-mehr { width: 52px; }
+  .haken-knopf { width: 28px; height: 28px; padding: 0; border: 0; background: none; color: var(--tv-text-3); font-size: 18px; cursor: pointer; }
+  .gewaehlt .haken-knopf { color: var(--tv-akzent); }
+  .wer { display: flex; align-items: center; gap: var(--tv-a3); width: 100%; min-width: 0; padding: 0; border: 0; background: none;
+         color: var(--tv-text); font: inherit; font-size: var(--tv-gr-text); font-weight: 600; text-align: left; cursor: pointer; }
+  .wer:hover .wer-name { color: var(--tv-akzent); }
+  .wer .avatar { width: 36px; height: 36px; border-radius: var(--tv-ecke-klein); font-size: var(--tv-gr-klein); }
+  .wer-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wer .medaille { height: 24px; padding: 0 6px; }
+  .prozent { flex: none; min-width: 52px; text-align: right; }
+  .neu-zahl { padding: 0; border: 0; background: none; color: var(--tv-text); font-size: var(--tv-gr-klein); cursor: pointer; }
+  .neu-zahl:hover { color: var(--tv-akzent); }
+  .schalter-reihe { display: flex; gap: 4px; }
+  .schalter-reihe button { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--tv-ecke-klein);
+                           background: var(--tv-karte); color: var(--tv-text-3); font-size: var(--tv-gr-klein); cursor: pointer; }
+  .schalter-reihe button:hover { color: var(--tv-text); }
+  .schalter-reihe button.an { background: rgba(var(--tv-akzent-rgb), 0.12); color: var(--tv-akzent); }
+  .schalter-reihe button.an.musik { background: rgba(192, 132, 252, 0.12); color: var(--tv-art-musik); }
 
-  .avatar-wrap { position:relative; width:56px; height:56px; flex-shrink:0; }
-  .avatar { width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid var(--border-secondary); }
-  .avatar-fb { width:56px; height:56px; border-radius:50%; background:var(--accent-muted); color:var(--accent-primary); display:flex; align-items:center; justify-content:center; font-size:1.4rem; font-weight:700; border:2px solid var(--border-secondary); }
-  .new-dot { position:absolute; top:-3px; right:-3px; background:var(--status-error); color:#fff; font-size:0.6rem; font-weight:700; min-width:16px; height:16px; display:flex; align-items:center; justify-content:center; border-radius:8px; padding:0 3px; }
+  @container (max-width: 980px) { .sp-geprueft { display: none; } }
+  @container (max-width: 820px) { .sp-video { display: none; } }
+  @container (max-width: 600px) { .sp-merkmale { display: none; } }
 
-  .card-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
-  .card-name { font-size:0.88rem; font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .card-sub { font-size:0.72rem; color:var(--text-tertiary); }
-  .card-interval { color:var(--text-quaternary, #64748b); font-size:0.68rem; }
-  .card-interval i { font-size:0.58rem; }
-  .tag-interval { background:var(--bg-tertiary); color:var(--text-secondary); font-weight:700; font-size:0.72rem; min-width:24px; text-align:center; }
-  .tag-interval:hover { background:var(--accent-primary); color:var(--bg-primary); }
-  .card-err { font-size:0.7rem; color:var(--status-warning); }
-
-  .card-bottom { display:flex; gap:4px; flex-wrap:wrap; }
-  .card-settings { display:flex; gap:4px; align-items:center; }
-
-  .card-progress { display:flex; align-items:center; gap:6px; padding:2px 8px; }
-  .prog-bar { flex:1; height:3px; background:var(--bg-tertiary); border-radius:2px; overflow:hidden; }
-  .prog-fill { height:100%; background:var(--accent-primary); border-radius:2px; transition:width 0.3s; }
-  .prog-text { font-size:0.62rem; color:var(--text-muted); white-space:nowrap; }
-
-  .tag-done { background:var(--bg-tertiary) !important; color:var(--text-muted) !important; border-color:var(--border-primary) !important; opacity:0.6; }
-  .tag-warn { border-color:var(--status-warning) !important; color:var(--status-warning) !important; }
-  .strikethrough { text-decoration:line-through; opacity:0.5; }
-  .quality-select {
-    padding:3px 6px; background:var(--bg-tertiary); border:1px solid var(--border-primary);
-    border-radius:6px; font-size:0.72rem; color:var(--text-primary); cursor:pointer; outline:none;
-  }
-  .quality-select:focus { border-color:var(--accent-primary); }
-  .tag { padding:3px 10px; background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:6px; font-size:0.72rem; color:var(--text-tertiary); cursor:pointer; transition:all 0.15s; }
-  .tag:hover { border-color:var(--accent-primary); color:var(--text-primary); }
-  .tag-on { background:var(--accent-muted); color:var(--accent-primary); border-color:var(--accent-primary); }
-  .tag-del:hover { border-color:var(--status-error); color:var(--status-error); }
-
-  .empty { display:flex; flex-direction:column; align-items:center; padding:60px 20px; text-align:center; color:var(--text-tertiary); }
-  .empty h3 { margin:16px 0 8px; color:var(--text-secondary); }
-  .empty p { margin-bottom:16px; font-size:0.88rem; max-width:380px; }
-
-  .info-bar {
-    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
-    background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-radius: 8px; margin-bottom: 16px; font-size: 0.78rem;
-    color: var(--text-tertiary); line-height: 1.5;
-  }
-  .info-bar i { color: var(--accent-primary); flex-shrink: 0; }
-
-  .filter-chip.warn { border-color: var(--status-warning); }
-  .filter-chip.warn strong { color: var(--status-warning); }
-  .filter-chip.warn.active { background: rgba(245,158,11,0.1); color: var(--status-warning); }
-  /* Medal-Filter-Chips: Farbverlauf passend zur Medaille. */
-  .filter-chip.medal-gold-chip { border-color: rgba(250,204,21,0.6); }
-  .filter-chip.medal-gold-chip strong { color: #eab308; }
-  .filter-chip.medal-gold-chip.active { background: rgba(234,179,8,0.14); border-color: #eab308; }
-  .filter-chip.medal-silver-chip { border-color: rgba(200,200,210,0.6); }
-  .filter-chip.medal-silver-chip strong { color: #c0c0c8; }
-  .filter-chip.medal-silver-chip.active { background: rgba(200,200,210,0.14); border-color: #c0c0c8; }
-  .filter-chip.medal-bronze-chip { border-color: rgba(205,127,50,0.6); }
-  .filter-chip.medal-bronze-chip strong { color: #cd7f32; }
-  .filter-chip.medal-bronze-chip.active { background: rgba(205,127,50,0.14); border-color: #cd7f32; }
-
-  .status-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 1px 7px; border-radius: 4px; font-size: 0.68rem; font-weight: 600;
-  }
-  .status-badge.unchecked { background: rgba(245,158,11,0.12); color: #d97706; }
-  /* ─── Prognosis Bar ─── */
-  .prognosis-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; margin-bottom: 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; font-size: 0.75rem; color: var(--text-secondary); flex-wrap: wrap; }
-  .prognosis-bar i { color: var(--accent-primary); }
-  .prognosis-bar b { color: var(--text-primary); }
-  .disk-warn { color: var(--status-warning) !important; font-weight: 600; }
-  .disk-warn b { color: var(--status-warning); }
-  .prognosis-note { color: var(--text-muted); font-style: italic; font-size: 0.7rem; }
-
-  /* ─── Medals ─── */
-  .medal { font-size: 0.85rem; line-height: 1; flex-shrink: 0; cursor: default; }
-  .prog-fill.prog-complete { background: var(--status-success); }
-
-  /* ─── Problem-Videos-Sektion ─── */
-  .problem-dot {
-    position: absolute;
-    bottom: -3px; right: -3px;
-    background: var(--status-warning);
-    color: #1a1a1a;
-    font-size: 0.6rem;
-    font-weight: 700;
-    min-width: 16px;
-    height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    border-radius: 8px;
-    padding: 0 4px;
-  }
-  .problem-dot i { font-size: 0.55rem; }
-
-  .problem-section {
-    margin-top: 6px;
-    border-top: 1px solid var(--border-primary);
-    padding-top: 6px;
-  }
-  .problem-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    background: none;
-    border: none;
-    padding: 4px 6px;
-    font-size: 0.75rem;
-    color: var(--status-warning);
-    cursor: pointer;
-    text-align: left;
-    border-radius: 4px;
-  }
-  .problem-header:hover { background: rgba(255, 152, 0, 0.08); }
-  .problem-header i { font-size: 0.7rem; }
-  .problem-hint { color: var(--text-quaternary, #64748b); font-size: 0.65rem; margin-left: auto; }
-
-  .problem-body {
-    margin-top: 4px;
-    padding: 6px;
-    background: rgba(255, 152, 0, 0.04);
-    border-radius: 6px;
-    border-left: 2px solid var(--status-warning);
-  }
-  .problem-loading, .problem-empty {
-    font-size: 0.75rem; color: var(--text-tertiary); padding: 4px; text-align: center;
-  }
-  .problem-actions { display: flex; justify-content: flex-end; margin-bottom: 6px; }
-  .btn-retry-all {
-    font-size: 0.7rem;
-    padding: 4px 8px;
-    border-radius: 4px;
-    background: var(--accent-muted, rgba(59,130,246,0.1));
-    color: var(--accent-primary);
-    border: 1px solid var(--accent-primary);
-    cursor: pointer;
-  }
-  .btn-retry-all:hover { background: var(--accent-primary); color: var(--accent-text); }
-
-  .problem-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-  .problem-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px;
-    border-radius: 4px;
-    background: var(--bg-secondary);
-  }
-  .problem-thumb {
-    width: 48px; height: 27px; object-fit: cover; border-radius: 3px; flex-shrink: 0;
-    background: var(--bg-primary);
-  }
-  .problem-thumb.placeholder { background: var(--bg-primary); border: 1px dashed var(--border-primary); }
-  .problem-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .problem-title {
-    font-size: 0.75rem; color: var(--text-primary); text-decoration: none;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .problem-title:hover { color: var(--accent-primary); text-decoration: underline; }
-  .problem-reason {
-    font-size: 0.65rem;
-    color: var(--status-warning);
-    display: inline-flex; gap: 3px; align-items: center;
-  }
-  .problem-item-actions { display: flex; gap: 3px; flex-shrink: 0; }
-  .btn-xs {
-    border: none; background: var(--bg-primary); color: var(--text-secondary);
-    width: 24px; height: 24px; border-radius: 4px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.7rem;
-  }
-  .btn-retry:hover { background: var(--accent-primary); color: var(--accent-text); }
-  .btn-dismiss:hover { background: var(--status-error); color: #fff; }
+  /* Leere Liste */
+  .tv-leer p { margin: 0 0 var(--tv-a3); }
+  .leer-gross { padding: 72px var(--tv-a5); text-align: center; color: var(--tv-text-2); }
+  .leer-gross i { font-size: 44px; color: var(--tv-text-3); margin-bottom: var(--tv-a4); }
+  .leer-gross h2 { margin: 0 0 var(--tv-a2); color: var(--tv-text); }
+  .leer-gross p { margin: 0 auto var(--tv-a4); max-width: 520px; }
+  .leer-gross .tv-knopf i { font-size: inherit; color: inherit; margin: 0; }
 </style>

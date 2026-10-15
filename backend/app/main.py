@@ -252,6 +252,9 @@ async def lifespan(app: FastAPI):
     from app.services import own_scan
     task_manager.register("own_scan", "Eigene Videos einlesen",
                           own_scan.worker, auto_restart=True, essential=False)
+    from app.services import music_files
+    task_manager.register("music_files", "Eigene Musiksammlung einlesen",
+                          music_files.background_scan, auto_restart=True, essential=False)
     task_manager.register("search_index", "Suchindex nachziehen",
                           search_index.background_catch_up, auto_restart=False, essential=False)
     await task_manager.start_all()

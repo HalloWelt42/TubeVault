@@ -88,6 +88,16 @@ TUBEVAULT_SCAN_SOURCE=/mnt/platte/alte-videos
 
 Unterordner der obersten Ebene gelten als Hinweis auf den Kanal (`ARTE/...`, `c't 3003/...`).
 
+Ebenso wahlweise kommt die **eigene Musiksammlung** dazu (FLAC, MP3, M4A, OGG und andere
+Tondateien). Sie wird nur lesend eingehängt und erscheint in der Musik neben den
+Musikvideos, mit Angaben aus den Tags, Cover (eingebettet oder `cover.jpg`/`folder.jpg`
+im Ordner) und mitlaufendem Liedtext aus einer `.lrc`-Datei gleichen Namens. Auf der
+Musikseite lässt sich wählen: alles, nur die Sammlung oder nur die Musikvideos.
+
+```bash
+TUBEVAULT_MUSIC_SOURCE=/mnt/platte/musik
+```
+
 Die Datenbank ist nur der Index - Dokumente
 (Beschreibungen, Kapitel, Notizen) liegen als Dateien im Texte-Verzeichnis, Metadaten
 redundant als `info.json` neben jedem Video.
