@@ -24,6 +24,7 @@ const STATE_KEY = 'musik.zustand';          // Weiterhören: Warteschlange diese
 const VOLUME_KEY = 'player.lastVolume';     // wie beim Videoplayer
 const COUNT_AFTER_S = 30;                    // ab dann zählt ein Titel als gehört
 const RESTART_AFTER_S = 3;                   // "Zurück" springt danach erst an den Titelanfang
+const BOOK_SKIP_S = 30;                       // Sprungtasten beim Hörbuch (Sperrbildschirm, Uhr)
 const REPEAT_MODES = ['off', 'all', 'one'];
 export const UNDO_MS = 6000;                 // so lange lässt sich ein Löschen zurücknehmen
 // Stille, um die Wiedergabe in einer Nutzeraktion freizuschalten (iOS)
@@ -60,6 +61,7 @@ class MusicPlayer {
   #audio = null;
   #counted = null;               // Kennung, deren Wiedergabe schon gezählt ist
   #skipRanges = [];
+  #skipsForBook = null;          // für welche Art die Sprungtasten angemeldet sind (#sessionSkips)
   #saveTimer = null;
   #unlocked = false;
   #deleteTimer = null;
@@ -175,6 +177,7 @@ class MusicPlayer {
     audio.src = audioSrc(track);
     audio.currentTime = at;
     this.#applyRate();
+    this.#sessionSkips();
     this.#updateMetadata();
     this.#save();
     if (autoplay) audio.play().catch(() => { this.playing = false; });
@@ -521,12 +524,25 @@ class MusicPlayer {
     const handlers = {
       play: () => this.toggle(), pause: () => this.pause(),
       previoustrack: () => this.prev(), nexttrack: () => this.next(),
-      seekbackward: (d) => this.seek(this.time - (d.seekOffset || 10)),
-      seekforward: (d) => this.seek(this.time + (d.seekOffset || 10)),
       seekto: (d) => this.seek(d.seekTime),
     };
     for (const [action, handler] of Object.entries(handlers)) {
       try { session.setActionHandler(action, handler); } catch { /* nicht unterstützt */ }
+    }
+    this.#sessionSkips();
+  }
+
+  /** Sprungtasten für Sperrbildschirm, Uhr und Kopfhörer. Sind sie angemeldet,
+   *  zeigen iPhone und Uhr nur sie statt "Titel vor/zurück". Darum: bei Musik
+   *  keine (dort zählen Titel und Abschnitte), beim Hörbuch 30 Sekunden. */
+  #sessionSkips() {
+    if (!('mediaSession' in navigator)) return;
+    const book = !!this.audiobook;
+    if (this.#skipsForBook === book) return;
+    this.#skipsForBook = book;
+    const skip = (direction) => (book ? (d) => this.skipBy(direction * (d.seekOffset || BOOK_SKIP_S)) : null);
+    for (const [action, handler] of [['seekbackward', skip(-1)], ['seekforward', skip(1)]]) {
+      try { navigator.mediaSession.setActionHandler(action, handler); } catch { /* nicht unterstützt */ }
     }
   }
 
