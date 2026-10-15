@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS chunk_embeddings (
     model TEXT NOT NULL,
     vector BLOB NOT NULL
 );
+-- Zählen je Modell ohne die Vektoren zu lesen (pending_chunks)
+CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model ON chunk_embeddings(model);
 CREATE TRIGGER IF NOT EXISTS trg_chunk_embedding_delete AFTER DELETE ON transcript_chunks
 BEGIN
     DELETE FROM chunk_embeddings WHERE chunk_id = old.id;
@@ -266,20 +268,26 @@ async def background_index() -> None:
 
 # ─── Transkript-Abschnitte ────────────────────────────────────────────
 
-_CHUNK_WAITING_SQL = """
-    FROM transcript_chunks c LEFT JOIN chunk_embeddings e ON e.chunk_id = c.id AND e.model = ?
-    WHERE e.chunk_id IS NULL
-"""
+# Eingelesene Untertitel (subtitle_import) bekommen keine Vektoren: es sind
+# Hunderttausende Abschnitte, ihre Vektoren lägen mit je 4 KB im Speicher
+# (gemessen 15.10.2026: etwa 440.000 Abschnitte, also rund 1,8 GB).
+# Die Abfragen gehen deshalb von den Transkripten aus (wenige) und nutzen
+# den Index der Abschnitte je Video, statt alle Abschnitte zu durchlaufen.
+_EMBEDDABLE = "FROM transcripts t JOIN transcript_chunks c ON c.video_id = t.video_id WHERE COALESCE(t.imported, 0) = 0"
 
 
 async def pending_chunks(model: str) -> int:
-    return await db.fetch_val(f"SELECT COUNT(*) {_CHUNK_WAITING_SQL}", (model,)) or 0
+    embeddable = await db.fetch_val(f"SELECT COUNT(*) {_EMBEDDABLE}") or 0
+    embedded = await db.fetch_val("SELECT COUNT(*) FROM chunk_embeddings WHERE model = ?", (model,)) or 0
+    return max(0, embeddable - embedded)
 
 
 async def index_chunk_batch(url: str, model: str) -> int:
     """Einen Stapel Transkript-Abschnitte einbetten. Gibt die Zahl zurück."""
     rows = await db.fetch_all(
-        f"SELECT c.id, c.text {_CHUNK_WAITING_SQL} ORDER BY c.id LIMIT ?", (model, _BATCH))
+        f"""SELECT c.id, c.text {_EMBEDDABLE}
+            AND NOT EXISTS (SELECT 1 FROM chunk_embeddings e WHERE e.chunk_id = c.id AND e.model = ?)
+            ORDER BY c.id LIMIT ?""", (model, _BATCH))
     if not rows:
         return 0
     vectors = await embed_texts([row["text"] for row in rows], url, model, timeout=_REQUEST_TIMEOUT_S)

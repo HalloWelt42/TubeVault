@@ -142,6 +142,10 @@ SETTINGS: list[SettingDef] = [
                label="KI-Transkripte erstellen",
                description="Der Rechner mit der Spracherkennung holt sich laufend das nächste Video. "
                            "Angehalten wird nach dem Video, das gerade bearbeitet wird."),
+    SettingDef(key="transcripts.import_enabled", default="true", kind="toggle", category="transcripts",
+               label="Mitgeladene Untertitel einlesen",
+               description="Macht das Gesagte von Videos durchsuchbar, zu denen beim Laden Untertitel "
+                           "mitkamen. Liest nur lokale Dateien, fragt nicht bei der Quelle."),
     SettingDef(key="scan.auto_enabled", default="false", kind="toggle", category="scan",
                label="Ungescannte Kanäle erfassen",
                description="Liest Kanäle, die noch nie vollständig gelesen wurden, von selbst: höchstens "

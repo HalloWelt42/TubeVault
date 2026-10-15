@@ -39,7 +39,7 @@ describe('Keyboard Shortcuts', () => {
       expect(shortcuts).toEqual({
         'd': '/',
         'b': '/library',
-        // 's' fokussiert SearchDropdown (kein Route-Wechsel)
+        // 's' fokussiert das Suchfeld im Kopf (kein Route-Wechsel)
         'h': '/history',
         'p': '/playlists',
         'f': '/favorites',
@@ -76,7 +76,7 @@ describe('Keyboard Shortcuts', () => {
   describe('Escape', () => {
     it('verlässt das Suchfeld', () => {
       const input = document.createElement('input');
-      input.className = 'search-input';
+      input.setAttribute('data-suchfeld', '');
       document.body.appendChild(input);
       input.focus();
       pressKey('Escape');

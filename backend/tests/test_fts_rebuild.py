@@ -4,7 +4,7 @@ FTS5-Rebuild-Tests (Phase 3a – Such-Pfad).
 Kontrakt:
 - fts_rebuild_from_resolver() holt description aus text_resolver
   (File-first) und baut den Index komplett neu.
-- Suche via fts_search funktioniert nach Rebuild, auch wenn die DB-Spalte
+- Die Suche (services/search) findet nach dem Rebuild, auch wenn die DB-Spalte
   videos.description leer ist (weil der Inhalt aus der Datei kommt).
 """
 import pytest
@@ -18,6 +18,12 @@ async def search_video(test_db):
         ("fts_vid", "Titel", "Kanal", "Apfelstrudel mit Vanillesauce"),
     )
     return "fts_vid"
+
+
+async def _hits(text):
+    from app.services.search import engine
+    from app.services.search.filters import SearchFilters
+    return (await engine.section("videos", text, SearchFilters())).items
 
 
 async def test_rebuild_populates_fts_from_file(
@@ -42,8 +48,8 @@ async def test_rebuild_populates_fts_from_file(
     assert stats["rebuilt"] >= 1
 
     # Suchbegriff aus dem FILE-Inhalt muss Hit geben
-    hits = await test_db.fts_search("Apfelstrudel")
-    assert any(h["id"] == search_video for h in hits), (
+    hits = await _hits("Apfelstrudel")
+    assert any(h.id == search_video for h in hits), (
         "FTS muss Videos finden, deren description nur in der Datei steht"
     )
 
@@ -66,8 +72,8 @@ async def test_rebuild_uses_file_over_db(
 
     await test_db.fts_rebuild_from_resolver()
 
-    hits_new = await test_db.fts_search("Quantenverschränkung")
-    assert any(h["id"] == search_video for h in hits_new), "FTS nutzt File-Inhalt"
+    hits_new = await _hits("Quantenverschränkung")
+    assert any(h.id == search_video for h in hits_new), "FTS nutzt File-Inhalt"
 
 
 async def test_rebuild_skips_non_ready_videos(test_db, tmp_path, monkeypatch):
@@ -80,5 +86,5 @@ async def test_rebuild_skips_non_ready_videos(test_db, tmp_path, monkeypatch):
         ("pending_vid", "T", "pending", "Uniquekeyword12345"),
     )
     await test_db.fts_rebuild_from_resolver()
-    hits = await test_db.fts_search("Uniquekeyword12345")
-    assert not any(h["id"] == "pending_vid" for h in hits)
+    hits = await _hits("Uniquekeyword12345")
+    assert not any(h.id == "pending_vid" for h in hits)

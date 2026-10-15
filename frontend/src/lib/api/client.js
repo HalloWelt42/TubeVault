@@ -187,13 +187,20 @@ export const api = {
 
   // YouTube Search
   searchYouTube: (q, maxResults = 15) => request(`/api/search/youtube?q=${encodeURIComponent(q)}&max_results=${maxResults}`),
-  searchYouTubeFull: (q, maxResults = 10) => request(`/api/search/youtube/full?q=${encodeURIComponent(q)}&max_results=${maxResults}`),
   searchYouTubePaged: (q, page = 1, perPage = 20) => request(`/api/search/youtube/full?q=${encodeURIComponent(q)}&page=${page}&per_page=${perPage}`),
   resolveUrl: (url) => request('/api/search/resolve-url', { method: 'POST', body: JSON.stringify({ url }) }),
-  searchLocal: (q, params = {}) => {
-    const p = new URLSearchParams({ q, ...params }).toString();
-    return request(`/api/search/local?${p}`);
-  },
+  // Suche über alles (Backend: services/search). params: Filter für die API (searchState.apiParams)
+  search: (q, params = {}) => request(`/api/search?${new URLSearchParams({ q, ...params })}`),
+  searchSection: (section, q, params = {}) =>
+    request(`/api/search/section/${section}?${new URLSearchParams({ q, ...params })}`),
+  searchVideoIds: (q, params = {}) => request(`/api/search/video-ids?${new URLSearchParams({ q, ...params })}`),
+  searchSpots: (videoId, q) => request(`/api/search/spots/${encodeURIComponent(videoId)}?q=${encodeURIComponent(q)}`),
+  searchComplete: (q) => request(`/api/search/complete?q=${encodeURIComponent(q)}`),
+  savedSearches: () => request('/api/search/saved'),
+  saveSearch: (body) => request('/api/search/saved', { method: 'POST', body: JSON.stringify(body) }),
+  renameSavedSearch: (id, name) => request(`/api/search/saved/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+  seenSavedSearch: (id) => request(`/api/search/saved/${id}/seen`, { method: 'POST' }),
+  deleteSavedSearch: (id) => request(`/api/search/saved/${id}`, { method: 'DELETE' }),
 
   // Playlists
   getPlaylists: () => request('/api/playlists'),
@@ -603,7 +610,6 @@ export const api = {
   metadataFromSource: (videoId) => request(`/api/video-repair/${videoId}/metadata-from-source`, { method: 'POST' }),
   autoEnrich: (videoId) => request(`/api/videos/${videoId}/auto-enrich`, { method: 'POST' }),
   saveNotes: (videoId, notes) => request(`/api/videos/${videoId}/notes`, { method: 'PUT', body: JSON.stringify({ notes }) }),
-  searchNotes: (q) => request(`/api/videos/search/notes?q=${encodeURIComponent(q)}`),
   thumbnailFromSource: (videoId) => request(`/api/video-repair/${videoId}/thumbnail-from-source`, { method: 'POST' }),
 
   // Like/Dislike (Return YouTube Dislike API)

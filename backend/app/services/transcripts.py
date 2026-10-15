@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS transcripts (
     language TEXT,
     kind TEXT,                       -- manual | auto | ai
     note TEXT,
+    imported INTEGER DEFAULT 0,      -- aus mitgeladenen Untertitel-Dateien (subtitle_import): nur Wortsuche
+    spoken INTEGER DEFAULT 1,        -- Sprache ist die gesprochene (nicht übersetzt), zählt für language_assign
     fetched_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS transcript_chunks (
@@ -118,6 +120,11 @@ class Passage(BaseModel):
 
 async def install_schema(connection) -> None:
     await connection.executescript(SCHEMA_SQL)
+    for column in ("imported INTEGER DEFAULT 0", "spoken INTEGER DEFAULT 1"):
+        try:
+            await connection.execute(f"ALTER TABLE transcripts ADD COLUMN {column}")
+        except Exception:
+            pass  # Spalte existiert bereits
     await connection.commit()
 
 
@@ -141,45 +148,66 @@ def into_chunks(sentences: list[Segment]) -> list[Segment]:
     return chunks
 
 
-async def store(video_id: str, language: str, kind: str, sentences: list[Segment]) -> int:
+async def store(video_id: str, language: str, kind: str, sentences: list[Segment], *,
+                imported: bool = False, spoken: bool = True, note: Optional[str] = None) -> int:
     """Transkript eines Videos ablegen (ersetzt ein vorhandenes). Sätze in
     Werbestellen fallen weg - sie sollen weder gefunden noch angezeigt werden
-    (die Untertitel-Datei bleibt vollständig, siehe ad_segments)."""
+    (die Untertitel-Datei bleibt vollständig, siehe ad_segments).
+    imported: aus einer mitgeladenen Datei (nur Wortsuche, siehe subtitle_import);
+    spoken: die Sprache ist die gesprochene, nicht übersetzt; note: Hinweis
+    (bei eingelesenen Untertiteln der Dateiname)."""
     from app.services import ad_segments
     sentences = ad_segments.outside(sentences, await ad_segments.skip_ranges(video_id))
     chunks = into_chunks(sentences)
-    await db.execute("DELETE FROM transcript_chunks WHERE video_id = ?", (video_id,))
-    for chunk in chunks:
-        await db.execute(
-            "INSERT INTO transcript_chunks (video_id, start, end, text) VALUES (?, ?, ?, ?)",
-            (video_id, chunk.start, chunk.end, chunk.text))
-    await _mark(video_id, "ok" if chunks else "none", language, kind)
+    # Alles in einem Zug schreiben: ein Commit statt einem je Abschnitt
+    await db.conn.execute("DELETE FROM transcript_chunks WHERE video_id = ?", (video_id,))
+    await db.conn.executemany(
+        "INSERT INTO transcript_chunks (video_id, start, end, text) VALUES (?, ?, ?, ?)",
+        [(video_id, chunk.start, chunk.end, chunk.text) for chunk in chunks])
+    await _mark(video_id, "ok" if chunks else "none", language, kind, note, imported=imported, spoken=spoken)
     return len(chunks)
 
 
 async def _mark(video_id: str, status: Status, language: str | None = None,
-                kind: str | None = None, note: str | None = None) -> None:
+                kind: str | None = None, note: str | None = None, *,
+                imported: bool = False, spoken: bool = True) -> None:
     await db.execute(
-        """INSERT INTO transcripts (video_id, status, language, kind, note)
-           VALUES (?, ?, ?, ?, ?)
+        """INSERT INTO transcripts (video_id, status, language, kind, note, imported, spoken)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(video_id) DO UPDATE SET status = excluded.status,
                language = excluded.language, kind = excluded.kind, note = excluded.note,
+               imported = excluded.imported, spoken = excluded.spoken,
                fetched_at = datetime('now')""",
-        (video_id, status, language, kind, note))
+        (video_id, status, language, kind, note, int(imported), int(spoken)))
 
 
 async def rebuild(video_id: str) -> int:
     """Abschnitte eines Transkripts neu aus seiner Untertitel-Datei bilden -
     etwa wenn sich die Werbestellen des Videos geändert haben."""
     row = await db.fetch_one(
-        "SELECT status, language, kind FROM transcripts WHERE video_id = ? AND status IN ('ok', 'none')",
-        (video_id,))
+        """SELECT status, language, kind, note, imported, spoken FROM transcripts
+           WHERE video_id = ? AND status IN ('ok', 'none')""", (video_id,))
     if not row or not row["language"] or not row["kind"]:
         return 0
-    path = _subtitle_file(video_id, row["language"], row["kind"])
+    path = _file_of(video_id, row)
     if not path.exists():
         return 0
-    return await store(video_id, row["language"], row["kind"], subtitle_segments.segments_from_file(path))
+    return await store(video_id, row["language"], row["kind"], subtitle_segments.segments_from_file(path),
+                       imported=bool(row["imported"]), spoken=bool(row["spoken"]),
+                       note=row["note"] if row["imported"] else None)
+
+
+async def mark_none(video_id: str, note: str) -> None:
+    """Eingelesen, aber ohne verwertbaren Text (subtitle_import): nicht wieder versuchen."""
+    await _mark(video_id, "none", note=note, imported=True)
+
+
+def _file_of(video_id: str, row):
+    """Untertitel-Datei eines Transkripts; eingelesene merken sich ihren
+    Dateinamen in note (subtitle_import), alle anderen folgen _subtitle_file."""
+    if row["imported"] and row["note"]:
+        return SUBTITLES_DIR / video_id / row["note"]
+    return _subtitle_file(video_id, row["language"], row["kind"])
 
 
 def _subtitle_file(video_id: str, language: str, kind: str):
@@ -211,12 +239,12 @@ async def for_dubbing(video_id: str, use: str) -> DubTranscriptAnswer:
         return missing("Untertitel sollen für diesen Auftrag nicht verwendet werden")
 
     row = await db.fetch_one(
-        "SELECT status, language, kind FROM transcripts WHERE video_id = ?", (video_id,))
+        "SELECT status, language, kind, note, imported FROM transcripts WHERE video_id = ?", (video_id,))
     if not row or row["status"] != "ok":
         return missing("Für dieses Video gibt es noch kein Transkript")
     if row["kind"] != "manual" and use == "manual":
         return missing(f"Es gibt nur ein {KIND_LABELS[row['kind']]}; gewünscht waren Untertitel vom Autor")
-    path = _subtitle_file(video_id, row["language"], row["kind"])
+    path = _file_of(video_id, row)
     if not path.exists():
         return missing("Die Untertitel-Datei des Transkripts fehlt")
     segments = subtitle_segments.segments_from_file(path)
@@ -373,18 +401,6 @@ async def ai_counts() -> dict[str, int]:
 
 
 # ─── Suchen ───────────────────────────────────────────────────────────
-
-async def keyword_passages(match: str, limit: int = 400) -> list[Passage]:
-    """Abschnitte, in denen die Suchwörter vorkommen, beste zuerst.
-    match ist ein fertiger Volltext-Ausdruck (search_index.build_match)."""
-    rows = await db.fetch_all(
-        """SELECT c.id AS chunk_id, c.video_id, c.start, c.text, t.kind
-           FROM transcript_fts f JOIN transcript_chunks c ON c.id = f.rowid
-           LEFT JOIN transcripts t ON t.video_id = c.video_id
-           WHERE transcript_fts MATCH ? ORDER BY bm25(transcript_fts) LIMIT ?""",
-        (match, limit))
-    return [Passage(**dict(row)) for row in rows]
-
 
 async def passages_by_id(chunk_ids: list[int]) -> dict[int, Passage]:
     if not chunk_ids:

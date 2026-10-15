@@ -162,6 +162,16 @@ def normalize(raw) -> Optional[str]:
     return code if code in BY_CODE else None
 
 
+def from_user(raw) -> Optional[str]:
+    """Sprache, wie man sie tippt: Kürzel ("en", "eng") oder deutscher Name
+    ("englisch", "Deutsch"). Unbekanntes ergibt None."""
+    code = normalize(raw)
+    if code:
+        return code
+    text = str(raw or "").strip().lower()
+    return next((lang.code for lang in LANGUAGES if lang.name.lower() == text), None)
+
+
 def name(code: Optional[str]) -> str:
     """Deutscher Name ("Englisch"); Unbekanntes als Kürzel in Großbuchstaben."""
     if code == MIXED:

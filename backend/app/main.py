@@ -229,6 +229,9 @@ async def lifespan(app: FastAPI):
     from app.services import auto_scan
     task_manager.register("auto_scan", "Ungescannte Kanäle erfassen (alle 2 Std.)",
                           auto_scan.loop, auto_restart=True, essential=False)
+    from app.services import subtitle_import
+    task_manager.register("subtitle_import", "Mitgeladene Untertitel einlesen",
+                          subtitle_import.loop, auto_restart=True, essential=False)
     task_manager.register("thumbnail_backfill", "Thumbnail-Backfill",
                           rss_service.backfill_missing_thumbnails, auto_restart=False, essential=False)
     task_manager.register("banner_backfill", "Banner-Backfill",
@@ -437,7 +440,7 @@ async def api_overview():
             "languages": {
                 "catalog": "GET /api/languages",
                 "filter": "language=de,en (und = ohne Sprache) an /api/videos, /api/subscriptions, "
-                          "/api/subscriptions/feed, /api/search/local",
+                          "/api/subscriptions/feed, /api/search",
             },
             "downloads": {
                 "add": "POST /api/downloads",
@@ -457,9 +460,13 @@ async def api_overview():
                 "audio_get": "GET /api/player/{video_id}/audio",
             },
             "search": {
-                "youtube": "GET /api/search/youtube?q=...",
-                "youtube_playlists": "GET /api/search/youtube/playlists?q=...",
-                "local": "GET /api/search/local?q=...",
+                "all": "GET /api/search?q=... (alle Bereiche; Suchsprache: \"Wortfolge\", -Wort, oder, "
+                       "kanal:, sprache:, länge:, jahr:, in:)",
+                "section": "GET /api/search/section/{videos|gesagt|kapitel|abos|kanaele|playlists|musik|sinngemaess}",
+                "spots": "GET /api/search/spots/{video_id}?q=...",
+                "complete": "GET /api/search/complete?q=...",
+                "saved": "GET|POST /api/search/saved, PUT|DELETE /api/search/saved/{id}, POST .../seen",
+                "source": "GET /api/search/youtube/full?q=... (Quelle, nur auf Wunsch)",
             },
             "import": {
                 "youtube_playlist": "POST /api/import/youtube-playlist",

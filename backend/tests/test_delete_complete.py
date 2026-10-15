@@ -11,7 +11,8 @@ Kontrakt:
 """
 import pytest
 
-from app.services import search_index
+from app.services.search import engine
+from app.services.search.filters import SearchFilters
 from app.services.download_service import download_service
 from app.services.metadata_service import metadata_service
 from app.services.rss_service import rss_service
@@ -62,7 +63,7 @@ async def _video(test_db, dirs, vid, channel_id=CH):
 async def test_video_restlos_weg(test_db, dirs):
     from app import config
     await _video(test_db, dirs, "v1")
-    assert (await search_index.search_videos("Einzigartigv1"))["total"] == 1
+    assert (await engine.section("videos", "Einzigartigv1", SearchFilters())).total == 1
 
     assert await metadata_service.delete_video("v1")
 
@@ -72,7 +73,7 @@ async def test_video_restlos_weg(test_db, dirs):
         count = await test_db.fetch_val(f"SELECT COUNT(*) FROM {table} WHERE {column} = 'v1'")
         assert count == 0, f"Rest in {table}.{column}"
     assert await test_db.fetch_val("SELECT COUNT(*) FROM videos WHERE id = 'v1'") == 0
-    assert (await search_index.search_videos("Einzigartigv1"))["total"] == 0
+    assert (await engine.section("videos", "Einzigartigv1", SearchFilters())).total == 0
 
     feed = await test_db.fetch_one("SELECT status, auto_queued FROM rss_entries WHERE video_id = 'v1'")
     assert (feed["status"], feed["auto_queued"]) == ("new", 0), "Feed zeigt es wieder als nicht geladen"

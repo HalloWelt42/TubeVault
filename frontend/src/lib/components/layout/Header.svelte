@@ -1,12 +1,12 @@
 <!--
   TubeVault – Header v1.5.88
-  Mit integrierter Universal-Suche (SearchDropdown).
+  Mit dem Suchfeld samt Aufklappliste (SearchBox).
   © HalloWelt42 – Private Nutzung
 -->
 <script>
   import { route, navigate } from '../../router/router.js';
   import { sidebarOpen } from '../../stores/app.js';
-  import SearchDropdown from './SearchDropdown.svelte';
+  import SearchBox from './SearchBox.svelte';
 
   function toggleSidebar() {
     sidebarOpen.update(v => !v);
@@ -25,7 +25,7 @@
   </div>
 
   <div class="header-center">
-    <SearchDropdown />
+    <SearchBox />
   </div>
 
   <div class="header-right">

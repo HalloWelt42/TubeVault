@@ -36,7 +36,7 @@ export const sidebarOpen = writable(true);
 /** Wird inkrementiert wenn Backend neue Feed-Einträge meldet → Feed.svelte reagiert */
 export const feedVersion = writable(0);
 
-/** URL die von SearchDropdown → Downloads übergeben wird */
+/** Adresse, die das Suchfeld im Kopf oder die Übersicht an die Downloads übergibt */
 export const pendingDownloadUrl = writable(null);
 
 // ─── Re-Exports für direkten Router-Zugriff ─────────────

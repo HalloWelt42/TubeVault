@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 53
+SCHEMA_VERSION = 54
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -999,10 +999,11 @@ class Database:
         # v32: Suchindex mit eigener, stabiler Dokumentnummer und Triggern.
         # Ersetzt den an videos.rowid gebundenen Altindex (siehe search_index).
         from app.services import search_index
-        await search_index.install_schema(self._connection, rebuild=current_version < 32)
-        if current_version < 32:
+        # v54: Liedtexte im Index (neue Spalte) - der Index wird einmal neu aufgebaut
+        await search_index.install_schema(self._connection, rebuild=current_version < 54)
+        if current_version < 54:
             await self._connection.commit()
-            logger.info("Migration v32: Suchindex neu angelegt, Videos werden nachgezogen")
+            logger.info("Migration v32/v54: Suchindex neu angelegt, Videos werden nachgezogen")
 
         # v33: Kanalname am Video per Trigger erzwingen, Bestand auffüllen
         # (siehe channel_identity). Füllt nur Leeres, überschreibt nichts.
@@ -1206,6 +1207,14 @@ class Database:
         if current_version < 53:
             logger.info(f"Migration v53: Sprache je Video, Feed-Eintrag und Kanal, {adopted} Angaben übernommen")
 
+        # v54: Suche über alles (services/search): Volltext über Kapitel und Feed,
+        # gemerkte Suchen; Transkripte merken sich, ob sie eingelesen wurden
+        from app.services.search import index as search_extra_index, saved as saved_searches
+        await search_extra_index.install_schema(self._connection, build=current_version < 54)
+        await saved_searches.install_schema(self._connection)
+        if current_version < 54:
+            logger.info("Migration v54: Kapitel und Feed durchsuchbar, gemerkte Suchen")
+
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing
         await self._connection.executescript(audio_tracks.SCHEMA_SQL)
@@ -1274,14 +1283,6 @@ class Database:
         """Suchindex komplett neu aufbauen (Beschreibung aus dem text_resolver)."""
         from app.services import search_index
         return await search_index.rebuild()
-
-    async def fts_search(self, query: str, limit: int = 50, offset: int = 0) -> list:
-        """Volltextsuche über die Bibliothek (ohne Archiv)."""
-        from app.services import search_index
-        page = offset // limit + 1 if limit else 1
-        result = await search_index.search_videos(
-            query, page=page, per_page=limit, archived=False)
-        return result["videos"]
 
 
 # Singleton

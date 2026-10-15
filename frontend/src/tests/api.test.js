@@ -276,7 +276,7 @@ describe('API Endpoint Vollständigkeit', () => {
     // Tags
     'getAllTags',
     // Search
-    'searchYouTube', 'searchLocal',
+    'searchYouTube', 'search', 'searchSection', 'searchSpots', 'savedSearches',
     // Playlists
     'getPlaylists', 'getPlaylist', 'createPlaylist', 'deletePlaylist',
     'addToPlaylist', 'removeFromPlaylist',

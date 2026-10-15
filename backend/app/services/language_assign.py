@@ -127,7 +127,7 @@ async def evaluate_videos(video_ids: Iterable[str]) -> set[str]:
         rows = await db.fetch_all(
             f"""SELECT v.id, v.channel_id, v.title, v.description, v.language, v.language_source,
                        (SELECT t.language FROM transcripts t
-                        WHERE t.video_id = v.id AND t.status = 'ok') AS spoken
+                        WHERE t.video_id = v.id AND t.status = 'ok' AND COALESCE(t.spoken, 1) = 1) AS spoken
                 FROM videos v WHERE v.id IN ({_marks(chunk)})""", chunk)
         if not rows:
             continue

@@ -182,6 +182,23 @@ async def _ai_transcripts() -> Optional[WorkItem]:
                     switch_key=transcripts.AI_SWITCH, paused=paused)
 
 
+async def _subtitle_import() -> Optional[WorkItem]:
+    """Mitgeladene Untertitel werden durchsuchbar gemacht (subtitle_import)."""
+    from app.services import setting_values, subtitle_import
+    paused = not await setting_values.is_on(subtitle_import.SWITCH)
+    done, total = subtitle_import.progress()
+    if not total:
+        waiting = await subtitle_import.remaining() if paused else 0
+        if not waiting:
+            return None
+        return WorkItem(key="subtitle_import", label="Untertitel einlesen", waiting=waiting,
+                        detail=f"Angehalten - {waiting} Videos mit Untertiteln sind noch nicht durchsuchbar.",
+                        switch_key=subtitle_import.SWITCH, paused=True)
+    return WorkItem(key="subtitle_import", label="Untertitel einlesen",
+                    detail="Macht das Gesagte von Videos mit mitgeladenen Untertiteln durchsuchbar.",
+                    done=done, total=total, progress=done / total, switch_key=subtitle_import.SWITCH, paused=paused)
+
+
 async def _passage_index() -> Optional[WorkItem]:
     from app.services import semantic_index
     cfg = await semantic_index.config()
@@ -241,7 +258,7 @@ async def _own_videos() -> Optional[WorkItem]:
 
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _ai_transcripts, _channel_scan, _own_videos, _search_index, _semantic_index, _passage_index,
+    _dubbing, _ai_transcripts, _channel_scan, _subtitle_import, _own_videos, _search_index, _semantic_index, _passage_index,
     _type_check, _languages]
 
 

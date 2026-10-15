@@ -297,9 +297,12 @@ async def test_kanaele_filter_und_zaehler(async_client_factory, stocked):
 async def test_suche_filter_und_zaehler(async_client_factory, stocked):
     from app.routers import search
     async with await async_client_factory(search.router) as client:
-        body = (await client.get("/api/search/local", params={"q": "Sauerteig", "language": "en"})).json()
-        assert [v["id"] for v in body["videos"]] == ["e1"] and body["total"] == 1
-        assert _counts(body["language_counts"]) == {"de": 2, "en": 1, "und": 1}
+        body = (await client.get("/api/search", params={"q": "Sauerteig", "language": "en"})).json()
+        videos = body["sections"]["videos"]
+        assert [v["id"] for v in videos["items"]] == ["e1"] and videos["total"] == 1
+        assert [e["video_id"] for e in body["sections"]["abos"]["items"]] == ["re1"]
+        # Zähler über Videos und noch nicht geladene Feed-Einträge, ohne den Sprachfilter
+        assert _counts(body["language_counts"]) == {"de": 4, "en": 2, "und": 2}
 
 
 async def test_katalog(async_client_factory, test_db):

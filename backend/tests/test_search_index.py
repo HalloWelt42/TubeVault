@@ -11,6 +11,8 @@ Kontrakt (siehe app/services/search_index.py):
 import pytest
 
 from app.services import search_index
+from app.services.search import engine, query as query_module
+from app.services.search.filters import SearchFilters
 
 
 async def _add(db, vid, title, *, channel="Kanal", archived=0, status="ready",
@@ -22,9 +24,13 @@ async def _add(db, vid, title, *, channel="Kanal", archived=0, status="ready",
     )
 
 
+async def _section(query, *, archived=None, page=1, per_page=100):
+    location = None if archived is None else ("archiv" if archived else "bibliothek")
+    return await engine.section("videos", query, SearchFilters(location=location), page=page, per_page=per_page)
+
+
 async def _ids(query, **kwargs):
-    result = await search_index.search_videos(query, **kwargs)
-    return [v["id"] for v in result["videos"]]
+    return [item.id for item in (await _section(query, **kwargs)).items]
 
 
 async def test_findet_archiv_und_bibliothek(test_db):
@@ -38,9 +44,9 @@ async def test_findet_archiv_und_bibliothek(test_db):
 
 async def test_treffer_tragen_archiv_kennzeichen(test_db):
     await _add(test_db, "a1", "Weichenbau", archived=1)
-    result = await search_index.search_videos("Weichenbau")
-    assert result["total"] == 1
-    assert result["videos"][0]["is_archived"] == 1
+    result = await _section("Weichenbau")
+    assert result.total == 1
+    assert result.items[0].is_archived is True
 
 
 async def test_wortanfang_und_teilwort(test_db):
@@ -147,7 +153,7 @@ async def test_listenfilter_nutzt_dieselben_regeln(test_db):
     assert [v["id"] for v in result["videos"]] == ["a1"]
 
 
-def test_build_match():
-    assert search_index.build_match("foo bar") == '"foo"* AND "bar"*'
-    assert search_index.build_match('  "  ') is None
-    assert search_index.build_match("foo-bar") == '"foo bar"*'
+def test_ausdruck():
+    assert query_module.parse("Folge Brühe").expression() == '"folge"* AND "brühe"*'
+    assert query_module.parse('  "  ').expression() is None
+    assert query_module.parse("foo-bars").expression() == '"foo bars"*'

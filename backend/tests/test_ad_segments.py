@@ -4,7 +4,14 @@ import subprocess
 
 import pytest
 
-from app.services import ad_free_export, ad_segments, search_index, transcripts
+from app.services import ad_free_export, ad_segments, transcripts
+from app.services.search import engine
+from app.services.search.filters import SearchFilters
+
+
+async def _said(text):
+    """Videos, in deren Gesagtem der Text vorkommt."""
+    return [item.id for item in (await engine.section("gesagt", text, SearchFilters())).items]
 from app.services.subtitle_segments import Segment
 
 VIDEO = "werbung0001"   # 11 Zeichen wie eine Video-ID der Quelle
@@ -80,19 +87,19 @@ async def test_transkript_ohne_werbung_und_nachtraeglich_korrigiert(video, monke
         "00:02:00.000 --> 00:02:04.000\nZuerst kommt der Trafo.\n", encoding="utf-8")
     await transcripts.store(VIDEO, "de", "manual",
                             transcripts.subtitle_segments.segments_from_file(folder / "de.vtt"))
-    assert (await search_index.search_videos("Brausepulver"))["videos"]
+    assert await _said("Brausepulver")
 
     # Der Dienst kennt die Stelle erst später: das Transkript wird nachgezogen
     monkeypatch.setattr(ad_segments, "_fetch", answer(("u1", 55, 70, "sponsor")))
     await ad_segments.refresh(VIDEO)
-    assert (await search_index.search_videos("Brausepulver"))["videos"] == []
-    assert (await search_index.search_videos("Trafo"))["videos"][0]["id"] == VIDEO
+    assert await _said("Brausepulver") == []
+    assert (await _said("Trafo"))[0] == VIDEO
     assert "Brausepulver" in (folder / "de.vtt").read_text(encoding="utf-8")   # Datei bleibt vollständig
 
     # Zieht der Dienst die Stelle zurück, ist der Satz wieder auffindbar
     monkeypatch.setattr(ad_segments, "_fetch", answer())
     await ad_segments.refresh(VIDEO)
-    assert (await search_index.search_videos("Brausepulver"))["videos"]
+    assert await _said("Brausepulver")
 
 
 async def test_eigene_marken_aendern_das_transkript_dienstmarken_sind_fest(video, async_client_factory, tmp_path):
@@ -106,9 +113,9 @@ async def test_eigene_marken_aendern_das_transkript_dienstmarken_sind_fest(video
     client = await async_client_factory(ad_markers.router)
     created = await client.post(f"/api/ad-markers/{VIDEO}", json={"start_time": 5, "end_time": 20})
     assert created.status_code == 200
-    assert (await search_index.search_videos("Tassen"))["videos"] == []
+    assert await _said("Tassen") == []
     await client.delete(f"/api/ad-markers/{created.json()['id']}")
-    assert (await search_index.search_videos("Tassen"))["videos"]
+    assert await _said("Tassen")
 
     await video.execute(
         "INSERT INTO ad_markers (video_id, start_time, end_time, source, category) VALUES (?, 1, 2, 'sponsorblock', 'sponsor')",

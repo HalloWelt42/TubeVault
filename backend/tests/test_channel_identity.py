@@ -109,9 +109,10 @@ async def test_bestandsreparatur_fuellt_nur_leeres(test_db):
 
 
 async def test_suchindex_kennt_den_ergaenzten_namen(test_db):
-    from app.services import search_index
+    from app.services.search import engine
+    from app.services.search.filters import SearchFilters
     await _sub(test_db)
     await test_db.execute(
         "INSERT INTO videos (id, title, channel_id, status) VALUES ('v1', 'Folge 1', ?, 'ready')", (CH,))
-    result = await search_index.search_videos("Werkbank")
-    assert [v["id"] for v in result["videos"]] == ["v1"]
+    result = await engine.section("videos", "Werkbank", SearchFilters())
+    assert [v.id for v in result.items] == ["v1"]

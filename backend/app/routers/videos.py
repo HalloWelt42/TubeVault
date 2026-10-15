@@ -179,17 +179,6 @@ async def get_video_streams(video_id: str):
     return {"video_id": video_id, "streams": [dict(r) for r in rows]}
 
 
-@router.get("/search/notes")
-async def search_notes(q: str = Query(..., min_length=1)):
-    """Globale Suche in Video-Notizen."""
-    rows = await db.fetch_all(
-        """SELECT id, title, channel_name, notes, thumbnail_path
-           FROM videos WHERE notes IS NOT NULL AND notes != ''
-           AND notes LIKE ? ORDER BY updated_at DESC LIMIT 50""",
-        (f"%{q}%",))
-    return {"results": [dict(r) for r in rows], "query": q}
-
-
 @router.get("/random")
 async def get_random_video(exclude: str = None, count: int = 1, pool: str = "all"):
     """Zufälliges Video für Vorschläge. pool: all|library|music|own|archive."""

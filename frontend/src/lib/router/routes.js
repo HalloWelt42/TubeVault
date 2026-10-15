@@ -223,8 +223,8 @@ export const routeDefinitions = {
     icon: 'fa-solid fa-magnifying-glass',
     group: 'main',
     hasId: false,
-    queryParams: ['q', 'scope', 'genau'],
-    description: 'Globale Suche (Bibliothek + YouTube)',
+    queryParams: ['q', 'bereich', 'sprache', 'laenge', 'zeitraum', 'ort', 'stand', 'ordnung', 'genau'],
+    description: 'Suche über alles: Bibliothek, Gesagtes, Kapitel, Abos, Kanäle, Playlists, Musik; Quelle auf Wunsch',
   },
 
   // ─── Admin (eigene Menü-Gruppe, Fullsize-Layout) ────────────

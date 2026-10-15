@@ -7,14 +7,17 @@ Wortgleichheit prüfbar ist.
 
 Kontrakt:
 - Ohne eingeschaltete oder erreichbare KI ist die Suche reine Wortsuche.
-- Mit KI kommen inhaltlich verwandte Videos dazu; was Wort- und
-  Bedeutungssuche beide finden, steht vorn.
+- Mit KI kommen inhaltlich verwandte Videos dazu - im eigenen Bereich
+  "sinngemaess", nie vor den Worttreffern; was ein Wort trifft, steht dort
+  nicht noch einmal.
 - Bedeutungstreffer bestehen dieselben Filter (Archiv, Shorts).
 - Geänderte und gelöschte Videos ziehen von selbst nach.
 """
 import pytest
 
-from app.services import search_index, semantic_index
+from app.services import semantic_index
+from app.services.search import engine
+from app.services.search.filters import SearchFilters
 
 TOPICS = {
     "backen": ("brot", "teig", "sauerteig", "hefe", "backen", "ofen"),
@@ -65,16 +68,19 @@ async def _index():
         pass
 
 
-async def _search(query, **kwargs):
-    result = await search_index.search_videos(query, **kwargs)
-    return [(v["id"], v.get("match")) for v in result["videos"]], result
+async def _search(query, **filters):
+    """(Worttreffer, sinngemäß Verwandtes, Übersicht)."""
+    overview = await engine.overview(query, SearchFilters(**filters), limit=20)
+    words = [item.id for item in overview.sections["videos"].items] if overview.sections else []
+    meaning = [item.id for item in overview.sections["sinngemaess"].items] if overview.sections else []
+    return words, meaning, overview
 
 
 async def test_ohne_ki_reine_wortsuche(test_db):
     await _add(test_db, "v1", "Sauerteig ansetzen")
-    hits, result = await _search("Sauerteig")
-    assert hits == [("v1", None)] and result["semantic"] is False
-    assert (await _search("Brot backen"))[0] == []
+    words, meaning, overview = await _search("Sauerteig")
+    assert words == ["v1"] and meaning == [] and overview.semantic is False
+    assert (await _search("Brot backen"))[:2] == ([], [])
 
 
 async def test_verwandtes_ohne_wortgleichheit(test_db, ai):
@@ -82,20 +88,19 @@ async def test_verwandtes_ohne_wortgleichheit(test_db, ai):
     await _add(test_db, "loet", "Platine löten für Anfänger")
     await _index()
 
-    hits, result = await _search("Brot backen")
-    assert result["semantic"] is True
-    assert hits == [("teig", "bedeutung")], "Thema passt, kein Wort gleich - das Lötvideo bleibt draussen"
+    words, meaning, overview = await _search("Brot backen")
+    assert overview.semantic is True
+    assert (words, meaning) == ([], ["teig"]), "Thema passt, kein Wort gleich - das Lötvideo bleibt draussen"
 
 
-async def test_doppelt_gefunden_steht_vorn(test_db, ai):
+async def test_worttreffer_vor_sinngemaessem(test_db, ai):
     await _add(test_db, "nurwort", "Brot")                       # Worttreffer, auch Thema
     await _add(test_db, "nursinn", "Hefe und Ofen")              # nur Thema
     await _add(test_db, "fremd", "Brot und Spiele im alten Rom") # Worttreffer
     await _index()
-    hits, _ = await _search("Brot")
-    kinds = dict(hits)
-    assert kinds["nursinn"] == "bedeutung" and kinds["nurwort"] == "beides"
-    assert hits[0][1] == "beides", "was beide Suchen finden, führt die Liste an"
+    words, meaning, _ = await _search("Brot")
+    assert set(words) == {"nurwort", "fremd"}
+    assert meaning == ["nursinn"], "was ein Wort trifft, steht nicht noch einmal unter sinngemäß"
 
 
 async def test_filter_gelten_auch_fuer_bedeutungstreffer(test_db, ai, set_setting):
@@ -103,9 +108,9 @@ async def test_filter_gelten_auch_fuer_bedeutungstreffer(test_db, ai, set_settin
     await _add(test_db, "lib", "Teig kneten", archived=0)
     await _add(test_db, "kurz", "Ofen in 30 Sekunden", video_type="short")
     await _index()
-    assert {h[0] for h in (await _search("Brot backen", archived=False))[0]} == {"lib", "kurz"}
+    assert set((await _search("Brot backen", location="bibliothek"))[1]) == {"lib", "kurz"}
     await set_setting("shorts.exclude", "true")
-    assert {h[0] for h in (await _search("Brot backen"))[0]} == {"arch", "lib"}
+    assert set((await _search("Brot backen"))[1]) == {"arch", "lib"}
 
 
 async def test_ki_faellt_aus_suche_laeuft_weiter(test_db, ai):
@@ -114,8 +119,8 @@ async def test_ki_faellt_aus_suche_laeuft_weiter(test_db, ai):
     ai["up"] = False
     semantic_index.reset_availability()
     semantic_index._query_cache.clear()
-    hits, result = await _search("Sauerteig")
-    assert hits == [("teig", None)] and result["semantic"] is False
+    words, meaning, overview = await _search("Sauerteig")
+    assert words == ["teig"] and meaning == [] and overview.semantic is False
 
 
 async def test_aenderung_und_loeschen_ziehen_nach(test_db, ai):
@@ -126,8 +131,8 @@ async def test_aenderung_und_loeschen_ziehen_nach(test_db, ai):
     await test_db.execute("UPDATE videos SET title = 'Teleskop für den Mond' WHERE id = 'v1'")
     assert await semantic_index.pending() == 1
     await _index()
-    assert (await _search("Stern und Planet"))[0] == [("v1", "bedeutung")]
-    assert (await _search("Brot backen"))[0] == []
+    assert (await _search("Stern und Planet"))[1] == ["v1"]
+    assert (await _search("Brot backen"))[1] == []
 
     await test_db.execute("DELETE FROM videos WHERE id = 'v1'")
     assert await test_db.fetch_val("SELECT COUNT(*) FROM video_embeddings") == 0
@@ -142,20 +147,15 @@ async def test_unveraenderter_text_wird_nicht_neu_gerechnet(test_db, ai):
     assert ai["n"] == before
 
 
-def test_rangfolgen_verschmelzen():
-    assert search_index.fuse_rankings(["a", "b", "c"], ["c", "a", "d"])[:2] == ["a", "c"]
-    assert search_index.fuse_rankings(["a"], []) == ["a"]
-
-
 async def test_genauigkeit_ist_je_suche_waehlbar(test_db, ai, set_setting):
     """Wunsch 15.10.2026: Genauigkeit selbst einstellen, mit Standard. "aus"
     sucht nur nach Wörtern; die Stufe kommt sonst aus den Einstellungen."""
     await _add(test_db, "teig", "Sauerteig ansetzen")
     await _index()
-    hits, result = await _search("Brot backen")
-    assert result["semantic"] and hits == [("teig", "bedeutung")]
-    hits, result = await _search("Brot backen", precision="aus")
-    assert not result["semantic"] and hits == []
+    words, meaning, overview = await _search("Brot backen")
+    assert overview.semantic and meaning == ["teig"]
+    words, meaning, overview = await _search("Brot backen", precision="aus")
+    assert not overview.semantic and meaning == []
     await set_setting("ai.precision", "sehr_genau")
     assert (await semantic_index.precision()).label == "Sehr genau"
     assert (await semantic_index.precision("weit")).label == "Weit"
@@ -168,8 +168,8 @@ async def test_bedeutung_findet_kanaele_playlists_feed_und_liedtexte(ai, test_db
     semantic_items._matrices.clear()
     await test_db.execute(
         "INSERT INTO subscriptions (channel_id, channel_name, channel_description) VALUES "
-        "('UCback', 'Backstube', 'Hier geht es um Sauerteig und Hefe'), ('UCtech', 'Werkbank', 'Löten und Platinen')")
-    await test_db.execute("INSERT INTO playlists (name, description) VALUES ('Sterne schauen', 'Teleskop und Mond')")
+        "('UCback', 'Backstube', 'Rund um Brot und Hefe'), ('UCtech', 'Werkbank', 'Löten und Platinen')")
+    await test_db.execute("INSERT INTO playlists (name, description) VALUES ('Sterne schauen', 'Abends draussen')")
     await test_db.execute(
         "INSERT INTO rss_entries (video_id, channel_id, title, description) VALUES "
         "('feedbrot001', 'UCback', 'Brot ohne Kneten', 'Teig über Nacht'), ('feedgeladen', 'UCback', 'Ofenbrot', 'Brot')")
@@ -184,11 +184,11 @@ async def test_bedeutung_findet_kanaele_playlists_feed_und_liedtexte(ai, test_db
         pass
     assert (await semantic_items.overview(model)) == {"channel": 2, "playlist": 1, "lyrics": 1, "feed": 1}
 
-    level = await semantic_index.precision("ausgewogen")
-    related = await semantic_items.related("Sauerteig backen", level)
-    assert [c.channel_name for c in related.channels][:1] == ["Backstube"]
-    assert [f.video_id for f in related.feed] == ["feedbrot001"]     # geladene fallen heraus
+    backen = (await _search("Sauerteig backen", precision="ausgewogen"))[2]
+    channels = backen.sections["kanaele"].items
+    assert [c.channel_name for c in channels][:1] == ["Backstube"] and channels[0].meaning
+    assert [f.video_id for f in backen.sections["abos"].items] == ["feedbrot001"]   # geladene fallen heraus
 
-    sterne = await search_index.search_videos("Teleskop", precision="ausgewogen")
-    assert "liedmond001" in [v["id"] for v in sterne["videos"]]
-    assert [p["name"] for p in sterne["related"]["playlists"]] == ["Sterne schauen"]
+    sterne = (await _search("Teleskop", precision="ausgewogen"))[2]
+    assert "liedmond001" in [v.id for v in sterne.sections["sinngemaess"].items]
+    assert [p.name for p in sterne.sections["playlists"].items] == ["Sterne schauen"]

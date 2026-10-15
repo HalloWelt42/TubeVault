@@ -296,9 +296,9 @@
     if (!addQuery.trim()) { addResults = []; return; }
     addTimer = setTimeout(async () => {
       try {
-        const res = await api.searchLocal(addQuery, { per_page: 30 });
+        const res = await api.searchSection('videos', addQuery, { per_page: 30 });
         const present = new Set(items.map((i) => i.id));
-        addResults = (res.videos || []).filter((v) => !present.has(v.id));
+        addResults = res.items.filter((v) => !present.has(v.id));
       } catch { addResults = []; }
     }, 300);
   }

@@ -11,11 +11,19 @@ import re
 import time
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.routers.blocked_channels import get_blocked_ids
+from app.services import language as _language
+from app.services.search import engine as search_engine, saved as saved_searches, vocabulary
+from app.services.search.filters import Length, Order, Period, SearchFilters
+from app.services.search.models import Overview, Section, SectionPage, VideoSpots
+from app.services.search.query import Location
+from app.services.search.saved import SavedSearch, SavedSearchInput
+from app.services.watch_state import State
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["Search"])
@@ -406,29 +414,106 @@ async def search_youtube(
     return {"query": q, "results": results["videos"], "count": len(results["videos"])}
 
 
-# ─── Lokale Suche ─────────────────────────────────────────────────
+# ─── Suche über alles (services/search) ──────────────────────────
 
-@router.get("/local")
-async def search_local(
+_PRECISION = "^(aus|weit|ausgewogen|genau|sehr_genau)$"
+
+
+def search_filters(
+    language: Optional[list[str]] = Query(None, description="Sprachkürzel, mehrfach oder kommagetrennt; und = ohne Sprache"),
+    length: Optional[Length] = None,
+    period: Optional[Period] = None,
+    location: Optional[Location] = None,
+    state: Optional[State] = None,
+    order: Order = "passend",
+    precision: Optional[str] = Query(None, pattern=_PRECISION),
+) -> SearchFilters:
+    """Filter der Suche aus den Abfrageparametern (Angaben im Suchtext gehen vor)."""
+    return SearchFilters(languages=_language.parse_filter(language), length=length, period=period,
+                         location=location, state=state, order=order, precision=precision)
+
+
+@router.get("", response_model=Overview)
+async def search_all(
+    q: str = Query("", max_length=200),
+    limit: int = Query(5, ge=1, le=20),
+    meaning: bool = Query(True, description="Bedeutungssuche einbeziehen (Aufklappliste: aus)"),
+    filters: SearchFilters = Depends(search_filters),
+):
+    """Alle Bereiche auf einmal: je Bereich die besten Treffer und die Zahl.
+    Suchsprache und Rangfolge: services/search (query, videos)."""
+    return await search_engine.overview(q, filters, limit=limit, with_meaning=meaning)
+
+
+@router.get("/section/{name}", response_model=SectionPage)
+async def search_section(
+    name: Section,
     q: str = Query(..., min_length=1, max_length=200),
     page: int = Query(1, ge=1),
     per_page: int = Query(24, ge=1, le=100),
-    source: Optional[str] = None,
-    scope: Optional[str] = None,
-    archived: Optional[bool] = None,
-    precision: Optional[str] = Query(None, pattern="^(aus|weit|ausgewogen|genau|sehr_genau)$"),
-    language: Optional[list[str]] = Query(None, description="Sprachkürzel, mehrfach oder kommagetrennt; und = ohne Sprache"),
+    filters: SearchFilters = Depends(search_filters),
 ):
-    """Lokale Suche über Bibliothek UND Archiv (archived=true/false grenzt ein).
-    precision: Stufe der Bedeutungssuche für diese Suche (leer = Standard).
+    """Ein Bereich seitenweise (videos, gesagt, kapitel, abos, kanaele, playlists, musik, sinngemaess)."""
+    return await search_engine.section(name, q, filters, page=page, per_page=per_page)
 
-    Regeln und Rangfolge liegen in search_index: Wortanfänge im Volltext
-    (Titel, Kanal, Beschreibung, Tags, Notizen) plus Teilwörter in Titel und
-    Kanalname. Jeder Treffer trägt is_archived, damit die Oberfläche zeigen
-    kann, wo das Video liegt."""
-    from app.services import language as language_service, search_index
-    return await search_index.search_videos(
-        q, page=page, per_page=per_page,
-        archived=archived, source=source, scope=scope, precision=precision,
-        languages=language_service.parse_filter(language),
-    )
+
+@router.get("/video-ids", response_model=list[str])
+async def search_video_ids(
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(1000, ge=1, le=5000),
+    filters: SearchFilters = Depends(search_filters),
+):
+    """Kennungen der Videotreffer in Trefferfolge, etwa für "Treffer als Playlist"."""
+    return await search_engine.video_ids(q, filters, limit=limit)
+
+
+@router.get("/spots/{video_id}", response_model=VideoSpots)
+async def search_spots(video_id: str, q: str = Query(..., min_length=1, max_length=200)):
+    """Alle Fundstellen eines Videos (Vorschau): Kapitel, Gesagtes, Beschreibung."""
+    return await search_engine.spots_of(video_id, q)
+
+
+@router.get("/complete", response_model=list[str])
+async def search_complete(q: str = Query(..., min_length=1, max_length=200), limit: int = Query(6, ge=1, le=12)):
+    """Ergänzungen für das zuletzt getippte Wort aus dem Wortschatz der Titel."""
+    return await vocabulary.complete(q, limit)
+
+
+@router.get("/saved", response_model=list[SavedSearch])
+async def saved_list():
+    """Gemerkte Suchen mit der Zahl neuer Treffer seit dem letzten Öffnen."""
+    return await saved_searches.all_saved()
+
+
+@router.post("/saved", response_model=SavedSearch)
+async def saved_create(data: SavedSearchInput):
+    try:
+        return await saved_searches.create(data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class _Rename(BaseModel):
+    name: str
+
+
+@router.put("/saved/{saved_id}")
+async def saved_rename(saved_id: str, data: _Rename):
+    if not await saved_searches.rename(saved_id, data.name):
+        raise HTTPException(404, "Gemerkte Suche nicht gefunden")
+    return {"ok": True}
+
+
+@router.post("/saved/{saved_id}/seen")
+async def saved_seen(saved_id: str):
+    """Neue Treffer als gesehen werten (beim Öffnen der Suche)."""
+    if not await saved_searches.mark_seen(saved_id):
+        raise HTTPException(404, "Gemerkte Suche nicht gefunden")
+    return {"ok": True}
+
+
+@router.delete("/saved/{saved_id}")
+async def saved_delete(saved_id: str):
+    if not await saved_searches.delete(saved_id):
+        raise HTTPException(404, "Gemerkte Suche nicht gefunden")
+    return {"ok": True}

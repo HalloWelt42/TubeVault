@@ -21,8 +21,6 @@ import logging
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
-from pydantic import BaseModel
-
 from app.database import db
 from app.services import semantic_index
 
@@ -202,62 +200,3 @@ async def search(query: str, kind: str, level, limit: int = 12) -> list[tuple[st
     floor = semantic_index.score_floor(scores, level, len(loaded.refs))
     top = np.argsort(-scores)[:limit]
     return [(loaded.refs[i], float(scores[i])) for i in top if scores[i] >= floor]
-
-
-# ─── Treffer für die Suche ────────────────────────────────────────────
-
-class ChannelHit(BaseModel):
-    channel_id: str
-    channel_name: str
-    score: float
-
-
-class PlaylistHit(BaseModel):
-    id: int
-    name: str
-    video_count: int
-    score: float
-
-
-class FeedHit(BaseModel):
-    video_id: str
-    title: str
-    channel_id: Optional[str] = None
-    channel_name: Optional[str] = None
-    published: Optional[str] = None
-    score: float
-
-
-class Related(BaseModel):
-    """Was die Bedeutungssuche außer Videos findet (nur für die erste Seite)."""
-    channels: list[ChannelHit] = []
-    playlists: list[PlaylistHit] = []
-    feed: list[FeedHit] = []
-
-
-async def related(query: str, level) -> Related:
-    """Passende Kanäle, Playlists und noch nicht geladene Feed-Einträge;
-    Verschwundenes (Abo beendet, inzwischen geladen) fällt heraus."""
-    result = Related()
-    hits = dict(await search(query, "channel", level, 6))
-    if hits:
-        rows = await db.fetch_all(
-            f"SELECT channel_id, channel_name FROM subscriptions WHERE channel_id IN ({','.join('?' * len(hits))})", list(hits))
-        result.channels = sorted((ChannelHit(channel_id=r["channel_id"], channel_name=(r["channel_name"] or "").strip(),
-                                             score=hits[r["channel_id"]]) for r in rows), key=lambda h: -h.score)
-    hits = dict(await search(query, "playlist", level, 6))
-    if hits:
-        rows = await db.fetch_all(
-            f"""SELECT p.id, p.name, (SELECT COUNT(*) FROM playlist_videos pv WHERE pv.playlist_id = p.id) AS n
-                FROM playlists p WHERE p.id IN ({','.join('?' * len(hits))})""", [int(h) for h in hits])
-        result.playlists = sorted((PlaylistHit(id=r["id"], name=r["name"], video_count=r["n"], score=hits[str(r["id"])])
-                                   for r in rows), key=lambda h: -h.score)
-    hits = dict(await search(query, "feed", level, 12))
-    if hits:
-        rows = await db.fetch_all(
-            f"""SELECT r.video_id, r.title, r.channel_id, s.channel_name, r.published FROM rss_entries r
-                LEFT JOIN subscriptions s ON s.channel_id = r.channel_id
-                WHERE r.video_id IN ({','.join('?' * len(hits))})
-                  AND NOT EXISTS (SELECT 1 FROM videos v WHERE v.id = r.video_id AND v.status = 'ready')""", list(hits))
-        result.feed = sorted((FeedHit(**dict(r), score=hits[r["video_id"]]) for r in rows), key=lambda h: -h.score)
-    return result

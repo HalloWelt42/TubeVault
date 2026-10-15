@@ -18,6 +18,8 @@ const shortcuts = {
 };
 
 let enabled = true;
+// Das Suchfeld im Kopf (layout/SearchBox.svelte)
+export const SEARCH_FIELD = '[data-suchfeld]';
 
 export function initKeyboard() {
   window.addEventListener('keydown', handleKey);
@@ -31,19 +33,10 @@ function handleKey(e) {
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
   if (e.target?.isContentEditable) return;
 
-  // Ctrl/Cmd + K oder S → Focus search
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+  // Ctrl/Cmd + K, S oder / → Suchfeld im Kopf
+  if (((e.ctrlKey || e.metaKey) && e.key === 'k') || (!e.altKey && !e.ctrlKey && !e.metaKey && ['s', 'S', '/'].includes(e.key))) {
     e.preventDefault();
-    const searchEl = document.querySelector('.sd-input');
-    if (searchEl) searchEl.focus();
-    return;
-  }
-
-  // S → Focus search (wie Ctrl+K, aber ohne Modifier)
-  if (e.key === 's' || e.key === 'S') {
-    e.preventDefault();
-    const searchEl = document.querySelector('.sd-input');
-    if (searchEl) searchEl.focus();
+    document.querySelector(SEARCH_FIELD)?.focus();
     return;
   }
 
@@ -62,8 +55,7 @@ function handleKey(e) {
 
   // Escape → Suchfeld verlassen
   if (e.key === 'Escape') {
-    const searchEl = document.querySelector('.search-input');
-    if (searchEl) searchEl.blur();
+    document.querySelector(SEARCH_FIELD)?.blur();
     return;
   }
 }

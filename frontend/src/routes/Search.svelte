@@ -1,579 +1,460 @@
 <!--
-  TubeVault – Search v1.0.0
-  Eigene Suchseite mit YouTube-Suche, Paginierung, großen Thumbs,
-  Block-Button und lokaler Bibliotheks-Suche.
-  © HalloWelt42 – Private Nutzung
+  TubeVault - Suche (Gestaltung nach mockups/suche.html)
+  Fester Kopf mit Suchfeld, Merken, Bereichen samt Zahlen und Filtern;
+  darunter links die Treffer (Alles: je Bereich die besten, sonst ein Bereich
+  seitenweise), rechts die Vorschau des gewählten Treffers mit allen
+  Fundstellen. Ohne Suchtext: zuletzt gesucht, gemerkte Suchen, Suchsprache.
+  Der ganze Zustand steht in der Adresse (utils/searchState.js), Pfeiltasten
+  wählen Treffer, Enter spielt ab. Die Quelle wird nur auf Wunsch gefragt.
+  © HalloWelt42 - Private Nutzung
 -->
 <script>
-  import { untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { api } from '../lib/api/client.js';
-  import { route, navigate, updateParams } from '../lib/router/router.js';
+  import { navigate, route, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { formatDuration, formatViews } from '../lib/utils/format.js';
-  import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
-  import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
-  import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
-  import StreamDialog from '../lib/components/common/StreamDialog.svelte';
-  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
-  import LanguageChips from '../lib/components/common/LanguageChips.svelte';
-  import LanguageLabel from '../lib/components/common/LanguageLabel.svelte';
-  import { parseLanguageList } from '../lib/utils/language.js';
-  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { clearSearchHistory, forgetSearch, rememberSearch, searchHistory } from '../lib/stores/searchHistory.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
-  import { settings } from '../lib/stores/settings.js';
-  let confirmRef;
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { activeFilterCount, addressParams, apiParams, emptyFilters, filtersFromSaved, filtersToSaved, readSearch } from '../lib/utils/searchState.js';
+  import { SECTIONS } from '../lib/constants/searchChoices.js';
+  import SectionTabs from '../lib/components/search/SectionTabs.svelte';
+  import SearchFilterBar from '../lib/components/search/SearchFilterBar.svelte';
+  import VideoHitRow from '../lib/components/search/VideoHitRow.svelte';
+  import FeedHitRow from '../lib/components/search/FeedHitRow.svelte';
+  import ChannelHitList from '../lib/components/search/ChannelHitList.svelte';
+  import PlaylistHitList from '../lib/components/search/PlaylistHitList.svelte';
+  import MusicHitList from '../lib/components/search/MusicHitList.svelte';
+  import HitPreview from '../lib/components/search/HitPreview.svelte';
+  import SearchHelp from '../lib/components/search/SearchHelp.svelte';
+  import SavedSearchList from '../lib/components/search/SavedSearchList.svelte';
+  import SourceResults from '../lib/components/search/SourceResults.svelte';
 
-  let query = $state($route.params.q || '');
-  let scope = $state($route.params.scope || 'both'); // 'both' | 'local' | 'youtube'
-
-  // Genauigkeit der Bedeutungssuche: je Suche wählbar, Standard aus den Einstellungen
-  const PRECISIONS = [
-    { id: 'aus', label: 'Aus', hint: 'Nur nach Wörtern suchen' },
-    { id: 'weit', label: 'Weit', hint: 'Auch lose Verwandtes - mehr Treffer' },
-    { id: 'ausgewogen', label: 'Ausgewogen', hint: 'Verwandtes, ohne Beliebiges' },
-    { id: 'genau', label: 'Genau', hint: 'Nur eng Verwandtes' },
-    { id: 'sehr_genau', label: 'Sehr genau', hint: 'Nur sehr eng Passendes - wenige Treffer' },
-  ];
-  let precision = $state($route.params.genau || '');
-  let effectivePrecision = $derived(precision || $settings['ai.precision'] || 'ausgewogen');
-  let meaningAvailable = $derived($settings['ai.enabled'] === 'true');
-  let loading = $state(false);
-  const perPage = 20;
-  let ytShorts = $state([]);
-  let ytChannels = $state([]);
-  let subscribedIds = $state(new Set());
-  let downloading = $state(new Set());
-  // Stream-Dialog (Qualitäts-Auswahl)
-  let streamDialog = $state(null);
-
-  async function loadSubs() {
-    try {
-      const res = await api.getSubscriptions();
-      subscribedIds = new Set((res.subscriptions || res || []).map(s => s.channel_id));
-    } catch {}
-  }
-
-  // YouTube-Treffer über den zentralen Loader; Dedup gegen schon Geladene
-  // passiert im fetchPage (Paging kann dieselbe ID mehrfach liefern).
-  const yt = createListLoader(async (page) => {
-    if (scope === 'local' || !query.trim()) return { items: [], hasMore: false };
-    const r = await api.searchYouTubePaged(query, page, perPage);
-    const newVids = r.videos || [];
-    if (page === 1) {
-      const sSeen = new Set();
-      ytShorts = (r.shorts || []).filter(s => s?.id && !sSeen.has(s.id) && sSeen.add(s.id));
-      const cSeen = new Set();
-      ytChannels = (r.channels || []).filter(c => c?.id && !cSeen.has(c.id) && cSeen.add(c.id));
-    }
-    const seen = new Set(page === 1 ? [] : yt.items.map(v => v.id));
-    const items = newVids.filter(v => v?.id && !seen.has(v.id) && seen.add(v.id));
-    return { items, hasMore: !!r.has_more };
-  });
-
-  // Lokale Treffer (Bibliothek UND Archiv) über denselben Loader, mit Gesamtzahl
-  const LOCAL_PER_PAGE = 12;
-  let localSemantic = $state(false);   // Bedeutungssuche war an dieser Trefferliste beteiligt
-  // Was die Bedeutungssuche außer Videos findet: Kanäle, Playlists, noch nicht geladene Feed-Einträge
-  let related = $state(null);
-  // Sprache der lokalen Treffer: Auswahl (in der Adresse) und Zähler über alle Treffer
-  let languages = $state(parseLanguageList($route.params.sprache));
-  let languageCounts = $state([]);
-  const languageParams = () => (languages.length ? { language: languages.join(',') } : {});
-  const local = createListLoader(async (page) => {
-    if (scope === 'youtube' || !query.trim()) return { items: [], total: 0 };
-    const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE, ...(precision ? { precision } : {}), ...languageParams() });
-    if (page === 1) { localSemantic = !!r.semantic; related = r.related || null; languageCounts = r.language_counts || []; }
-    return { items: r.videos || [], total: r.total || 0 };
-  });
-
-  function chooseLanguages(list) {
-    languages = list;
-    updateParams({ sprache: list.length ? list.join(',') : null });
-    if (query.trim() && scope !== 'youtube') local.load(true);
-  }
-
-  async function runSearch(reset = true) {
-    if (!query.trim()) return;
-    if (reset) { ytShorts = []; ytChannels = []; loading = true; }
-    updateParams({ q: query, scope: scope !== 'both' ? scope : null });
-    try {
-      // Lokal sofort anzeigen, YouTube darf länger brauchen
-      const localRun = reset ? local.load(true).catch(() => { local.items = []; }) : null;
-      if (reset) await yt.load(true);
-      await localRun;
-    } catch (e) { toast.error(e.message); }
-    finally { loading = false; }
-  }
-
-  function onSubmit(e) { e.preventDefault(); runSearch(true); }
-
-  function choosePrecision(id) {
-    precision = id === ($settings['ai.precision'] || 'ausgewogen') ? '' : id;
-    updateParams({ genau: precision || null });
-    if (query.trim() && scope !== 'youtube') local.load(true);
-  }
-
-  // ─── Lokale Treffer als Playlist speichern ───
+  const PER_PAGE = 24;
+  const VIDEO_SECTIONS = new Set(['videos', 'gesagt', 'kapitel', 'sinngemaess']);
   const PLAYLIST_MAX = 1000;
-  let savingPlaylist = $state(false);
-  let playlistName = $state('');
+  // So viele Treffer je Bereich zeigt "Alles" (die Übersicht liefert bis zu 5)
+  const SHOWN = { videos: 5, gesagt: 3, kapitel: 3, abos: 3 };
+
+  const initial = readSearch($route.params);
+  let input = $state(initial.q);         // was im Feld steht
+  let q = $state(initial.q);             // was gesucht wird
+  let section = $state(initial.section);
+  let filters = $state(initial.filters);
+
+  let overview = $state(null);
+  let loading = $state(false);
+  let saved = $state([]);
+  let selected = $state(null);
+  let field;
+  let run = 0;
+
+  let terms = $derived(overview?.terms || []);
+  let sections = $derived(overview?.sections || {});
+  let wordTotal = $derived(Object.entries(sections).filter(([name]) => name !== 'sinngemaess')
+    .reduce((sum, [, page]) => sum + page.total, 0));
+  let savedHere = $derived(saved.find((s) => s.query === q && JSON.stringify(filtersFromSaved(s.filters)) === JSON.stringify(filters)));
+  const shown = (id) => (sections[id]?.items || []).slice(0, SHOWN[id] ?? 5);
+
+  // Ein Bereich seitenweise
+  const list = createListLoader(async (page) => {
+    if (!q || !section || section === 'quelle') return { items: [], total: 0 };
+    const result = await api.searchSection(section, q, { ...apiParams(filters), page, per_page: PER_PAGE });
+    return { items: result.items, total: result.total };
+  }, { keyOf: (item) => item.id ?? item.channel_id ?? item.track?.id });
+
+  // Wählbare Treffer in Anzeigefolge (Pfeiltasten, Vorschau)
+  let selectable = $derived(section
+    ? (VIDEO_SECTIONS.has(section) ? list.items : [])
+    : [...shown('videos'), ...shown('gesagt'), ...shown('kapitel')]);
+
+  async function loadOverview() {
+    const mine = ++run;
+    if (!q) { overview = null; selected = null; return; }
+    loading = true;
+    try {
+      const result = await api.search(q, { ...apiParams(filters), limit: 5 });
+      if (mine !== run) return;
+      overview = result;
+      if (!section) selected = selectable[0] || null;
+    } catch (e) {
+      if (mine === run) toast.error(e.message);
+    }
+    if (mine === run) loading = false;
+  }
+
+  async function reload() {
+    updateParams(addressParams({ q, section, filters }));
+    await loadOverview();
+    if (section && section !== 'quelle') {
+      await list.load(true);
+      selected = VIDEO_SECTIONS.has(section) ? list.items[0] || null : null;
+    }
+  }
+
+  function submit(event) {
+    event?.preventDefault();
+    q = input.trim();
+    if (q) rememberSearch(q);
+    reload();
+  }
+
+  function searchFor(text) {
+    input = text;
+    submit();
+  }
+
+  function chooseSection(id) {
+    section = id;
+    selected = null;
+    reload();
+  }
+
+  function changeFilters(next) {
+    filters = next;
+    reload();
+  }
+
+  function play(hit, start = null) {
+    navigate(`/watch/${hit.id}`, start ? { t: Math.floor(start) } : {});
+  }
+
+  async function loadSaved() {
+    try { saved = await api.savedSearches(); } catch { saved = []; }
+  }
+
+  async function toggleSaved() {
+    try {
+      if (savedHere) {
+        await api.deleteSavedSearch(savedHere.id);
+        toast.success(`Vergessen: ${savedHere.name}`);
+      } else {
+        await api.saveSearch({ query: q, filters: filtersToSaved(filters) });
+        toast.success(`Gemerkt: ${q} - neue Treffer erscheinen in der Übersicht`);
+      }
+      await loadSaved();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  // ─── Treffer als Playlist ───
+  let playlistName = $state(null);       // null: kein Formular offen
   let playlistBusy = $state(false);
 
-  async function saveAsPlaylist() {
+  async function saveAsPlaylist(event) {
+    event.preventDefault();
     playlistBusy = true;
     try {
-      // Alle Treffer holen, nicht nur die gerade angezeigten
-      const ids = [];
-      for (let page = 1; ids.length < Math.min(local.total, PLAYLIST_MAX); page++) {
-        const r = await api.searchLocal(query, { page, per_page: 100, ...languageParams() });
-        if (!r.videos?.length) break;
-        ids.push(...r.videos.map(v => v.id));
-      }
-      const result = await api.createPlaylistFromVideos(playlistName.trim(), ids.slice(0, PLAYLIST_MAX));
+      const ids = await api.searchVideoIds(q, { ...apiParams(filters), limit: PLAYLIST_MAX });
+      const result = await api.createPlaylistFromVideos(playlistName.trim(), ids);
       toast.success(`Playlist "${result.name}" mit ${result.video_count} Videos angelegt`);
-      savingPlaylist = false;
+      playlistName = null;
     } catch (e) { toast.error(e.message); }
     playlistBusy = false;
   }
 
-  async function subscribe(v, e) {
-    e.stopPropagation();
-    try {
-      await api.addSubscription({ channel_id: v.channel_id, channel_name: v.channel_name });
-      subscribedIds = new Set([...subscribedIds, v.channel_id]);
-      toast.success(`„${v.channel_name}" abonniert`);
-    } catch (err) { toast.error(err.message); }
+  // ─── Tastatur: Pfeile wählen, Enter spielt, Esc zurück ins Feld ───
+  async function move(step) {
+    if (!selectable.length) return;
+    const index = selectable.indexOf(selected);
+    selected = selectable[Math.max(0, Math.min(selectable.length - 1, index < 0 ? 0 : index + step))];
+    await tick();
+    document.querySelector(`[data-pos="${selectable.indexOf(selected)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
 
-  async function blockCh(v, e) {
-    e.stopPropagation();
-    if (!await confirmRef.ask(`Kanal „${v.channel_name}" ausblenden?`, 'Aus YouTube-Suche raus.', { confirmLabel: 'Ausblenden' })) return;
-    try {
-      await api.blockChannel(v.channel_id, v.channel_name);
-      yt.items = yt.items.filter(r => r.channel_id !== v.channel_id);
-      ytShorts = ytShorts.filter(r => r.channel_id !== v.channel_id);
-      toast.success(`„${v.channel_name}" blockiert`);
-    } catch (err) { toast.error(err.message); }
-  }
-
-  async function quickDl(v, e) {
-    e.stopPropagation();
-    if (downloading.has(v.id)) return;
-    downloading = new Set([...downloading, v.id]);
-    try {
-      await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}` });
-      v.already_in_queue = true;
-      yt.items = [...yt.items];
-      toast.success('Zur Warteschlange hinzugefügt');
-    } catch (err) { toast.error(err.message); }
-    downloading = new Set([...downloading].filter(id => id !== v.id));
-  }
-
-  async function openStreams(v, e) {
-    e.stopPropagation();
-    const id = v.id;
-    streamDialog = { video: { ...v, id }, loading: true, streams: [], videoStreams: [], audioStreams: [], captions: [], selectedVideoItag: null, selectedAudioItag: null, mergeAudio: true };
-    try {
-      const info = await api.getVideoInfo(`https://www.youtube.com/watch?v=${id}`);
-      const videoStreams = (info.streams || []).filter(s => s.type === 'video').sort((a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0));
-      const audioStreams = (info.streams || []).filter(s => s.type === 'audio').sort((a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0));
-      streamDialog = {
-        ...streamDialog, streams: info.streams || [], videoStreams, audioStreams,
-        captions: info.captions || [], loading: false, alreadyDownloaded: info.already_downloaded,
-        unavailableReason: info.unavailable_reason || null,
-        selectedVideoItag: videoStreams[0]?.itag || null,
-        selectedAudioItag: videoStreams[0]?.is_progressive ? null : (audioStreams[0]?.itag || null),
-      };
-    } catch (err) {
-      toast.error(`Stream-Info: ${err.message}`);
-      streamDialog = null;
+  function onFieldKey(event) {
+    if (event.key === 'ArrowDown' && selectable.length) {
+      event.preventDefault();
+      field.blur();
+      move(selectable.includes(selected) ? 0 : 1);
     }
   }
 
-  async function startStreamDownload({ itag = null, audioItag = null, mergeAudio = true, audioOnly = false, priority = 0 } = {}) {
-    if (!streamDialog) return;
-    const v = streamDialog.video;
-    downloading = new Set([...downloading, v.id]);
-    try {
-      await api.addDownload({ url: `https://www.youtube.com/watch?v=${v.id}`, audio_only: audioOnly, itag, audio_itag: audioItag, merge_audio: mergeAudio, priority });
-      toast.success(priority >= 10 ? 'Sofort-Download gestartet' : 'In die Warteschlange gelegt');
-      // Markiere als queued
-      const idx = yt.items.findIndex(x => x.id === v.id);
-      if (idx >= 0) {
-        yt.items[idx].already_in_queue = true;
-        yt.items = [...yt.items];
-      }
-      streamDialog = null;
-    } catch (err) { toast.error(err.message); }
-    downloading = new Set([...downloading].filter(id => id !== v.id));
+  function onWindowKey(event) {
+    const tag = event.target?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || event.target?.isContentEditable || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      move(event.key === 'ArrowDown' ? 1 : -1);
+    } else if (event.key === 'Enter' && selected && selectable.includes(selected)) {
+      event.preventDefault();
+      play(selected);
+    } else if (event.key === 'Escape') {
+      field?.focus();
+    }
   }
 
-  function openVideo(id) { navigate(`/watch/${id}`); }
-  function openChannel(id) { navigate(`/channel/${id}`); }
-
-  $effect(() => { loadSubs(); });
-  // Reagiere NUR auf Änderungen von $route.params.q (externe Navigation).
-  // WICHTIG: untrack(...) verhindert, dass das eigene query/ytVideos den
-  // Effect erneut auslöst und die User-Eingabe überschreibt.
+  // Suche von außen (Kopfzeile, Verweise): Adresse geändert
   $effect(() => {
-    const q = $route.params.q;  // tracked (extern)
+    const params = $route.params;
     untrack(() => {
-      if (q && q !== query) {
-        query = q;
-        runSearch(true);
-      } else if (q && yt.items.length === 0 && local.items.length === 0 && !loading) {
-        runSearch(true);
-      }
+      const next = readSearch(params);
+      if (next.q === q && next.section === section && JSON.stringify(next.filters) === JSON.stringify(filters)) return;
+      input = next.q;
+      q = next.q;
+      section = next.section;
+      filters = next.filters;
+      selected = null;
+      reload();
     });
   });
+
+  onMount(() => {
+    loadSaved();
+    if (q) reload();
+    else tick().then(() => field?.focus());
+  });
+
+  const sectionOf = (id) => SECTIONS.find((s) => s.id === id);
+  const positionOf = (hit) => selectable.indexOf(hit);
 </script>
 
-<!-- Fester Kopf mit Suchzeile und Genauigkeit; darunter rollen nur die Treffer -->
+<svelte:window onkeydown={onWindowKey} />
+
+{#snippet head(id, label = null)}
+  {@const def = sectionOf(id)}
+  <div class="abschnitt-kopf">
+    <h2>{label || def.label}</h2>
+    <span class="zahl tv-schwach">{sections[id].total.toLocaleString('de-DE')}{sections[id].more ? '+' : ''}</span>
+    <span class="erkl">{def.hint}</span>
+    {#if sections[id].total > shown(id).length}
+      <button class="mehr" onclick={() => chooseSection(id)}>Alle {sections[id].total.toLocaleString('de-DE')}{sections[id].more ? '+' : ''}</button>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet videoRows(items)}
+  {#each items as hit, i (hit.id + i)}
+    <div data-pos={positionOf(hit)}>
+      <VideoHitRow {hit} {terms} selected={selected === hit} onselect={(h) => selected = h} onplay={play} />
+    </div>
+  {/each}
+{/snippet}
+
 <div class="tv-seite">
- <div class="tv-seitenkopf">
-  <div class="page-header">
-    <h1 class="page-title"><i class="fa-solid fa-magnifying-glass"></i> Suche</h1>
+  <div class="tv-seitenkopf">
+    <form class="kopf" onsubmit={submit}>
+      <h1>Suche</h1>
+      <label class="feld">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input bind:this={field} bind:value={input} onkeydown={onFieldKey} placeholder="Was suchst du?" aria-label="Suchtext"
+               autocomplete="off" spellcheck="false" />
+        {#if input}
+          <button type="button" class="leeren" onclick={() => { input = ''; field.focus(); }} title="Feld leeren" aria-label="Feld leeren">
+            <i class="fa-solid fa-xmark"></i></button>
+        {/if}
+      </label>
+      <button type="submit" class="tv-knopf haupt gross" disabled={!input.trim()}><i class="fa-solid fa-magnifying-glass"></i> Suchen</button>
+      {#if q}
+        <button type="button" class="tv-knopf gross" class:aktiv={!!savedHere} onclick={toggleSaved}
+                title={savedHere ? 'Gemerkte Suche vergessen' : 'Suche samt Filtern merken; neue Treffer erscheinen in der Übersicht'}>
+          <i class="fa-{savedHere ? 'solid' : 'regular'} fa-star"></i> {savedHere ? 'Gemerkt' : 'Merken'}</button>
+      {/if}
+    </form>
+    {#if q}
+      <SectionTabs {sections} active={section} onchoose={chooseSection} />
+      <SearchFilterBar {filters} effective={overview?.filters} languageCounts={overview?.language_counts || []} onchange={changeFilters} />
+    {/if}
   </div>
 
-  <form class="search-form" onsubmit={onSubmit}>
-    <div class="search-input-wrap">
-      <i class="fa-solid fa-magnifying-glass search-icon"></i>
-      <input type="text" class="search-input" placeholder="Bibliothek, Archiv und YouTube durchsuchen…"
-             bind:value={query} />
-      {#if query}<button type="button" class="search-clear" onclick={() => { query = ''; yt.items = []; local.items = []; local.total = 0; }}><i class="fa-solid fa-xmark"></i></button>{/if}
-    </div>
-    <div class="search-scope">
-      {#each [['both','Alles'],['local','Lokal'],['youtube','YouTube']] as [id, label]}
-        <button type="button" class="scope-btn" class:active={scope === id}
-                onclick={() => { scope = id; runSearch(true); }}>{label}</button>
-      {/each}
-    </div>
-    <button type="submit" class="btn-primary" disabled={!query.trim() || loading}>
-      {#if loading}<i class="fa-solid fa-spinner fa-spin"></i>{:else}Suchen{/if}
-    </button>
-  </form>
-
-  {#if scope !== 'youtube' && query.trim()}
-    <LanguageChips counts={languageCounts} selected={languages} onchange={chooseLanguages} />
-  {/if}
-
-  {#if meaningAvailable && scope !== 'youtube'}
-    <div class="genauigkeit" title="Wie eng die Bedeutungssuche Verwandtes fasst">
-      <span class="tv-etikett">Bedeutungssuche</span>
-      {#each PRECISIONS as p (p.id)}
-        <button class="tv-chip" class:aktiv={effectivePrecision === p.id} onclick={() => choosePrecision(p.id)} title={p.hint}>{p.label}</button>
-      {/each}
-    </div>
-  {/if}
- </div>
-
- <div class="tv-rollfeld" data-scroll-root>
-  {#if loading && yt.items.length === 0 && local.items.length === 0}
-    <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Suche läuft…</div>
-  {:else if query && yt.items.length === 0 && local.items.length === 0 && !loading && !local.loading}
-    <div class="empty"><i class="fa-solid fa-magnifying-glass"></i><h3>Keine Treffer für "{query}"</h3></div>
-  {/if}
-
-  <!-- Lokale Ergebnisse -->
-  {#if scope !== 'youtube' && local.items.length > 0}
-    <section class="section">
-      <h2 class="section-title">
-        <i class="fa-solid fa-photo-film"></i> Lokal ({local.total})
-        {#if localSemantic}
-          <span class="semantic-note" title="Zusätzlich zur Wortsuche wurden inhaltlich verwandte Videos gesucht (lokale KI)">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> mit Bedeutungssuche
-          </span>
-        {/if}
-        {#if savingPlaylist}
-          <form class="pl-form" onsubmit={(e) => { e.preventDefault(); saveAsPlaylist(); }}>
-            <input type="text" bind:value={playlistName} placeholder="Name der Playlist" />
-            <button type="submit" class="pl-btn primary" disabled={!playlistName.trim() || playlistBusy}>
-              {#if playlistBusy}<i class="fa-solid fa-spinner fa-spin"></i>{:else}Speichern{/if}
-            </button>
-            <button type="button" class="pl-btn" onclick={() => savingPlaylist = false}>Abbrechen</button>
-          </form>
-        {:else}
-          <button class="pl-btn" onclick={() => { playlistName = query.trim(); savingPlaylist = true; }}
-                  title="Alle {local.total} lokalen Treffer in dieser Reihenfolge als Playlist speichern">
-            <i class="fa-solid fa-list-ul"></i> Treffer als Playlist
-          </button>
-        {/if}
-      </h2>
-      <div class="grid">
-        {#each local.items as v (v.id)}
-          <div class="card-wrap">
-            <div class="video-card" role="button" tabindex="0"
-                 onclick={() => openVideo(v.id)}
-                 onkeydown={(e) => e.key === 'Enter' && openVideo(v.id)}>
-              <div class="thumb-wrap">
-                <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" />
-                {#if v.duration}<span class="duration">{formatDuration(v.duration)}</span>{/if}
-                {#if v.is_archived}<span class="badge archive"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
-                {#if v.match === 'bedeutung'}
-                  <span class="badge meaning" title="Kein Suchwort im Text - inhaltlich verwandt">sinngemäß</span>
-                {/if}
-                <HoverActionOverlay>
-                  <HoverActionBtn variant="success" onclick={() => openVideo(v.id)} title="Abspielen">
-                    <i class="fa-solid fa-play"></i>
-                  </HoverActionBtn>
-                </HoverActionOverlay>
-              </div>
-              <div class="info">
-                <h3 class="title">{v.title}</h3>
-                <div class="info-zeile">
-                  <span class="channel">{v.channel_name || 'Unbekannt'}</span>
-                  <LanguageLabel code={v.language} source={v.language_source} />
-                </div>
-              </div>
+  <div class="tv-spalten">
+    <div class="tv-rollfeld" data-scroll-root>
+      {#if !q}
+        {#if $searchHistory.length}
+          <section class="abschnitt">
+            <div class="abschnitt-kopf"><h2>Zuletzt gesucht</h2>
+              <button class="mehr" onclick={clearSearchHistory}>Verlauf leeren</button></div>
+            <div class="verlauf">
+              {#each $searchHistory.slice(0, 12) as entry (entry.query)}
+                <span class="eintrag">
+                  <button onclick={() => searchFor(entry.query)}><i class="fa-solid fa-clock-rotate-left"></i> {entry.query}</button>
+                  <button class="weg" onclick={() => forgetSearch(entry.query)} title="Aus dem Verlauf nehmen" aria-label="Aus dem Verlauf nehmen">
+                    <i class="fa-solid fa-xmark"></i></button>
+                </span>
+              {/each}
             </div>
-            {#if v.passage}
-              <button class="passage" onclick={() => navigate(`/watch/${v.id}?t=${v.passage.start}`)}
-                      title="Im Video gesagt - an diese Stelle springen">
-                <span class="passage-time"><i class="fa-solid fa-play"></i> {formatDuration(v.passage.start)}</span>
-                {#if v.passage.kind === 'ai'}
-                  <span class="passage-ai" title="Textstelle aus einem KI-Transkript (Spracherkennung, nicht vom Autor)"><i class="fa-solid fa-robot"></i> KI</span>
-                {/if}
-                <span class="passage-text">{v.passage.text}</span>
-              </button>
+          </section>
+        {/if}
+        <section class="abschnitt">
+          <div class="abschnitt-kopf"><h2>Gemerkte Suchen</h2><span class="erkl">neue Treffer erscheinen hier und in der Übersicht</span></div>
+          {#if saved.length}
+            <SavedSearchList items={saved} onchange={loadSaved} />
+          {:else}
+            <p class="leise">Noch nichts gemerkt. Nach einer Suche merkt "Merken" sie samt Filtern.</p>
+          {/if}
+        </section>
+
+      {:else if section === 'quelle'}
+        <SourceResults {q} {terms} />
+
+      {:else if section}
+        {@const def = sectionOf(section)}
+        <div class="abschnitt-kopf">
+          <h2>{def.label}</h2>
+          <span class="zahl tv-schwach">{list.total.toLocaleString('de-DE')}{sections[section]?.more ? '+' : ''}</span>
+          <span class="erkl">{def.hint}</span>
+          {#if section === 'videos' && list.total > 1}
+            {@render playlistButton()}
+          {/if}
+        </div>
+        {#if VIDEO_SECTIONS.has(section)}
+          {@render videoRows(list.items)}
+        {:else if section === 'abos'}
+          {#each list.items as hit (hit.id)}<FeedHitRow {hit} {terms} />{/each}
+        {:else if section === 'kanaele'}
+          <ChannelHitList items={list.items} {terms} />
+        {:else if section === 'playlists'}
+          <PlaylistHitList items={list.items} {terms} />
+        {:else if section === 'musik'}
+          <MusicHitList items={list.items} {terms} query={q} />
+        {/if}
+        {#if list.loading && !list.items.length}<div class="hinweis"><i class="fa-solid fa-spinner fa-spin"></i> Suche läuft</div>{/if}
+        {#if !list.loading && !list.items.length}<div class="hinweis">In diesem Bereich nichts gefunden.</div>{/if}
+        <div use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
+        {#if list.loadingMore}<div class="hinweis"><i class="fa-solid fa-spinner fa-spin"></i> Weitere Treffer</div>{/if}
+
+      {:else if !overview}
+        <div class="hinweis"><i class="fa-solid fa-spinner fa-spin"></i> Suche läuft</div>
+
+      {:else if !wordTotal && !sections.sinngemaess?.total}
+        <div class="nichts">
+          <h2>Nichts gefunden für "{q}"</h2>
+          <p class="leise">Weder in Bibliothek und Archiv noch im Gesagten, bei Abos, Kanälen, Playlists oder in der Musik.</p>
+          {#if overview.suggestion}
+            <button class="meintest" onclick={() => searchFor(overview.suggestion.text)}>
+              <i class="fa-solid fa-spell-check"></i> Meintest du {overview.suggestion.text}?
+              <span class="zahl">{overview.suggestion.total}</span> Videos</button>
+          {/if}
+          <div class="auswege">
+            {#if activeFilterCount(filters)}
+              <button class="tv-knopf" onclick={() => changeFilters(emptyFilters())}><i class="fa-solid fa-filter-circle-xmark"></i> Filter aufheben</button>
             {/if}
+            {#if overview.semantic === false && filters.genau === 'aus'}
+              <button class="tv-knopf" onclick={() => changeFilters({ ...filters, genau: null })}><i class="fa-solid fa-wand-magic-sparkles"></i> Auch sinngemäß suchen</button>
+            {:else if overview.semantic && filters.genau !== 'weit'}
+              <button class="tv-knopf" onclick={() => changeFilters({ ...filters, genau: 'weit' })}><i class="fa-solid fa-wand-magic-sparkles"></i> Sinngemäß weiter fassen</button>
+            {/if}
+            <button class="tv-knopf" onclick={() => chooseSection('quelle')}><i class="fa-solid fa-globe"></i> Bei der Quelle suchen</button>
           </div>
-        {/each}
-      </div>
-      {#if local.hasMore}
-        <button class="load-more" onclick={local.loadMore} disabled={local.loadingMore}>
-          {#if local.loadingMore}<i class="fa-solid fa-spinner fa-spin"></i> Lade…{:else}Weitere lokale Treffer ({local.total - local.items.length}){/if}
-        </button>
-      {/if}
-    </section>
-  {/if}
-
-  <!-- Bedeutungssuche: passende Kanäle, Playlists und noch nicht geladene Videos -->
-  {#if scope !== 'youtube' && related && (related.channels.length || related.playlists.length || related.feed.length)}
-    <section class="section">
-      <h2 class="section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Passt außerdem</h2>
-      {#if related.channels.length}
-        <div class="tv-etikett verwandt-etikett">Kanäle aus deinen Abos</div>
-        <div class="verwandt-reihe">
-          {#each related.channels as c (c.channel_id)}
-            <button class="verwandt-kanal" onclick={() => navigate(`/channel/${c.channel_id}`)}>
-              <img src={api.channelAvatarUrl(c.channel_id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-              <span>{c.channel_name}</span>
-            </button>
-          {/each}
         </div>
-      {/if}
-      {#if related.playlists.length}
-        <div class="tv-etikett verwandt-etikett">Playlists</div>
-        <div class="verwandt-reihe">
-          {#each related.playlists as p (p.id)}
-            <button class="verwandt-kanal" onclick={() => navigate('/playlists', { open: p.id })}>
-              <i class="fa-solid fa-list-ul"></i><span>{p.name} <span class="zahl tv-schwach">{p.video_count}</span></span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-      {#if related.feed.length}
-        <div class="tv-etikett verwandt-etikett">Noch nicht geladen, aus deinen Abos</div>
-        <div class="verwandt-feed">
-          {#each related.feed as f (f.video_id)}
-            <div class="verwandt-eintrag">
-              <img src={api.thumbnailUrl(f.video_id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-              <div class="verwandt-text">
-                <button class="verwandt-titel" onclick={() => openVideo(f.video_id)}>{f.title}</button>
-                <span class="channel">{f.channel_name || ''}</span>
-              </div>
-              <button class="tv-knopf klein" title="Herunterladen"
-                      onclick={() => api.addDownload({ url: `https://www.youtube.com/watch?v=${f.video_id}` })
-                        .then(() => toast.success('In die Warteschlange')).catch((e) => toast.error(e.message))}>
-                <i class="fa-solid fa-download"></i></button>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </section>
-  {/if}
 
-  <!-- YouTube-Kanäle -->
-  {#if scope !== 'local' && ytChannels.length > 0}
-    <section class="section">
-      <h2 class="section-title"><i class="fa-solid fa-tv"></i> Kanäle ({ytChannels.length})</h2>
-      <div class="ch-grid">
-        {#each ytChannels.slice(0, 6) as c (c.id)}
-          <button class="ch-card" onclick={() => openChannel(c.id)}>
-            {#if c.thumbnail_url}<img src={c.thumbnail_url} alt="" loading="lazy" />{:else}<div class="ch-ph"><i class="fa-solid fa-user"></i></div>{/if}
-            <span class="ch-name">{c.name}</span>
-            {#if c.subscriber_count}<span class="ch-subs">{formatViews(c.subscriber_count)} Abos</span>{/if}
-          </button>
-        {/each}
-      </div>
-    </section>
-  {/if}
-
-  <!-- YouTube-Videos -->
-  {#if scope !== 'local' && yt.items.length > 0}
-    <section class="section">
-      <h2 class="section-title"><i class="fa-brands fa-youtube"></i> YouTube ({yt.items.length}{yt.hasMore ? '+' : ''})</h2>
-      <div class="grid">
-        {#each yt.items as v (v.id)}
-          <div class="card-wrap" class:already={v.already_downloaded} class:queued={v.already_in_queue}>
-            <div class="video-card" role="button" tabindex="0"
-                 onclick={() => openVideo(v.id)}
-                 onkeydown={(e) => e.key === 'Enter' && openVideo(v.id)}>
-              <div class="thumb-wrap">
-                <img src={v.already_downloaded ? api.thumbnailUrl(v.id) : api.rssThumbUrl(v.id)} alt="" loading="lazy" />
-                {#if v.duration}<span class="duration">{formatDuration(v.duration)}</span>{/if}
-                {#if v.already_downloaded}<span class="badge ok">Lokal</span>
-                {:else if v.already_in_queue}<span class="badge queue">Wartet</span>{/if}
-                <HoverActionOverlay>
-                  {#if v.already_downloaded}
-                    <HoverActionBtn variant="success" onclick={() => openVideo(v.id)} title="Abspielen">
-                      <i class="fa-solid fa-play"></i>
-                    </HoverActionBtn>
-                  {:else if v.already_in_queue}
-                    <HoverActionBtn variant="accent" disabled title="Bereits in Warteschlange">
-                      <i class="fa-solid fa-clock"></i>
-                    </HoverActionBtn>
-                  {:else}
-                    <HoverActionBtn variant="accent" onclick={(e) => quickDl(v, e)}
-                                    disabled={downloading.has(v.id)} title="Schnell-Download (Standard-Qualität)">
-                      <i class="fa-solid fa-bolt"></i>
-                    </HoverActionBtn>
-                    <HoverActionBtn variant="accent" onclick={(e) => openStreams(v, e)}
-                                    disabled={downloading.has(v.id)} title="Stream wählen (Qualität/Audio)">
-                      <i class="fa-solid fa-sliders"></i>
-                    </HoverActionBtn>
-                  {/if}
-                  <QuickPlaylistBtn videoId={v.id} title={v.title} channelName={v.channel_name} channelId={v.channel_id} size="sm" />
-                  <HoverActionBtn variant="danger" onclick={(e) => blockCh(v, e)} title="Kanal blockieren">
-                    <i class="fa-solid fa-ban"></i>
-                  </HoverActionBtn>
-                </HoverActionOverlay>
-              </div>
-              <div class="info">
-                <h3 class="title">{v.title}</h3>
-                <div class="ch-row">
-                  <button class="channel-btn" onclick={(e) => { e.stopPropagation(); openChannel(v.channel_id); }}>{v.channel_name || '–'}</button>
-                  {#if v.channel_id && !subscribedIds.has(v.channel_id)}
-                    <button class="sub-btn" onclick={(e) => subscribe(v, e)} title="Abonnieren">
-                      <i class="fa-solid fa-rss"></i>
-                    </button>
-                  {:else if subscribedIds.has(v.channel_id)}
-                    <span class="sub-ok" title="Abonniert"><i class="fa-solid fa-check"></i></span>
-                  {/if}
-                </div>
-                {#if v.view_count}<span class="meta">{formatViews(v.view_count)} Aufrufe</span>{/if}
-              </div>
-            </div>
+      {:else}
+        {#if overview.suggestion}
+          <button class="meintest oben" onclick={() => searchFor(overview.suggestion.text)}>
+            <i class="fa-solid fa-spell-check"></i> Kein Wort getroffen. Meintest du {overview.suggestion.text}?
+            <span class="zahl">{overview.suggestion.total}</span> Videos</button>
+        {/if}
+        {#if sections.videos?.total}
+          <section class="abschnitt">
+            {@render head('videos')}
+            {@render videoRows(shown('videos'))}
+          </section>
+        {/if}
+        {#if sections.gesagt?.total}
+          <section class="abschnitt">{@render head('gesagt')}{@render videoRows(shown('gesagt'))}</section>
+        {/if}
+        {#if sections.kapitel?.total}
+          <section class="abschnitt">{@render head('kapitel')}{@render videoRows(shown('kapitel'))}</section>
+        {/if}
+        {#if sections.abos?.total}
+          <section class="abschnitt">{@render head('abos', 'Bei Abos, noch nicht geladen')}
+            {#each shown('abos') as hit (hit.id)}<FeedHitRow {hit} {terms} />{/each}</section>
+        {/if}
+        {#if sections.kanaele?.total}
+          <section class="abschnitt">{@render head('kanaele')}<ChannelHitList items={sections.kanaele.items} {terms} /></section>
+        {/if}
+        {#if sections.playlists?.total}
+          <section class="abschnitt">{@render head('playlists')}<PlaylistHitList items={sections.playlists.items} {terms} /></section>
+        {/if}
+        {#if sections.musik?.total}
+          <section class="abschnitt">{@render head('musik')}<MusicHitList items={sections.musik.items} {terms} query={q} /></section>
+        {/if}
+        {#if sections.sinngemaess?.total}
+          <div class="lose">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span><span class="zahl">{sections.sinngemaess.total}</span> weitere nur sinngemäß verwandt, ohne das Wort</span>
+            <button class="tv-knopf klein ohne" onclick={() => chooseSection('sinngemaess')}>Ansehen</button>
           </div>
-        {/each}
-      </div>
-      <div class="scroll-sentinel" use:infiniteScroll={{ onLoadMore: yt.loadMore, canLoad: () => yt.canLoad() && !loading }}></div>
-      {#if yt.hasMore}
-        <button class="load-more" onclick={yt.loadMore} disabled={yt.loadingMore}>
-          {#if yt.loadingMore}<i class="fa-solid fa-spinner fa-spin"></i> Lade…{:else}Weitere Treffer laden{/if}
-        </button>
+        {/if}
+        <div class="quelle">
+          <i class="fa-solid fa-globe"></i>
+          <div><b>Mehr bei der Quelle?</b><div class="leise">Fragt die Quelle nur auf Wunsch und schont so die Abrufgrenze.</div></div>
+          <button class="tv-knopf" onclick={() => chooseSection('quelle')}><i class="fa-solid fa-magnifying-glass"></i> Bei der Quelle suchen</button>
+        </div>
       {/if}
-    </section>
-  {/if}
- </div>
+    </div>
+
+    <div class="tv-rollfeld">
+      {#if selected && q}
+        <HitPreview hit={selected} {q} {terms} onplay={play} />
+      {:else}
+        <SearchHelp onexample={(code) => { input = `${input.trim()} ${code}`.trim(); field.focus(); }} />
+      {/if}
+    </div>
+  </div>
 </div>
 
-<StreamDialog
-  dialog={streamDialog}
-  showAudioOnly={true}
-  ondownload={(opts) => startStreamDownload(opts)}
-  onclose={() => streamDialog = null}
-/>
-<ConfirmDialog bind:this={confirmRef} />
+{#snippet playlistButton()}
+  {#if playlistName === null}
+    <button class="mehr" onclick={() => playlistName = q} title="Alle Videotreffer in dieser Reihenfolge als Playlist speichern (bis {PLAYLIST_MAX})">
+      <i class="fa-solid fa-list"></i> Als Playlist</button>
+  {:else}
+    <form class="playlist" onsubmit={saveAsPlaylist}>
+      <input class="tv-eingabe" bind:value={playlistName} aria-label="Name der Playlist" />
+      <button class="tv-knopf klein haupt" disabled={!playlistName.trim() || playlistBusy}>
+        <i class="fa-solid {playlistBusy ? 'fa-spinner fa-spin' : 'fa-check'}"></i> Anlegen</button>
+      <button type="button" class="tv-knopf klein ohne" onclick={() => playlistName = null}>Abbrechen</button>
+    </form>
+  {/if}
+{/snippet}
 
 <style>
-  /* Abstand zum Rollfeld kommt aus Kopf und Rollfeld, nicht vom letzten Element */
-  .tv-seitenkopf > :last-child { margin-bottom: 0; }
-  .search-form { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-  .search-input-wrap { flex: 1; min-width: 280px; position: relative; display: flex; align-items: center; }
-  .search-icon { position: absolute; left: 14px; color: var(--text-tertiary); font-size: 0.9rem; pointer-events: none; }
-  .search-input { flex: 1; padding: 10px 36px 10px 38px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; color: var(--text-primary); font-size: 0.95rem; outline: none; }
-  .search-input:focus { border-color: var(--accent-primary); }
-  .search-clear { position: absolute; right: 10px; background: none; border: none; color: var(--text-tertiary); cursor: pointer; padding: 4px; }
-  .search-clear:hover { color: var(--status-error); }
+  .kopf { display: flex; align-items: center; gap: var(--tv-a3); }
+  h1 { margin: 0; font-size: var(--tv-gr-seite); }
+  .feld { flex: 1; display: flex; align-items: center; gap: var(--tv-a2); height: 48px; padding: 0 var(--tv-a3);
+          border-radius: var(--tv-ecke); background: var(--tv-mulde); color: var(--tv-text-3); cursor: text; }
+  .feld:focus-within { outline: 1px solid rgba(var(--tv-akzent-rgb), 0.6); }
+  .feld input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--tv-text); font: inherit;
+                font-size: 19px; font-weight: 600; outline: 0; }
+  .feld input::placeholder { font-weight: 400; color: var(--tv-text-3); }
+  .leeren { width: 34px; height: 34px; border: 0; border-radius: var(--tv-ecke); background: none; color: var(--tv-text-3); cursor: pointer; }
+  .leeren:hover { background: var(--tv-karte-2); color: var(--tv-text); }
+  .gross { height: 48px; }
 
-  .search-scope { display: flex; gap: 4px; }
-  .scope-btn { padding: 8px 14px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); font-size: 0.82rem; cursor: pointer; }
-  .scope-btn.active { background: var(--accent-primary); color: var(--accent-text); border-color: var(--accent-primary); }
+  .abschnitt { margin-bottom: var(--tv-a5); }
+  .abschnitt-kopf { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--tv-a2) var(--tv-a3); margin-bottom: var(--tv-a2); }
+  .abschnitt-kopf h2 { margin: 0; font-size: var(--tv-gr-titel); }
+  .erkl { font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .mehr { margin-left: auto; padding: 0; border: 0; background: none; color: var(--tv-akzent); font: inherit; font-weight: 600;
+          font-size: var(--tv-gr-klein); white-space: nowrap; cursor: pointer; }
+  .mehr:hover { color: var(--tv-akzent-hell); }
+  .playlist { margin-left: auto; display: flex; gap: var(--tv-a2); }
+  .playlist .tv-eingabe { height: 34px; width: 240px; }
 
-  .loading, .empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; color: var(--text-tertiary); }
-  .empty i { font-size: 2.5rem; opacity: 0.4; margin-bottom: 12px; }
+  .verlauf { display: flex; flex-wrap: wrap; gap: var(--tv-a2); }
+  .eintrag { display: inline-flex; align-items: center; border-radius: var(--tv-ecke); background: var(--tv-flaeche); }
+  .eintrag button { height: 36px; padding: 0 var(--tv-a3); border: 0; background: none; color: var(--tv-text); font: inherit; cursor: pointer; }
+  .eintrag button i { color: var(--tv-text-3); margin-right: 4px; }
+  .eintrag .weg { padding: 0 10px; color: var(--tv-text-3); }
+  .eintrag button:hover { color: var(--tv-akzent); }
+  .leise { color: var(--tv-text-3); }
+  .hinweis { padding: var(--tv-a4); color: var(--tv-text-3); font-size: var(--tv-gr-klein); }
 
-  .section { margin-bottom: 32px; }
-  .section-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .lose { display: flex; align-items: center; gap: var(--tv-a2); margin-bottom: var(--tv-a4); padding: var(--tv-a3);
+          border-radius: var(--tv-ecke); background: var(--tv-flaeche); color: var(--tv-text-2); font-size: var(--tv-gr-klein); }
+  .lose > i { color: var(--tv-info); }
+  .lose .tv-knopf { margin-left: auto; }
+  .quelle { display: flex; align-items: center; gap: var(--tv-a3); padding: var(--tv-a4); border-radius: var(--tv-ecke);
+            background: rgba(var(--tv-info-rgb), 0.08); }
+  .quelle > i { font-size: 26px; color: var(--tv-info); }
+  .quelle .leise { font-size: var(--tv-gr-klein); }
+  .quelle .tv-knopf { margin-left: auto; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-  .card-wrap { position: relative; }
-  .video-card { display: flex; flex-direction: column; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 12px; overflow: hidden; cursor: pointer; transition: all 0.15s; text-align: left; color: inherit; }
-  .video-card:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
-  .card-wrap.queued .video-card { border-color: var(--status-warning, #f59e0b); }
-  .card-wrap.already .video-card { border-color: var(--status-success); }
-
-  .thumb-wrap { position: relative; aspect-ratio: 16/9; background: var(--bg-tertiary); overflow: hidden; }
-  .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; }
-  .duration { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-family: monospace; }
-  .badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
-  .badge.ok { background: var(--status-success); color: #fff; }
-  .badge.archive { background: rgba(0,0,0,0.72); color: #fff; }
-  .badge.meaning { left: auto; right: 8px; background: var(--accent-primary); color: var(--accent-text); text-transform: none; }
-  .passage {
-    display: flex; gap: 8px; align-items: flex-start; width: 100%; margin-top: 4px; padding: 6px 8px;
-    border: none; border-radius: 8px; background: var(--bg-tertiary); color: var(--text-secondary);
-    font: inherit; font-size: 0.74rem; line-height: 1.35; text-align: left; cursor: pointer;
-  }
-  .passage:hover { color: var(--text-primary); }
-  .passage-ai { flex-shrink: 0; padding: 0 5px; border-radius: 4px; font-weight: 700; font-size: 0.66rem;
-                background: color-mix(in srgb, var(--status-warning) 18%, transparent); color: var(--status-warning); }
-  .passage-time { flex-shrink: 0; font-weight: 600; color: var(--accent-primary); white-space: nowrap; }
-  .passage-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .genauigkeit { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; margin: 0 0 var(--tv-a4); }
-  .tv-seitenkopf :global(.sprachen) { margin: 0 0 var(--tv-a3); }
-  .info-zeile { display: flex; align-items: center; gap: var(--tv-a2); min-width: 0; }
-  .verwandt-etikett { margin: var(--tv-a3) 0 var(--tv-a2); }
-  .verwandt-reihe { display: flex; flex-wrap: wrap; gap: var(--tv-a2); }
-  .verwandt-kanal { display: inline-flex; align-items: center; gap: var(--tv-a2); padding: 6px 12px 6px 6px; border: 1px solid var(--tv-rand);
-                    border-radius: var(--tv-ecke); background: var(--tv-karte); color: var(--tv-text); font: inherit; cursor: pointer; }
-  .verwandt-kanal:hover { border-color: var(--tv-rand-stark); background: var(--tv-karte-2); }
-  .verwandt-kanal img { width: 32px; height: 32px; border-radius: var(--tv-ecke-klein); object-fit: cover; background: var(--tv-mulde); }
-  .verwandt-kanal > i { width: 32px; text-align: center; color: var(--tv-akzent); }
-  .verwandt-feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--tv-a2) var(--tv-a4); }
-  .verwandt-eintrag { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: center; }
-  .verwandt-eintrag img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); background: var(--tv-mulde); }
-  .verwandt-text { min-width: 0; display: flex; flex-direction: column; }
-  .verwandt-titel { padding: 0; border: 0; background: none; color: var(--tv-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer;
-                    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .verwandt-titel:hover { color: var(--tv-akzent); }
-  .semantic-note { margin-left: 10px; font-size: 0.74rem; font-weight: 600; color: var(--accent-primary); }
-  .pl-form { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; }
-  .pl-form input { padding: 5px 10px; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font: inherit; font-size: 0.8rem; font-weight: 400; }
-  .pl-btn { margin-left: 12px; padding: 5px 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-secondary); font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
-  .pl-form .pl-btn { margin-left: 0; }
-  .pl-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent-primary); }
-  .pl-btn.primary { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--accent-text); }
-  .badge.queue { background: var(--status-warning, #f59e0b); color: #fff; }
-
-  .info { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
-  .title { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
-  .ch-row { display: flex; align-items: center; gap: 6px; }
-  .channel-btn { background: none; border: none; padding: 0; color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; text-align: left; }
-  .channel-btn:hover { color: var(--accent-primary); text-decoration: underline; }
-  .sub-btn { background: none; border: 1px solid var(--border-primary); color: var(--text-tertiary); padding: 2px 6px; border-radius: 5px; cursor: pointer; font-size: 0.7rem; }
-  .sub-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
-  .sub-ok { color: var(--status-success); font-size: 0.72rem; }
-  .meta { font-size: 0.75rem; color: var(--text-tertiary); }
-
-  .ch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .ch-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; cursor: pointer; }
-  .ch-card:hover { border-color: var(--accent-primary); }
-  .ch-card img, .ch-ph { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
-  .ch-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); text-align: center; }
-  .ch-subs { font-size: 0.68rem; color: var(--text-tertiary); }
-
-  .load-more { display: block; margin: 16px auto; padding: 10px 24px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; color: var(--text-secondary); cursor: pointer; font-size: 0.85rem; }
-  .load-more:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+  .nichts { padding: var(--tv-a5); border-radius: var(--tv-ecke); background: var(--tv-flaeche); }
+  .nichts h2 { margin: 0 0 var(--tv-a2); }
+  .meintest { display: inline-flex; align-items: center; gap: var(--tv-a2); margin-top: var(--tv-a3); height: 44px; padding: 0 var(--tv-a4);
+              border: 0; border-radius: var(--tv-ecke); background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent);
+              font: inherit; font-weight: 700; cursor: pointer; }
+  .meintest:hover { background: rgba(var(--tv-akzent-rgb), 0.22); }
+  .meintest.oben { margin: 0 0 var(--tv-a4); }
+  .auswege { display: flex; flex-wrap: wrap; gap: var(--tv-a2); margin-top: var(--tv-a4); }
 </style>

@@ -7,7 +7,9 @@ bestätigte Shorts - ungeprüfte bleiben.
 """
 import pytest
 
-from app.services import search_index, video_classifier as vc
+from app.services import video_classifier as vc
+from app.services.search import engine
+from app.services.search.filters import SearchFilters
 from app.services.counts_service import counts_service
 from app.services.metadata_service import metadata_service
 from app.services.rss_service import rss_service
@@ -48,7 +50,7 @@ async def test_ausgeschlossen_ueberall(stock, set_setting):
     await set_setting("shorts.exclude", "true")
     assert await _ids() == {"normalvideo"}
     assert await counts_service.library_videos() == 1
-    assert [v["id"] for v in (await search_index.search_videos("Clip"))["videos"]] == ["normalvideo"]
+    assert [v.id for v in (await engine.section("videos", "Clip", SearchFilters())).items] == ["normalvideo"]
     feed = await rss_service.get_new_videos()
     assert [e["video_id"] for e in feed["entries"]] == ["neuesvideo1"]
     assert feed["tab_counts"]["active"] == 1

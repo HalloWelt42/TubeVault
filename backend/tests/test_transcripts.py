@@ -1,8 +1,11 @@
 """Transkripte: lokal erkennen lassen, zerlegen, im Volltext und nach Bedeutung finden."""
 import pytest
 
-from app.services import search_index, semantic_index, transcripts
+from app.services import semantic_index, transcripts
+from app.services.search import engine
+from app.services.search.filters import SearchFilters
 from app.services.subtitle_segments import Segment
+
 
 def test_saetze_werden_zu_abschnitten():
     sentences = [Segment(start=n * 5.0, end=n * 5.0 + 5, text="wort " * 40) for n in range(10)]
@@ -28,13 +31,13 @@ async def stock(test_db):
 
 
 async def test_wort_im_transkript_findet_video_mit_stelle(stock):
-    result = await search_index.search_videos("Lötspitze")
-    assert [v["id"] for v in result["videos"]] == ["vidloeten01"]
-    passage = result["videos"][0]["passage"]
-    assert "Lötspitze" in passage["text"] and passage["start"] == 600
-    # Ohne Treffer im Transkript bleibt es bei der bisherigen Suche
-    assert (await search_index.search_videos("Küche"))["videos"][0]["id"] == "vidkochen1"
-    assert "passage" not in (await search_index.search_videos("Küche"))["videos"][0]
+    page = await engine.section("gesagt", "Lötspitze", SearchFilters())
+    assert [v.id for v in page.items] == ["vidloeten01"]
+    spot = page.items[0].spots[0]
+    assert "Lötspitze" in spot.text and spot.start == 600
+    # Ohne Treffer im Gesagten bleibt es bei den Videos
+    assert (await engine.section("videos", "Küche", SearchFilters())).items[0].id == "vidkochen1"
+    assert (await engine.section("gesagt", "Küche", SearchFilters())).total == 0
 
 
 async def test_bedeutung_im_transkript(stock, set_setting, monkeypatch):
@@ -60,10 +63,9 @@ async def test_bedeutung_im_transkript(stock, set_setting, monkeypatch):
     by_id = await transcripts.passages_by_id([chunk_id for chunk_id, _ in hits])
     assert len(hits) == 1 and "Zinn" in by_id[hits[0][0]].text
 
-    result = await search_index.search_videos("Lot auftragen")
-    assert result["videos"][0]["id"] == "vidloeten01"
-    assert result["videos"][0]["match"] == "bedeutung"
-    assert "Zinn" in result["videos"][0]["passage"]["text"]
+    page = await engine.section("sinngemaess", "Lot auftragen", SearchFilters())
+    assert page.items[0].id == "vidloeten01" and page.items[0].meaning
+    assert "Zinn" in page.items[0].spots[0].text
 
 
 async def test_transkript_fuer_nachvertonung(stock, monkeypatch, tmp_path):
@@ -109,8 +111,8 @@ async def test_ki_transkript_fuer_videos_ohne_transkript(stock, monkeypatch, tmp
     assert vtt.startswith("WEBVTT") and "KI-Transkript" in vtt and "00:00:03.000" in vtt
     assert await stock.fetch_val("SELECT language FROM videos WHERE id = 'vidkochen1'") == "de"
 
-    found = (await search_index.search_videos("Pfeffer"))["videos"]
-    assert found[0]["id"] == "vidkochen1" and found[0]["passage"]["kind"] == "ai"
+    found = (await engine.section("gesagt", "Pfeffer", SearchFilters())).items
+    assert found[0].id == "vidkochen1" and found[0].spots[0].origin == "ai"
     assert (await transcripts.ai_counts())["done"] == 1
     assert await transcripts.pending() == 0
 

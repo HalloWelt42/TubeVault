@@ -850,6 +850,8 @@ async def full_cleanup():
         await db._connection.commit()
         await db._connection.execute("VACUUM")
         await db._connection.commit()
+        from app.services.search import index as search_extra_index
+        await search_extra_index.after_vacuum(db._connection)
         size_after = db_before.stat().st_size if db_before.exists() else 0
         freed = max(0, size_before - size_after)
         log("vacuum", f"VACUUM: {human_size(size_before)} → {human_size(size_after)}", 0, freed)

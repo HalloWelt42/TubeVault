@@ -2,7 +2,8 @@
   TubeVault - Übersicht (Gestaltung nach mockups/uebersicht.html)
   Fester Kopf mit Kennzahlen, Diensten und Laden-Zeile; darunter zwei
   Spalten, die jede für sich rollen: links was weitergeht und was neu ist
-  (Weiterschauen, Weiterhören, Neu bei Abos, Zuletzt geladen), rechts der
+  (Weiterschauen, Weiterhören, gemerkte Suchen, Neu bei Abos, Zuletzt
+  geladen), rechts der
   Betrieb (Speicher, Downloads, Hintergrundarbeiten, Sprachen, Geräte).
   Die Karten rechts laden sich selbst nach. Frisch eingerichtet stehen
   links die ersten Schritte.
@@ -20,6 +21,7 @@
   import OverviewCard from '../lib/components/overview/OverviewCard.svelte';
   import MediaTile from '../lib/components/overview/MediaTile.svelte';
   import ContinueListening from '../lib/components/overview/ContinueListening.svelte';
+  import SavedSearches from '../lib/components/overview/SavedSearches.svelte';
   import FirstSteps from '../lib/components/overview/FirstSteps.svelte';
   import ShortcutsCard from '../lib/components/overview/ShortcutsCard.svelte';
   import StorageCard from '../lib/components/overview/StorageCard.svelte';
@@ -107,6 +109,8 @@
         {/if}
 
         <ContinueListening />
+
+        <SavedSearches />
 
         {#if feed.entries.length}
           <OverviewSection title="Neu bei Abos" count={feed.total} more={{ label: 'Zum Feed', path: '/feed' }}>

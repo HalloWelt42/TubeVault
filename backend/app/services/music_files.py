@@ -357,7 +357,8 @@ async def background_scan() -> None:
 
 # ─── Lesen ────────────────────────────────────────────────────────────
 
-def _info(row) -> FileInfo:
+def info_of(row) -> FileInfo:
+    """FileInfo aus einer Zeile von music_files (SELECT *)."""
     return FileInfo(**{k: row[k] for k in FileInfo.model_fields
                        if k in row.keys() and k not in ("has_cover", "has_lyrics", "favorite", "hidden")},
                     has_cover=bool(row["cover"]), has_lyrics=bool(row["lyrics_path"] or row["lyrics_text"]),
@@ -372,15 +373,15 @@ VISIBLE = "COALESCE(hidden, 0) = 0"
 async def all_files(category: Optional[str] = MUSIC) -> list[FileInfo]:
     """Sichtbare Dateien einer Art (Standard: Musik), neueste zuerst; None = alle."""
     if category is None:
-        return [_info(r) for r in await db.fetch_all(f"SELECT * FROM music_files WHERE {VISIBLE} ORDER BY added_at DESC, path")]
-    return [_info(r) for r in await db.fetch_all(
+        return [info_of(r) for r in await db.fetch_all(f"SELECT * FROM music_files WHERE {VISIBLE} ORDER BY added_at DESC, path")]
+    return [info_of(r) for r in await db.fetch_all(
         f"SELECT * FROM music_files WHERE COALESCE(category, ?) = ? AND {VISIBLE} ORDER BY added_at DESC, path",
         (MUSIC, category))]
 
 
 async def hidden_files() -> list[FileInfo]:
     """Ausgeblendete Dateien, zuletzt ausgeblendete zuerst."""
-    return [_info(r) for r in await db.fetch_all(
+    return [info_of(r) for r in await db.fetch_all(
         "SELECT * FROM music_files WHERE COALESCE(hidden, 0) = 1 ORDER BY hidden_at DESC, path")]
 
 
@@ -399,7 +400,7 @@ async def set_hidden(item_id: str, hidden: bool) -> bool:
 
 async def get(item_id: str) -> Optional[FileInfo]:
     row = await db.fetch_one("SELECT * FROM music_files WHERE id = ?", (item_id,))
-    return _info(row) if row else None
+    return info_of(row) if row else None
 
 
 async def path_of(item_id: str) -> Optional[Path]:

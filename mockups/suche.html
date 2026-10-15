@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Suche</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+<style>
+  mark { background: rgba(var(--tv-akzent-rgb), 0.22); color: var(--tv-text); border-radius: 2px; padding: 0 2px; }
+
+  /* Kopf: Suchfeld, Bereiche, Filter */
+  .such-kopf { display: flex; align-items: center; gap: var(--tv-a3); }
+  .such-kopf h1 { margin: 0; font-size: var(--tv-gr-seite); }
+  .gross-feld { flex: 1; display: flex; align-items: center; gap: var(--tv-a2); height: 48px; padding: 0 var(--tv-a3);
+                border-radius: var(--tv-ecke); background: var(--tv-mulde); outline: 1px solid rgba(var(--tv-akzent-rgb), 0.5); font-size: 19px; }
+  .gross-feld i { color: var(--tv-text-3); }
+  .gross-feld .q { flex: 1; font-weight: 600; }
+  .gross-feld .loeschen { color: var(--tv-text-3); }
+  .bereiche { display: flex; gap: var(--tv-a1); flex-wrap: wrap; margin-top: var(--tv-a3); }
+  .bereiche button { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 var(--tv-a3); border: 1px solid transparent;
+                     border-radius: var(--tv-ecke); background: none; color: var(--tv-text-2); font: inherit; font-weight: 600; font-size: var(--tv-gr-klein); }
+  .bereiche button.aktiv { background: var(--tv-flaeche); border-color: var(--tv-rand-stark); color: var(--tv-text); }
+  .bereiche button.aktiv i { color: var(--tv-akzent); }
+  .bereiche .quelle { margin-left: auto; color: var(--tv-akzent); }
+  .filterzeile { display: flex; flex-wrap: wrap; align-items: center; gap: var(--tv-a2); margin-top: var(--tv-a2); }
+  .wahl { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px; border-radius: var(--tv-ecke);
+          background: var(--tv-karte); color: var(--tv-text-2); font-size: var(--tv-gr-klein); white-space: nowrap; }
+  .wahl b { color: var(--tv-text); font-weight: 600; }
+  .wahl.an { background: rgba(var(--tv-akzent-rgb), 0.12); color: var(--tv-akzent); }
+  .wahl.an b { color: var(--tv-akzent); }
+  .filterzeile .trenn { width: 1px; height: 22px; background: var(--tv-rand); margin: 0 2px; }
+  .filterzeile .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); }
+
+  /* Abschnitte */
+  .abschnitt { margin-bottom: var(--tv-a5); }
+  .abschnitt-kopf { display: flex; align-items: baseline; gap: var(--tv-a3); margin-bottom: var(--tv-a2); }
+  .abschnitt-kopf h2 { margin: 0; font-size: 20px; }
+  .abschnitt-kopf .erkl { font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .abschnitt-kopf .mehr { margin-left: auto; color: var(--tv-akzent); font-weight: 600; font-size: var(--tv-gr-klein); white-space: nowrap; }
+
+  /* Trefferzeile */
+  .treffer { display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: start;
+             padding: var(--tv-a2); border-radius: var(--tv-ecke); }
+  .treffer:hover { background: var(--tv-flaeche); }
+  .treffer.gewaehlt { background: var(--tv-karte); outline: 1px solid rgba(var(--tv-akzent-rgb), 0.45); }
+  .treffer .bild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde); }
+  .treffer img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .treffer .d { position: absolute; right: 5px; bottom: 5px; padding: 1px 6px; border-radius: var(--tv-ecke-klein); background: rgba(0, 0, 0, 0.75);
+                font-size: 13px; font-family: var(--tv-schrift-zahl); }
+  .treffer .t { font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .treffer .w { margin-top: 2px; font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .fund { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .fund span { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px; border-radius: var(--tv-ecke-klein);
+               background: var(--tv-karte-2); font-size: 13px; color: var(--tv-text-2); }
+  .fund span i { color: var(--tv-akzent); font-size: 12px; }
+  .marke-a { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: var(--tv-ecke-klein);
+             background: var(--tv-karte-2); font-size: 13px; color: var(--tv-text-2); }
+  .aktion { display: flex; gap: 6px; }
+  .aktion .knopf { height: 36px; }
+
+  /* Gesagtes: Textstellen mit Zeit */
+  .stellen { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+  .stelle { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--tv-a2); align-items: baseline; padding: 6px 8px;
+            border-radius: var(--tv-ecke-klein); background: var(--tv-flaeche); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .stelle .zeit { color: var(--tv-akzent); font-family: var(--tv-schrift-zahl); font-weight: 600; }
+  .stelle .art-k { font-size: 13px; color: var(--tv-text-3); }
+
+  /* Kanäle */
+  .kanaele { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--tv-a3); }
+  .kanal { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: var(--tv-a2); align-items: center; padding: var(--tv-a3);
+           border-radius: var(--tv-ecke); background: var(--tv-flaeche); }
+  .kanal .av { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--tv-karte-3); font-weight: 700; }
+  .kanal .n { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kanal .w { font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+
+  .lose { display: flex; align-items: center; gap: var(--tv-a2); padding: var(--tv-a3); border-radius: var(--tv-ecke); background: var(--tv-flaeche);
+          color: var(--tv-text-2); font-size: var(--tv-gr-klein); }
+  .lose .knopf { margin-left: auto; }
+  .quelle-karte { display: flex; align-items: center; gap: var(--tv-a3); padding: var(--tv-a4); border-radius: var(--tv-ecke);
+                  background: rgba(var(--tv-info-rgb), 0.08); }
+  .quelle-karte i.gross { font-size: 26px; color: var(--tv-info); }
+  .quelle-karte .knopf { margin-left: auto; }
+
+  /* Vorschau rechts */
+  .vorschau-karte { background: var(--tv-flaeche); border-radius: var(--tv-ecke); padding: var(--tv-a4); }
+  .vorschau-karte .bild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde); }
+  .vorschau-karte img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vorschau-karte h3 { margin: var(--tv-a3) 0 4px; font-size: 19px; line-height: 1.3; }
+  .vorschau-karte .meta { font-size: var(--tv-gr-klein); color: var(--tv-text-2); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .vorschau-karte .knoepfe { display: flex; gap: var(--tv-a2); margin: var(--tv-a3) 0; }
+  .vorschau-karte .text { font-size: var(--tv-gr-klein); color: var(--tv-text-2); line-height: 1.5; }
+  .etikett-z { margin: var(--tv-a4) 0 var(--tv-a2); font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+  .fundstelle { display: grid; grid-template-columns: 64px minmax(0, 1fr) 34px; gap: var(--tv-a2); align-items: center; padding: 6px 0; font-size: var(--tv-gr-klein); }
+  .fundstelle .zeit { color: var(--tv-akzent); font-family: var(--tv-schrift-zahl); font-weight: 600; }
+  .fundstelle .art-k { display: block; font-size: 13px; color: var(--tv-text-3); }
+  .fundstelle button { width: 34px; height: 34px; border: 0; border-radius: var(--tv-ecke); background: var(--tv-karte-3); color: var(--tv-text); }
+
+  .tasten { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: var(--tv-a3); font-size: 13px; color: var(--tv-text-3); }
+  kbd { display: inline-block; min-width: 24px; padding: 1px 6px; border-radius: var(--tv-ecke-klein); background: var(--tv-karte-3);
+        color: var(--tv-text); font-family: var(--tv-schrift-zahl); font-size: 13px; text-align: center; }
+
+  /* Start ohne Suchbegriff */
+  .verlauf { display: flex; flex-wrap: wrap; gap: var(--tv-a2); }
+  .verlauf span { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 var(--tv-a3); border-radius: var(--tv-ecke);
+                  background: var(--tv-flaeche); }
+  .verlauf span i { color: var(--tv-text-3); }
+  .gemerkt { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--tv-a3); }
+  .gemerkt .karte { padding: var(--tv-a4); border-radius: var(--tv-ecke); background: var(--tv-flaeche); }
+  .gemerkt .n { display: flex; align-items: center; gap: var(--tv-a2); font-weight: 700; font-size: 18px; }
+  .gemerkt .n i { color: var(--tv-warnung); }
+  .gemerkt .f { margin-top: 4px; font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .neu { margin-left: auto; padding: 1px 8px; border-radius: var(--tv-ecke-klein); background: rgba(var(--tv-akzent-rgb), 0.16); color: var(--tv-akzent);
+         font-size: 13px; font-weight: 700; }
+  .regel { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: var(--tv-a3); padding: 7px 0; font-size: var(--tv-gr-klein); }
+  .regel code { color: var(--tv-akzent); font-family: var(--tv-schrift-zahl); font-size: 15px; }
+  .quellen-liste { display: flex; flex-wrap: wrap; gap: 6px; }
+  .quellen-liste span { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px; border-radius: var(--tv-ecke); background: var(--tv-karte-2);
+                        font-size: var(--tv-gr-klein); }
+  .quellen-liste span i { color: var(--tv-akzent); }
+  .quellen-liste span.wunsch i { color: var(--tv-info); }
+
+  /* Aufklappliste unter dem Suchfeld im Kopf */
+  .schleier { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 30; }
+  .aufklapp { position: fixed; z-index: 31; width: 720px; max-height: calc(100vh - 90px); overflow: hidden; display: flex; flex-direction: column;
+              border-radius: var(--tv-ecke); background: var(--tv-karte); box-shadow: var(--tv-schatten); }
+  .aufklapp .koerper { overflow-y: auto; padding: var(--tv-a2); }
+  .aufklapp .gruppe { padding: var(--tv-a2) var(--tv-a2) 2px; font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+                      color: var(--tv-text-3); display: flex; }
+  .aufklapp .gruppe span { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 600; color: var(--tv-akzent); }
+  .vorschlag { display: flex; align-items: center; gap: var(--tv-a2); height: 38px; padding: 0 var(--tv-a2); border-radius: var(--tv-ecke-klein); }
+  .vorschlag i { width: 18px; color: var(--tv-text-3); text-align: center; }
+  .az { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: center; padding: 6px var(--tv-a2); border-radius: var(--tv-ecke-klein); }
+  .az img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); display: block; }
+  .az .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .az .w { font-size: var(--tv-gr-klein); color: var(--tv-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .az .knopf { grid-area: auto; }   /* .haupt ist auch der Seitenbereich */
+  .az.gewaehlt, .vorschlag.gewaehlt { background: rgba(var(--tv-akzent-rgb), 0.12); outline: 1px solid rgba(var(--tv-akzent-rgb), 0.45); }
+  .aufklapp .fusszeile { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: var(--tv-a2) var(--tv-a3); background: var(--tv-karte-2);
+                         font-size: 13px; color: var(--tv-text-3); }
+  .aufklapp .fusszeile .rechts { margin-left: auto; color: var(--tv-akzent); font-weight: 600; font-size: var(--tv-gr-klein); }
+
+  .leer-hinweis { padding: var(--tv-a5); border-radius: var(--tv-ecke); background: var(--tv-flaeche); }
+  .leer-hinweis h2 { margin: 0 0 var(--tv-a2); }
+  .meintest { display: inline-flex; align-items: center; gap: var(--tv-a2); margin-top: var(--tv-a3); height: 44px; padding: 0 var(--tv-a4);
+              border-radius: var(--tv-ecke); background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+  <main class="haupt rahmen" id="haupt" style="position: relative"></main>
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, vorschau as bild, dauer } from './gemeinsam.js';
+  import { zustaende } from './sammlung.js';
+  seite('suche');
+  const haupt = document.getElementById('haupt');
+  const feedBild = (id) => `http://192.168.178.49:8031/api/subscriptions/rss-thumb/${id}`;
+  const m = (text) => text.replace(/(Kernfusion|Fusion)/g, '<mark>$1</mark>');
+  const zahl = (n) => n.toLocaleString('de-DE');
+  const datum = (d) => d.split('-').reverse().join('.');
+
+  // Echte Treffer vom Pi für "Kernfusion" (15.10.2026), neu geordnet: Titel vor Gesagtem
+  const VIDEOS = [
+    { id: 'VMY3HqDdK1Q', t: 'Kernfusion: Löst sie alle Probleme? Replay LIVESTREAM | Harald Lesch, Marco Smolla & Hartmut Zohm', k: 'Terra X Lesch & Co', d: 5110, am: '2023-02-09', archiv: true, fund: [['fa-heading', 'Titel'], ['fa-list-ol', '4 Kapitel'], ['fa-align-left', 'Beschreibung']] },
+    { id: 'nVTcirxdRWM', t: 'Kernfusion: Klimaretter oder Milliardengrab? | Harald Lesch | Terra X Lesch & Co', k: 'Terra X Lesch & Co', d: 1472, am: '2020-05-13', archiv: true, fund: [['fa-heading', 'Titel'], ['fa-align-left', 'Beschreibung']] },
+    { id: 'aVvs5OGRA98', t: 'Kernfusion: Wenn der Mensch Sonnen erschafft | Impulse | ARTE', k: 'ARTEde', d: 1583, am: '2026-04-16', archiv: true, fund: [['fa-heading', 'Titel']] },
+    { id: '7RSmaHZtUJE', t: 'Wunderwerk Kernfusion - Vision oder Wunschdenken? | KlimaZeit vom 13.03.2026', k: 'tagesschau', d: 992, am: '2026-03-13', archiv: true, fund: [['fa-heading', 'Titel']] },
+    { id: '9ZOE58KxalQ', t: 'Alpha Centauri - Brauchen wir die Kernfusion - Folge 114', k: 'TheLordOfDeath2000', d: 861, am: '2013-01-20', archiv: false, fund: [['fa-heading', 'Titel']] },
+    { id: 'nN4VIp4kAw4', t: 'Fusionskraft: Schaffen deutsche Startups die Energierevolution? | Saloon Talk | ARTE', k: 'ARTEde', d: 5515, am: '2025-11-04', archiv: true, fund: [['fa-heading', 'Titel, Wortanfang'], ['fa-align-left', 'Beschreibung']] },
+  ];
+  const GESAGT = [
+    { id: '9wMty1uTQaA', t: 'Ex-NASA-Forschungschef: Die Wahrheit über Rechenzentren im WELTALL, Mond-Quantencomputer & KI', k: 'Everlast AI', d: 3692,
+      stellen: [['27:19', 'Du hattest vorhin, als wir über den Mond gesprochen haben, erwähnt, dass dieser unter anderem im Bereich Kernfusion und auch Quantencomputing ...', 'KI-Transkript']] },
+    { id: 'Gp2B76BnHi8', t: 'Die Wahrheit über unsere Wirtschafts- & Energieministerin (EXPOSED)', k: 'Wirklich Dracon', d: 2466,
+      stellen: [['19:21', '... während sie gleichzeitig Geld für die Energie und die Kernfusion kann man nicht modellieren ...', 'Untertitel']] },
+  ];
+  const ABOS = [
+    ['0L_MdzlekDo', 'Fusion ohne Tritium scheitert • Alternative Brennstoffe der Kernfusion', 'videowissen', '2026-07-07'],
+    ['Pc1wb7ed_FQ', 'Tritium in der Kernfusion • Das größte Fusionsproblem lösbar? | Hartmut Zohm', 'Urknall, Weltall und das Leben', '2026-05-04'],
+    ['v9Ll4iEiWkk', 'ITER Bauteil schwerer als A380 • Unglaubliche Dimensionen der Kernfusion', 'Urknall, Weltall und das Leben', '2026-03-09'],
+  ];
+
+  const zeile = (v, i) => `
+    <div class="treffer${i === 0 ? ' gewaehlt' : ''}">
+      <div class="bild"><img src="${bild(v.id)}" alt=""><span class="d">${dauer(v.d)}</span></div>
+      <div style="min-width:0"><div class="t">${m(v.t)}</div>
+        <div class="w">${v.k} · <span class="zahl">${datum(v.am)}</span>${v.archiv ? ' · <span class="marke-a"><i class="fa-solid fa-box-archive"></i> Archiv</span>' : ''}</div>
+        <div class="fund">${v.fund.map(([s, n]) => `<span><i class="fa-solid ${s}"></i>${n}</span>`).join('')}</div></div>
+      <div class="aktion"><button class="knopf haupt symbol" title="Abspielen"><i class="fa-solid fa-play"></i></button></div>
+    </div>`;
+
+  const gesagt = (v) => `
+    <div class="treffer">
+      <div class="bild"><img src="${bild(v.id)}" alt=""><span class="d">${dauer(v.d)}</span></div>
+      <div style="min-width:0"><div class="t">${v.t}</div><div class="w">${v.k}</div>
+        <div class="stellen">${v.stellen.map(([z, text, art]) => `<div class="stelle"><span class="zeit">${z}</span><span>${m(text)} <span class="art-k">· ${art}</span></span></div>`).join('')}</div></div>
+      <div class="aktion"><button class="knopf symbol" title="Ab dieser Stelle abspielen"><i class="fa-solid fa-play"></i></button></div>
+    </div>`;
+
+  const abo = ([id, t, k, am]) => `
+    <div class="treffer">
+      <div class="bild"><img src="${feedBild(id)}" alt=""></div>
+      <div style="min-width:0"><div class="t">${m(t)}</div><div class="w">${k} · <span class="zahl">${datum(am)}</span> · noch nicht geladen</div></div>
+      <div class="aktion"><button class="knopf klein"><i class="fa-solid fa-play"></i> Ansehen</button><button class="knopf klein haupt"><i class="fa-solid fa-download"></i> Laden</button></div>
+    </div>`;
+
+  const KOPF = (q, aktiv = 'alles', filter = true) => `
+    <div class="rahmen-kopf">
+      <div class="such-kopf">
+        <h1>Suche</h1>
+        <div class="gross-feld"><i class="fa-solid fa-magnifying-glass"></i><span class="q">${q || '<span class="leise" style="font-weight:400">Was suchst du?</span>'}</span>${q ? '<i class="fa-solid fa-xmark loeschen"></i>' : ''}</div>
+        ${q ? '<button class="knopf" style="height:48px" title="Suche mit allen Filtern merken; neue Treffer erscheinen in der Übersicht"><i class="fa-regular fa-star"></i> Merken</button>' : ''}
+      </div>
+      ${q ? `<div class="bereiche">
+        ${[['alles', 'fa-layer-group', 'Alles', ''], ['videos', 'fa-film', 'Videos', 19], ['gesagt', 'fa-comment-dots', 'Im Gesagten', 6], ['kapitel', 'fa-list-ol', 'Kapitel', 4],
+           ['abos', 'fa-rss', 'Bei Abos', 9], ['kanaele', 'fa-tv', 'Kanäle', 3], ['playlists', 'fa-list', 'Playlists', 1]]
+          .map(([k, s, n, z]) => `<button class="${k === aktiv ? 'aktiv' : ''}"><i class="fa-solid ${s}"></i> ${n}${z !== '' ? ` <span class="zaehler">${z}</span>` : ''}</button>`).join('')}
+        <button class="quelle" title="Fragt die Quelle nur auf Wunsch"><i class="fa-solid fa-globe"></i> Bei der Quelle suchen</button>
+      </div>` : ''}
+      ${q && filter ? `<div class="filterzeile">
+        <span class="chip aktiv">🇩🇪 Deutsch <span class="zaehler">16</span></span>
+        <span class="chip">🇬🇧 Englisch <span class="zaehler">3</span></span>
+        <span class="trenn"></span>
+        <span class="wahl">Länge <b>alle</b> <i class="fa-solid fa-chevron-down"></i></span>
+        <span class="wahl">Zeitraum <b>jederzeit</b> <i class="fa-solid fa-chevron-down"></i></span>
+        <span class="wahl">Ort <b>alle</b> <i class="fa-solid fa-chevron-down"></i></span>
+        <span class="wahl">Stand <b>alle</b> <i class="fa-solid fa-chevron-down"></i></span>
+        <span class="rechts">
+          <span class="wahl">Ordnung <b>Passendste</b> <i class="fa-solid fa-chevron-down"></i></span>
+          <span class="wahl" title="Findet auch Verwandtes ohne das Wort">Sinngemäß <b>ausgewogen</b> <i class="fa-solid fa-chevron-down"></i></span>
+        </span>
+      </div>` : ''}
+    </div>`;
+
+  const VORSCHAU = `
+    <div class="vorschau-karte">
+      <div class="bild"><img src="${bild('VMY3HqDdK1Q')}" alt=""></div>
+      <h3>${m(VIDEOS[0].t)}</h3>
+      <div class="meta"><span>Terra X Lesch &amp; Co</span><span class="zahl">1:25:10</span><span class="zahl">09.02.2023</span><span><i class="fa-solid fa-box-archive"></i> Archiv</span></div>
+      <div class="knoepfe">
+        <button class="knopf haupt"><i class="fa-solid fa-play"></i> Abspielen</button>
+        <button class="knopf"><i class="fa-solid fa-list"></i> In Playlist</button>
+        <button class="knopf symbol" title="Kanal öffnen"><i class="fa-solid fa-tv"></i></button>
+      </div>
+      <div class="etikett-z">Fundstellen <span class="zahl">6</span></div>
+      <div class="fundstelle"><span class="zeit">Titel</span><span>${m('Kernfusion: Löst sie alle Probleme?')}</span><span></span></div>
+      <div class="fundstelle"><span class="zeit">7:35</span><span>Können wir heute kontrolliert an <mark>Fusion</mark>skraftwerk bauen?<span class="art-k">Kapitel</span></span><button title="Ab hier abspielen"><i class="fa-solid fa-play"></i></button></div>
+      <div class="fundstelle"><span class="zeit">11:05</span><span>Entsteht bei der Verschmelzung bei der ${m('Kernfusion')} Müll?<span class="art-k">Kapitel</span></span><button title="Ab hier abspielen"><i class="fa-solid fa-play"></i></button></div>
+      <div class="fundstelle"><span class="zeit">31:45</span><span>Laser<mark>fusion</mark><span class="art-k">Kapitel</span></span><button title="Ab hier abspielen"><i class="fa-solid fa-play"></i></button></div>
+      <div class="fundstelle"><span class="zeit">52:35</span><span>Wie effizient ist ${m('Kernfusion')}?<span class="art-k">Kapitel</span></span><button title="Ab hier abspielen"><i class="fa-solid fa-play"></i></button></div>
+      <div class="etikett-z">Beschreibung</div>
+      <div class="text">Was kann #${m('Kernfusion')} - und was kann ${m('Kernfusion')} nicht? Harald Lesch und Marco Smolla im Gespräch mit einem der führenden Experten im Bereich ${m('Kernfusion')}: Prof. Dr. Hartmut Zohm, Leiter des Bereichs Tokamak-Szenario-Entwicklung am Max-Planck-Institut für Plasmaphysik.</div>
+    </div>
+    <div class="tasten"><span><kbd>↑</kbd> <kbd>↓</kbd> Treffer wählen</span><span><kbd>Enter</kbd> abspielen</span><span><kbd>→</kbd> Fundstellen</span><span><kbd>/</kbd> Suchfeld</span><span><kbd>Esc</kbd> zurück</span></div>`;
+
+  const ALLES = `
+    <div class="abschnitt"><div class="abschnitt-kopf"><h2>Videos</h2><span class="zahl leise">19</span><span class="erkl">Wort in Titel, Kanal, Beschreibung oder Kapitel</span><a class="mehr">Alle 19</a></div>
+      ${VIDEOS.slice(0, 4).map(zeile).join('')}</div>
+    <div class="abschnitt"><div class="abschnitt-kopf"><h2>Im Gesagten</h2><span class="zahl leise">6</span><span class="erkl">Textstellen aus Transkripten und Untertiteln</span><a class="mehr">Alle 6</a></div>
+      ${GESAGT.map(gesagt).join('')}</div>
+    <div class="abschnitt"><div class="abschnitt-kopf"><h2>Bei Abos, noch nicht geladen</h2><span class="zahl leise">9</span><a class="mehr">Alle 9</a></div>
+      ${ABOS.map(abo).join('')}</div>
+    <div class="abschnitt"><div class="abschnitt-kopf"><h2>Kanäle</h2><span class="zahl leise">3</span></div>
+      <div class="kanaele">
+        <div class="kanal"><span class="av">T</span><div style="min-width:0"><div class="n">Terra X Lesch &amp; Co</div><div class="w"><span class="zahl">3</span> Treffer · abonniert</div></div></div>
+        <div class="kanal"><span class="av">U</span><div style="min-width:0"><div class="n">Urknall, Weltall und das Leben</div><div class="w"><span class="zahl">2</span> im Feed · abonniert</div></div></div>
+        <div class="kanal"><span class="av">V</span><div style="min-width:0"><div class="n">videowissen</div><div class="w"><span class="zahl">1</span> im Feed · abonniert</div></div></div>
+      </div></div>
+    <div class="abschnitt"><div class="lose"><i class="fa-solid fa-wand-magic-sparkles"></i> <span><span class="zahl">3</span> weitere nur sinngemäß verwandt, ohne das Wort</span><button class="knopf klein ohne">Einblenden</button></div></div>
+    <div class="quelle-karte"><i class="fa-solid fa-globe gross"></i><div><b>Mehr bei der Quelle?</b><div class="leise klein">Fragt die Quelle nur auf Wunsch und schont so die Abrufgrenze.</div></div><button class="knopf"><i class="fa-solid fa-magnifying-glass"></i> Bei der Quelle suchen</button></div>`;
+
+  const NUR_VIDEOS = `
+    <div class="abschnitt"><div class="abschnitt-kopf"><h2>Videos</h2><span class="zahl leise">19</span><span class="erkl">sortiert nach Passendste: Titel vor Kapitel vor Beschreibung</span></div>
+      ${VIDEOS.map(zeile).join('')}
+      <div class="leise klein" style="padding: var(--tv-a3) var(--tv-a2)">Weitere Treffer laden beim Rollen.</div></div>`;
+
+  const START = `
+    <div class="abschnitt"><div class="abschnitt-kopf"><h2>Zuletzt gesucht</h2><a class="mehr">Verlauf leeren</a></div>
+      <div class="verlauf">${['Kernfusion', 'Stanislaw Lem Hörspiel', 'kanal:"media.ccc.de" Rust', 'Drohnen sprache:en', 'Lineare Algebra Strang', 'Raft Konsens'].map((s) => `<span><i class="fa-solid fa-clock-rotate-left"></i>${s}</span>`).join('')}</div></div>
+    <div class="abschnitt"><div class="abschnitt-kopf"><h2>Gemerkte Suchen</h2><span class="erkl">neue Treffer erscheinen hier und in der Übersicht</span></div>
+      <div class="gemerkt">
+        <div class="karte"><div class="n"><i class="fa-solid fa-star"></i> Kernfusion<span class="neu"><span class="zahl">2</span> neu</span></div><div class="f">Deutsch · Bibliothek, Archiv und Abos</div></div>
+        <div class="karte"><div class="n"><i class="fa-solid fa-star"></i> Hörspiel Science-Fiction<span class="neu"><span class="zahl">5</span> neu</span></div><div class="f">Deutsch · Länge über 45 Minuten · nur Abos</div></div>
+        <div class="karte"><div class="n"><i class="fa-solid fa-star"></i> Rust Vortrag</div><div class="f">alle Sprachen · Kanal media.ccc.de</div></div>
+        <div class="karte"><div class="n"><i class="fa-solid fa-star"></i> Sicherheitspolitik Analyse</div><div class="f">Deutsch, Englisch · letzte 30 Tage</div></div>
+      </div></div>`;
+
+  const START_RECHTS = `
+    <div class="vorschau-karte"><div class="etikett-z" style="margin-top:0">Was durchsucht wird</div>
+      <div class="quellen-liste">
+        ${['Titel', 'Kanal', 'Beschreibung', 'Tags', 'Notizen', 'Kapitel', 'Gesagtes', 'Liedtexte', 'Abos und Feed', 'Kanäle', 'Playlists', 'Musik', 'Eigene Videos', 'Archiv'].map((n) => `<span><i class="fa-solid fa-check"></i>${n}</span>`).join('')}
+        <span class="wunsch"><i class="fa-solid fa-globe"></i>Quelle, nur auf Wunsch</span>
+      </div>
+      <div class="etikett-z">So findest du genauer</div>
+      <div class="regel"><code>"Wortfolge"</code><span>genau diese Wörter hintereinander</span></div>
+      <div class="regel"><code>-Wort</code><span>Treffer mit diesem Wort weglassen</span></div>
+      <div class="regel"><code>A oder B</code><span>eins von beiden reicht</span></div>
+      <div class="regel"><code>kanal:Lesch</code><span>nur dieser Kanal</span></div>
+      <div class="regel"><code>sprache:en</code><span>nur diese Sprache</span></div>
+      <div class="regel"><code>länge:&gt;20</code><span>länger als 20 Minuten</span></div>
+      <div class="leise klein" style="margin-top:6px">Groß- und Kleinschreibung und Akzente spielen keine Rolle. Kurze Wortanfänge zählen erst ab vier Zeichen, damit "Lem" nicht "Lemma" findet.</div>
+    </div>`;
+
+  const KEINE = `
+    <div class="leer-hinweis">
+      <h2>Nichts gefunden für "kernfusoin"</h2>
+      <div class="leise">Weder in Bibliothek und Archiv noch im Gesagten, bei Abos, Kanälen oder Playlists.</div>
+      <a class="meintest"><i class="fa-solid fa-spell-check"></i> Meintest du Kernfusion? <span class="zahl">19</span> Videos</a>
+      <div style="display:flex; gap:var(--tv-a2); margin-top:var(--tv-a4); flex-wrap:wrap">
+        <button class="knopf"><i class="fa-solid fa-wand-magic-sparkles"></i> Sinngemäß weiter fassen</button>
+        <button class="knopf"><i class="fa-solid fa-filter-circle-xmark"></i> Filter aufheben</button>
+        <button class="knopf"><i class="fa-solid fa-globe"></i> Bei der Quelle suchen</button>
+      </div>
+    </div>`;
+
+  const AUFKLAPP = `
+    <div class="schleier"></div>
+    <div class="aufklapp" id="aufklapp">
+      <div class="koerper">
+        <div class="vorschlag"><i class="fa-solid fa-clock-rotate-left"></i><span><b>kernfu</b>sion</span><span class="leise klein" style="margin-left:auto">zuletzt gesucht</span></div>
+        <div class="vorschlag"><i class="fa-solid fa-magnifying-glass"></i><span><b>kernfu</b>sion iter</span></div>
+        <div class="gruppe">Videos <span>19 ansehen</span></div>
+        <div class="az gewaehlt"><img src="${bild('VMY3HqDdK1Q')}" alt=""><div style="min-width:0"><div class="t">${m('Kernfusion: Löst sie alle Probleme? Replay LIVESTREAM')}</div><div class="w">Terra X Lesch &amp; Co · Titel, 4 Kapitel · Archiv</div></div><kbd>Enter</kbd></div>
+        <div class="az"><img src="${bild('nVTcirxdRWM')}" alt=""><div style="min-width:0"><div class="t">${m('Kernfusion: Klimaretter oder Milliardengrab?')}</div><div class="w">Terra X Lesch &amp; Co · Titel · Archiv</div></div><span></span></div>
+        <div class="az"><img src="${bild('aVvs5OGRA98')}" alt=""><div style="min-width:0"><div class="t">${m('Kernfusion: Wenn der Mensch Sonnen erschafft')}</div><div class="w">ARTEde · Titel · Archiv</div></div><span></span></div>
+        <div class="gruppe">Im Gesagten <span>6 ansehen</span></div>
+        <div class="az"><img src="${bild('9wMty1uTQaA')}" alt=""><div style="min-width:0"><div class="t">27:19 ... im Bereich ${m('Kernfusion')} und auch Quantencomputing ...</div><div class="w">Ex-NASA-Forschungschef: Die Wahrheit über Rechenzentren im WELTALL</div></div><span></span></div>
+        <div class="gruppe">Bei Abos, noch nicht geladen <span>9 ansehen</span></div>
+        <div class="az"><img src="${feedBild('0L_MdzlekDo')}" alt=""><div style="min-width:0"><div class="t">${m('Fusion ohne Tritium scheitert • Alternative Brennstoffe der Kernfusion')}</div><div class="w">videowissen · 07.07.2026</div></div><button class="knopf klein haupt"><i class="fa-solid fa-download"></i> Laden</button></div>
+        <div class="gruppe">Kanäle</div>
+        <div class="vorschlag"><i class="fa-solid fa-tv"></i><span>Terra X Lesch &amp; Co</span><span class="leise klein" style="margin-left:auto">3 Treffer</span></div>
+      </div>
+      <div class="fusszeile"><span><kbd>↑</kbd> <kbd>↓</kbd> wählen</span><span><kbd>Enter</kbd> öffnen</span><span><kbd>Strg</kbd>+<kbd>Enter</kbd> alle Treffer</span><span><kbd>Esc</kbd> schließen</span><span class="rechts"><i class="fa-solid fa-globe"></i> Bei der Quelle suchen</span></div>
+    </div>`;
+
+  function zeige(kopf, links, rechts) {
+    haupt.innerHTML = kopf + `<div class="spalten"><div class="rollfeld">${links}</div><div class="rollfeld">${rechts}</div></div>`;
+  }
+
+  zustaende([['alles', 'Alles'], ['videos', 'Nur Videos'], ['aufklapp', 'Beim Tippen'], ['start', 'Ohne Suchbegriff'], ['keine', 'Nichts gefunden']], (z) => {
+    document.querySelectorAll('.schleier, .aufklapp').forEach((e) => e.remove());
+    const feld = document.querySelector('.kopf .suche input');
+    feld.value = '';
+    if (z === 'alles') zeige(KOPF('Kernfusion'), ALLES, VORSCHAU);
+    if (z === 'videos') zeige(KOPF('Kernfusion', 'videos'), NUR_VIDEOS, VORSCHAU);
+    if (z === 'start') zeige(KOPF(''), START, START_RECHTS);
+    if (z === 'keine') zeige(KOPF('kernfusoin', 'alles', false).replace(/<div class="bereiche">[\s\S]*?<\/div>/, ''), KEINE, START_RECHTS);
+    if (z === 'aufklapp') {
+      zeige(KOPF(''), START, START_RECHTS);
+      feld.value = 'kernfu';
+      document.body.insertAdjacentHTML('beforeend', AUFKLAPP);
+      const r = document.querySelector('.kopf .suche').getBoundingClientRect();
+      Object.assign(document.getElementById('aufklapp').style, { left: `${r.left}px`, top: `${r.bottom + 6}px`, width: `${Math.max(720, r.width)}px` });
+      document.querySelector('.kopf').style.position = 'relative';
+      document.querySelector('.kopf').style.zIndex = '32';
+    }
+  });
+</script>
+</body>
+</html>
