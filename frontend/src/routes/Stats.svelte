@@ -1,7 +1,9 @@
 <script>
   import { api } from '../lib/api/client.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { formatSize } from '../lib/utils/format.js';
+  import { formatSize, formatDateRelative } from '../lib/utils/format.js';
+
+  const DIR_NAMES = { videos: 'Videos', audio: 'Ton', subtitles: 'Untertitel', thumbnails: 'Vorschaubilder', avatars: 'Kanalbilder', temp: 'Zwischenablage' };
 
   let stats = $state(null);
   let storage = $state(null);
@@ -130,11 +132,16 @@
         <div class="dir-grid">
           {#each Object.entries(storage.directories || {}) as [name, dir]}
             <div class="dir-card">
-              <span class="dir-name">{name}</span>
-              <span class="dir-size">{dir.size_human}</span>
+              <span class="dir-name">{DIR_NAMES[name] || name}</span>
+              <span class="dir-size zahl">{dir.size_human ?? 'wird gemessen'}</span>
             </div>
           {/each}
         </div>
+        <p class="dir-note">
+          {#if storage.measuring}Ordner werden im Hintergrund gemessen ...
+          {:else if storage.measured_at}Ordner gemessen {formatDateRelative(storage.measured_at)}; Videos laut Datenbank.
+          {/if}
+        </p>
         <button class="btn-sm" onclick={cleanupTemp} disabled={cleaningTemp}>
           {cleaningTemp ? 'Räume auf…' : 'Temp aufräumen'}
         </button>
@@ -245,4 +252,5 @@
   .btn-sm:disabled { opacity: 0.4; }
 
   .loading { padding: 60px; text-align: center; color: var(--text-tertiary); }
+  .dir-note { font-size: var(--tv-gr-klein); color: var(--tv-text-3); margin: var(--tv-a2) 0; }
 </style>

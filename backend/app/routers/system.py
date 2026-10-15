@@ -4,6 +4,7 @@ System-Status, Rate-Limiter Stats, Health, Live-Logs
 © HalloWelt42 – Private Nutzung
 """
 
+import asyncio
 import logging
 import time
 from collections import deque
@@ -576,54 +577,24 @@ async def toggle_rate_limit():
 
 @router.get("/storage")
 async def get_storage_details():
-    """Detaillierte Speicher-Übersicht mit Split-Storage."""
-    from app.config import VIDEOS_DIR, AUDIO_DIR, THUMBNAILS_DIR, TEMP_DIR, SUBTITLES_DIR, AVATARS_DIR
+    """Speicher-Übersicht: Platten sofort, Ordnergrößen aus der letzten
+    Messung im Hintergrund (siehe services/storage_usage) - nie blockierend."""
+    from app.services import storage_usage
 
     disk_media = get_disk_usage(str(VIDEOS_DIR))
     disk_meta = get_disk_usage(str(DB_DIR))
     is_split = abs(disk_media.get("total", 0) - disk_meta.get("total", 0)) > 1_000_000_000
-
+    usage = await storage_usage.snapshot()
     result = {
         "disk": disk_media,
         "storage_split": is_split,
         "directories": {
-            "videos": {
-                "path": str(VIDEOS_DIR),
-                "size": get_directory_size(VIDEOS_DIR),
-                "size_human": human_size(get_directory_size(VIDEOS_DIR)),
-                "disk": "media",
-            },
-            "audio": {
-                "path": str(AUDIO_DIR),
-                "size": get_directory_size(AUDIO_DIR),
-                "size_human": human_size(get_directory_size(AUDIO_DIR)),
-                "disk": "media",
-            },
-            "subtitles": {
-                "path": str(SUBTITLES_DIR),
-                "size": get_directory_size(SUBTITLES_DIR),
-                "size_human": human_size(get_directory_size(SUBTITLES_DIR)),
-                "disk": "media",
-            },
-            "thumbnails": {
-                "path": str(THUMBNAILS_DIR),
-                "size": get_directory_size(THUMBNAILS_DIR),
-                "size_human": human_size(get_directory_size(THUMBNAILS_DIR)),
-                "disk": "meta",
-            },
-            "avatars": {
-                "path": str(AVATARS_DIR),
-                "size": get_directory_size(AVATARS_DIR),
-                "size_human": human_size(get_directory_size(AVATARS_DIR)),
-                "disk": "meta",
-            },
-            "temp": {
-                "path": str(TEMP_DIR),
-                "size": get_directory_size(TEMP_DIR),
-                "size_human": human_size(get_directory_size(TEMP_DIR)),
-                "disk": "meta",
-            },
+            name: {"size": d.size, "size_human": human_size(d.size) if d.size is not None else None,
+                   "disk": d.disk}
+            for name, d in usage.directories.items()
         },
+        "measured_at": usage.measured_at,
+        "measuring": usage.measuring,
     }
     if is_split:
         result["disk_media"] = {**disk_media, "label": "Medien (USB)"}
@@ -637,10 +608,12 @@ async def cleanup_temp():
     import shutil
     from app.config import TEMP_DIR
 
-    size_before = get_directory_size(TEMP_DIR)
+    from app.services import storage_usage
+    size_before = await asyncio.to_thread(storage_usage.directory_size, TEMP_DIR)
     if TEMP_DIR.exists():
-        shutil.rmtree(TEMP_DIR)
+        await asyncio.to_thread(shutil.rmtree, TEMP_DIR)
         TEMP_DIR.mkdir(parents=True)
+    storage_usage.refresh()
 
     return {
         "cleaned": True,
