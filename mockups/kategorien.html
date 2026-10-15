@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Kategorien</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+<style>
+  .kat-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--tv-a4); }
+  .kat { position: relative; background: var(--tv-karte); border-radius: var(--tv-ecke); overflow: hidden; cursor: pointer;
+         outline: 1px solid var(--tv-rand); outline-offset: -1px; }
+  .kat .streifen { height: 6px; }
+  .kat .collage { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; aspect-ratio: 16 / 7; background: var(--tv-mulde); }
+  .kat .collage img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .kat .collage img:first-child { grid-row: 1 / 3; }
+  .kat .text { padding: var(--tv-a3) var(--tv-a4) var(--tv-a4); }
+  .kat .name { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: var(--tv-a2); }
+  .kat .punkt { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .kat .meta { font-size: var(--tv-gr-klein); color: var(--tv-text-2); margin-top: 2px; }
+  .kat .regeln { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--tv-a2); }
+  .regel { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: var(--tv-ecke-klein);
+           background: var(--tv-karte-2); color: var(--tv-text-2); font-size: var(--tv-gr-marke); font-weight: 700; }
+  .regel i { color: var(--tv-text-3); }
+  .regel.bedeutung { color: #c084fc; }
+  .regel.bedeutung i { color: #c084fc; }
+  .kat .los { position: absolute; right: 10px; top: 16px; display: flex; gap: 6px; opacity: 0; transition: opacity var(--tv-schnell); }
+  .kat:hover .los { opacity: 1; }
+  .kat .los button { height: 36px; padding: 0 10px; border: 0; border-radius: var(--tv-ecke); background: var(--tv-schleier); color: var(--tv-text);
+                     font-weight: 700; cursor: pointer; }
+  .kat .los button.spielen { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+
+  .unsortiert { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--tv-a4); align-items: start; padding: var(--tv-a4);
+          background: var(--tv-flaeche); border-radius: var(--tv-ecke); margin-bottom: var(--tv-a5); }
+  .unsortiert h2 { margin: 0 0 4px; font-size: var(--tv-gr-titel); }
+  .ohne-kanaele { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--tv-a2); margin-top: var(--tv-a3); }
+  .ohne-kanal { display: flex; align-items: center; gap: var(--tv-a2); padding: 6px 8px; background: var(--tv-karte); border-radius: var(--tv-ecke); }
+  .ohne-kanal .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ohne-kanal select { height: 32px; background: var(--tv-karte-2); color: var(--tv-text); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke-klein);
+                       font: inherit; font-size: var(--tv-gr-klein); }
+
+  .vorschlaege { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--tv-a3); }
+  .vorschlag { padding: var(--tv-a3) var(--tv-a4); background: var(--tv-karte); border-radius: var(--tv-ecke); outline: 1px dashed rgba(192, 132, 252, 0.45);
+               outline-offset: -1px; }
+  .vorschlag .kopf-z { display: flex; align-items: baseline; gap: var(--tv-a2); }
+  .vorschlag .kopf-z b { font-size: 18px; }
+  .vorschlag .beispiele { font-size: var(--tv-gr-klein); color: var(--tv-text-2); margin: 6px 0 var(--tv-a2); }
+  .vorschlag .tasten { display: flex; gap: var(--tv-a2); }
+
+  .farben { display: flex; gap: 6px; flex-wrap: wrap; }
+  .farbe { width: 28px; height: 28px; border-radius: var(--tv-ecke-klein); border: 2px solid transparent; cursor: pointer; }
+  .farbe.an { border-color: var(--tv-text); }
+
+  .blatt { position: absolute; right: 0; top: 0; bottom: 0; width: 460px; background: var(--tv-karte);
+           box-shadow: var(--tv-schatten); display: flex; flex-direction: column; z-index: 8; }
+  .blatt-kopf { display: flex; gap: var(--tv-a3); align-items: center; padding: var(--tv-a4); background: var(--tv-karte-2); }
+  .blatt-kopf .n { flex: 1; font-weight: 700; font-size: 19px; }
+  .blatt-inhalt { flex: 1; overflow-y: auto; padding: var(--tv-a3) var(--tv-a4); display: flex; flex-direction: column; gap: var(--tv-a3); }
+  .blatt h3 { margin: var(--tv-a2) 0 0; font-size: var(--tv-gr-marke); letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+  .regel-zeile { display: grid; grid-template-columns: 180px minmax(0, 1fr) 34px; gap: var(--tv-a2); align-items: center; }
+  .regel-zeile select, .regel-zeile input { height: 36px; background: var(--tv-mulde); color: var(--tv-text); border: 1px solid var(--tv-rand);
+                                            border-radius: var(--tv-ecke-klein); padding: 0 8px; font: inherit; font-size: var(--tv-gr-klein); }
+  .vorschau { padding: var(--tv-a3); background: rgba(var(--tv-akzent-rgb), 0.07); border: 1px solid rgba(var(--tv-akzent-rgb), 0.35);
+              border-radius: var(--tv-ecke); font-size: var(--tv-gr-klein); }
+  .vorschau .zeilen { margin-top: var(--tv-a2); }
+  .vorschau .mini { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--tv-a2); align-items: center; padding: 3px 0; }
+  .vorschau .mini img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .blatt-fuss { padding: var(--tv-a3) var(--tv-a4); background: var(--tv-karte-2); display: flex; gap: var(--tv-a2); }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+  <main class="haupt rahmen" id="haupt" style="position: relative"></main>
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, vorschau as bild } from './gemeinsam.js';
+  import { zustaende, zeile } from './sammlung.js';
+  seite('kategorien');
+
+  const haupt = document.getElementById('haupt');
+  const KATEGORIEN = [
+    { name: 'Konzerte', farbe: '#673AB7', videos: 214, dauer: '183 Std.', regeln: [['fa-tv', 'ARTE Concert'], ['fa-tag', 'Konzert'], ['fa-wand-magic-sparkles', 'inhaltlich wie: Live-Auftritt einer Band', 'bedeutung']],
+      bilder: ['noYNGxNKoR0', '7fqg9-SIWfU', 'dQw4w9WgXcQ'] },
+    { name: 'Kulturkämpfe', farbe: '#E91E63', videos: 37, dauer: '21 Std.', beschreibung: 'Auswüchse fragwürdiger Kultur unter jungen Menschen',
+      regeln: [['fa-wand-magic-sparkles', 'inhaltlich wie: Jugendkultur, Influencer, Trends', 'bedeutung']], bilder: ['rHh4JyIvHJ0', 'utYEqbWiByI', 'e_9zm6GxclQ'] },
+    { name: 'Eigene Videos', farbe: '#607D8B', videos: 4, dauer: '1 Std.', beschreibung: 'Importe aus alter Sammlung', regeln: [['fa-film', 'Herkunft: eigene Videos']],
+      bilder: ['IX610ZJGslE'] },
+  ];
+  const VORSCHLAEGE = [
+    { name: 'Mathematik', anzahl: 4808, beispiele: 'Weitz / HAW Hamburg, MathemaTrick, Christian Spannagel', bild: ['K-u8-Cn29a4', 'lzYVcFbtQBE', 'Xv8jkBHknLM'] },
+    { name: 'Dokumentationen', anzahl: 2686, beispiele: 'ARTEde, Irgendwas mit ARTE und Kultur', bild: ['Bn-w4f4H9OE', 'wHtMXn0abS0', 'dfIuZ968ZkA'] },
+    { name: 'Astronomie und Raumfahrt', anzahl: 612, beispiele: 'Terra X Lesch & Co, Leben aus dem All', bild: ['YcyTgo7FlZs', 'zXNBPkgAdMU', 'dfIuZ968ZkA'] },
+    { name: 'Netz und Sicherheit', anzahl: 775, beispiele: 'media.ccc.de, morf', bild: ['IX610ZJGslE', 'bRYkcW694So', 'XdU8gaAki2c'] },
+  ];
+
+  const KOPF = (aktionen) => `
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <h1>Kategorien</h1>
+        <span class="zahl">3 Kategorien · 255 Videos eingeordnet · 32.268 ohne Kategorie</span>
+        <div class="aktionen">${aktionen}</div>
+      </div>
+      <div class="steuer">
+        <input class="eingabe" placeholder="Kategorien suchen">
+        <span class="trenner"></span>
+        <span class="etikett">Sortieren</span>
+        <button class="chip aktiv">Größe</button><button class="chip">Name</button><button class="chip">Zuletzt gefüllt</button>
+      </div>
+    </div>`;
+  const AKTIONEN = `<button class="knopf"><i class="fa-solid fa-wand-magic-sparkles"></i> Themen erkennen</button>
+                    <button class="knopf haupt"><i class="fa-solid fa-plus"></i> Neue Kategorie</button>`;
+
+  function kachel(k) {
+    return `<div class="kat"><div class="streifen" style="background:${k.farbe}"></div>
+      <div class="collage">${k.bilder.map(id => `<img src="${bild(id)}" alt="">`).join('')}</div>
+      <div class="los"><button class="spielen"><i class="fa-solid fa-play"></i> Abspielen</button><button title="Zufällig"><i class="fa-solid fa-shuffle"></i></button><button title="Mehr"><i class="fa-solid fa-ellipsis"></i></button></div>
+      <div class="text"><div class="name"><span class="punkt" style="background:${k.farbe}"></span>${k.name}</div>
+        <div class="meta"><span class="zahl">${k.videos}</span> Videos · <span class="zahl">${k.dauer}</span>${k.beschreibung ? ` · ${k.beschreibung}` : ''}</div>
+        <div class="regeln">${k.regeln.map(([i, t, art]) => `<span class="regel ${art || ''}"><i class="fa-solid ${i}"></i> ${t}</span>`).join('')}</div></div></div>`;
+  }
+
+  const OHNE = `
+    <div class="unsortiert">
+      <div>
+        <div class="leise klein" style="margin-bottom:6px"><i class="fa-solid fa-circle-info"></i> Entwurf: Die Zahlen an den Kategorien zeigen den Stand nach dem Anwenden der gezeigten Regeln; heute sind 6 Videos von Hand eingeordnet.</div>
+        <h2>32.268 Videos ohne Kategorie</h2>
+        <div class="leise klein">Am schnellsten über ihre Kanäle: eine Kategorie wählen, alle Videos des Kanals kommen hinein, neue auch.</div>
+        <div class="ohne-kanaele">
+          ${[['Weitz / HAW Hamburg', 2251], ['MathemaTrick', 1548], ['ARTEde', 1449], ['Irgendwas mit ARTE und Kultur', 1237], ['Christian Spannagel', 1009], ['morf', 826]]
+            .map(([n, z]) => `<div class="ohne-kanal"><span class="n">${n}</span><span class="zahl schwach">${z.toLocaleString('de-DE')}</span>
+              <select><option>Kategorie wählen ...</option><option>Konzerte</option><option>Kulturkämpfe</option><option>Neue Kategorie ...</option></select></div>`).join('')}
+        </div>
+      </div>
+      <button class="knopf"><i class="fa-solid fa-wand-magic-sparkles"></i> Themen erkennen</button>
+    </div>`;
+
+  const VORSCHLAEGE_HTML = `
+    <div class="hinweis-box" style="padding: var(--tv-a3) var(--tv-a4); background: rgba(192,132,252,0.1); border-radius: var(--tv-ecke); margin-bottom: var(--tv-a3)">
+      <i class="fa-solid fa-wand-magic-sparkles" style="color:#c084fc"></i>&nbsp; Die lokale KI hat die Inhalte der Bibliothek nach Themen geordnet. Übernehmen legt die Kategorie samt Regel "inhaltlich wie" an - nichts geschieht ohne Klick.
+    </div>
+    <div class="vorschlaege">${VORSCHLAEGE.map(v => `
+      <div class="vorschlag"><div class="kopf-z"><b>${v.name}</b><span class="zahl schwach">${v.anzahl.toLocaleString('de-DE')} Videos</span></div>
+        <div class="beispiele">vor allem ${v.beispiele}</div>
+        <div class="tasten"><button class="knopf klein haupt"><i class="fa-solid fa-check"></i> Übernehmen</button><button class="knopf klein">Ansehen</button><button class="knopf klein ohne">Verwerfen</button></div>
+      </div>`).join('')}</div>`;
+
+  const DETAIL = `
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <button class="knopf ohne symbol zurueck"><i class="fa-solid fa-arrow-left"></i></button>
+        <h1><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#673AB7;margin-right:8px"></span>Konzerte</h1>
+        <span class="zahl">214 Videos · 183 Std. · 12 gesehen</span>
+        <div class="aktionen">
+          <button class="knopf"><i class="fa-solid fa-sliders"></i> Regeln</button>
+          <button class="knopf"><i class="fa-solid fa-shuffle"></i> Zufällig</button>
+          <button class="knopf haupt"><i class="fa-solid fa-play"></i> Abspielen</button>
+          <button class="knopf symbol"><i class="fa-solid fa-ellipsis"></i></button>
+        </div>
+      </div>
+      <div class="regeln" style="display:flex;gap:6px;margin:-8px 0 var(--tv-a3)">${KATEGORIEN[0].regeln.map(([i, t, art]) => `<span class="regel ${art || ''}"><i class="fa-solid ${i}"></i> ${t}</span>`).join('')}
+        <span class="leise klein" style="margin-left:6px">neue Videos ordnen sich von selbst ein</span></div>
+      <div class="steuer">
+        <input class="eingabe" placeholder="In der Kategorie suchen">
+        <span class="trenner"></span>
+        <button class="chip aktiv">Alle <span class="zaehler">214</span></button><button class="chip">Neu <span class="zaehler">198</span></button><button class="chip">Angefangen <span class="zaehler">4</span></button><button class="chip">Gesehen <span class="zaehler">12</span></button>
+        <span class="trenner"></span><span class="etikett">Sortieren</span>
+        <button class="chip aktiv">Neueste</button><button class="chip">Titel</button><button class="chip">Dauer</button>
+        <div class="rechts"><div class="ansicht"><button class="an"><i class="fa-solid fa-list"></i></button><button><i class="fa-solid fa-table-cells-large"></i></button></div><button class="knopf klein"><i class="fa-regular fa-square-check"></i> Auswählen</button></div>
+      </div>
+    </div>`;
+
+  const REGELN = `
+    <div class="blatt">
+      <div class="blatt-kopf"><span class="n">Regeln: Konzerte</span><button class="knopf ohne symbol klein"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="blatt-inhalt">
+        <div class="leise klein">Ein Video kommt hinein, wenn eine Regel passt. Von Hand Hinzugefügtes und Entferntes bleibt so.</div>
+        <h3>Regeln</h3>
+        <div class="regel-zeile"><select><option>Kanal ist</option></select><input value="ARTE Concert"><button class="knopf ohne symbol klein"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="regel-zeile"><select><option>Schlagwort enthält</option></select><input value="Konzert"><button class="knopf ohne symbol klein"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="regel-zeile"><select><option>Inhaltlich wie</option></select><input value="Live-Auftritt einer Band"><button class="knopf ohne symbol klein"><i class="fa-solid fa-xmark"></i></button></div>
+        <button class="knopf klein ohne" style="align-self:flex-start"><i class="fa-solid fa-plus"></i> Regel hinzufügen</button>
+        <h3>Vorschau</h3>
+        <div class="vorschau"><b class="zahl">231</b> Videos passen, davon <b class="zahl">17</b> neu für diese Kategorie
+          <div class="zeilen">${[['noYNGxNKoR0', "And One - M'era Luna 2025"], ['7fqg9-SIWfU', 'OVERWERK - The Nth [Piano]'], ['dQw4w9WgXcQ', 'Rick Astley - Never Gonna Give You Up']]
+            .map(([id, t]) => `<div class="mini"><img src="${bild(id)}" alt=""><span>${t}</span></div>`).join('')}</div></div>
+        <h3>Aussehen</h3>
+        <div class="farben">${['#F44336', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#03A9F4', '#00BCD4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722', '#795548', '#607D8B']
+          .map(c => `<span class="farbe${c === '#673AB7' ? ' an' : ''}" style="background:${c}"></span>`).join('')}</div>
+      </div>
+      <div class="blatt-fuss"><button class="knopf haupt"><i class="fa-solid fa-check"></i> Speichern und 17 einordnen</button><button class="knopf ohne">Abbrechen</button></div>
+    </div>`;
+
+  const DETAIL_LISTE = [
+    { id: 'noYNGxNKoR0', titel: "And One - M'era Luna 2025 - ARTE Concert", kanal: 'ARTE Concert', dauer: 4400, stand: 0.42, wann: 'Regel: Kanal' },
+    { id: '7fqg9-SIWfU', titel: 'OVERWERK - The Nth º [Piano] - INDEX : 01/14', kanal: 'OVERWERK', dauer: 1031, stand: 0.06, wann: 'inhaltlich wie' },
+    { id: 'dQw4w9WgXcQ', titel: 'Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)', kanal: 'Rick Astley', dauer: 213, stand: 1, wann: 'von Hand' },
+  ];
+
+  zustaende([['uebersicht', 'Übersicht'], ['themen', 'Themen erkennen'], ['detail', 'Kategorie'], ['regeln', 'Regeln'], ['neu', 'Neue Kategorie']], (z) => {
+    if (z === 'detail' || z === 'regeln') {
+      haupt.innerHTML = DETAIL + `<div class="rollfeld"><div class="zeilen">${DETAIL_LISTE.map((v, i) => zeile(v, i + 1)).join('')}</div></div>` + (z === 'regeln' ? REGELN : '');
+      return;
+    }
+    const neu = z === 'neu' ? `<div class="steuer" style="margin-top: var(--tv-a3)">
+        <input class="eingabe" style="width:280px" value="Physik"><input class="eingabe" style="flex:1;min-width:220px" placeholder="Beschreibung (optional)">
+        <div class="farben">${['#2196F3', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0'].map((c, i) => `<span class="farbe${i === 0 ? ' an' : ''}" style="background:${c}"></span>`).join('')}</div>
+        <button class="knopf haupt">Anlegen und Regeln festlegen</button><button class="knopf ohne">Abbrechen</button></div>` : '';
+    haupt.innerHTML = KOPF(AKTIONEN).replace('</div>\n    </div>', `</div>${neu}\n    </div>`)
+      + `<div class="rollfeld">${z === 'themen' ? VORSCHLAEGE_HTML : OHNE + `<div class="kat-raster">${KATEGORIEN.map(kachel).join('')}</div>`}</div>`;
+  });
+</script>
+</body>
+</html>

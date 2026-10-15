@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Nachvertonung</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+<style>
+  .geraet { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: var(--tv-ecke);
+            background: var(--tv-karte); font-size: var(--tv-gr-klein); }
+  .geraet .punkt { width: 10px; height: 10px; border-radius: 50%; }
+  .geraet.bereit .punkt { background: var(--tv-erfolg); }
+  .geraet.aus .punkt { background: var(--tv-warnung); }
+
+  /* Laufender Auftrag: Schritte mit Fortschritt */
+  .laeuft-karte { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--tv-a4); padding: var(--tv-a4);
+                  background: var(--tv-karte); border-radius: var(--tv-ecke); outline: 1px solid rgba(var(--tv-akzent-rgb), 0.45); outline-offset: -1px;
+                  margin-bottom: var(--tv-a4); }
+  .laeuft-karte img { width: 240px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .laeuft-karte .titel { font-weight: 700; font-size: 18px; }
+  .schritte { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: var(--tv-a3) 0 var(--tv-a2); }
+  .schritt { display: flex; flex-direction: column; gap: 4px; font-size: var(--tv-gr-marke); color: var(--tv-text-3); font-weight: 700; }
+  .schritt .balken { height: 6px; }
+  .schritt.fertig { color: var(--tv-text-2); }
+  .schritt.fertig .balken b { background: var(--tv-erfolg); width: 100%; }
+  .schritt.jetzt { color: var(--tv-akzent); }
+  .zeile-satz { font-size: var(--tv-gr-klein); color: var(--tv-text-2); padding: var(--tv-a2) var(--tv-a3); background: var(--tv-mulde); border-radius: var(--tv-ecke-klein); }
+  .zeile-satz .orig { color: var(--tv-text-3); }
+
+  /* Aufträge */
+  .auftrag { display: grid; grid-template-columns: 160px minmax(0, 1fr) 150px 160px; gap: var(--tv-a3); align-items: center;
+             padding: 6px var(--tv-a2); border-radius: var(--tv-ecke); }
+  .auftrag:hover { background: var(--tv-flaeche); }
+  .auftrag img { width: 160px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .auftrag .t { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .auftrag .m { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .sprachen { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: var(--tv-gr-marke); }
+  .auftrag .tun { display: flex; justify-content: flex-end; gap: 2px; }
+  .auftrag .tun button { width: 38px; height: 38px; border: 0; background: none; color: var(--tv-text-2); border-radius: var(--tv-ecke); cursor: pointer; }
+  .auftrag .tun button:hover { background: var(--tv-karte-2); color: var(--tv-text); }
+  .auftrag .tun button.spielen { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+
+  /* Rechte Spalte */
+  .karte { background: var(--tv-karte); border-radius: var(--tv-ecke); padding: var(--tv-a4); margin-bottom: var(--tv-a3); }
+  .karte h3 { margin: 0 0 var(--tv-a3); font-size: var(--tv-gr-marke); letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+  .stimme { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: var(--tv-a2); align-items: center; padding: 6px 4px; border-radius: var(--tv-ecke-klein); }
+  .stimme:hover { background: var(--tv-flaeche); }
+  .stimme button { width: 34px; height: 34px; border: 0; border-radius: var(--tv-ecke-klein); background: var(--tv-karte-2); color: var(--tv-text-2); cursor: pointer; }
+  .stimme.gewaehlt { background: rgba(var(--tv-akzent-rgb), 0.08); }
+  .stimme .art { font-size: var(--tv-gr-marke); color: var(--tv-text-3); }
+  .stimme .stern { color: var(--tv-akzent); }
+  .vergleich { display: inline-flex; background: var(--tv-mulde); border-radius: var(--tv-ecke); padding: 2px; }
+  .vergleich button { height: 30px; padding: 0 10px; border: 0; background: none; color: var(--tv-text-2); border-radius: var(--tv-ecke-klein); font: inherit; font-size: var(--tv-gr-klein); cursor: pointer; }
+  .vergleich button.an { background: var(--tv-karte-3); color: var(--tv-akzent); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+  <main class="haupt rahmen" id="haupt" style="position: relative"></main>
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, vorschau as bild, dauer } from './gemeinsam.js';
+  import { zustaende } from './sammlung.js';
+  seite('vertonung');
+  const haupt = document.getElementById('haupt');
+
+  const AUFTRAEGE = [
+    ['UPpDtgep9z8', 'Iran’s masterclass has seen UK embarrassed and US frightened away in Red Sea', 'The Sun', 663, 'vor 3 Tagen'],
+    ['Bn4D6tnjqKY', "Can AI robots turn the tide for Ukraine against Russia's $12B drone threat?", 'The Sun', 902, 'vor 3 Tagen'],
+    ['NxsYhM89B4M', "Why F-35B Can't Land on American Supercarriers", 'Not What You Think', 853, 'vor 5 Tagen'],
+    ['TIS_NfTO_7w', 'Der Physik-Nobelpreis für einen Kubikkilometer Eis', 'Prof. Lemeshko', 921, 'vor 5 Tagen', 'de'],
+    ['-gfgQfw2g_E', 'Build & Train a GLM-5.3-Flash Model From Scratch with Python', 'freeCodeCamp.org', 2666, 'vor 8 Tagen'],
+  ];
+  const STIMMEN = [['Zeit Stimme', 'eigene Stimme', true], ['Stimme: Florian', 'eigene Stimme'], ['Stimme: phil', 'eigene Stimme'], ['Thorsten', 'Katalog'],
+                   ['Kerstin', 'Katalog'], ['Eva K.', 'Katalog'], ['Karlsson', 'Katalog'], ['Ramona', 'Katalog'], ['Pavoque', 'Katalog']];
+
+  const KOPF = (aus) => `
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <h1>Nachvertonung</h1>
+        <span class="zahl">1 läuft · 2 warten · 8 fertig</span>
+        <div class="aktionen">
+          <span class="geraet ${aus ? 'aus' : 'bereit'}"><span class="punkt"></span>${aus ? 'Nachvertoner seit 3 Tagen nicht gemeldet' : 'Nachvertoner bereit · gerade eben'}</span>
+          <button class="knopf haupt"><i class="fa-solid fa-plus"></i> Video vertonen</button>
+        </div>
+      </div>
+      <div class="reiter">
+        <button class="aktiv"><i class="fa-solid fa-layer-group"></i> Alle <span class="zaehler">11</span></button>
+        <button><i class="fa-solid fa-gears"></i> Läuft <span class="zaehler">1</span></button>
+        <button><i class="fa-solid fa-hourglass-half"></i> Wartet <span class="zaehler">2</span></button>
+        <button><i class="fa-solid fa-check"></i> Fertig <span class="zaehler">8</span></button>
+        <button><i class="fa-solid fa-triangle-exclamation"></i> Fehler</button>
+      </div>
+    </div>`;
+
+  const LAEUFT = `
+    <div class="laeuft-karte">
+      <img src="${bild('JZKdej7uHLA')}" alt="">
+      <div>
+        <div class="titel">Indien: Kindheit unter Einfluss | Doku HD | ARTE</div>
+        <div class="leise klein">ARTEde · <span class="zahl">55:21</span> · <span class="sprachen">Französisch <i class="fa-solid fa-arrow-right"></i> Deutsch</span> · Stimme Zeit Stimme</div>
+        <div class="schritte">
+          <div class="schritt fertig"><span>Ton holen</span><div class="balken"><b></b></div></div>
+          <div class="schritt fertig"><span>Verstehen</span><div class="balken"><b></b></div></div>
+          <div class="schritt fertig"><span>Übersetzen</span><div class="balken"><b></b></div></div>
+          <div class="schritt jetzt"><span>Sprechen <span class="zahl">62 %</span></span><div class="balken"><b style="width:62%"></b></div></div>
+          <div class="schritt"><span>Mischen</span><div class="balken"><b style="width:0"></b></div></div>
+        </div>
+        <div class="zeile-satz"><span class="orig">"Dans ce village, les enfants travaillent dès l'âge de huit ans."</span><br>"In diesem Dorf arbeiten die Kinder schon ab acht Jahren."</div>
+        <div class="leise klein" style="margin-top:6px">fertig in etwa <span class="zahl">14 Min.</span> · <button class="knopf klein ohne gefahr">Abbrechen</button></div>
+      </div>
+    </div>`;
+
+  function auftrag([id, titel, kanal, d, wann, quelle], i) {
+    const neu = quelle === 'de';
+    return `<div class="auftrag">
+      <img src="${bild(id)}" alt="">
+      <div><div class="t">${titel}</div><div class="m">${kanal} · <span class="zahl">${dauer(d)}</span> · fertig ${wann}</div></div>
+      <div><span class="sprachen">${neu ? 'Deutsch, neu gesprochen' : 'Englisch <i class="fa-solid fa-arrow-right"></i> Deutsch'}</span><div class="m">Zeit Stimme</div></div>
+      <div class="tun">
+        <button class="spielen" title="Auf Deutsch abspielen"><i class="fa-solid fa-play"></i></button>
+        <button title="Original und Neu im Wechsel vergleichen"><i class="fa-solid fa-code-compare"></i></button>
+        <button title="Mit anderer Stimme neu vertonen"><i class="fa-solid fa-microphone"></i></button>
+        <button title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
+      </div>
+    </div>`;
+  }
+
+  const RECHTS = (aus) => `
+    <div class="karte"><h3>Nachvertoner</h3>
+      ${aus ? `<div class="hinweis" style="margin-bottom:var(--tv-a3)"><i class="fa-solid fa-plug-circle-xmark"></i> Der Rechner mit dem Nachvertoner meldet sich nicht. Wartende Aufträge bleiben liegen, bis er wieder läuft.</div>` : ''}
+      <div class="einstellung" style="grid-template-columns: 1fr auto"><div class="name">Zuletzt gemeldet</div><div class="zahl">${aus ? 'vor 3 Tagen' : 'gerade eben'}</div></div>
+            <div class="einstellung" style="grid-template-columns: 1fr auto"><div class="name">Untertitel</div><div class="vergleich"><button class="an">vom Autor</button><button>auch automatische</button></div></div>
+    </div>
+    <div class="karte"><h3>Stimmen</h3>
+      ${STIMMEN.map(([n, art, vor]) => `<div class="stimme${vor ? ' gewaehlt' : ''}"><button title="Hörprobe"><i class="fa-solid fa-play"></i></button>
+        <div><div>${n}</div><div class="art">${art}</div></div>${vor ? '<span class="stern" title="Vorauswahl"><i class="fa-solid fa-star"></i></span>' : '<button title="Als Vorauswahl"><i class="fa-regular fa-star"></i></button>'}</div>`).join('')}
+    </div>
+    <div class="karte"><h3>So läuft es</h3>
+      <div class="leise klein">Im Video das Sprach-Symbol wählen: Zielsprache und Stimme. Ein Rechner mit dem Nachvertoner holt den Auftrag, die fertige Tonspur ist in der Wiedergabe umschaltbar; das Video bleibt unverändert.</div>
+    </div>`;
+
+  zustaende([['normal', 'Normal'], ['offline', 'Nachvertoner aus'], ['vergleich', 'Vergleichen'], ['leer', 'Leer']], (z) => {
+    const aus = z === 'offline';
+    const vergleich = z === 'vergleich' ? `<div class="karte" style="margin-bottom:var(--tv-a4);display:flex;gap:var(--tv-a4);align-items:center">
+        <img src="${bild('Bn4D6tnjqKY')}" alt="" style="width:200px;border-radius:var(--tv-ecke-klein)">
+        <div style="flex:1"><b>Vergleichen</b><div class="leise klein">Gleiche Stelle, Ton im Wechsel: Original und neu gesprochen.</div>
+          <div class="zeitleiste" style="margin-top:var(--tv-a2);display:flex;gap:8px;align-items:center"><span class="zahl">3:14</span><div class="balken" style="flex:1"><b style="width:22%"></b></div><span class="zahl">15:02</span></div></div>
+        <div class="vergleich"><button>Original</button><button class="an">Deutsch</button></div></div>` : '';
+    haupt.innerHTML = KOPF(aus) + `<div class="spalten">
+      <div class="rollfeld">${z === 'leer' ? '<div class="leer-gross"><i class="fa-solid fa-language"></i><h2>Noch keine Aufträge</h2><p>Ein Video vertonen: im Video das Sprach-Symbol wählen oder hier "Video vertonen".</p></div>'
+        : vergleich + (aus ? '' : LAEUFT) + `<div class="tag-kopf"><h2>Fertig</h2><span class="zahl">8</span></div><div class="zeilen">${AUFTRAEGE.map(auftrag).join('')}</div>`}</div>
+      <div class="rollfeld">${RECHTS(aus)}</div></div>`;
+  });
+</script>
+</body>
+</html>

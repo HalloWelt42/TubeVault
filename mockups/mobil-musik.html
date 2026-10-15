@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Musik am Handy</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<style>
+  body { padding: var(--tv-a5); display: flex; gap: var(--tv-a5); flex-wrap: wrap; align-items: flex-start; }
+  .spalte > .etikett { margin-bottom: var(--tv-a2); }
+  .telefon { width: 390px; height: 844px; display: flex; flex-direction: column; overflow: hidden; position: relative;
+             background: var(--tv-grund); border: 1px solid var(--tv-rand-stark); border-radius: 18px; }
+  .telefon-kopf { display: flex; align-items: center; gap: var(--tv-a3); height: 60px; padding: 0 var(--tv-a4); background: var(--tv-leiste); flex: none; }
+  .telefon-kopf h2 { font-size: 22px; flex: 1; }
+  .telefon-inhalt { flex: 1; min-height: 0; overflow-y: auto; padding: var(--tv-a4); display: flex; flex-direction: column; gap: var(--tv-a4); }
+  .telefon-fuss { display: grid; grid-template-columns: repeat(6, 1fr); height: 64px; background: var(--tv-leiste); flex: none; }
+  .telefon-fuss a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--tv-text-3); font-size: 13px; font-weight: 600; }
+  .telefon-fuss a i { font-size: 19px; }
+  .telefon-fuss a.aktiv { color: var(--tv-akzent); }
+  .rund { width: 44px; height: 44px; border: 0; background: none; color: var(--tv-text-2); font-size: 20px; border-radius: var(--tv-ecke); cursor: pointer; flex: none; }
+
+  /* Quelle: global, gilt auch für Mixe */
+  .quelle { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--tv-mulde); border-radius: var(--tv-ecke); padding: 3px; flex: none; }
+  .quelle button { height: 40px; border: 0; background: none; color: var(--tv-text-2); font: inherit; font-size: 15px; font-weight: 600; border-radius: var(--tv-ecke-klein); }
+  .quelle button.an { background: var(--tv-karte-3); color: var(--tv-akzent); }
+  .quelle .zahl { font-size: 13px; color: var(--tv-text-3); margin-left: 4px; }
+
+  .weiter { display: grid; grid-template-columns: 76px minmax(0, 1fr) 52px; gap: var(--tv-a3); align-items: center; padding: var(--tv-a3);
+            background: var(--tv-karte); border-radius: var(--tv-ecke); flex: none; }
+  .weiter img { width: 76px; height: 76px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .weiter .art { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tv-art-vertont); }
+  .weiter .t { font-weight: 700; font-size: 17px; }
+  .weiter .w { font-size: 15px; color: var(--tv-text-2); }
+  .weiter .balken { height: 4px; margin-top: 6px; }
+  .spiel { width: 52px; height: 52px; border: 0; border-radius: var(--tv-ecke); background: var(--tv-akzent); color: var(--tv-akzent-text); font-size: 20px; }
+
+  .mixe { display: grid; grid-template-columns: 1fr 1fr; gap: var(--tv-a2); flex: none; }
+  .mix { display: flex; align-items: center; gap: var(--tv-a2); height: 56px; padding: 0 var(--tv-a3); border: 0; border-radius: var(--tv-ecke);
+         background: var(--tv-karte); color: var(--tv-text); font: inherit; font-size: 16px; font-weight: 600; text-align: left; }
+  .mix i { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--tv-ecke-klein); background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent); }
+
+  .bereiche { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; flex: none; }
+  .bereiche button { height: 40px; border: 0; background: var(--tv-flaeche); color: var(--tv-text-2); font: inherit; font-size: 15px; font-weight: 600; border-radius: var(--tv-ecke-klein); }
+  .bereiche button.an { background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent); }
+  .raster { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--tv-a3); }
+  .raster .k img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--tv-ecke-klein); display: block; }
+  .raster .k .t { font-weight: 600; font-size: 15px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .raster .k .w { font-size: 13px; color: var(--tv-text-3); }
+
+  .mini { position: relative; display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px 48px; gap: var(--tv-a2); align-items: center;
+          height: 64px; padding: 0 var(--tv-a2) 0 var(--tv-a3); background: var(--tv-karte-2); flex: none; }
+  .mini img { width: 48px; height: 48px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .mini .t { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini .w { font-size: 14px; color: var(--tv-text-2); }
+  .mini .lauf { position: absolute; left: 0; top: 0; height: 3px; background: var(--tv-akzent); }
+  .mini button { width: 48px; height: 48px; border: 0; background: none; color: var(--tv-text); font-size: 20px; }
+
+  /* Vollbild-Player */
+  .voll { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 var(--tv-a5) var(--tv-a4);
+          background: linear-gradient(180deg, #3a2a1e 0%, var(--tv-grund) 62%); }
+  .voll-kopf { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 60px; flex: none; text-align: center; }
+  .voll-kopf .von { font-size: 13px; color: var(--tv-text-3); letter-spacing: 0.06em; text-transform: uppercase; }
+  .voll-kopf .quelle-name { font-size: 15px; font-weight: 600; }
+  .gross-cover { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten); flex: none; }
+  .titelzeile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; margin-top: var(--tv-a4); flex: none; }
+  .titelzeile .t { font-size: 24px; font-weight: 700; line-height: 1.2; }
+  .titelzeile .w { font-size: 17px; color: var(--tv-text-2); }
+  .titelzeile .herz { color: #EF5350; }
+  .technik { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--tv-text-3); }
+  .technik b { color: var(--tv-erfolg); font-weight: 700; }
+  .spur { height: 6px; margin-top: var(--tv-a4); background: rgba(255, 255, 255, 0.15); border-radius: 3px; position: relative; flex: none; }
+  .spur b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--tv-text); border-radius: 3px; }
+  .spur b::after { content: ''; position: absolute; right: -8px; top: -5px; width: 16px; height: 16px; border-radius: 50%; background: var(--tv-text); }
+  .zeiten { display: flex; justify-content: space-between; font-size: 14px; color: var(--tv-text-3); margin-top: 6px; flex: none; }
+  .tasten { display: grid; grid-template-columns: 1fr 1fr 80px 1fr 1fr; align-items: center; justify-items: center; margin-top: var(--tv-a3); flex: none; }
+  .tasten button { width: 52px; height: 52px; border: 0; background: none; color: var(--tv-text); font-size: 24px; position: relative; }
+  .tasten button.klein-t { color: var(--tv-text-3); font-size: 19px; }
+  .tasten button.klein-t.an { color: var(--tv-akzent); }
+  .tasten button.mitte { width: 76px; height: 76px; border-radius: 50%; background: var(--tv-text); color: var(--tv-grund); font-size: 30px; }
+  .tasten .sek { display: block; font-size: 12px; font-weight: 700; margin-top: 2px; }
+  .unten { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: auto; padding-top: var(--tv-a3); flex: none; }
+  .unten button { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 56px; border: 0; background: none; color: var(--tv-text-2); font: inherit; font-size: 13px; font-weight: 600; }
+  .unten button i { font-size: 19px; }
+  .unten button.an { color: var(--tv-akzent); }
+  .unten .geraet-name { color: var(--tv-info); }
+  .wisch { display: flex; justify-content: center; gap: 6px; margin-top: var(--tv-a2); flex: none; }
+  .wisch span { width: 6px; height: 6px; border-radius: 50%; background: var(--tv-text-3); opacity: 0.5; }
+  .wisch span.an { opacity: 1; background: var(--tv-text); }
+
+  /* Liedtext */
+  .lied-kopf { display: grid; grid-template-columns: 44px 48px minmax(0, 1fr) 44px; gap: var(--tv-a2); align-items: center; height: 72px; padding: 0 var(--tv-a3); flex: none; }
+  .lied-kopf img { width: 48px; height: 48px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .lied { flex: 1; min-height: 0; overflow: hidden; padding: var(--tv-a4) var(--tv-a5); display: flex; flex-direction: column; gap: 18px;
+          background: linear-gradient(180deg, #3a2a1e, #24201c); }
+  .lied .z { height: 22px; border-radius: 3px; background: rgba(255, 255, 255, 0.16); }
+  .lied .z.vorbei { background: rgba(255, 255, 255, 0.3); }
+  .lied .z.jetzt { height: 30px; background: var(--tv-text); }
+  .lied-hinweis { font-size: 14px; color: var(--tv-text-3); text-align: center; padding: var(--tv-a2) var(--tv-a4); flex: none; }
+  .lied-steuer { display: grid; grid-template-columns: 1fr 64px 1fr; align-items: center; justify-items: center; height: 92px; flex: none; background: #24201c; }
+  .lied-steuer .spur { position: absolute; left: var(--tv-a5); right: var(--tv-a5); top: 0; margin: 0; height: 4px; }
+
+  /* Als Nächstes */
+  .naechste { display: grid; grid-template-columns: 26px 48px minmax(0, 1fr) auto; gap: var(--tv-a2); align-items: center; padding: 6px 0; }
+  .naechste img { width: 48px; height: 48px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .naechste .t { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .naechste .w { font-size: 14px; color: var(--tv-text-2); }
+  .naechste .griff { color: var(--tv-text-3); text-align: center; }
+  .naechste.jetzt { background: rgba(var(--tv-akzent-rgb), 0.1); border-radius: var(--tv-ecke); padding: 6px; margin: 0 -6px; }
+  .naechste.jetzt .t { color: var(--tv-akzent); }
+  .naechste.weg { transform: translateX(-96px); position: relative; }
+  .wegwisch { position: relative; overflow: hidden; }
+  .wegwisch::after { content: 'Entfernen'; position: absolute; right: 0; top: 0; bottom: 0; width: 96px; display: grid; place-items: center;
+                     background: var(--tv-gefahr); color: #fff; font-weight: 700; font-size: 14px; border-radius: var(--tv-ecke-klein); }
+  .naechste.weg { background: var(--tv-grund); z-index: 1; }
+  .abschnitt { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+
+  /* Hörbuch */
+  .buch-tasten { grid-template-columns: 1fr 1fr 80px 1fr 1fr; }
+  .tempo { display: flex; gap: var(--tv-a2); justify-content: center; margin-top: var(--tv-a3); flex: none; }
+  .tempo button { height: 40px; padding: 0 var(--tv-a3); border: 0; border-radius: var(--tv-ecke); background: var(--tv-karte); color: var(--tv-text-2); font: inherit; font-size: 15px; font-weight: 600; }
+  .gesamt { font-size: 14px; color: var(--tv-text-3); margin-top: var(--tv-a2); display: flex; justify-content: space-between; flex: none; }
+  .gesamt .balken { height: 4px; flex: 1; margin: 8px var(--tv-a2) 0; }
+</style>
+</head>
+<body>
+
+<!-- 1: Übersicht -->
+<div class="spalte">
+  <div class="etikett">Musik: Übersicht</div>
+  <div class="telefon">
+    <div class="telefon-kopf"><h2>Musik</h2><button class="rund"><i class="fa-solid fa-magnifying-glass"></i></button></div>
+    <div class="telefon-inhalt">
+      <div class="quelle"><button class="an">Alle</button><button>Sammlung<span class="zahl">8.704</span></button><button>Videos<span class="zahl">1.204</span></button></div>
+      <div class="weiter">
+        <img src="bilder/cover-insel.jpg" alt="">
+        <div><div class="art"><i class="fa-solid fa-book-open"></i> Weiterhören</div><div class="t">Die geheimnisvolle Insel</div>
+          <div class="w">Teil 7 von 32 · noch <span class="zahl">36 Min.</span></div><div class="balken"><b style="width:26%"></b></div></div>
+        <button class="spiel"><i class="fa-solid fa-play"></i></button>
+      </div>
+      <div class="mixe">
+        <button class="mix"><i class="fa-solid fa-shuffle"></i>Alles zufällig</button>
+        <button class="mix"><i class="fa-solid fa-heart"></i>Lieblingssongs</button>
+        <button class="mix"><i class="fa-solid fa-hourglass-half"></i>Lange nicht gehört</button>
+        <button class="mix"><i class="fa-solid fa-fire"></i>Oft gehört</button>
+      </div>
+      <div class="bereiche"><button class="an">Interpreten</button><button>Alben</button><button>Kanäle</button><button>Hörbücher</button></div>
+      <div class="raster">
+        <div class="k"><img src="bilder/cover-abba-gold.jpg" alt=""><div class="t">ABBA</div><div class="w">Sammlung, Videos</div></div>
+        <div class="k"><img src="http://192.168.178.49:8031/api/player/7fqg9-SIWfU/thumbnail" alt=""><div class="t">OVERWERK</div><div class="w">Videos</div></div>
+        <div class="k"><img src="http://192.168.178.49:8031/api/player/A96hojkujLc/thumbnail" alt=""><div class="t">Electro Junkiee</div><div class="w">Videos</div></div>
+        <div class="k"><img src="http://192.168.178.49:8031/api/player/eFnMdac-gOU/thumbnail" alt=""><div class="t">Vini Vici</div><div class="w">Sammlung, Videos</div></div>
+        <div class="k"><img src="http://192.168.178.49:8031/api/player/7-_friA1NLE/thumbnail" alt=""><div class="t">Romulus</div><div class="w">Videos</div></div>
+        <div class="k"><img src="http://192.168.178.49:8031/api/player/Xa6WZkfKlxA/thumbnail" alt=""><div class="t">France Gall</div><div class="w">Videos</div></div>
+      </div>
+    </div>
+    <div class="mini"><span class="lauf" style="width:31%"></span><img src="bilder/cover-abba-gold.jpg" alt="">
+      <div style="min-width:0"><div class="t">Dancing Queen</div><div class="w">ABBA</div></div>
+      <button><i class="fa-solid fa-pause"></i></button><button><i class="fa-solid fa-forward-step"></i></button></div>
+    <nav class="telefon-fuss">
+      <a><i class="fa-solid fa-house"></i>Start</a><a><i class="fa-solid fa-photo-film"></i>Videos</a><a class="aktiv"><i class="fa-solid fa-music"></i>Musik</a>
+      <a><i class="fa-solid fa-list-ul"></i>Listen</a><a><i class="fa-solid fa-magnifying-glass"></i>Suche</a><a><i class="fa-solid fa-rss"></i>Neu</a>
+    </nav>
+  </div>
+</div>
+
+<!-- 2: Läuft gerade -->
+<div class="spalte">
+  <div class="etikett">Läuft gerade</div>
+  <div class="telefon">
+    <div class="voll">
+      <div class="voll-kopf"><button class="rund"><i class="fa-solid fa-chevron-down"></i></button>
+        <div><div class="von">Spielt aus</div><div class="quelle-name">ABBA Gold</div></div>
+        <button class="rund"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>
+      <img class="gross-cover" src="bilder/cover-abba-gold.jpg" alt="">
+      <div class="wisch"><span></span><span class="an"></span><span></span></div>
+      <div class="titelzeile"><div><div class="t">Dancing Queen</div><div class="w">ABBA</div></div>
+        <button class="rund herz"><i class="fa-solid fa-heart"></i></button></div>
+      <div class="technik"><i class="fa-solid fa-hard-drive"></i> Sammlung · <b>FLAC</b> · 16 Bit · 44,1 kHz</div>
+      <div class="spur"><b style="width:31%"></b></div>
+      <div class="zeiten"><span class="zahl">1:12</span><span class="zahl">3:51</span></div>
+      <div class="tasten">
+        <button class="klein-t an"><i class="fa-solid fa-shuffle"></i></button>
+        <button><i class="fa-solid fa-backward-step"></i></button>
+        <button class="mitte"><i class="fa-solid fa-pause"></i></button>
+        <button><i class="fa-solid fa-forward-step"></i></button>
+        <button class="klein-t"><i class="fa-solid fa-repeat"></i></button>
+      </div>
+      <div class="unten">
+        <button><i class="fa-solid fa-align-left"></i>Liedtext</button>
+        <button><i class="fa-solid fa-list-ol"></i>Warteschlange</button>
+        <button class="geraet-name"><i class="fa-solid fa-display"></i>Auf Rechner</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3: Liedtext -->
+<div class="spalte">
+  <div class="etikett">Liedtext, läuft mit (Zeilen hier nur angedeutet)</div>
+  <div class="telefon">
+    <div class="lied-kopf" style="background:#3a2a1e"><button class="rund"><i class="fa-solid fa-chevron-down"></i></button><img src="bilder/cover-abba-gold.jpg" alt="">
+      <div style="min-width:0"><div style="font-weight:700">Dancing Queen</div><div class="leise" style="font-size:15px">ABBA</div></div>
+      <button class="rund"><i class="fa-solid fa-text-height"></i></button></div>
+    <div class="lied">
+      <div class="z vorbei" style="width:62%"></div><div class="z vorbei" style="width:80%"></div><div class="z vorbei" style="width:54%"></div>
+      <div class="z jetzt" style="width:86%"></div>
+      <div class="z" style="width:70%"></div><div class="z" style="width:58%"></div><div class="z" style="width:76%"></div>
+      <div class="z" style="width:44%"></div><div class="z" style="width:68%"></div><div class="z" style="width:82%"></div>
+      <div class="z" style="width:50%"></div><div class="z" style="width:64%"></div>
+    </div>
+    <div class="lied-hinweis">Zeile antippen springt dorthin · Schrift größer oder kleiner oben rechts</div>
+    <div class="lied-steuer" style="position:relative"><div class="spur"><b style="width:31%"></b></div>
+      <button class="rund" style="font-size:24px"><i class="fa-solid fa-backward-step"></i></button>
+      <button class="spiel" style="width:64px;height:64px;border-radius:50%"><i class="fa-solid fa-pause"></i></button>
+      <button class="rund" style="font-size:24px"><i class="fa-solid fa-forward-step"></i></button></div>
+  </div>
+</div>
+
+<!-- 4: Als Nächstes -->
+<div class="spalte">
+  <div class="etikett">Warteschlange</div>
+  <div class="telefon">
+    <div class="telefon-kopf"><button class="rund"><i class="fa-solid fa-chevron-down"></i></button><h2>Warteschlange</h2><button class="rund"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>
+    <div class="telefon-inhalt" style="gap:var(--tv-a2)">
+      <div class="naechste jetzt"><span class="griff"><i class="fa-solid fa-volume-high"></i></span><img src="bilder/cover-abba-gold.jpg" alt="">
+        <div style="min-width:0"><div class="t">Dancing Queen</div><div class="w">ABBA · FLAC</div></div><span class="zahl leise">3:51</span></div>
+      <div class="abschnitt"><span>Aus ABBA Gold, zufällig</span><span class="zahl">18 Titel</span></div>
+      <div class="naechste"><span class="griff"><i class="fa-solid fa-grip-lines"></i></span><img src="bilder/cover-abba-gold.jpg" alt="">
+        <div style="min-width:0"><div class="t">The Winner Takes It All</div><div class="w">ABBA · FLAC</div></div><span class="zahl leise">4:55</span></div>
+      <div class="wegwisch"><div class="naechste weg"><span class="griff"><i class="fa-solid fa-grip-lines"></i></span><img src="bilder/cover-abba-gold.jpg" alt="">
+        <div style="min-width:0"><div class="t">Mamma Mia</div><div class="w">ABBA · FLAC</div></div><span class="zahl leise">3:31</span></div></div>
+      <div class="naechste"><span class="griff"><i class="fa-solid fa-grip-lines"></i></span><img src="bilder/cover-abba-gold.jpg" alt="">
+        <div style="min-width:0"><div class="t">Knowing Me, Knowing You</div><div class="w">ABBA · FLAC</div></div><span class="zahl leise">4:02</span></div>
+      <div class="naechste"><span class="griff"><i class="fa-solid fa-grip-lines"></i></span><img src="http://192.168.178.49:8031/api/player/_CsJCa2TlXU/thumbnail" alt="">
+        <div style="min-width:0"><div class="t">Bang-A-Boomerang</div><div class="w">ABBA · Video</div></div><span class="zahl leise">3:01</span></div>
+      <div class="naechste"><span class="griff"><i class="fa-solid fa-grip-lines"></i></span><img src="bilder/cover-abba-gold.jpg" alt="">
+        <div style="min-width:0"><div class="t">Super Trouper</div><div class="w">ABBA · FLAC</div></div><span class="zahl leise">4:12</span></div>
+      <div class="naechste"><span class="griff"><i class="fa-solid fa-grip-lines"></i></span><img src="bilder/cover-abba-gold.jpg" alt="">
+        <div style="min-width:0"><div class="t">Take A Chance On Me</div><div class="w">ABBA · FLAC</div></div><span class="zahl leise">4:07</span></div>
+      <div class="naechste"><span class="griff"><i class="fa-solid fa-grip-lines"></i></span><img src="http://192.168.178.49:8031/api/player/ofOaQ2CHm5M/thumbnail" alt="">
+        <div style="min-width:0"><div class="t">Bumblebee</div><div class="w">ABBA · Video</div></div><span class="zahl leise">3:58</span></div>
+      <div class="hinweis" style="margin-top:var(--tv-a2)"><i class="fa-solid fa-hand-pointer"></i><span>Am Griff ziehen ordnet um, nach links wischen nimmt heraus (mit Rückgängig).</span></div>
+    </div>
+    <div class="mini"><span class="lauf" style="width:31%"></span><img src="bilder/cover-abba-gold.jpg" alt="">
+      <div style="min-width:0"><div class="t">Dancing Queen</div><div class="w">ABBA</div></div>
+      <button><i class="fa-solid fa-pause"></i></button><button><i class="fa-solid fa-forward-step"></i></button></div>
+  </div>
+</div>
+
+<!-- 5: Hörbuch -->
+<div class="spalte">
+  <div class="etikett">Hörbuch läuft</div>
+  <div class="telefon">
+    <div class="voll" style="background: linear-gradient(180deg, #1f3138 0%, var(--tv-grund) 62%)">
+      <div class="voll-kopf"><button class="rund"><i class="fa-solid fa-chevron-down"></i></button>
+        <div><div class="von">Hörbuch</div><div class="quelle-name">Teil 7 von 32</div></div>
+        <button class="rund"><i class="fa-solid fa-list-ol"></i></button></div>
+      <img class="gross-cover" src="bilder/cover-insel.jpg" alt="">
+      <div class="titelzeile"><div><div class="t">Die geheimnisvolle Insel</div><div class="w">Jules Verne, Hans Paulisch</div></div>
+        <button class="rund"><i class="fa-solid fa-rotate-left"></i></button></div>
+      <div class="spur"><b style="width:42%"></b></div>
+      <div class="zeiten"><span class="zahl">0:38</span><span>Teil 7</span><span class="zahl">1:31</span></div>
+      <div class="tasten buch-tasten">
+        <button class="klein-t"><i class="fa-solid fa-backward-step"></i></button>
+        <button><i class="fa-solid fa-rotate-left"></i><span class="sek zahl">30</span></button>
+        <button class="mitte"><i class="fa-solid fa-pause"></i></button>
+        <button><i class="fa-solid fa-rotate-right"></i><span class="sek zahl">30</span></button>
+        <button class="klein-t"><i class="fa-solid fa-forward-step"></i></button>
+      </div>
+      <div class="tempo"><button>Tempo <span class="zahl">1,0</span></button><button><i class="fa-solid fa-moon"></i> Aus nach Teil 7</button></div>
+      <div class="gesamt"><span class="zahl">12 Min.</span><div class="balken"><b style="width:26%"></b></div><span>noch <span class="zahl">36 Min.</span></span></div>
+      <div class="leise klein" style="margin-top:auto;text-align:center;padding-top:var(--tv-a2)">Immer in der Reihenfolge, nie zufällig. Die Stelle wird gemerkt.</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

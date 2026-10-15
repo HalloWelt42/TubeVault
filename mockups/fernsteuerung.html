@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Fernsteuerung und Übergabe</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<style>
+  body { padding: var(--tv-a5); display: flex; gap: var(--tv-a5); flex-wrap: wrap; align-items: flex-start; }
+  .spalte > .etikett { margin-bottom: var(--tv-a2); }
+  .telefon { width: 390px; height: 844px; display: flex; flex-direction: column; overflow: hidden; position: relative;
+             background: var(--tv-grund); border: 1px solid var(--tv-rand-stark); border-radius: 18px; }
+  .rund { width: 44px; height: 44px; border: 0; background: none; color: var(--tv-text-2); font-size: 20px; border-radius: var(--tv-ecke); cursor: pointer; flex: none; }
+  .spur { height: 6px; background: rgba(255, 255, 255, 0.15); border-radius: 3px; position: relative; flex: none; }
+  .spur b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--tv-text); border-radius: 3px; }
+  .spur b::after { content: ''; position: absolute; right: -8px; top: -5px; width: 16px; height: 16px; border-radius: 50%; background: var(--tv-text); }
+  .zeiten { display: flex; justify-content: space-between; font-size: 14px; color: var(--tv-text-3); margin-top: 6px; }
+
+  /* Gerät, auf dem es läuft: immer oben, in Infofarbe */
+  .fern-band { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: var(--tv-a2); align-items: center; padding: var(--tv-a2) var(--tv-a3);
+               background: rgba(var(--tv-info-rgb), 0.16); color: var(--tv-info); flex: none; }
+  .fern-band i.gr { font-size: 22px; text-align: center; }
+  .fern-band .t { font-weight: 700; font-size: 16px; }
+  .fern-band .w { font-size: 14px; color: var(--tv-text-2); }
+  .knopf-info { height: 40px; padding: 0 var(--tv-a3); border: 0; border-radius: var(--tv-ecke); background: var(--tv-info); color: #0b1a22; font: inherit; font-weight: 700; font-size: 15px; }
+
+  .koerper { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: var(--tv-a4) var(--tv-a5); gap: var(--tv-a3); }
+  .cover { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--tv-ecke); }
+  .titel-gross { font-size: 24px; font-weight: 700; line-height: 1.2; }
+  .tasten { display: grid; grid-template-columns: 1fr 1fr 80px 1fr 1fr; align-items: center; justify-items: center; }
+  .tasten button { width: 52px; height: 52px; border: 0; background: none; color: var(--tv-text); font-size: 24px; position: relative; }
+  .tasten button.mitte { width: 76px; height: 76px; border-radius: 50%; background: var(--tv-info); color: #0b1a22; font-size: 30px; }
+  .tasten button.klein-t { color: var(--tv-text-3); font-size: 19px; }
+  .tasten .sek { display: block; font-size: 12px; font-weight: 700; margin-top: 2px; }
+  .laut { display: grid; grid-template-columns: 24px 1fr 24px; gap: var(--tv-a2); align-items: center; color: var(--tv-text-3); }
+  .laut .spur b { background: var(--tv-info); }
+  .laut .spur b::after { background: var(--tv-info); }
+
+  /* Auswahl "Abspielen auf" als Blatt von unten */
+  .schleier { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+  .blatt { position: absolute; left: 0; right: 0; bottom: 0; background: var(--tv-karte); border-radius: 14px 14px 0 0; padding: var(--tv-a3) var(--tv-a4) var(--tv-a5); }
+  .blatt .griff { width: 44px; height: 5px; border-radius: 3px; background: var(--tv-rand-stark); margin: 0 auto var(--tv-a3); }
+  .blatt h3 { font-size: 20px; margin: 0 0 4px; }
+  .geraet { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: center; padding: var(--tv-a3) var(--tv-a2); border-radius: var(--tv-ecke); }
+  .geraet i.gr { font-size: 24px; text-align: center; color: var(--tv-text-2); }
+  .geraet .t { font-weight: 700; font-size: 17px; }
+  .geraet .w { font-size: 14px; color: var(--tv-text-2); }
+  .geraet.hier { background: rgba(var(--tv-akzent-rgb), 0.08); }
+  .geraet.hier i.gr, .geraet.hier .haken { color: var(--tv-akzent); }
+  .geraet.spielt i.gr { color: var(--tv-info); }
+  .geraet .welle { color: var(--tv-info); }
+  .geraet .knopf { grid-area: auto; }   /* .haupt ist auch der Seitenbereich */
+
+  /* Video als Fernbedienung */
+  .vbild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke); overflow: hidden; }
+  .vbild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vbild .auf { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); color: #fff; font-weight: 700; font-size: 15px; text-align: center; }
+  .wahl { display: grid; grid-template-columns: 1fr 1fr; background: var(--tv-mulde); border-radius: var(--tv-ecke); padding: 3px; }
+  .wahl button { height: 40px; border: 0; background: none; color: var(--tv-text-2); font: inherit; font-size: 15px; font-weight: 600; border-radius: var(--tv-ecke-klein); }
+  .wahl button.an { background: var(--tv-karte-3); color: var(--tv-info); }
+  .kapitel { display: grid; grid-template-columns: 56px 1fr; gap: var(--tv-a2); padding: 8px var(--tv-a2); border-radius: var(--tv-ecke-klein); font-size: 15px; }
+  .kapitel .zahl { color: var(--tv-text-3); }
+  .kapitel.jetzt { background: rgba(var(--tv-info-rgb), 0.12); }
+  .kapitel.jetzt .zahl { color: var(--tv-info); }
+  .zeile-knoepfe { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--tv-a2); }
+  .zeile-knoepfe button { height: 48px; border: 0; border-radius: var(--tv-ecke); background: var(--tv-karte); color: var(--tv-text-2); font: inherit; font-size: 14px; font-weight: 600; }
+
+  /* Rechner */
+  .rechner { width: 980px; height: 620px; display: flex; flex-direction: column; overflow: hidden; position: relative;
+             background: var(--tv-grund); border: 1px solid var(--tv-rand-stark); border-radius: 8px; }
+  .r-kopf { height: 52px; display: flex; align-items: center; gap: var(--tv-a3); padding: 0 var(--tv-a4); background: var(--tv-leiste); flex: none; font-weight: 700; }
+  .r-kopf img { width: 26px; height: 26px; }
+  .r-inhalt { flex: 1; min-height: 0; padding: var(--tv-a4) var(--tv-a5); display: flex; flex-direction: column; gap: var(--tv-a3); }
+  .r-inhalt h2 { font-size: 26px; margin: 0; }
+  .r-raster { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--tv-a3); opacity: 0.85; }
+  .r-raster img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--tv-ecke-klein); display: block; }
+  .r-raster .t { font-size: 15px; font-weight: 600; margin-top: 6px; }
+  .leiste { height: 92px; display: grid; grid-template-columns: 300px 1fr 330px; align-items: center; gap: var(--tv-a4); padding: 0 var(--tv-a4); background: var(--tv-leiste); flex: none; position: relative; }
+  .leiste .wer { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: var(--tv-a3); align-items: center; }
+  .leiste .wer img { width: 60px; height: 60px; object-fit: cover; border-radius: var(--tv-ecke-klein); }
+  .leiste .mitte-l { display: flex; flex-direction: column; gap: 6px; }
+  .leiste .mini-tasten { display: flex; justify-content: center; gap: var(--tv-a3); }
+  .leiste .mini-tasten button { width: 40px; height: 40px; border: 0; background: none; color: var(--tv-text); font-size: 18px; }
+  .leiste .mini-tasten button.p { background: var(--tv-text); color: var(--tv-grund); border-radius: 50%; }
+  .leiste .rechts { display: flex; align-items: center; justify-content: flex-end; gap: var(--tv-a2); }
+  .gesteuert { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: var(--tv-ecke); background: rgba(var(--tv-info-rgb), 0.16); color: var(--tv-info); font-size: 14px; font-weight: 600; }
+  .geraete-knopf { height: 40px; padding: 0 var(--tv-a3); border: 0; border-radius: var(--tv-ecke); background: var(--tv-karte-2); color: var(--tv-text); font: inherit; font-weight: 600; font-size: 15px; }
+  .r-auswahl { position: absolute; right: var(--tv-a4); bottom: 100px; width: 360px; background: var(--tv-karte); border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten); padding: var(--tv-a3); }
+  .r-auswahl .etikett { margin: 0 0 var(--tv-a2) var(--tv-a2); }
+  .toast { position: absolute; left: 50%; bottom: 108px; transform: translateX(-50%); display: flex; align-items: center; gap: var(--tv-a3);
+           padding: var(--tv-a3) var(--tv-a4); background: var(--tv-karte-3); border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten); font-size: 16px; }
+  .toast button { border: 0; background: none; color: var(--tv-akzent); font: inherit; font-weight: 700; }
+
+  .erklaerung { width: 980px; background: var(--tv-karte); border-radius: var(--tv-ecke); padding: var(--tv-a4) var(--tv-a5); }
+  .erklaerung h3 { margin: 0 0 var(--tv-a3); font-size: 20px; }
+  .erklaerung ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; color: var(--tv-text-2); }
+  .erklaerung b { color: var(--tv-text); }
+</style>
+</head>
+<body>
+
+<!-- Rechner: wird vom Handy gesteuert -->
+<div class="spalte">
+  <div class="etikett">Rechner: spielt, das Handy steuert mit</div>
+  <div class="rechner" id="rechner"></div>
+</div>
+
+<!-- Handy 1: Auswahl, wo es spielen soll -->
+<div class="spalte">
+  <div class="etikett">Handy: Abspielen auf ...</div>
+  <div class="telefon">
+    <div class="koerper" style="opacity:0.5">
+      <img class="cover" src="bilder/cover-abba-gold.jpg" alt="">
+      <div class="titel-gross">Dancing Queen</div>
+    </div>
+    <div class="schleier"></div>
+    <div class="blatt">
+      <div class="griff"></div>
+      <h3>Abspielen auf</h3>
+      <div class="leise klein" style="margin-bottom:var(--tv-a3)">Wechseln nimmt Stelle und Warteschlange mit, das andere Gerät hält an.</div>
+      <div class="geraet spielt"><i class="fa-solid fa-display gr"></i>
+        <div><div class="t">Rechner Arbeitszimmer</div><div class="w"><i class="fa-solid fa-volume-high welle"></i> spielt Dancing Queen · <span class="zahl">1:12</span></div></div>
+        <button class="knopf klein">Steuern</button></div>
+      <div class="geraet hier"><i class="fa-solid fa-mobile-screen gr"></i>
+        <div><div class="t">Dieses Handy</div><div class="w">Hierher holen, ab <span class="zahl">1:12</span></div></div>
+        <button class="knopf klein haupt">Holen</button></div>
+      <div class="geraet"><i class="fa-solid fa-tablet-screen-button gr"></i>
+        <div><div class="t">Tablet Wohnzimmer</div><div class="w">bereit · zuletzt vor <span class="zahl">2 Min.</span></div></div>
+        <button class="knopf klein">Dorthin</button></div>
+      <div class="hinweis" style="margin-top:var(--tv-a3)"><i class="fa-solid fa-circle-info"></i><span>Hier stehen alle Geräte, auf denen TubeVault gerade offen ist. Namen lassen sich in den Einstellungen ändern.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Handy 2: Musik auf dem Rechner fernsteuern -->
+<div class="spalte">
+  <div class="etikett">Handy als Fernbedienung: Musik</div>
+  <div class="telefon">
+    <div class="fern-band"><i class="fa-solid fa-display gr"></i>
+      <div><div class="t">Läuft auf Rechner Arbeitszimmer</div><div class="w">Du steuerst von hier</div></div>
+      <button class="knopf-info"><i class="fa-solid fa-mobile-screen"></i> Holen</button></div>
+    <div class="koerper">
+      <img class="cover" src="bilder/cover-abba-gold.jpg" alt="">
+      <div style="display:grid;grid-template-columns:1fr 44px;align-items:center"><div><div class="titel-gross">Dancing Queen</div><div class="leise">ABBA · ABBA Gold</div></div>
+        <button class="rund" style="color:#EF5350"><i class="fa-solid fa-heart"></i></button></div>
+      <div><div class="spur"><b style="width:31%"></b></div><div class="zeiten"><span class="zahl">1:12</span><span class="zahl">3:51</span></div></div>
+      <div class="tasten">
+        <button class="klein-t"><i class="fa-solid fa-shuffle"></i></button>
+        <button><i class="fa-solid fa-backward-step"></i></button>
+        <button class="mitte"><i class="fa-solid fa-pause"></i></button>
+        <button><i class="fa-solid fa-forward-step"></i></button>
+        <button class="klein-t"><i class="fa-solid fa-repeat"></i></button>
+      </div>
+      <div class="laut"><i class="fa-solid fa-volume-low"></i><div class="spur"><b style="width:64%"></b></div><i class="fa-solid fa-volume-high"></i></div>
+      <div class="leise klein" style="text-align:center">Lautstärke des Rechners</div>
+    </div>
+  </div>
+</div>
+
+<!-- Handy 3: Video auf dem Rechner fernsteuern -->
+<div class="spalte">
+  <div class="etikett">Handy als Fernbedienung: Video</div>
+  <div class="telefon">
+    <div class="fern-band"><i class="fa-solid fa-display gr"></i>
+      <div><div class="t">Läuft auf Rechner Arbeitszimmer</div><div class="w">Vollbild · Deutsch vertont</div></div>
+      <button class="knopf-info"><i class="fa-solid fa-mobile-screen"></i> Holen</button></div>
+    <div class="koerper" style="gap:var(--tv-a3)">
+      <div class="vbild"><img src="http://192.168.178.49:8031/api/player/NxsYhM89B4M/thumbnail" alt=""><div class="auf"><span><i class="fa-solid fa-display"></i><br>Bild läuft am Rechner</span></div></div>
+      <div style="font-weight:700;font-size:18px;line-height:1.25">Why F-35B Can't Land on American Supercarriers</div>
+      <div><div class="spur"><b style="width:38%"></b></div><div class="zeiten"><span class="zahl">5:24</span><span class="zahl">14:13</span></div></div>
+      <div class="tasten">
+        <button class="klein-t"><i class="fa-solid fa-backward-step"></i></button>
+        <button><i class="fa-solid fa-rotate-left"></i><span class="sek zahl">10</span></button>
+        <button class="mitte"><i class="fa-solid fa-pause"></i></button>
+        <button><i class="fa-solid fa-rotate-right"></i><span class="sek zahl">10</span></button>
+        <button class="klein-t"><i class="fa-solid fa-forward-step"></i></button>
+      </div>
+      <div class="wahl"><button>Original</button><button class="an">Deutsch</button></div>
+      <div class="zeile-knoepfe"><button><i class="fa-solid fa-closed-captioning"></i> Untertitel</button><button><i class="fa-solid fa-expand"></i> Vollbild</button><button><i class="fa-solid fa-volume-high"></i> <span class="zahl">64 %</span></button></div>
+    </div>
+  </div>
+</div>
+
+<div class="erklaerung">
+  <h3>So geht es</h3>
+  <ol>
+    <li><b>Kein Koppeln nötig.</b> Jedes Gerät, auf dem TubeVault offen ist, meldet sich beim Server und bekommt einen Namen (änderbar). Wer spielt, sieht man überall.</li>
+    <li><b>Steuern:</b> Spielt der Rechner, zeigt das Handy oben das blaue Band und wird zur Fernbedienung: Pause, Weiter, Stelle, Lautstärke, bei Videos auch Ton Original oder Deutsch, Untertitel und Vollbild.</li>
+    <li><b>Holen:</b> "Holen" übernimmt die Wiedergabe aufs Handy, an derselben Stelle mit derselben Warteschlange. Der Rechner hält an und zeigt kurz, wohin es gewechselt ist.</li>
+    <li><b>Hinschicken:</b> Umgekehrt geht es vom Handy über "Abspielen auf" an den Rechner oder ans Tablet, für Musik, Hörbücher und Videos.</li>
+    <li><b>Gleichzeitig steuern</b> dürfen alle Geräte; die letzte Eingabe gilt, und das spielende Gerät zeigt, von wo sie kam.</li>
+  </ol>
+</div>
+
+<script type="module">
+  const r = document.getElementById('rechner');
+  const KACHELN = [['bilder/cover-abba-gold.jpg', 'ABBA'], ['http://192.168.178.49:8031/api/player/7fqg9-SIWfU/thumbnail', 'OVERWERK'],
+    ['http://192.168.178.49:8031/api/player/A96hojkujLc/thumbnail', 'Electro Junkiee'], ['http://192.168.178.49:8031/api/player/eFnMdac-gOU/thumbnail', 'Vini Vici'],
+    ['http://192.168.178.49:8031/api/player/7-_friA1NLE/thumbnail', 'Romulus'], ['http://192.168.178.49:8031/api/player/Xa6WZkfKlxA/thumbnail', 'France Gall']];
+  r.innerHTML = `
+    <div class="r-kopf"><img src="../frontend/public/favicon.svg" alt="">TubeVault</div>
+    <div class="r-inhalt"><h2>Musik</h2>
+      <div class="r-raster">${KACHELN.map(([b, n]) => `<div><img src="${b}" alt=""><div class="t">${n}</div></div>`).join('')}</div></div>
+    <div class="r-auswahl">
+      <div class="etikett">Abspielen auf</div>
+      <div class="geraet hier"><i class="fa-solid fa-display gr"></i><div><div class="t">Dieser Rechner</div><div class="w">spielt gerade</div></div><i class="fa-solid fa-check haken"></i></div>
+      <div class="geraet"><i class="fa-solid fa-mobile-screen gr"></i><div><div class="t">Handy</div><div class="w">steuert mit</div></div><button class="knopf klein">Dorthin</button></div>
+      <div class="geraet"><i class="fa-solid fa-tablet-screen-button gr"></i><div><div class="t">Tablet Wohnzimmer</div><div class="w">bereit</div></div><button class="knopf klein">Dorthin</button></div>
+    </div>
+    <div class="toast"><i class="fa-solid fa-mobile-screen" style="color:var(--tv-info)"></i>Handy hat auf Pause gedrückt</div>
+    <div class="leiste">
+      <div class="wer"><img src="bilder/cover-abba-gold.jpg" alt=""><div style="min-width:0"><div style="font-weight:700">Dancing Queen</div><div class="leise">ABBA · FLAC</div></div></div>
+      <div class="mitte-l"><div class="mini-tasten"><button><i class="fa-solid fa-backward-step"></i></button><button class="p"><i class="fa-solid fa-play"></i></button><button><i class="fa-solid fa-forward-step"></i></button></div>
+        <div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center"><span class="zahl leise klein">1:12</span><div class="spur" style="height:4px"><b style="width:31%"></b></div><span class="zahl leise klein">3:51</span></div></div>
+      <div class="rechts"><span class="gesteuert"><i class="fa-solid fa-mobile-screen"></i> Handy steuert mit</span>
+        <button class="geraete-knopf"><i class="fa-solid fa-display"></i> Geräte</button></div>
+    </div>`;
+</script>
+</body>
+</html>
