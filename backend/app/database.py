@@ -1112,6 +1112,7 @@ class Database:
         # Nutzerentscheidung 15.10.2026: Bestand zurück auf "keine Musik".
         from app.services import meta_sidecar, music_flag
         await meta_sidecar.install_schema(self._connection)
+        await music_flag.install_schema(self._connection)
         try:
             await self._connection.execute("ALTER TABLE videos ADD COLUMN music_source TEXT")
         except Exception:

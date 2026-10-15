@@ -102,6 +102,8 @@ export const api = {
   cleanupExemptChannels: () => request('/api/admin/cleanup/exempt-channels'),
   setShortExempt: (channelId, exempt) =>
     request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/short-exempt`, { method: 'PUT', body: JSON.stringify({ exempt }) }),
+  setMusicChannel: (channelId, music) =>
+    request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/music`, { method: 'PUT', body: JSON.stringify({ music }) }),
   cleanupDelete: (videoIds) => request('/api/admin/cleanup/delete', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
   setTypeBatch: (videoIds, videoType) => request('/api/videos/type/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, video_type: videoType }) }),
   setMusicBatch: (videoIds, isMusic) => request('/api/videos/music/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, is_music: isMusic }) }),

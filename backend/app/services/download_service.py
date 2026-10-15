@@ -1041,7 +1041,7 @@ class DownloadService:
                        music_title = COALESCE(music_title, ?), music_album = COALESCE(music_album, ?)
                    WHERE id = ?""",
                 (music.get("artist"), music.get("title"), music.get("album"), vid))
-            await music_flag.apply_auto(vid, meta.get("channel_name"), meta.get("description"))
+            await music_flag.apply_auto(vid, meta.get("channel_id"), meta.get("channel_name"), meta.get("description"))
 
             # Sprache der geladenen (Original-)Tonspur festhalten
             if meta.get("language"):

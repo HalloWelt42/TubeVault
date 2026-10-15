@@ -195,15 +195,24 @@ async def install_schema(connection) -> None:
     await connection.commit()
 
 
+_refresh_lock = asyncio.Lock()
+
+
 async def refresh_stale(throttle_every: int = 50, throttle_sleep: float = 0.1) -> int:
-    """Hintergrundlauf: vorgemerkte Begleitdateien schreiben, dann Ende."""
-    rows = await db.fetch_all("SELECT video_id FROM sidecar_stale")
-    for i, row in enumerate(rows):
-        await write_sidecar(row["video_id"])
-        await db.execute("DELETE FROM sidecar_stale WHERE video_id = ?", (row["video_id"],))
-        if throttle_every and (i + 1) % throttle_every == 0:
-            await asyncio.sleep(throttle_sleep)
-    if rows:
-        logger.info(f"[sidecar] {len(rows)} vorgemerkte Begleitdateien nachgeschrieben")
-    return len(rows)
+    """Vorgemerkte Begleitdateien schreiben, bis keine mehr warten. Läuft
+    schon ein Durchgang, übernimmt der auch die neu Vorgemerkten."""
+    if _refresh_lock.locked():
+        return 0
+    written = 0
+    async with _refresh_lock:
+        while rows := await db.fetch_all("SELECT video_id FROM sidecar_stale LIMIT 200"):
+            for row in rows:
+                await write_sidecar(row["video_id"])
+                await db.execute("DELETE FROM sidecar_stale WHERE video_id = ?", (row["video_id"],))
+                written += 1
+                if throttle_every and written % throttle_every == 0:
+                    await asyncio.sleep(throttle_sleep)
+    if written:
+        logger.info(f"[sidecar] {written} vorgemerkte Begleitdateien nachgeschrieben")
+    return written
 

@@ -135,6 +135,17 @@
     } catch (e) { toast.error(e.message); }
   }
 
+  async function toggleMusicChannel() {
+    const music = !channel.music_channel;
+    try {
+      const result = await api.setMusicChannel(channel.channel_id, music);
+      channel = { ...channel, music_channel: music };
+      toast.success(music ? `Musikkanal: ${result.changed} Videos jetzt Musik (Ausnahmen am Video festlegen)`
+                          : `Kein Musikkanal mehr: ${result.changed} Videos zurückgesetzt`);
+      await list.load(true);
+    } catch (e) { toast.error(e.message); }
+  }
+
   async function cancelScan() {
     if (!scanJobId) return;
     try {
@@ -590,6 +601,12 @@
                 ? 'Videos dieses Kanals gelten nie als Short. Klick hebt den Schutz auf (bestehende Videos bleiben Videos).'
                 : 'Videos dieses Kanals nie als Short führen - z.B. kurze, aber vollwertige Videos.'}>
         <i class="fa-solid fa-shield-halved"></i> {channel.short_exempt ? 'Nie Shorts' : 'Shorts normal'}
+      </button>
+      <button class="short-exempt" class:on={channel.music_channel} onclick={toggleMusicChannel}
+              title={channel.music_channel
+                ? 'Alle Videos dieses Kanals gelten als Musik, auch künftige. Einzelne Ausnahmen am Video festlegen. Klick hebt die Markierung auf.'
+                : 'Ganzen Kanal als Musikkanal markieren: alle Videos gelten sofort als Musik, Ausnahmen einzeln abwählen.'}>
+        <i class="fa-solid fa-music"></i> {channel.music_channel ? 'Musikkanal' : 'Kein Musikkanal'}
       </button>
       {#if channel.download_quality}
         <span class="quality-tag">Qualität: {channel.download_quality}</span>

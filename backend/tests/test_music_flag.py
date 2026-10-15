@@ -35,8 +35,8 @@ async def _flag(db, vid):
 async def test_automatik_ueberschreibt_den_nutzer_nie(test_db):
     await _video(test_db, "vonhand0001", is_music=0, source="user")
     await _video(test_db, "offen000001")
-    assert not await music_flag.apply_auto("vonhand0001", "Adele - Topic", None)
-    assert await music_flag.apply_auto("offen000001", "Adele - Topic", None)
+    assert not await music_flag.apply_auto("vonhand0001", None, "Adele - Topic", None)
+    assert await music_flag.apply_auto("offen000001", None, "Adele - Topic", None)
     assert await _flag(test_db, "vonhand0001") == (0, "user")
     assert await _flag(test_db, "offen000001") == (1, "auto")
 
@@ -62,3 +62,31 @@ async def test_bestand_zuruecksetzen(test_db):
     assert await _flag(test_db, "offen000001") == (None, None)
     stale = {r["video_id"] for r in await test_db.fetch_all("SELECT video_id FROM sidecar_stale")}
     assert stale == {"geraten0001", "geraten0002", "topic000001"}
+
+
+async def _channel_video(db, vid, is_music=None, source=None):
+    await db.execute(
+        """INSERT INTO videos (id, title, status, channel_id, channel_name, is_music, music_source)
+           VALUES (?, 'T', 'ready', 'UCmusik', 'Band', ?, ?)""", (vid, is_music, source))
+
+
+async def test_musikkanal_mit_ausnahmen(test_db, monkeypatch):
+    """Wunsch 15.10.2026: ganzen Kanal als Musikkanal markieren, Ausreißer
+    einzeln abwählen; die Ausnahme bleibt, auch für künftige Videos gilt der Kanal."""
+    async def no_refresh():
+        return 0
+    from app.services import meta_sidecar
+    monkeypatch.setattr(meta_sidecar, "refresh_stale", no_refresh)
+    await _channel_video(test_db, "song0000001")
+    await _channel_video(test_db, "interview01", is_music=0, source="user")   # Ausnahme
+    assert await music_flag.mark_channel("UCmusik", True) == 1
+    assert await _flag(test_db, "song0000001") == (1, "channel")
+    assert await _flag(test_db, "interview01") == (0, "user")
+
+    await _channel_video(test_db, "neuersong01")                              # später geladen
+    assert await music_flag.apply_auto("neuersong01", "UCmusik", "Band", None)
+    assert await _flag(test_db, "neuersong01") == (1, "channel")
+
+    await music_flag.mark_channel("UCmusik", False)
+    assert await _flag(test_db, "song0000001") == (0, None)
+    assert await _flag(test_db, "interview01") == (0, "user")
