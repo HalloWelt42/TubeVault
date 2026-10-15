@@ -5,6 +5,7 @@
 -->
 <script>
   import { api } from '../../api/client.js';
+  import { navigate } from '../../router/router.js';
   import DownloadProgress from '../common/DownloadProgress.svelte';
   import { statusOf, canRetry, canDelay, canCancel, PRIORITY_LABELS } from './jobStatus.js';
 
@@ -51,6 +52,11 @@
       {/if}
       {#if item.status === 'active' && live?.stage_label}<span>{live.stage_label}</span>{/if}
       {#if item.status === 'done' && item.completed_at}<span class="zahl">{item.completed_at.slice(11, 16)}</span>{/if}
+      {#if item.same_as}
+        <button class="zwilling" onclick={act(() => navigate(`/watch/${item.same_as.id}`))}
+                title="Reupload: dasselbe Video liegt schon in der Bibliothek ({item.same_as.title}). Es wurde nicht noch einmal geladen.">
+          <i class="fa-solid fa-clone"></i> Schon vorhanden</button>
+      {/if}
     </div>
     {#if item.status === 'active' && progress > 0}
       <DownloadProgress data={{ progress, stage, stage_label: live?.stage_label || '', phases: live?.phases || null, phaseFills: phaseFill }} />
@@ -90,4 +96,7 @@
   .titel { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .zeile2 { display: flex; gap: var(--tv-a3); align-items: center; flex-wrap: wrap; font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
   .knoepfe { display: flex; gap: 2px; }
+  .zwilling { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none;
+              font: inherit; color: var(--tv-akzent); cursor: pointer; }
+  .zwilling:hover { text-decoration: underline; }
 </style>

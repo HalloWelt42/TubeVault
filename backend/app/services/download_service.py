@@ -36,7 +36,7 @@ from app.config import (
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.services.job_service import job_service
-from app.services import download_options, video_classifier
+from app.services import download_options, reupload_guard, video_classifier
 from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
 from app.utils.tag_utils import sanitize_tags
@@ -938,6 +938,13 @@ class DownloadService:
             except Exception:
                 pass
 
+            # Ein Reupload eines schon geladenen Videos wird nicht noch einmal geladen
+            twin = await reupload_guard.find_twin(
+                vid, meta.get("channel_id"), meta.get("title"), meta.get("duration"))
+            if twin:
+                await self._skip_reupload(job_id, vid, twin)
+                return
+
             # Stage 2+3: DOWNLOAD (rate-limited)
             await rate_limiter.acquire("download")
             final_path, file_size, stream_info, merged = await self._download(job_id, vid, url, opts, meta)
@@ -1445,6 +1452,21 @@ class DownloadService:
             }
         result = await asyncio.get_event_loop().run_in_executor(None, _r)
         return result
+
+    async def _skip_reupload(self, job_id: int, vid: str, twin: reupload_guard.Twin):
+        """Auftrag als erledigt abschließen, ohne zu laden: das Video liegt
+        schon als twin in der Bibliothek. Der Auftrag merkt sich den Zwilling
+        (für den Hinweis in der Downloadliste), der Feed-Eintrag gilt als
+        erledigt."""
+        logger.info(f"[REUPLOAD] {vid} ist dasselbe Video wie {twin.id} - nicht geladen")
+        await db.execute(
+            "UPDATE jobs SET metadata = json_set(COALESCE(metadata, '{}'), '$.same_as', json(?)) WHERE id = ?",
+            (twin.model_dump_json(), job_id))
+        await db.execute(
+            """UPDATE rss_entries SET feed_status = 'dismissed', dismissed = 1
+               WHERE video_id = ? AND COALESCE(feed_status, 'active') = 'active'""", (vid,))
+        await job_service.complete(job_id, f"Schon vorhanden: {twin.title[:80]}")
+        await self._stage(job_id, vid, "done", 1.0, "Schon vorhanden, nicht geladen")
 
     async def _download(self, job_id: int, vid: str, url: str, opts: dict, meta: dict):
         # Tracking fürs Retry-Hook: welcher Job läuft gerade?
@@ -2033,6 +2055,7 @@ class DownloadService:
             item["video_id"] = vid
             item["url"] = meta.get("url", "")
             item["download_options"] = json.dumps(meta.get("download_options", {}))
+            item["same_as"] = meta.get("same_as")   # Reupload: das schon vorhandene Video
             # Titel anreichern falls noch generisch
             if vid and item.get("title", "").startswith("Download:"):
                 row = await db.fetch_one("SELECT title FROM videos WHERE id = ?", (vid,))
