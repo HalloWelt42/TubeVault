@@ -22,7 +22,7 @@ export const routeDefinitions = {
   // ─── Hauptnavigation ───────────────────────────────────
   'dashboard': {
     path: '/',
-    label: 'Dashboard',
+    label: 'Übersicht',
     icon: 'fa-solid fa-house',
     group: 'main',
     hasId: false,

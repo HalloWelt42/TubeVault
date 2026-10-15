@@ -9,6 +9,7 @@
   import { api } from '../../api/client.js';
   import { parseServerTime, formatClock } from '../../utils/format.js';
   import { toast } from '../../stores/notifications.js';
+  import { workPercent as percent, switchWork } from '../../utils/backgroundWork.js';
 
   const REFRESH_MS = 8000;
 
@@ -22,10 +23,6 @@
     try { items = (await api.getBackgroundWork()).items || []; } catch { /* Statusleiste bleibt still */ }
     now = Date.now();
     if (items.length === 0) open = false;
-  }
-
-  function percent(item) {
-    return item.progress === null || item.progress === undefined ? null : Math.round(item.progress * 100);
   }
 
   function runningFor(item) {
@@ -42,7 +39,7 @@
   async function toggle(item) {
     switching = item.key;
     try {
-      await api.updateSetting(item.switch_key, item.paused ? 'true' : 'false');
+      await switchWork(item);
       await load();
     } catch (e) { toast.error(e.message); }
     switching = null;

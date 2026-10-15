@@ -12,8 +12,9 @@
   import { KIND_ICONS } from '../../utils/remoteDevices.js';
   import { formatDuration } from '../../utils/format.js';
 
-  /** onControl(device): Fernbedienung öffnen (nur wo es eine gibt); onDone: nach einer Aktion */
-  let { onControl = null, onDone = () => {} } = $props();
+  /** onControl(device): Fernbedienung öffnen (nur wo es eine gibt); onDone: nach einer Aktion;
+      heading: eigene Überschrift zeigen (aus, wo der Rahmen schon eine hat) */
+  let { onControl = null, onDone = () => {}, heading = true } = $props();
 
   let now = $state(performance.now());
   let renaming = $state(false);
@@ -55,10 +56,12 @@
 </script>
 
 <div class="geraete">
-  <div class="kopf">
-    <div class="titel">Abspielen auf</div>
-    <div class="tv-leise tv-klein">Wechseln nimmt Stelle und Warteschlange mit, das andere Gerät hält an.</div>
-  </div>
+  {#if heading}
+    <div class="kopf">
+      <div class="titel">Abspielen auf</div>
+      <div class="tv-leise tv-klein">Wechseln nimmt Stelle und Warteschlange mit, das andere Gerät hält an.</div>
+    </div>
+  {/if}
 
   {#if remote.me}
     <div class="geraet hier">

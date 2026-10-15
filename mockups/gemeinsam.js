@@ -24,7 +24,7 @@ export const VIDEOS = [
 ];
 
 // Entwurfsseiten je Eintrag der Seitenleiste
-const SEITEN = { bibliothek: 'bibliothek.html', musik: 'musik.html', downloads: 'downloads.html', eigene: 'eigene-videos.html', einstellungen: 'einstellungen.html',
+const SEITEN = { start: 'uebersicht.html', bibliothek: 'bibliothek.html', musik: 'musik.html', downloads: 'downloads.html', eigene: 'eigene-videos.html', einstellungen: 'einstellungen.html',
                  favoriten: 'favoriten.html', playlists: 'playlists.html', verlauf: 'verlauf.html', kanaele: 'kanaele.html',
                  kategorien: 'kategorien.html', vertonung: 'nachvertonung.html' };
 
