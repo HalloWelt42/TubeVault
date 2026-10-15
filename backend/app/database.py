@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 55
+SCHEMA_VERSION = 56
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1222,6 +1222,12 @@ class Database:
             chunks = await semantic_index.fill_codes(self._connection, "chunk_embeddings", "seq")
             items = await semantic_index.fill_codes(self._connection, "item_embeddings", "rowid")
             logger.info(f"Migration v55: Binärschlüssel für {chunks} Abschnitte und {items} weitere Vektoren")
+
+        # v56: Geräuschmarken der Quelle ("[Musik]") aus dem Gesagten entfernen
+        if current_version < 56:
+            from app.services import transcripts as transcript_service
+            cleaned = await transcript_service.remove_annotations(self._connection)
+            logger.info(f"Migration v56: Geräuschmarken aus {cleaned} Abschnitten entfernt, Volltext neu")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

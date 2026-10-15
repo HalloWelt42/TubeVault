@@ -67,3 +67,10 @@ def test_sprechpause_und_hoechstdauer_trennen():
 def test_automatische_untertitel_ohne_wiederholungen():
     cues = subs.without_repeats(subs.parse_vtt(AUTO))
     assert " ".join(c.text for c in cues) == "hello and welcome to the channel today we solder"
+
+
+def test_geraeuschmarken_fallen_weg():
+    vtt = ("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n[Musik] Heute geht es um\n\n"
+           "00:00:03.000 --> 00:00:05.000\nKernfusion [Applaus] und [ __ ] mehr.\n\n"
+           "00:00:05.000 --> 00:00:06.000\n[music]\n")
+    assert [cue.text for cue in subs.parse_vtt(vtt)] == ["Heute geht es um", "Kernfusion und mehr."]

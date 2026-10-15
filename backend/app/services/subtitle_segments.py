@@ -26,6 +26,9 @@ SubtitleUse = Literal["never", "manual", "any"]
 _TIME = r"(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{3})"
 _CUE_LINE = re.compile(rf"{_TIME}\s*-->\s*{_TIME}")
 _TAG = re.compile(r"<[^>]+>")
+# Geräusch- und Sprechermarken der Quelle ("[Musik]", "[Applaus]", "[ __ ]"):
+# kein gesprochener Text - weder suchen noch vorlesen
+ANNOTATION = re.compile(r"\[[^\]\n]{1,40}\]")
 _SENTENCE_END = re.compile(r"[.!?…][\"')\]]*$")
 
 # Ein gebündelter Satz wird spätestens nach so vielen Sekunden abgeschlossen
@@ -66,7 +69,7 @@ def parse_vtt(text: str) -> list[Segment]:
             flush()
             start, lines = None, []
         elif start is not None:
-            line = " ".join(html.unescape(_TAG.sub("", raw)).split())
+            line = " ".join(ANNOTATION.sub(" ", html.unescape(_TAG.sub("", raw))).split())
             if line:
                 lines.append(line)
     flush()

@@ -197,6 +197,33 @@ async def rebuild(video_id: str) -> int:
                        note=row["note"] if row["imported"] else None)
 
 
+async def remove_annotations(connection) -> int:
+    """Geräusch- und Sprechermarken ("[Musik]") aus den gespeicherten Abschnitten
+    entfernen (einmalig; neue kommen ohne sie, siehe subtitle_segments). Der
+    Volltext wird nur für die betroffenen Abschnitte ersetzt, nicht neu
+    aufgebaut. Gibt die Zahl der bereinigten Abschnitte zurück."""
+    cursor = await connection.execute("SELECT id, text FROM transcript_chunks WHERE instr(text, '[') > 0")
+    rows = await cursor.fetchall()
+    changed, emptied = [], []
+    for chunk_id, text in rows:
+        cleaned = " ".join(subtitle_segments.ANNOTATION.sub(" ", text).split())
+        if cleaned == text:
+            continue
+        (changed if cleaned else emptied).append((chunk_id, text, cleaned))
+    # Volltext ohne Inhalt-Trigger für Änderungen: alten Eintrag löschen, neuen setzen
+    await connection.executemany(
+        "INSERT INTO transcript_fts (transcript_fts, rowid, text) VALUES ('delete', ?, ?)",
+        [(chunk_id, text) for chunk_id, text, _ in changed])
+    await connection.executemany("UPDATE transcript_chunks SET text = ? WHERE id = ?",
+                                 [(cleaned, chunk_id) for chunk_id, _, cleaned in changed])
+    await connection.executemany("INSERT INTO transcript_fts (rowid, text) VALUES (?, ?)",
+                                 [(chunk_id, cleaned) for chunk_id, _, cleaned in changed])
+    # Leer gewordene fallen ganz weg (der Lösch-Trigger nimmt sie aus dem Volltext)
+    await connection.executemany("DELETE FROM transcript_chunks WHERE id = ?", [(chunk_id,) for chunk_id, _, _ in emptied])
+    await connection.commit()
+    return len(changed) + len(emptied)
+
+
 async def mark_none(video_id: str, note: str) -> None:
     """Eingelesen, aber ohne verwertbaren Text (subtitle_import): nicht wieder versuchen."""
     await _mark(video_id, "none", note=note, imported=True)
