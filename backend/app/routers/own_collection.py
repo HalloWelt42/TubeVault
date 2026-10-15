@@ -230,7 +230,7 @@ class OwnVideoPage(BaseModel):
 @router.get("/library", response_model=OwnVideoPage)
 async def library(offset: int = Query(0, ge=0), limit: int = Query(60, ge=1, le=200)):
     """Eingeordnete eigene und übernommene Videos, nach Kanal sortiert."""
-    where = "status = 'ready' AND source IN ('local', 'imported')"
+    where = own_actions.LIBRARY_WHERE
     totals = await db.fetch_one(
         f"""SELECT COUNT(*) AS n, COALESCE(SUM(file_size), 0) AS bytes,
                    SUM(CASE WHEN channel_name LIKE '%/%' THEN 1 ELSE 0 END) AS folder_named

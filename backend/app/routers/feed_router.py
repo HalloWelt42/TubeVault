@@ -190,3 +190,31 @@ async def move_all_status(body: dict):
         raise HTTPException(status_code=400, detail="from und to erforderlich")
     await rss_service.set_all_status(from_status, to_status, ch)
     return {"ok": True, "from": from_status, "to": to_status}
+
+
+@router.get("/feed-search")
+async def search_feed_entries(
+    q: str = Query("", min_length=2),
+    channel: Optional[str] = None,
+    limit: int = Query(20, ge=1, le=50),
+):
+    """Feed-Einträge nach Titel, Kennung oder Kanal durchsuchen (Zuordnen,
+    Verknüpfen, Suchfeld). in_library: das Video liegt schon in der Bibliothek."""
+    conditions = ["r.title IS NOT NULL"]
+    params = []
+    if q:
+        conditions.append("(r.title LIKE ? OR r.video_id LIKE ? OR s.channel_name LIKE ?)")
+        params.extend([f"%{q}%"] * 3)
+    if channel:
+        conditions.append("s.channel_name LIKE ?")
+        params.append(f"%{channel}%")
+    rows = await db.fetch_all(
+        f"""SELECT r.video_id, r.title, r.duration, r.published, s.channel_name, s.channel_id,
+                   CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END AS in_library
+            FROM rss_entries r
+            JOIN subscriptions s ON r.channel_id = s.channel_id
+            LEFT JOIN videos v ON v.id = r.video_id
+            WHERE {" AND ".join(conditions)}
+            ORDER BY r.published DESC LIMIT ?""", (*params, limit))
+    return {"results": [dict(r) for r in rows], "count": len(rows)}
+

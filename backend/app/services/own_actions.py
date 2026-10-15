@@ -32,6 +32,9 @@ from app.utils.file_utils import now_sqlite
 logger = logging.getLogger(__name__)
 
 OWN_VIDEO_PREFIX = "own_"
+# Eingeordnete eigene und übernommene Videos (Liste und Zähler der Seitenleiste)
+LIBRARY_WHERE = ("status = 'ready' AND source IN ('local', 'imported') "
+                 "AND COALESCE(file_path, '') <> '' AND file_size > 0")
 OWN_CHANNEL_PREFIX = "own_"
 
 

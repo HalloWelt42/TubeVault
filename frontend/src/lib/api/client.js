@@ -522,7 +522,7 @@ export const api = {
   searchRss: (q, channel = null) => {
     const params = new URLSearchParams({ q });
     if (channel) params.set('channel', channel);
-    return request(`/api/own-videos/search-rss?${params}`);
+    return request(`/api/subscriptions/feed-search?${params}`);
   },
   thumbnailFromFile: (videoId, position = null) =>
     request(`/api/video-repair/${videoId}/thumbnail-from-file${position === null ? '' : `?position=${position}`}`, { method: 'POST' }),

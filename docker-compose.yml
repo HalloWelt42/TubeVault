@@ -32,8 +32,10 @@ services:
       - /mnt/tb26/tubevault/audio:/app/data/audio
       - /mnt/tb26/tubevault/subtitles:/app/data/subtitles
       - /mnt/tb26/tubevault/exports:/app/data/exports
-      # Eigene Videos zum Scannen
-      - /mnt/tb26/youtube:/app/data/scan/youtube
+      # Sammlung alter Videos für "Eigene Videos" (wahlweise): ohne Angabe der
+      # leere Ordner scan im Datenverzeichnis, mit TUBEVAULT_SCAN_SOURCE in der
+      # .env z.B. eine externe Platte. Ohne Sammlung bleibt die Seite einfach leer.
+      - ${TUBEVAULT_SCAN_SOURCE:-/mnt/data/tubevault/data/scan}:/app/data/scan
     environment:
       - PYTHONUNBUFFERED=1
       # Zeitzone für Tageszähler und das nächtliche Drip-Fenster. Zeitstempel in

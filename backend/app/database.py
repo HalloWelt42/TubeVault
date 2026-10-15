@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 45
+SCHEMA_VERSION = 46
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -910,64 +910,6 @@ class Database:
             except Exception as e:
                 logger.warning(f"Migration v26 Fehler: {e}")
 
-        if current_version < 27:
-            try:
-                await self._connection.executescript("""
-                    CREATE TABLE IF NOT EXISTS scan_sessions (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        job_id INTEGER,
-                        scan_path TEXT NOT NULL,
-                        youtube_archive BOOLEAN DEFAULT 1,
-                        status TEXT DEFAULT 'running',
-                        total_files INTEGER DEFAULT 0,
-                        scanned_files INTEGER DEFAULT 0,
-                        created_at TEXT DEFAULT (datetime('now')),
-                        finished_at TEXT
-                    );
-
-                    CREATE TABLE IF NOT EXISTS scan_staging (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        session_id INTEGER NOT NULL,
-                        file_path TEXT NOT NULL,
-                        filename TEXT,
-                        folder_name TEXT,
-                        title TEXT,
-                        channel_name TEXT,
-                        duration INTEGER,
-                        file_size INTEGER DEFAULT 0,
-                        resolution TEXT,
-                        codec TEXT,
-                        youtube_id TEXT,
-                        is_portrait BOOLEAN DEFAULT 0,
-                        nfo_found BOOLEAN DEFAULT 0,
-                        thumbnail_path TEXT,
-                        description_text TEXT,
-                        subtitles_found TEXT,
-                        match_type TEXT DEFAULT 'none',
-                        match_id TEXT,
-                        match_title TEXT,
-                        match_channel TEXT,
-                        match_confidence REAL DEFAULT 0,
-                        match_duration INTEGER,
-                        duration_boost BOOLEAN DEFAULT 0,
-                        duration_penalty BOOLEAN DEFAULT 0,
-                        match_candidates TEXT DEFAULT '[]',
-                        already_registered BOOLEAN DEFAULT 0,
-                        existing_id TEXT,
-                        decision TEXT,
-                        decision_channel TEXT,
-                        decision_at TEXT,
-                        FOREIGN KEY (session_id) REFERENCES scan_sessions(id) ON DELETE CASCADE
-                    );
-
-                    CREATE INDEX IF NOT EXISTS idx_scan_staging_session ON scan_staging(session_id);
-                    CREATE INDEX IF NOT EXISTS idx_scan_staging_decision ON scan_staging(session_id, decision);
-                    CREATE INDEX IF NOT EXISTS idx_scan_staging_match ON scan_staging(session_id, match_type);
-                """)
-                logger.info("Migration v27: scan_sessions + scan_staging Tabellen erstellt")
-            except Exception as e:
-                logger.warning(f"Migration v27 Fehler: {e}")
-
         if current_version < 28:
             try:
                 # Drip-Feed Spalten
@@ -995,39 +937,6 @@ class Database:
                 logger.info("Migration v28: drip-feed + suggest-exclude Spalten")
             except Exception as e:
                 logger.warning(f"Migration v28 Fehler: {e}")
-
-        if current_version < 29:
-            try:
-                await self._connection.execute(
-                    "ALTER TABLE scan_staging ADD COLUMN info_json_found BOOLEAN DEFAULT 0"
-                )
-            except Exception:
-                pass
-            try:
-                await self._connection.execute(
-                    "ALTER TABLE scan_staging ADD COLUMN channel_folder TEXT"
-                )
-            except Exception:
-                pass
-            # Bestehende Daten: channel_folder aus folder_name berechnen
-            try:
-                # Für Pfade mit >= 2 Segmenten: erste 2 Teile nehmen
-                await self._connection.execute("""
-                    UPDATE scan_staging SET channel_folder =
-                    CASE
-                        WHEN INSTR(folder_name, '/') > 0 AND
-                             INSTR(SUBSTR(folder_name, INSTR(folder_name, '/') + 1), '/') > 0
-                        THEN SUBSTR(folder_name, 1,
-                             INSTR(folder_name, '/') +
-                             INSTR(SUBSTR(folder_name, INSTR(folder_name, '/') + 1), '/') - 1)
-                        ELSE folder_name
-                    END
-                    WHERE channel_folder IS NULL
-                """)
-            except Exception:
-                pass
-            await self._connection.commit()
-            logger.info("Migration v29: info_json_found + channel_folder in scan_staging")
 
         if current_version < 30:
             # Tag-Bereinigung: Kaputte Tags aus YouTube-Titeln reparieren
@@ -1188,9 +1097,15 @@ class Database:
         from app.services import ad_segments
         await ad_segments.install_schema(self._connection, backfill=current_version < 42)
 
-        # Eigene Videos: eingelesene Ordner und der Stand jeder Datei
+        # Eigene Videos: eingelesene Ordner und der Stand jeder Datei.
+        # v46: Tabellen des alten Einlese-Assistenten (v27/v29) entfallen
         from app.services import own_scan
         await own_scan.install_schema(self._connection)
+        if current_version < 46:
+            await self._connection.executescript(
+                "DROP TABLE IF EXISTS scan_staging; DROP TABLE IF EXISTS scan_sessions;")
+            await self._connection.commit()
+            logger.info("Migration v46: alter Einlese-Assistent entfernt")
 
         # v43: Prüftakt nach dem Alter des neuesten Videos (rss_service.interval_for).
         # Nutzerentscheidung 15.10.2026: Grundtakt 2x täglich, höchstens 30 Tage.

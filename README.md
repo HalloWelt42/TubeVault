@@ -75,7 +75,20 @@ TubeVault trennt Index und Medien bewusst:
   z. B. `/mnt/tb26/tubevault`
 
 Die Pfade werden über die Volumes in `docker-compose.yml` gesetzt (Feinsteuerung per
-`TUBEVAULT_*`-Umgebungsvariablen möglich). Die Datenbank ist nur der Index — Dokumente
+`TUBEVAULT_*`-Umgebungsvariablen möglich).
+
+Wahlweise kommt eine **Sammlung alter Videodateien** dazu, die unter "Eigene Videos"
+eingeordnet wird (Doppeltes löschen, Bekanntes übernehmen, Eigenes einem Kanal
+zuordnen). Ohne Angabe ist das ein leerer Ordner; eine externe Platte bindet man in
+der `.env` ein:
+
+```bash
+TUBEVAULT_SCAN_SOURCE=/mnt/platte/alte-videos
+```
+
+Unterordner der obersten Ebene gelten als Hinweis auf den Kanal (`ARTE/...`, `c't 3003/...`).
+
+Die Datenbank ist nur der Index - Dokumente
 (Beschreibungen, Kapitel, Notizen) liegen als Dateien im Texte-Verzeichnis, Metadaten
 redundant als `info.json` neben jedem Video.
 

@@ -9,7 +9,7 @@ komponieren daraus statt eigene, divergierende SQL zu führen.
 Leitregel: **Ein Badge zählt exakt das, was seine Zielseite anzeigt.**
 - videos      == Library-Seite  (ready & non-archived, jede source)
 - archives    == Archiv-Seite   (ready & archived)
-- own_videos  == OwnVideos-Seite (source local/imported, ready, echte Datei)
+- own_videos  == Eigene Videos, Reiter Eingeordnet (own_actions.LIBRARY_WHERE)
   → Fix ggü. früher: file_size>0 wie die Seite; KEIN Archiv-Filter, weil die
     Seite archivierte eigene Videos ebenfalls listet.
 """
@@ -41,13 +41,9 @@ class CountsService:
         ) or 0
 
     async def own_videos(self) -> int:
-        """Eigene/importierte mit echter Datei – wie die OwnVideos-Seite
-        (import_service.get_own_videos: source, ready, file_path, file_size>0)."""
-        return await db.fetch_val(
-            "SELECT COUNT(*) FROM videos WHERE source IN ('local','imported') "
-            "AND status='ready' AND file_path IS NOT NULL AND file_path != '' "
-            "AND file_size > 0"
-        ) or 0
+        """Eigene und übernommene Videos - genau die Liste "Eingeordnet"."""
+        from app.services.own_actions import LIBRARY_WHERE
+        return await db.fetch_val(f"SELECT COUNT(*) FROM videos WHERE {LIBRARY_WHERE}") or 0
 
     async def library_size_bytes(self) -> int:
         return await db.fetch_val(

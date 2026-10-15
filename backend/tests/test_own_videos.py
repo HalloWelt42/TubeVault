@@ -364,10 +364,10 @@ async def test_doppelte_auf_einmal_loeschen(test_db, collection, library_dirs):
 
 async def test_eingeordnet_zeigt_ordnerpfade_als_kanal(test_db, async_client_factory):
     await test_db.execute(
-        """INSERT INTO videos (id, title, channel_name, status, source, file_size) VALUES
-           ('own_1', 'A', 'youtube/ARTE/Reihe', 'ready', 'local', 10),
-           ('own_2', 'B', 'Werbespots', 'ready', 'local', 5),
-           ('nP7N1_34lh8', 'C', 'c''t 3003', 'ready', 'youtube', 1)""")
+        """INSERT INTO videos (id, title, channel_name, status, source, file_size, file_path) VALUES
+           ('own_1', 'A', 'youtube/ARTE/Reihe', 'ready', 'local', 10, '/v/1.mp4'),
+           ('own_2', 'B', 'Werbespots', 'ready', 'local', 5, '/v/2.mp4'),
+           ('nP7N1_34lh8', 'C', 'c''t 3003', 'ready', 'youtube', 1, '/v/3.mp4')""")
     async with await async_client_factory(own_collection.router) as client:
         page = (await client.get("/api/own-videos/library")).json()
     assert (page["total"], page["total_bytes"], page["folder_named_channels"]) == (2, 15, 1)

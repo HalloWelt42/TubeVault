@@ -77,14 +77,12 @@ async def test_stats_frozen_semantics(test_db, make_test_app):
 
 
 async def test_own_videos_badge_matches_page(test_db, make_test_app):
-    """Das Badge zählt exakt das, was die OwnVideos-Seite anzeigt
-    (source local/imported, ready, file_path, file_size>0). Seit Phase-1-Fix
-    konsistent (vorher xfail)."""
-    from app.routers import system, own_videos
+    """Das Badge zählt exakt das, was Eigene Videos unter "Eingeordnet" zeigt
+    (source local/imported, ready, file_path, file_size>0)."""
+    from app.routers import system, own_collection
     await _seed(test_db)
-    c = await _client(make_test_app, system.router, own_videos.router)
+    c = await _client(make_test_app, system.router, own_collection.router)
     async with c as client:
         badge = (await client.get("/api/system/badges")).json()["own_videos"]
-        page = (await client.get("/api/own-videos?per_page=100")).json()
-    page_total = page.get("total") if isinstance(page, dict) else len(page)
-    assert badge == page_total
+        page = (await client.get("/api/own-videos/library")).json()
+    assert badge == page["total"]
