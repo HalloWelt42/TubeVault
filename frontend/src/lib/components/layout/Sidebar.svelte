@@ -76,7 +76,7 @@
       <i class="fa-solid fa-terminal"></i>
       <span>Live-Log</span>
       {#if logActive}
-        <span class="badge accent">ON</span>
+        <span class="badge accent" title="Das Live-Log-Fenster ist offen">offen</span>
       {/if}
     </button>
   </div>

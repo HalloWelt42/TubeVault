@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Live-Log und Aufräumen</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+<style>
+  /* ── Live-Log: schwebendes Fenster in den Farben der App ── */
+  .ll { position: fixed; left: 300px; top: 92px; width: min(980px, calc(100vw - 340px)); height: 560px; z-index: 20;
+        display: flex; flex-direction: column; background: var(--tv-leiste); border: 1px solid var(--tv-rand-stark);
+        border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten); overflow: hidden; }
+  .ll-kopf { display: flex; align-items: center; gap: var(--tv-a3); height: 48px; padding: 0 var(--tv-a2) 0 var(--tv-a4);
+             background: var(--tv-flaeche); cursor: move; }
+  .ll-kopf .titel { font-weight: 700; display: flex; align-items: center; gap: var(--tv-a2); }
+  .ll-kopf .titel i { color: var(--tv-akzent); }
+  .verbindung { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: var(--tv-ecke-klein);
+                font-size: var(--tv-gr-marke); font-weight: 700; color: var(--tv-erfolg); background: rgba(var(--tv-erfolg-rgb), 0.12); }
+  .verbindung.aus { color: var(--tv-gefahr); background: rgba(var(--tv-gefahr-rgb), 0.12); }
+  .verbindung b { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .ll-kopf .rechts { margin-left: auto; display: flex; gap: 2px; }
+  .ll-leiste { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; padding: var(--tv-a2) var(--tv-a3); border-bottom: 1px solid var(--tv-rand); }
+  .ll-leiste .reiter { margin: 0; }
+  .ll-leiste .reiter button { height: 34px; padding: 0 var(--tv-a3); }
+  .ll-leiste .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; }
+  .ll-leiste .eingabe { height: 34px; }
+  .fehlerchip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--tv-ecke-klein);
+                background: rgba(var(--tv-gefahr-rgb), 0.14); color: var(--tv-gefahr); font-weight: 700; font-size: var(--tv-gr-marke); cursor: pointer; }
+  .ll-inhalt { flex: 1; overflow-y: auto; padding: var(--tv-a1) 0; font-size: var(--tv-gr-klein); }
+  .zeile-log { display: grid; grid-template-columns: 76px 112px 22px minmax(0, 1fr); gap: var(--tv-a3); align-items: baseline;
+               padding: 5px var(--tv-a4); border-radius: 0; }
+  .zeile-log:hover { background: var(--tv-flaeche); }
+  .zeile-log .zeit { color: var(--tv-text-3); font-size: var(--tv-gr-klein); min-width: 0; font-weight: 500; }
+  .zeile-log .gebiet { font-size: var(--tv-gr-marke); font-weight: 700; color: var(--farbe, var(--tv-text-2)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .zeile-log .stufe { text-align: center; font-size: 14px; }
+  .zeile-log .text { color: var(--tv-text); overflow-wrap: anywhere; }
+  .zeile-log .text .quelle { color: var(--tv-text-3); margin-right: 6px; }
+  .zeile-log.detail .text { color: var(--tv-text-3); }
+  .zeile-log.warnung { background: rgba(var(--tv-warnung-rgb), 0.06); }
+  .zeile-log.warnung .stufe { color: var(--tv-warnung); }
+  .zeile-log.fehler { background: rgba(var(--tv-gefahr-rgb), 0.08); }
+  .zeile-log.fehler .stufe { color: var(--tv-gefahr); }
+  .zeile-log.hinweis-t .text { color: var(--tv-info); }
+  .zeile-log .auf { margin-left: 8px; color: var(--tv-akzent); font-size: var(--tv-gr-marke); font-weight: 700; cursor: pointer; }
+  .verlauf-trace { margin: 0 var(--tv-a4) var(--tv-a2) calc(76px + 112px + 22px + 3 * var(--tv-a3) + var(--tv-a4)); padding: var(--tv-a2) var(--tv-a3);
+                   background: var(--tv-mulde); border-radius: var(--tv-ecke-klein); color: var(--tv-text-2);
+                   font: 14px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .tagwechsel { margin: var(--tv-a2) var(--tv-a4); text-align: center; font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.08em;
+                text-transform: uppercase; color: var(--tv-text-3); }
+  .ll-fuss { display: flex; align-items: center; gap: var(--tv-a4); height: 40px; padding: 0 var(--tv-a2) 0 var(--tv-a4);
+             border-top: 1px solid var(--tv-rand); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .ll-fuss .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); }
+  .griff { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize;
+           background: linear-gradient(135deg, transparent 50%, var(--tv-rand-stark) 50%); }
+  .auftrag { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; gap: var(--tv-a3); align-items: center;
+             padding: var(--tv-a2) var(--tv-a4); }
+  .auftrag i.art { color: var(--tv-akzent); }
+  .auftrag .balken { grid-column: 2 / -1; height: 5px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+  .auftrag .balken b { display: block; height: 100%; background: var(--tv-akzent); }
+  .auftrag .info { grid-column: 2 / -1; font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .dienst { display: flex; align-items: center; gap: var(--tv-a3); padding: 6px var(--tv-a4); font-size: var(--tv-gr-klein); }
+  .dienst .p { width: 9px; height: 9px; border-radius: 50%; background: var(--tv-erfolg); flex: none; }
+  .dienst .p.aus { background: var(--tv-text-3); }
+  .dienst .n { flex: 1; }
+  .gruppe-t { padding: var(--tv-a3) var(--tv-a4) var(--tv-a1); }
+
+  /* ── Aufräumen als normale Seite ── */
+  .a-zeile { display: grid; grid-template-columns: 26px 160px minmax(0, 1fr) auto auto; gap: var(--tv-a4); align-items: center;
+             padding: var(--tv-a2); border-radius: var(--tv-ecke); }
+  .a-zeile:hover { background: var(--tv-flaeche); }
+  .a-zeile.gewaehlt { background: rgba(var(--tv-akzent-rgb), 0.08); }
+  .a-zeile .haken { color: var(--tv-text-3); font-size: 19px; }
+  .a-zeile.gewaehlt .haken { color: var(--tv-akzent); }
+  .a-zeile .vbild { aspect-ratio: 16 / 9; border-radius: var(--tv-ecke-klein); overflow: hidden; background: var(--tv-mulde); position: relative; }
+  .a-zeile .vbild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .a-zeile .vbild .d { position: absolute; right: 5px; bottom: 6px; padding: 0 5px; background: var(--tv-schleier); border-radius: var(--tv-ecke-klein);
+                       font-size: var(--tv-gr-marke); font-family: var(--tv-schrift-zahl); }
+  .a-zeile .vtitel { font-weight: 600; }
+  .a-zeile .vmeta { font-size: var(--tv-gr-klein); color: var(--tv-text-3); display: flex; gap: var(--tv-a3); flex-wrap: wrap; }
+  .a-zeile .groesse { font-family: var(--tv-schrift-zahl); font-weight: 600; text-align: right; min-width: 90px; }
+  .auswahl { display: flex; align-items: center; gap: var(--tv-a3); flex-wrap: wrap; margin-top: var(--tv-a3); padding: var(--tv-a2) var(--tv-a2) var(--tv-a2) var(--tv-a4);
+             border-radius: var(--tv-ecke); background: rgba(var(--tv-akzent-rgb), 0.08); font-size: var(--tv-gr-klein); }
+  .auswahl .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); }
+
+  /* ── Einstellungen > System: Wiederherstellen ── */
+  .einst { max-width: 1000px; }
+  .einst .gruppe { background: var(--tv-flaeche); border-radius: var(--tv-ecke); margin-bottom: var(--tv-a5); padding: var(--tv-a4); }
+  .einst h2 { display: flex; gap: var(--tv-a2); align-items: center; margin: 0 0 var(--tv-a3); }
+  .einst h2 i { color: var(--tv-akzent); }
+  .w-zeile { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--tv-a4); align-items: center; padding: var(--tv-a3) 0;
+             border-top: 1px solid var(--tv-rand); }
+  .w-zeile:first-of-type { border-top: 0; }
+  .w-zeile .e { font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .w-zeile .tun { display: flex; gap: var(--tv-a2); }
+  .stand-datei { display: flex; align-items: center; gap: var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-2); margin-top: var(--tv-a2); }
+  .stand-datei .balken { flex: 1; max-width: 320px; height: 6px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+  .stand-datei .balken b { display: block; height: 100%; background: var(--tv-akzent); }
+  .neu-hier { margin-left: var(--tv-a2); font-size: var(--tv-gr-marke); font-weight: 700; color: var(--tv-akzent); }
+  .notiz { font-size: var(--tv-gr-marke); color: var(--tv-text-3); margin-top: var(--tv-a3); }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+  <main class="haupt rahmen" id="haupt"></main>
+  <div data-block="fuss"></div>
+</div>
+<div id="fenster"></div>
+
+<script type="module">
+  import { seite, vorschau, dauer, VIDEOS } from './gemeinsam.js';
+  import { zustaende } from './sammlung.js';
+
+  // Bereiche mit ganzen Wörtern statt BE/FE/DL/QUE/RTE/SCN ...
+  const BEREICH = { backend: ['Server', '#9fb3be'], api: ['Abfrage', '#c084fc'], frontend: ['Browser', '#34d399'],
+                    download: ['Download', '#58b8f0'], rss: ['Kanalprüfung', '#ffb03a'], queue: ['Warteschlange', '#c38bea'],
+                    scan: ['Kanalscan', '#26c6da'], meta: ['Metadaten', '#9fb3be'], lyrics: ['Liedtexte', '#ce93d8'] };
+  // Stufen als Zeichen und Farbe statt abgeschnittener Wörter (WARNI, CRITI)
+  const STUFE = { DEBUG: ['detail', ''], INFO: ['', ''], WARNING: ['warnung', 'fa-triangle-exclamation'], ERROR: ['fehler', 'fa-circle-xmark'] };
+
+  // Echte Meldungen vom Pi (16.10.2026), dazu ein Fehler mit Traceback
+  const LOG = [
+    ['00:45:40', 'INFO', 'backend', 'main', 'Interner Takt der Kanalprüfung gestartet (alle 5 Min.)'],
+    ['00:46:14', 'INFO', 'backend', 'music_files', 'Musikdateien: 8.736 Dateien, 0 gelesen, 0 entfernt (3,6 s)'],
+    ['00:46:41', 'INFO', 'backend', 'subtitle_import', 'Untertitel: Durchgang fertig, 6 Videos eingelesen'],
+    ['00:47:40', 'INFO', 'scan', 'auto_scan', 'Bereit: liest ungescannte Kanäle, höchstens einen alle 2 Stunden (wenn eingeschaltet)'],
+    ['00:47:41', 'INFO', 'backend', 'userdata_export', 'Nutzerdaten gesichert: favorites=42, watch_history=74033, categories=3, playlists=61, playlist_videos=2.412, notes=118'],
+    ['00:47:57', 'INFO', 'download', 'ytdlp_adapter', 'Drosselung angewandt: 1.200 KB/s (fest)'],
+    ['00:48:02', 'DEBUG', 'api', 'api', 'GET /api/jobs → 200 (13 ms)'],
+    ['00:48:02', 'DEBUG', 'api', 'api', 'GET /api/downloads → 200 (26 ms)'],
+    ['00:48:31', 'WARNING', 'api', 'slow-req', 'Langsam: GET /api/system/background → 4.812 ms'],
+    ['00:49:10', 'INFO', 'api', 'api', 'POST /api/transcripts/ai/claim → 200 (2 ms)'],
+    ['00:49:58', 'ERROR', 'backend', 'api', 'Unbehandelter Fehler bei GET /api/subscriptions/channel/UCMZgTsrg4GbC7meNeOL86fg/diagnosis', 'Traceback (most recent call last):\n  File "/app/app/services/channel_diagnosis.py", line 84, in files_of\n    counted = await asyncio.to_thread(_count_files, rows)\nPermissionError: [Errno 13] Permission denied: \'/app/data/subtitles/KYzUIm98NZE\''],
+    ['00:50:22', 'WARNING', 'frontend', 'console', 'Settings laden fehlgeschlagen: TypeError: Failed to fetch'],
+    ['00:50:23', 'INFO', 'queue', 'job_service', 'Auftrag 48211 fertig: Kanal-Scan MathemaTrick, 12 neue Videos'],
+  ];
+
+  function logZeile([zeit, stufe, cat, name, msg, trace], offen) {
+    const [klasse, icon] = STUFE[stufe];
+    const [bereich, farbe] = BEREICH[cat] || [cat, ''];
+    return `<div class="zeile-log ${klasse}">
+        <span class="zeit zahl" title="16.10.2026 ${zeit}">${zeit}</span>
+        <span class="gebiet" style="--farbe:${farbe}">${bereich}</span>
+        <span class="stufe" title="${{ DEBUG: 'Detail', INFO: 'Info', WARNING: 'Warnung', ERROR: 'Fehler' }[stufe]}">${icon ? `<i class="fa-solid ${icon}"></i>` : ''}</span>
+        <span class="text"><span class="quelle">${name}</span>${msg}${trace ? `<span class="auf">${offen ? 'Verlauf zu' : 'Verlauf auf'}</span>` : ''}</span>
+      </div>${trace && offen ? `<pre class="verlauf-trace">${trace}</pre>` : ''}`;
+  }
+
+  function fenster(reiter) {
+    const zeilen = reiter === 'auftraege' ? auftraege()
+      : `<div class="tagwechsel">Donnerstag, 16.10.2026</div>` + LOG.filter((l) => reiter !== 'alle-stufen' ? l[1] !== 'DEBUG' : true).map((l) => logZeile(l, true)).join('');
+    return `<div class="ll">
+      <div class="ll-kopf">
+        <span class="titel"><i class="fa-solid fa-terminal"></i> Live-Log</span>
+        <span class="verbindung" title="Mit dem Server verbunden; nach einem Neustart verbindet es sich selbst neu"><b></b> verbunden</span>
+        <div class="rechts">
+          <button class="knopf ohne klein" title="Anhalten: neue Meldungen werden gesammelt, nicht angezeigt"><i class="fa-solid fa-pause"></i> Anhalten</button>
+          <button class="knopf ohne symbol klein" title="Verkleinern"><i class="fa-solid fa-window-minimize"></i></button>
+          <button class="knopf ohne symbol klein" title="Schließen"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="ll-leiste">
+        <div class="reiter">
+          ${[['alle', 'Alle', 'fa-layer-group'], ['server', 'Server', 'fa-server'], ['abfragen', 'Abfragen', 'fa-right-left'],
+             ['browser', 'Browser', 'fa-display'], ['auftraege', 'Aufträge', 'fa-gears']].map(([k, n, i]) =>
+            `<button class="${(k === reiter || (reiter === 'alle-stufen' && k === 'alle')) ? 'aktiv' : ''}"><i class="fa-solid ${i}"></i> ${n}${k === 'auftraege' ? ' <span class="zaehler akzent">2</span>' : ''}</button>`).join('')}
+        </div>
+        ${reiter === 'auftraege' ? '' : `<div class="rechts">
+          <button class="fehlerchip" title="Nur Fehler zeigen"><i class="fa-solid fa-circle-xmark"></i> <span class="zahl">1</span> Fehler</button>
+          <input class="eingabe" style="width: 220px" placeholder="In Meldungen suchen">
+          <select class="eingabe" style="width: 150px" title="Ab welcher Stufe: Details sind die laufenden Abfragen der Oberfläche">
+            <option ${reiter === 'alle-stufen' ? 'selected' : ''}>Auch Details</option><option ${reiter !== 'alle-stufen' ? 'selected' : ''}>Ab Info</option><option>Ab Warnung</option><option>Nur Fehler</option>
+          </select>
+          <button class="knopf ohne symbol klein" title="Als Textdatei speichern"><i class="fa-solid fa-file-export"></i></button>
+          <button class="knopf ohne symbol klein" title="Anzeige leeren"><i class="fa-solid fa-eraser"></i></button>
+        </div>`}
+      </div>
+      <div class="ll-inhalt">${zeilen}</div>
+      <div class="ll-fuss">
+        ${reiter === 'auftraege' ? '<span><span class="zahl">2</span> Aufträge laufen, <span class="zahl">14</span> warten</span>'
+          : '<span><span class="zahl">1.204</span> Meldungen, davon <span class="zahl">1</span> Fehler und <span class="zahl">2</span> Warnungen</span>'}
+        <div class="rechts">${reiter === 'auftraege' ? '' : '<button class="knopf ohne klein" title="Neue Meldungen ans Ende rollen; beim Hochrollen aus, unten wieder an"><i class="fa-solid fa-arrows-down-to-line"></i> Mitrollen an</button>'}</div>
+      </div>
+      <div class="griff" title="Größe ändern"></div>
+    </div>`;
+  }
+
+  function auftraege() {
+    return `<div class="auftrag"><i class="fa-solid fa-download art"></i><span>Welche Zahl ist der Zauberer? - Harry Potter Rätsel</span>
+        <span class="zustand laeuft">läuft</span><button class="knopf ohne symbol klein" title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
+        <div class="balken"><b style="width: 62%"></b></div><div class="info"><span class="zahl">62 %</span> · Video, <span class="zahl">1.200 KB/s</span></div></div>
+      <div class="auftrag"><i class="fa-solid fa-satellite-dish art"></i><span>Kanal-Scan: Weitz / HAW Hamburg</span>
+        <span class="zustand laeuft">läuft</span><button class="knopf ohne symbol klein" title="Abbrechen"><i class="fa-solid fa-xmark"></i></button>
+        <div class="info"><span class="zahl">340</span> Videos gelesen</div></div>
+      <div class="auftrag"><i class="fa-solid fa-clock art" style="color: var(--tv-info)"></i><span><span class="zahl">14</span> Downloads warten</span>
+        <span></span><button class="knopf ohne klein"><i class="fa-solid fa-pause"></i> Warteschlange anhalten</button></div>
+      <div class="gruppe-t etikett">Dienste im Hintergrund</div>
+      ${[['Kanalprüfung (alle 5 Min.)', 1], ['Bestand nachladen (alle 15 Min.)', 1], ['Mitgeladene Untertitel einlesen', 1], ['Nach neuer Version sehen', 1], ['Ungescannte Kanäle erfassen', 0]]
+        .map(([n, an]) => `<div class="dienst"><span class="p${an ? '' : ' aus'}"></span><span class="n">${n}</span><span class="schwach">${an ? 'läuft' : 'angehalten'}</span>
+          <button class="knopf ohne symbol klein" title="${an ? 'Anhalten' : 'Starten'}"><i class="fa-solid ${an ? 'fa-stop' : 'fa-play'}"></i></button></div>`).join('')}`;
+  }
+
+  function uebersicht() {
+    return `<div class="rahmen-kopf"><div class="sammlung-kopf"><h1>Übersicht</h1><span class="zahl">32.479 in der Bibliothek</span></div></div>
+      <div class="rollfeld"><div class="raster">${VIDEOS.slice(0, 6).map((v) => `<div class="kachel"><div class="bild"><img src="${vorschau(v.id)}" alt=""></div><div class="kachel-text"><div class="kachel-titel">${v.titel}</div></div></div>`).join('')}</div></div>`;
+  }
+
+  // Aufräumen: normale Seite (vorher unter Verwaltung)
+  function aufraeumen() {
+    const kandidaten = VIDEOS.slice(0, 7);
+    return `<div class="rahmen-kopf">
+        <div class="sammlung-kopf"><h1>Aufräumen</h1><span class="zahl">Bestand ausmisten, restlos löschen</span></div>
+        <div class="reiter"><button><i class="fa-solid fa-mobile-screen"></i> Shorts <span class="zaehler">3</span></button>
+          <button><i class="fa-solid fa-tv"></i> Nach Kanal</button>
+          <button class="aktiv"><i class="fa-solid fa-hard-drive"></i> Groß und selten gesehen</button></div>
+        <div class="auswahl"><i class="fa-solid fa-square-check" style="color: var(--tv-akzent)"></i>
+          <span><span class="zahl">2</span> gewählt, <span class="zahl">342 MB</span></span>
+          <div class="rechts"><button class="knopf ohne klein">Auswahl aufheben</button><button class="knopf klein">Alle <span class="zahl">186</span> wählen</button>
+            <button class="knopf klein gefahr"><i class="fa-solid fa-trash-can"></i> Restlos löschen</button></div></div>
+      </div>
+      <div class="rollfeld">${kandidaten.map((v, i) => `<div class="a-zeile${i < 2 ? ' gewaehlt' : ''}">
+          <i class="fa-${i < 2 ? 'solid fa-square-check' : 'regular fa-square'} haken"></i>
+          <div class="vbild"><img src="${vorschau(v.id)}" alt=""><span class="d">${dauer(v.dauer)}</span></div>
+          <div><div class="vtitel">${v.titel}</div><div class="vmeta"><span>${v.kanal}</span><span class="zahl">${v.hochgeladen.split('-').reverse().join('.')}</span><span>${i % 3 ? 'nie gesehen' : 'einmal gesehen'}</span></div></div>
+          <span class="groesse">${(v.groesse / 1e6).toFixed(0)} MB</span>
+          <button class="knopf ohne symbol klein" title="Ansehen"><i class="fa-solid fa-play"></i></button>
+        </div>`).join('')}</div>`;
+  }
+
+  // Einstellungen > System: Notfallwerkzeuge neben der Sicherung (vorher unter Verwaltung)
+  function system() {
+    return `<div class="rahmen-kopf"><div class="sammlung-kopf"><h1>Einstellungen</h1><span class="zahl">Änderungen gelten sofort</span></div>
+        <div class="reiter"><button>Kanäle</button><button>Downloads</button><button>Ansicht</button><button>Erweiterungen</button><button class="aktiv"><i class="fa-solid fa-server"></i> System</button></div></div>
+      <div class="rollfeld"><div class="einst">
+        <section class="gruppe"><h2><i class="fa-solid fa-floppy-disk"></i> Sicherung</h2>
+          <div class="w-zeile"><div>Datenbank sichern<div class="e">Zuletzt: <span class="zahl">16.10.2026 03:00</span>, <span class="zahl">2,1 GB</span></div></div>
+            <div class="tun"><button class="knopf klein"><i class="fa-solid fa-plus"></i> Jetzt sichern</button><button class="knopf ohne klein"><i class="fa-solid fa-upload"></i> Datei zurückspielen</button></div></div>
+          <div class="w-zeile"><div>Nutzerdaten sichern<div class="e">Favoriten, Verlauf, Playlists, Notizen als Datei; täglich von selbst, die letzten <span class="zahl">14</span> Stände bleiben. Zuletzt <span class="zahl">00:47</span></div></div>
+            <div class="tun"><button class="knopf ohne klein"><i class="fa-solid fa-plus"></i> Jetzt sichern</button></div></div>
+        </section>
+        <section class="gruppe"><h2><i class="fa-solid fa-life-ring"></i> Wiederherstellen<span class="neu-hier">vorher unter Verwaltung</span></h2>
+          <div class="w-zeile"><div>Datenbank aus den Begleitdateien neu aufbauen<div class="e">Für den Notfall: liest neben jedem Video info.json, Beschreibung und Kapitel. Der Probelauf zeigt nur, was er täte.</div>
+              <div class="stand-datei"><span>Begleitdateien</span><div class="balken"><b style="width: 100%"></b></div><span><span class="zahl">32.479</span> von <span class="zahl">32.479</span> Videos</span></div></div>
+            <div class="tun"><button class="knopf klein"><i class="fa-solid fa-flask"></i> Probelauf</button><button class="knopf klein gefahr"><i class="fa-solid fa-rotate"></i> Neu aufbauen</button></div></div>
+          <div class="w-zeile"><div>Nutzerdaten zurückspielen<div class="e">Neuester Stand vom <span class="zahl">16.10.2026 00:47</span>; Vorhandenes bleibt, Fehlendes kommt dazu</div></div>
+            <div class="tun"><button class="knopf klein"><i class="fa-solid fa-clock-rotate-left"></i> Zurückspielen</button></div></div>
+        </section>
+        <p class="notiz">Begleitdateien schreibt TubeVault bei jeder Änderung und für den Altbestand einmalig im Hintergrund (Fortschritt unter Hintergrundarbeiten). Inhalte liegen als Datei, die Datenbank ist Index und Suche.</p>
+      </div></div>`;
+  }
+
+  // Schale einmal, passend zum Zustand aus der Adresse (Seitenleiste)
+  const startZustand = new URLSearchParams(location.search).get('zustand') || 'log';
+  seite(startZustand === 'aufraeumen' ? 'aufraeumen' : startZustand === 'system' ? 'einstellungen' : 'protokoll');
+
+  const haupt = document.getElementById('haupt');
+  const box = document.getElementById('fenster');
+  zustaende([['log', 'Live-Log'], ['log-details', 'Live-Log mit Details'], ['auftraege', 'Live-Log Aufträge'],
+             ['aufraeumen', 'Aufräumen'], ['system', 'Einstellungen System']], (z) => {
+    const imFenster = ['log', 'log-details', 'auftraege'].includes(z);
+    haupt.innerHTML = z === 'aufraeumen' ? aufraeumen() : z === 'system' ? system() : uebersicht();
+    box.innerHTML = imFenster ? fenster(z === 'log-details' ? 'alle-stufen' : z === 'auftraege' ? 'auftraege' : 'alle') : '';
+  });
+</script>
+</body>
+</html>

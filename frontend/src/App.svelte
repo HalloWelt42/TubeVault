@@ -10,7 +10,7 @@
   import AdminLayout from './lib/components/layout/AdminLayout.svelte';
   import Toast from './lib/components/common/Toast.svelte';
   import ActivityPanel from './lib/components/common/ActivityPanel.svelte';
-  import LogTerminal from './lib/components/common/LogTerminal.svelte';
+  import LiveLogWindow from './lib/components/livelog/LiveLogWindow.svelte';
   import VersionBar from './lib/components/common/VersionBar.svelte';
   import MusicPlayerBar from './lib/components/music/MusicPlayerBar.svelte';
   import RemoteBar from './lib/components/remote/RemoteBar.svelte';
@@ -156,7 +156,7 @@
   {/if}
 </div>
 <Toast />
-<LogTerminal bind:visible={logVisible} />
+<LiveLogWindow bind:visible={logVisible} />
 
 <style>
   :global(*) {

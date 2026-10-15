@@ -222,9 +222,9 @@ async def lifespan(app: FastAPI):
     await rss_service.start_worker()
     await rss_service.resume_avatar_jobs()
     # ─── Hintergrund-Tasks über TaskManager registrieren ─────────
-    task_manager.register("rss_cron", "RSS-Feed Cron (5 Min)",
+    task_manager.register("rss_cron", "Kanalprüfung (alle 5 Min.)",
                           _rss_cron_loop, auto_restart=True, essential=True)
-    task_manager.register("drip_cron", "Drip-Feed Cron (15 Min)",
+    task_manager.register("drip_cron", "Bestand nachladen (alle 15 Min.)",
                           _drip_cron_loop, auto_restart=True, essential=True)
     from app.services import auto_scan
     task_manager.register("auto_scan", "Ungescannte Kanäle erfassen (alle 2 Std.)",
@@ -235,11 +235,11 @@ async def lifespan(app: FastAPI):
     from app.services import subtitle_import
     task_manager.register("subtitle_import", "Mitgeladene Untertitel einlesen",
                           subtitle_import.loop, auto_restart=True, essential=False)
-    task_manager.register("thumbnail_backfill", "Thumbnail-Backfill",
+    task_manager.register("thumbnail_backfill", "Fehlende Vorschaubilder nachholen",
                           rss_service.backfill_missing_thumbnails, auto_restart=False, essential=False)
-    task_manager.register("banner_backfill", "Banner-Backfill",
+    task_manager.register("banner_backfill", "Fehlende Kanalbanner nachholen",
                           _backfill_banners, auto_restart=False, essential=False)
-    task_manager.register("userdata_export", "Nutzerdaten-Export (täglich)",
+    task_manager.register("userdata_export", "Nutzerdaten sichern (täglich)",
                           _userdata_export_loop, auto_restart=True, essential=False)
     from app.services import search_index
     task_manager.register("type_check", "Video-Typen bei der Quelle prüfen",

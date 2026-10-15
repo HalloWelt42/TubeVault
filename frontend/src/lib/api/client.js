@@ -432,6 +432,9 @@ export const api = {
   adminTextPurgeDbDescriptions: () =>
     request('/api/admin/text-export/purge-db-descriptions?confirm=YES', { method: 'POST' }),
   getJobStats: () => request('/api/jobs/stats'),
+  // Dienste im Hintergrund (Live-Log, Reiter Aufträge)
+  getTasks: () => request('/api/system/tasks'),
+  setTaskRunning: (name, running) => request(`/api/system/tasks/${name}/${running ? 'start' : 'stop'}`, { method: 'POST' }),
   getJob: (id) => request(`/api/jobs/${id}`),
   cancelJob: (id) => request(`/api/jobs/${id}/cancel`, { method: 'POST' }),
   unparkJob: (id) => request(`/api/jobs/${id}/unpark`, { method: 'POST' }),

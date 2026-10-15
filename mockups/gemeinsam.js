@@ -26,7 +26,8 @@ export const VIDEOS = [
 // Entwurfsseiten je Eintrag der Seitenleiste
 const SEITEN = { start: 'uebersicht.html', bibliothek: 'bibliothek.html', musik: 'musik.html', downloads: 'downloads.html', eigene: 'eigene-videos.html', einstellungen: 'einstellungen.html',
                  favoriten: 'favoriten.html', playlists: 'playlists.html', verlauf: 'verlauf.html', kanaele: 'kanaele.html',
-                 kategorien: 'kategorien.html', vertonung: 'nachvertonung.html', suche: 'suche.html' };
+                 kategorien: 'kategorien.html', vertonung: 'nachvertonung.html', suche: 'suche.html',
+                 protokoll: 'werkzeuge.html?zustand=log', aufraeumen: 'werkzeuge.html?zustand=aufraeumen' };
 
 // Wie in der App (Sidebar.svelte): Symbolfarben einzelner Einträge bleiben
 const NAVI = [
@@ -48,8 +49,8 @@ const NAVI = [
 const SYSTEM = [
   ['Statistik', 'fa-chart-simple', 'statistik', null, '#26C6DA'],
   ['Einstellungen', 'fa-gear', 'einstellungen'],
-  ['Protokoll', 'fa-terminal', 'protokoll'],
-  ['Verwaltung', 'fa-screwdriver-wrench', 'verwaltung'],
+  ['Live-Log', 'fa-terminal', 'protokoll'],
+  ['Aufräumen', 'fa-broom', 'aufraeumen'],
 ];
 
 export function dauer(sekunden) {
