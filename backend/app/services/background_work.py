@@ -159,7 +159,15 @@ async def _passage_index() -> Optional[WorkItem]:
 
 async def _own_videos() -> Optional[WorkItem]:
     from app.models.own_files import ScanPhase
-    from app.services import own_scan
+    from app.services import own_actions, own_scan
+    bulk = own_actions.bulk_running()
+    if bulk:
+        _, verb = own_actions.BULK_ACTIONS[bulk.action]
+        return WorkItem(key="own_videos", label=f"Eigene Videos werden {verb}",
+                        detail=f"{bulk.folder_path or 'ganze Sammlung'}"
+                               + (f" - {bulk.failed} nicht möglich" if bulk.failed else ""),
+                        done=bulk.done + bulk.failed, total=bulk.total,
+                        progress=(bulk.done + bulk.failed) / bulk.total if bulk.total else None, since=bulk.since)
     scan = await own_scan.live()
     if not scan:
         return None

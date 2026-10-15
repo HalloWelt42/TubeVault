@@ -8,6 +8,7 @@ Kontrakt (Wünsche 15.10.2026):
   geänderte Dateien, verschwundene gelten als fehlend.
 - Abgleich: schon vorhanden / sicher erkannt / vermutlich / unbekannt.
 """
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -232,3 +233,141 @@ async def test_anhalten_und_weitermachen(test_db, collection):
 async def test_pfade_nach_aussen_sind_verboten(test_db, collection):
     with pytest.raises(ValueError):
         await own_scan.request_scan("../etc")
+
+
+# ─── Einordnen ────────────────────────────────────────────────────────
+
+from app.models.own_files import Decision   # noqa: E402
+from app.services import own_actions       # noqa: E402
+
+
+@pytest.fixture
+def library_dirs(tmp_path, monkeypatch):
+    videos, thumbs = tmp_path / "videos", tmp_path / "thumbs"
+    monkeypatch.setattr(own_actions, "VIDEOS_DIR", videos)
+    monkeypatch.setattr(own_actions, "THUMBNAILS_DIR", thumbs)
+    monkeypatch.setattr(own_actions, "RSS_THUMBS_DIR", tmp_path / "rss")
+    monkeypatch.setattr(own_actions, "_frame_thumbnail", lambda video, vid, duration: None)
+
+    async def no_download(*a, **k):
+        return None
+    import app.utils.thumbnail_utils as thumbnail_utils
+    monkeypatch.setattr(thumbnail_utils, "download_yt_thumbnail", no_download)
+    return videos, thumbs
+
+
+async def _scanned(collection, folder="K"):
+    folder_id = await own_scan.request_scan(folder)
+    await own_scan.scan(folder_id, folder)
+    return folder_id, await _files(folder_id)
+
+
+async def test_sicher_erkanntes_wird_uebernommen(test_db, collection, library_dirs):
+    videos, thumbs = library_dirs
+    await test_db.execute("INSERT INTO subscriptions (channel_id, channel_name) VALUES ('UCarte', 'ARTEde')")
+    await test_db.execute(
+        """INSERT INTO rss_entries (video_id, channel_id, title, published, duration)
+           VALUES ('arteVideo01', 'UCarte', 'Alarm in Athen | ARTE', '2026-01-02', 1560)""")
+    _video(collection, "K/Athen/Alarm in Athen _ ARTE.mp4", size=500, title="Alarm in Athen _ ARTE", duration=1561)
+    (collection / "K" / "Athen" / "Alarm in Athen _ ARTE-poster.jpg").write_bytes(b"bild")
+    _video(collection, "K/Kopie/Alarm in Athen _ ARTE.mp4", size=400, title="Alarm in Athen _ ARTE", duration=1560)
+    folder_id, _ = await _scanned(collection)
+    items, _ = await own_scan.files(folder_id)
+    first = next(f for f in items if f.folder == "K/Athen")
+    assert first.finding == Finding.CERTAIN
+
+    assert await own_actions.adopt(first.id) == "arteVideo01"
+    video = await test_db.fetch_one("SELECT * FROM videos WHERE id = 'arteVideo01'")
+    assert (video["title"], video["channel_name"], video["status"], video["source"]) == \
+        ("Alarm in Athen | ARTE", "ARTEde", "ready", "imported")
+    assert Path(video["file_path"]) == videos / "arteVideo01" / "video.mp4" and Path(video["file_path"]).is_file()
+    assert (thumbs / "arteVideo01" / "thumbnail.jpg").read_bytes() == b"bild"
+    assert not (collection / "K" / "Athen").exists(), "Begleitdateien und leerer Ordner sind weg"
+    # die zweite Kopie desselben Videos ist jetzt doppelt
+    rest = await _files(folder_id)
+    assert [f.finding for f in rest.values()] == [Finding.DUPLICATE]
+    with pytest.raises(own_actions.ActionError):
+        await own_actions.adopt(next(iter(rest.values())).id, "arteVideo01")
+
+
+async def test_eigener_kanal_bleibt_derselbe(test_db, collection, library_dirs):
+    await test_db.execute("INSERT INTO subscriptions (channel_id, channel_name) VALUES ('UCct', 'c''t 3003')")
+    for name in ("Spot 1", "Spot 2", "Tasten"):
+        _video(collection, f"K/{name}.mp4", title=name, duration=30)
+    _, found = await _scanned(collection)
+    a = await own_actions.make_own(found["Spot 1.mp4"].id, "Werbespots")
+    b = await own_actions.make_own(found["Spot 2.mp4"].id, "werbespots")
+    c = await own_actions.make_own(found["Tasten.mp4"].id, "c't 3003")
+    rows = {r["id"]: r for r in await test_db.fetch_all("SELECT id, channel_id, source FROM videos")}
+    assert a.startswith("own_") and rows[a]["source"] == "local"
+    assert rows[a]["channel_id"] == rows[b]["channel_id"] == own_actions.own_channel_id("Werbespots")
+    assert rows[c]["channel_id"] == "UCct"
+    assert {ch["channel_name"] for ch in await own_actions.channels()} >= {"c't 3003", "Werbespots"}
+
+
+async def test_loeschen_und_ueberspringen(test_db, collection, library_dirs):
+    _video(collection, "K/Weg.mp4", title="Weg", duration=10)
+    (collection / "K" / "Weg-poster.jpg").write_bytes(b"x")
+    _video(collection, "K/Bleibt.mp4", title="Bleibt", duration=11)
+    folder_id, found = await _scanned(collection)
+    await own_actions.delete(found["Weg.mp4"].id)
+    assert sorted(p.name for p in (collection / "K").iterdir()) == ["Bleibt.mp4", "Bleibt.nfo"]
+    await own_actions.skip(found["Bleibt.mp4"].id)
+    assert await _files(folder_id) == {}
+    done = await _files(folder_id, "done")
+    assert {f.name: f.decision for f in done.values()} == {"Weg.mp4": Decision.DELETED, "Bleibt.mp4": Decision.SKIPPED}
+    await own_actions.reopen(found["Bleibt.mp4"].id)
+    assert set(await _files(folder_id)) == {"Bleibt.mp4"}
+
+
+async def test_ersetzen_tauscht_die_bibliotheksdatei(test_db, collection, library_dirs):
+    videos, _ = library_dirs
+    old = videos / "nP7N1_34lh8" / "video.webm"
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"alt")
+    await test_db.execute(
+        """INSERT INTO videos (id, title, duration, file_size, file_path, status)
+           VALUES ('nP7N1_34lh8', 'Tastatur', 914, 3, ?, 'ready')""", (str(old),))
+    _video(collection, "K/Tastatur.mp4", size=9000, title="Tastatur", duration=914)
+    _, found = await _scanned(collection)
+    assert found["Tastatur.mp4"].finding == Finding.DUPLICATE
+    await own_actions.replace(found["Tastatur.mp4"].id)
+    row = await test_db.fetch_one("SELECT file_path, file_size FROM videos WHERE id = 'nP7N1_34lh8'")
+    assert row["file_path"].endswith("nP7N1_34lh8/video.mp4") and row["file_size"] == 9000
+    assert not old.exists() and not (collection / "K" / "Tastatur.mp4").exists()
+
+
+async def test_archivvideos_werden_nicht_ersetzt(test_db, collection, library_dirs):
+    await test_db.execute(
+        """INSERT INTO videos (id, title, duration, file_size, file_path, status, storage_type)
+           VALUES ('archivVid01', 'Archiv', 50, 3, '/archiv/x.mp4', 'ready', 'archive')""")
+    _video(collection, "K/Archiv.mp4", title="Archiv", duration=50)
+    _, found = await _scanned(collection)
+    with pytest.raises(own_actions.ActionError):
+        await own_actions.replace(found["Archiv.mp4"].id)
+    assert (collection / "K" / "Archiv.mp4").exists()
+
+
+async def test_doppelte_auf_einmal_loeschen(test_db, collection, library_dirs):
+    await test_db.execute(
+        "INSERT INTO videos (id, title, duration, file_size, status) VALUES ('vorhanden01', 'Da', 100, 77, 'ready')")
+    for n in range(3):
+        _video(collection, f"K/Kopie {n}.mp4", size=77, title=f"Kopie {n}", duration=100)
+    _video(collection, "K/Anders.mp4", title="Anders", duration=5)
+    folder_id, _ = await _scanned(collection)
+    run = await own_actions.start_bulk(folder_id, "delete_duplicates")
+    assert run.total == 3
+    while own_actions.bulk_running():
+        await asyncio.sleep(0.01)
+    assert sorted(p.name for p in (collection / "K").iterdir()) == ["Anders.mp4", "Anders.nfo"]
+
+
+async def test_eingeordnet_zeigt_ordnerpfade_als_kanal(test_db, async_client_factory):
+    await test_db.execute(
+        """INSERT INTO videos (id, title, channel_name, status, source, file_size) VALUES
+           ('own_1', 'A', 'youtube/ARTE/Reihe', 'ready', 'local', 10),
+           ('own_2', 'B', 'Werbespots', 'ready', 'local', 5),
+           ('nP7N1_34lh8', 'C', 'c''t 3003', 'ready', 'youtube', 1)""")
+    async with await async_client_factory(own_collection.router) as client:
+        page = (await client.get("/api/own-videos/library")).json()
+    assert (page["total"], page["total_bytes"], page["folder_named_channels"]) == (2, 15, 1)

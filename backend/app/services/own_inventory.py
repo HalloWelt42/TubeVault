@@ -224,7 +224,8 @@ def companions(root: Path, rel_path: str) -> list[Path]:
         names = os.listdir(video.parent)
     except OSError:
         return []
-    stems = sorted((Path(n).stem for n in names if is_video(n)), key=len, reverse=True)
+    # das Video selbst zählt mit, auch wenn es schon verschoben ist
+    stems = sorted({Path(n).stem for n in names if is_video(n)} | {video.stem}, key=len, reverse=True)
 
     def belongs_to(name: str, stem: str) -> bool:
         if not name.startswith(stem) or is_video(name):
