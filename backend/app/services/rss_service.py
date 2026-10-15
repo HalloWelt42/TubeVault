@@ -591,6 +591,9 @@ class RSSService:
         )
         if new_count > 0:
             await refresh_type_counts(channel_id)
+            # Sprache der neuen Einträge gleich beim Eintragen (language_assign)
+            from app.services import language_assign
+            await language_assign.refresh_new_entries(channel_id)
             # Log-Drossel: nur die ersten 3 Kanäle pro Zyklus einzeln loggen,
             # der Rest wird gezählt und am Zyklus-Ende als Summe geloggt.
             self._feed_log_count += 1
@@ -1083,8 +1086,16 @@ class RSSService:
         values = list(filtered.values()) + [sub_id]
         await db.execute(f"UPDATE subscriptions SET {set_clause} WHERE id = ?", values)
 
-    async def get_subscriptions(self, page: int = 1, per_page: int = 50) -> dict:
-        total = await db.fetch_val("SELECT COUNT(*) FROM subscriptions")
+    async def get_subscriptions(self, page: int = 1, per_page: int = 50, languages: list[str] = None) -> dict:
+        """Abos mit Zählern. languages: Kanalsprache (language.parse_filter),
+        "mul" = gemischt, "und" = unbekannt; language_counts zählt alle Abos."""
+        from app.services import language, language_assign
+        language_where, language_params = "", []
+        if languages:
+            language_sql, language_params = language.filter_sql("s.language", languages)
+            language_where = f"WHERE {language_sql}"
+        language_counts = await language_assign.counts("FROM subscriptions s", (), "s.language")
+        total = await db.fetch_val(f"SELECT COUNT(*) FROM subscriptions s {language_where}", language_params)
         offset = (page - 1) * per_page
         # Zähler je Kanal in einem Durchgang je Tabelle (statt vier Unterabfragen
         # je Kanal - bei hunderten Kanälen dauerte die Liste sonst Sekunden).
@@ -1125,9 +1136,10 @@ class RSSService:
                LEFT JOIN coverage ON coverage.channel_id = s.channel_id
                LEFT JOIN loaded ON loaded.channel_id = s.channel_id
                LEFT JOIN problems ON problems.channel_id = s.channel_id
+               {language_where}
                ORDER BY s.channel_name COLLATE NOCASE ASC, s.id
                LIMIT ? OFFSET ?""",
-            (per_page, offset)
+            (*language_params, per_page, offset)
         )
         subscriptions = []
         for row in rows:
@@ -1141,6 +1153,7 @@ class RSSService:
             "total": total or 0,
             "page": page,
             "per_page": per_page,
+            "language_counts": [count.model_dump() for count in language_counts],
         }
 
     async def get_problem_videos(self, channel_id: str) -> list[dict]:
@@ -1179,12 +1192,14 @@ class RSSService:
                              feed_tab: str = "active",
                              page: int = 1, per_page: int = 50,
                              keywords: str = None,
-                             duration_min: int = None, duration_max: int = None) -> dict:
+                             duration_min: int = None, duration_max: int = None,
+                             languages: list[str] = None) -> dict:
         """Feed-Videos mit Pagination, Mehrfach-Typ/Kanal/Tag-Filter und Feed-Status-Tabs.
         
         feed_tab: active | later | dismissed | archived | all
         keywords: Komma-getrennte Tags zum Filtern (OR-Verknuepfung)
         duration_min/max: Dauer-Filter in Sekunden
+        languages: Sprachkürzel (language.parse_filter), "und" = ohne Sprache
         """
         offset = (page - 1) * per_page
 
@@ -1254,8 +1269,23 @@ class RSSService:
             status_filter = "AND r.feed_status = 'archived'"
         # feed_tab == "all" → kein Filter
 
-        base_where = f"WHERE 1=1 {status_filter} {channel_filter} {type_filter} {keyword_filter} {duration_filter}{shorts_clause}"
-        all_params = channel_params + type_params + keyword_params + duration_params
+        # Sprach-Filter (mehrfach); die Sprachzähler gelten ohne ihn
+        language_filter = ""
+        language_params = []
+        if languages:
+            from app.services import language
+            language_sql, language_params = language.filter_sql("r.language", languages)
+            language_filter = f"AND {language_sql}"
+
+        from app.services import language_assign
+        language_counts = await language_assign.counts(
+            f"""FROM rss_entries r JOIN subscriptions s ON r.channel_id = s.channel_id
+                WHERE 1=1 {status_filter} {channel_filter} {type_filter} {keyword_filter} {duration_filter}{shorts_clause}""",
+            tuple(channel_params + type_params + keyword_params + duration_params), "r.language")
+
+        base_where = (f"WHERE 1=1 {status_filter} {channel_filter} {type_filter} {keyword_filter} {duration_filter}"
+                      f" {language_filter}{shorts_clause}")
+        all_params = channel_params + type_params + keyword_params + duration_params + language_params
 
         # Total
         total = await db.fetch_val(
@@ -1273,8 +1303,8 @@ class RSSService:
             c = await db.fetch_val(
                 f"""SELECT COUNT(*) FROM rss_entries r
                     JOIN subscriptions s ON r.channel_id = s.channel_id
-                    WHERE 1=1 {status_filter} {channel_filter} {keyword_filter} {duration_filter} AND {cond}""",
-                tuple(channel_params + keyword_params + duration_params)
+                    WHERE 1=1 {status_filter} {channel_filter} {keyword_filter} {duration_filter} {language_filter} AND {cond}""",
+                tuple(channel_params + keyword_params + duration_params + language_params)
             ) or 0
             type_counts[vt] = c
 
@@ -1324,6 +1354,7 @@ class RSSService:
             "has_more": (page * per_page) < total,
             "type_counts": type_counts,
             "tab_counts": tab_counts,
+            "language_counts": [count.model_dump() for count in language_counts],
             "feed_tab": feed_tab,
         }
 

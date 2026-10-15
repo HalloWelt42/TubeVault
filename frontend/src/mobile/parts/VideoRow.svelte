@@ -5,6 +5,7 @@
 -->
 <script>
   import { formatDuration } from '../../lib/utils/format.js';
+  import LanguageLabel from '../../lib/components/common/LanguageLabel.svelte';
 
   let {
     title,
@@ -14,6 +15,8 @@
     archived = false,
     progress = null,      // 0..1 = angefangen gesehen
     note = null,          // kurzer Zusatz, z.B. Datum
+    language = null,      // Sprache des Videos: Label außer bei der Hauptsprache
+    languageSource = null,
     onopen = null,
     action = null,
   } = $props();
@@ -35,6 +38,7 @@
     <span class="text">
       <span class="title">{title}</span>
       <span class="meta">
+        <LanguageLabel code={language} source={languageSource} />
         {channel || 'Unbekannt'}{#if note}{' · '}{note}{/if}
         {#if archived}<span class="mark"><i class="fa-solid fa-box-archive"></i> Archiv</span>{/if}
       </span>
@@ -69,5 +73,6 @@
   }
   .meta { color: var(--m-dim); font-size: 0.84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mark { margin-left: 6px; color: var(--m-faint); }
+  .meta :global(.sprache) { margin-right: 6px; vertical-align: middle; }
   .action { display: flex; align-items: center; padding-right: 12px; }
 </style>

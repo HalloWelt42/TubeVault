@@ -417,6 +417,7 @@ async def search_local(
     scope: Optional[str] = None,
     archived: Optional[bool] = None,
     precision: Optional[str] = Query(None, pattern="^(aus|weit|ausgewogen|genau|sehr_genau)$"),
+    language: Optional[list[str]] = Query(None, description="Sprachkürzel, mehrfach oder kommagetrennt; und = ohne Sprache"),
 ):
     """Lokale Suche über Bibliothek UND Archiv (archived=true/false grenzt ein).
     precision: Stufe der Bedeutungssuche für diese Suche (leer = Standard).
@@ -425,8 +426,9 @@ async def search_local(
     (Titel, Kanal, Beschreibung, Tags, Notizen) plus Teilwörter in Titel und
     Kanalname. Jeder Treffer trägt is_archived, damit die Oberfläche zeigen
     kann, wo das Video liegt."""
-    from app.services import search_index
+    from app.services import language as language_service, search_index
     return await search_index.search_videos(
         q, page=page, per_page=per_page,
         archived=archived, source=source, scope=scope, precision=precision,
+        languages=language_service.parse_filter(language),
     )

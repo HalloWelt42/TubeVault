@@ -7,6 +7,7 @@
   import { onMount } from 'svelte';
   import { api } from '../../api/client.js';
   import { settings } from '../../stores/settings.js';
+  import { languageCatalog, languageChoices, languageInfo, loadLanguages, parseLanguageList } from '../../utils/language.js';
 
   // Props
   let {
@@ -17,9 +18,14 @@
     showSearch = false,
     showDuration = false,
     showMusic = false,
+    // Sprache: Zähler je Sprache liefert die Seite ([{ code, count }], vom
+    // Backend passend zu allen übrigen Filtern), die Auswahl kommt als
+    // "languages" (kommagetrennt) zurück
+    showLanguages = false,
+    languageCounts = [],
     feedTab = 'active',
     // Startauswahl im Format von onchange ({ types, channels, categories,
-    // keywords, search, is_music }). Damit zeigt die Leiste von Anfang an
+    // keywords, search, is_music, languages }). Damit zeigt die Leiste von Anfang an
     // genau das, was die Seite filtert (z.B. gespeicherte Auswahl, Verweis).
     initial = null,
     onchange = () => {},
@@ -32,6 +38,7 @@
   let selectedChannels = $state(fromList(initial?.channels));
   let selectedCategories = $state(fromList(initial?.categories));
   let selectedTags = $state(fromList(initial?.keywords));
+  let selectedLanguages = $state(parseLanguageList(initial?.languages));
   let selectedDurations = $state([]);
   let musicOnly = $state(!!initial?.is_music);
   let extraAudioOnly = $state(!!initial?.extra_audio);
@@ -50,6 +57,7 @@
   let showChannelDD = $state(false);
   let showCategoryDD = $state(false);
   let showTagDD = $state(false);
+  let showLanguageDD = $state(false);
 
   // Suchfelder in Dropdowns
   let channelSearch = $state('');
@@ -80,6 +88,7 @@
   onMount(() => {
     document.addEventListener('click', onClickOutside);
     loadChoices();
+    if (showLanguages) loadLanguages();
     return () => document.removeEventListener('click', onClickOutside);
   });
 
@@ -134,6 +143,7 @@
       durationMax,
       is_music: musicOnly || null,
       extra_audio: extraAudioOnly || null,
+      languages: selectedLanguages.length > 0 ? selectedLanguages.join(',') : null,
     });
   }
 
@@ -162,6 +172,13 @@
     selectedTags = selectedTags.includes(tag)
       ? selectedTags.filter(t => t !== tag)
       : [...selectedTags, tag];
+    emitChange();
+  }
+
+  function toggleLanguage(code) {
+    selectedLanguages = selectedLanguages.includes(code)
+      ? selectedLanguages.filter(l => l !== code)
+      : [...selectedLanguages, code];
     emitChange();
   }
 
@@ -195,6 +212,7 @@
     selectedChannels = [];
     selectedCategories = [];
     selectedTags = [];
+    selectedLanguages = [];
     selectedDurations = [];
     customDurMin = '';
     customDurMax = '';
@@ -218,17 +236,19 @@
     showChannelDD = false;
     showCategoryDD = false;
     showTagDD = false;
+    showLanguageDD = false;
   }
 
   function onClickOutside(e) {
     if (showChannelDD && !e.target.closest('.filter-dropdown-wrap.channel')) showChannelDD = false;
     if (showCategoryDD && !e.target.closest('.filter-dropdown-wrap.category')) showCategoryDD = false;
     if (showTagDD && !e.target.closest('.filter-dropdown-wrap.tag')) showTagDD = false;
+    if (showLanguageDD && !e.target.closest('.filter-dropdown-wrap.language')) showLanguageDD = false;
   }
 
   let hasActive = $derived(
     selectedTypes.length > 0 || selectedChannels.length > 0 ||
-    selectedCategories.length > 0 || selectedTags.length > 0 ||
+    selectedCategories.length > 0 || selectedTags.length > 0 || selectedLanguages.length > 0 ||
     selectedDurations.length > 0 || customDurActive || searchText.trim().length > 0 ||
     musicOnly || extraAudioOnly
   );
@@ -251,6 +271,9 @@
       ? tags.filter(t => t.tag.toLowerCase().includes(tagSearch.toLowerCase()))
       : tags.slice(0, 50)
   );
+
+  // Sprachen mit Zählern (gewählte bleiben sichtbar, auch ohne Treffer)
+  let languageOptions = $derived(languageChoices($languageCatalog, languageCounts, selectedLanguages));
 
   export function reset() { clearAll(); }
 </script>
@@ -428,6 +451,35 @@
     </div>
   {/if}
 
+  <!-- Sprach-Dropdown (Mehrfachauswahl, mit Zählern) -->
+  {#if showLanguages && languageOptions.length > 0}
+    <div class="filter-group">
+      <span class="filter-label">Sprache</span>
+      <div class="filter-dropdown-wrap language">
+        <button class="dropdown-trigger" onclick={(e) => { e.stopPropagation(); showLanguageDD = !showLanguageDD; showChannelDD = false; showCategoryDD = false; showTagDD = false; }}>
+          {selectedLanguages.length === 0 ? 'Alle Sprachen' : selectedLanguages.length === 1
+            ? languageInfo($languageCatalog, selectedLanguages[0]).name : `${selectedLanguages.length} ausgewählt`}
+          <i class="fa-solid fa-chevron-down dd-arrow" class:open={showLanguageDD}></i>
+        </button>
+        {#if showLanguageDD}
+          <div class="dropdown-panel" onclick={(e) => e.stopPropagation()}>
+            <div class="dd-list">
+              {#each languageOptions as lang (lang.code)}
+                <div class="dd-option" class:selected={selectedLanguages.includes(lang.code)}
+                     onclick={() => toggleLanguage(lang.code)} role="option" tabindex="-1">
+                  <input type="checkbox" checked={selectedLanguages.includes(lang.code)} tabindex="-1" />
+                  <span class="dd-flagge" aria-hidden="true">{lang.flag || ''}</span>
+                  <span class="dd-name">{lang.name}</span>
+                  <span class="dd-count">{(lang.count ?? 0).toLocaleString('de-DE')}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   {#if hasActive}
     <button class="filter-reset" onclick={clearAll}>
       <i class="fa-solid fa-xmark"></i> Zurücksetzen
@@ -456,6 +508,12 @@
     {#each selectedTags as tag}
       <button class="fbadge tag" onclick={() => toggleTag(tag)}>
         <i class="fa-solid fa-tag"></i> {tag} <i class="fa-solid fa-xmark"></i>
+      </button>
+    {/each}
+    {#each selectedLanguages as code}
+      {@const lang = languageInfo($languageCatalog, code)}
+      <button class="fbadge sprache" onclick={() => toggleLanguage(code)}>
+        {#if lang.flag}<span aria-hidden="true">{lang.flag}</span>{/if} {lang.name} <i class="fa-solid fa-xmark"></i>
       </button>
     {/each}
   </div>
@@ -554,6 +612,8 @@
   .fbadge.channel { background: rgba(192, 132, 252, 0.14); color: var(--tv-art-musik); }
   .fbadge.category { background: rgba(var(--tv-warnung-rgb), 0.14); color: var(--tv-warnung); }
   .fbadge.tag { background: rgba(var(--tv-erfolg-rgb), 0.14); color: var(--tv-erfolg); }
+  .fbadge.sprache { background: var(--tv-karte-2); color: var(--tv-text); }
+  .dd-flagge { width: 20px; flex-shrink: 0; text-align: center; font-size: 15px; }
   .fbadge:hover { border-color: currentColor; }
 
   /* Eigene Dauer von-bis */

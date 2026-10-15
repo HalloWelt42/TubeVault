@@ -34,7 +34,7 @@ _FIELDS = [
     "view_count", "like_count", "dislike_count",
     "source", "source_url", "video_type",
     "is_music", "music_source", "music_artist", "music_title", "music_album",
-    "is_archived", "file_size",
+    "is_archived", "file_size", "language", "language_source",
 ]
 
 

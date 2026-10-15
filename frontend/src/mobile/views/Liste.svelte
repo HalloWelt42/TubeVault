@@ -62,7 +62,8 @@
     </section>
 
     {#each queue.videos as v, index (v.id)}
-      <VideoRow title={v.title} channel={v.channel_name} duration={v.duration}
+      <VideoRow language={v.language} languageSource={v.language_source}
+                title={v.title} channel={v.channel_name} duration={v.duration}
                 thumb={api.thumbnailUrl(v.id)} note={`${index + 1}`}
                 onopen={() => play(v.id)} />
     {:else}

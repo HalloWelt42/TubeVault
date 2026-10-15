@@ -19,17 +19,19 @@
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
   import HoverActionOverlay from '../lib/components/common/HoverActionOverlay.svelte';
   import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
+  import LanguageLabel from '../lib/components/common/LanguageLabel.svelte';
 
   // Feed State (Liste zentral über createListLoader)
   let typeCounts = $state({ video: 0, short: 0, live: 0 });
   let tabCounts = $state({ active: 0, later: 0, dismissed: 0, archived: 0 });
+  let languageCounts = $state([]);   // Zähler je Sprache (mit allen übrigen Filtern)
   let downloading = $state(new Set());
 
   // Feed-Tab State (persistent)
   let feedTab = $state(getFilter('feed', 'feedTab', 'active'));
 
   // Multi-Filter State
-  let feedFilter = $state({ types: null, channels: null, keywords: null, durationMin: null, durationMax: null });
+  let feedFilter = $state({ types: null, channels: null, keywords: null, durationMin: null, durationMax: null, languages: null });
 
   // Batch-Auswahl
   let selectedIds = $state(new Set());
@@ -95,10 +97,12 @@
     if (feedFilter.keywords) params.keywords = feedFilter.keywords;
     if (feedFilter.durationMin != null) params.durationMin = feedFilter.durationMin;
     if (feedFilter.durationMax != null) params.durationMax = feedFilter.durationMax;
+    if (feedFilter.languages) params.languages = feedFilter.languages;
     try {
       const data = await api.getFeedVideos(params);
       typeCounts = data.type_counts || { video: 0, short: 0, live: 0 };
       tabCounts = data.tab_counts || tabCounts;
+      languageCounts = data.language_counts || [];
       return { items: data.entries || [], total: data.total || 0, hasMore: data.has_more || false };
     } catch (e) { toast.error(e.message); return { items: [], total: 0, hasMore: false }; }
   });
@@ -426,6 +430,8 @@
     showCategories={false}
     showTags={true}
     showDuration={true}
+    showLanguages={true}
+    {languageCounts}
     {feedTab}
     onchange={onFeedFilterChange}
   />
@@ -572,6 +578,7 @@
               </button>
               <div class="card-meta">
                 <button class="channel-link" onclick={() => openChannel(entry)}>{entry.channel_name || entry.channel_id}</button>
+                <LanguageLabel code={entry.language} source={entry.language_source} />
                 {#if entry.audio_only}
                   <span class="audio-only-badge" title="Audio-Only Kanal"><i class="fa-solid fa-podcast"></i></span>
                 {/if}

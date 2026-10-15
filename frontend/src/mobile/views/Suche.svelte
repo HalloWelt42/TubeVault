@@ -68,7 +68,8 @@
   </div>
 {:else}
   {#each list.items as v (v.id)}
-    <VideoRow title={v.title} channel={v.channel_name} duration={v.duration}
+    <VideoRow language={v.language} languageSource={v.language_source}
+              title={v.title} channel={v.channel_name} duration={v.duration}
               thumb={api.thumbnailUrl(v.id)} archived={!!v.is_archived}
               onopen={() => go(`/video/${v.id}`)} />
   {:else}

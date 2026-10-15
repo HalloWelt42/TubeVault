@@ -26,6 +26,7 @@
   let selected = $state(new Set());
   let filterRef;
   let allTags = $state([]);
+  let languageCounts = $state([]);   // Zähler je Sprache für den Filter (mit allen übrigen Filtern)
 
   async function loadTags() {
     // Tags nur für die im Archiv gefilterten Videos — nicht global.
@@ -40,9 +41,11 @@
     const params = {
       page, per_page: getSettingNum('general.videos_per_page', 24),
       is_archived: true, ...filters.apiParams(),
+      ...(page === 1 ? { with_language_counts: true } : {}),
     };
     try {
       const result = await api.getVideos(params);
+      if (page === 1) languageCounts = result.language_counts || [];
       return { items: result.videos || [], total: result.total || 0 };
     } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
   });
@@ -108,6 +111,7 @@
   {/if}
 
   <MultiFilter bind:this={filterRef} showSearch={true} showTypes={true} showChannels={true} showCategories={true}
+               showLanguages={true} {languageCounts}
                initial={filters.multi} onchange={filters.setMulti} />
 
   <TagFilterBar {allTags} activeTags={filters.activeTags} onToggle={filters.toggleTag} />

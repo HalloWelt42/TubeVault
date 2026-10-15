@@ -26,6 +26,7 @@
 
   let allTags = $state([]);
   let totalBytes = $state(0);   // Größe aller Treffer (vom Backend)
+  let languageCounts = $state([]);   // Zähler je Sprache für den Filter (mit allen übrigen Filtern)
   let _loadTimer = null;
 
   async function loadTags() {
@@ -41,10 +42,14 @@
     const params = {
       page, per_page: getSettingNum('general.videos_per_page', 24),
       is_archived: false, ...filters.apiParams(),
+      ...(page === 1 ? { with_language_counts: true } : {}),
     };
     try {
       const result = await api.getVideos(params);
-      if (page === 1) totalBytes = result.total_bytes || 0;
+      if (page === 1) {
+        totalBytes = result.total_bytes || 0;
+        languageCounts = result.language_counts || [];
+      }
       return { items: result.videos || [], total: result.total || 0 };
     } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
   });
@@ -142,6 +147,7 @@
   {/if}
 
   <MultiFilter bind:this={filterRef} showSearch={true} showTypes={true} showChannels={true} showCategories={true} showMusic={true}
+               showLanguages={true} {languageCounts}
                initial={filters.multi} onchange={filters.setMulti} />
 
   <div class="tv-filter">

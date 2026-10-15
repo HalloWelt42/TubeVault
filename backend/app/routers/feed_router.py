@@ -84,11 +84,15 @@ async def get_feed_videos(
     feed_tab: str = Query("active"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
+    language: Optional[list[str]] = Query(None, description="Sprachkürzel, mehrfach oder kommagetrennt; und = ohne Sprache"),
 ):
-    """Neue Videos aus RSS-Feeds – mit Mehrfach-Typ/Kanal/Tag/Dauer-Filter, Feed-Tabs und Pagination."""
+    """Neue Videos aus RSS-Feeds - mit Mehrfach-Typ/Kanal/Tag/Dauer/Sprach-Filter, Feed-Tabs und Pagination.
+    language_counts in der Antwort: Zähler je Sprache mit allen Filtern außer der Sprache."""
+    from app.services import language as language_service
     return await rss_service.get_new_videos(
         channel_id, channel_ids, video_type, video_types, feed_tab, page, per_page,
-        keywords=keywords, duration_min=duration_min, duration_max=duration_max
+        keywords=keywords, duration_min=duration_min, duration_max=duration_max,
+        languages=language_service.parse_filter(language),
     )
 
 

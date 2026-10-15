@@ -30,7 +30,7 @@ from app.routers import (
     jobs, subscriptions, playlists, chapters, search, exports, imports,
     ad_markers, own_collection, music, video_repair, backup, api_endpoints, admin_cleanup, transcripts as transcripts_router,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
-    cookies, admin, dubbing, collections as collections_router, remote,
+    cookies, admin, dubbing, collections as collections_router, remote, languages,
 )
 
 # Logging
@@ -263,6 +263,9 @@ async def lifespan(app: FastAPI):
                           music_files.background_scan, auto_restart=True, essential=False)
     task_manager.register("search_index", "Suchindex nachziehen",
                           search_index.background_catch_up, auto_restart=False, essential=False)
+    from app.services import language_assign
+    task_manager.register("languages", "Sprache von Videos, Feed und Kanälen zuordnen",
+                          language_assign.worker, auto_restart=True, essential=False)
     await task_manager.start_all()
     logger.info(f"[OK] {APP_NAME} v{VERSION} bereit")
     logger.info(f"   API: http://{HOST}:{PORT}")
@@ -397,6 +400,7 @@ app.include_router(cookies.router)
 app.include_router(admin.router)
 app.include_router(dubbing.router)
 app.include_router(remote.router)
+app.include_router(languages.router)
 
 
 # --- Root Endpoint ---
@@ -428,6 +432,12 @@ async def api_overview():
                 "tags": "GET /api/videos/tags",
                 "history": "GET /api/videos/history",
                 "position": "GET/POST /api/videos/{id}/position",
+                "language": "POST /api/videos/language/batch",
+            },
+            "languages": {
+                "catalog": "GET /api/languages",
+                "filter": "language=de,en (und = ohne Sprache) an /api/videos, /api/subscriptions, "
+                          "/api/subscriptions/feed, /api/search/local",
             },
             "downloads": {
                 "add": "POST /api/downloads",

@@ -128,11 +128,13 @@ const ALL_FILTERS = [...FILTERS, ...MEDAL_FILTERS];
 /** Anzahl je Filter: { key: count }. */
 export const filterCounts = (subs) => Object.fromEntries(ALL_FILTERS.map((f) => [f.key, subs.filter(f.test).length]));
 
-/** Nach Filter und Suchwörtern (Name oder Kanal-ID) auswählen. */
-export function filterChannels(subs, { filter = '', search = '' } = {}) {
+/** Nach Filter, Kanalsprache (Kürzel, "mul" gemischt, "und" unbekannt) und
+ *  Suchwörtern (Name oder Kanal-ID) auswählen. */
+export function filterChannels(subs, { filter = '', search = '', languages = [] } = {}) {
   const test = ALL_FILTERS.find((f) => f.key === filter)?.test || (() => true);
   const words = search.trim().toLocaleLowerCase('de').split(/\s+/).filter(Boolean);
   return subs.filter((s) => test(s)
+    && (!languages.length || languages.includes(s.language || 'und'))
     && words.every((w) => `${s.channel_name || ''} ${s.channel_id}`.toLocaleLowerCase('de').includes(w)));
 }
 

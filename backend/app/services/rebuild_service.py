@@ -58,6 +58,17 @@ def _read_description(video_id: str) -> str | None:
     return None
 
 
+def _kept_language(data: dict) -> tuple:
+    """(language, language_source) aus dem Sidecar, soweit sie sich nicht lokal
+    neu bestimmen lassen; sonst (None, None)."""
+    from app.services import language
+    code = language.normalize(data.get("language"))
+    source = data.get("language_source")
+    if code and source in (language.HAND, language.QUELLE):
+        return code, source
+    return None, None
+
+
 async def rebuild_from_sidecars(dry_run: bool = False,
                                 throttle_every: int = 50,
                                 throttle_sleep: float = 0.1) -> dict:
@@ -105,8 +116,8 @@ async def rebuild_from_sidecars(dry_run: bool = False,
                     like_count, dislike_count, tags, status,
                     file_path, file_size, source, source_url, video_type,
                     is_music, music_source, music_artist, music_title, music_album,
-                    is_archived, thumbnail_path, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?,?,?,?,?,?,?,?,?,?,?,
+                    is_archived, thumbnail_path, language, language_source, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?,?,?,?,?,?,?,?,?,?,?,?,?,
                            datetime('now'), datetime('now'))""",
                 (data["id"], data.get("title"), data.get("channel_id"),
                  data.get("channel_name"), desc,
@@ -120,7 +131,10 @@ async def rebuild_from_sidecars(dry_run: bool = False,
                  data.get("is_music") or 0, data.get("music_source"), data.get("music_artist"),
                  data.get("music_title"), data.get("music_album"),
                  data.get("is_archived") or 0,
-                 f"thumbnails/{data['id']}.jpg"))
+                 f"thumbnails/{data['id']}.jpg",
+                 # Sprache: nur Angaben, die sich lokal nicht wiederholen lassen
+                 # (von Hand, beim Laden); den Rest bewertet der Hintergrundlauf neu
+                 *_kept_language(data)))
             try:
                 await db.fts_sync_video(data["id"])
             except Exception:

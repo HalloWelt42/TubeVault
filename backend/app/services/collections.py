@@ -40,6 +40,8 @@ class Item(BaseModel):
     play_count: int = 0
     loaded: bool = True               # False: vorgemerkt, noch nicht geladen
     reason: Optional[Reason] = None   # nur Kategorien: warum das Video drin ist
+    language: Optional[str] = None          # Sprache (services/language) für das Label
+    language_source: Optional[str] = None
 
 
 class Collection(BaseModel):
@@ -53,7 +55,7 @@ class Collection(BaseModel):
 
 _FIELDS = """v.id, v.title, v.channel_id, v.channel_name, v.duration, v.video_type, v.upload_date,
              COALESCE(v.last_position, 0) AS position, v.last_played, COALESCE(v.play_count, 0) AS play_count,
-             v.status = 'ready' AS loaded"""
+             v.status = 'ready' AS loaded, v.language, v.language_source"""
 
 
 async def _rows(kind: str, value: str):

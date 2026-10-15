@@ -36,6 +36,7 @@ import asyncio
 import json
 import logging
 import re
+from collections import Counter
 
 from app.database import db
 
@@ -261,10 +262,14 @@ async def search_videos(
     source: str | None = None,
     scope: str | None = None,
     precision: str | None = None,
+    languages: list[str] | None = None,
 ) -> dict:
     """Videos suchen. archived: None = Bibliothek UND Archiv, True/False = nur eines.
     precision: Stufe der Bedeutungssuche (leer = Standard, "aus" = nur Wörter).
+    languages: Sprachkürzel (language.parse_filter); language_counts in der
+    Antwort zählt alle Treffer je Sprache, ohne diesen Filter.
     Sortierung: Volltext-Treffer nach Relevanz, danach Teilwort-Treffer."""
+    from app.services import language
     await refresh_before_query()
 
     match = build_match(query)
@@ -340,10 +345,18 @@ async def search_videos(
         return list(dict.fromkeys(passage.video_id for passage in passages))
 
     if not semantic and not best_passage:   # reine Wortsuche in Titel, Beschreibung, Stichworten
-        total = await db.fetch_val(f"{cte} SELECT COUNT(*) {from_where}", base_params) or 0
+        language_counts = language.counts_from_rows([(row["code"], row["n"]) for row in await db.fetch_all(
+            f"{cte} SELECT {language.code_sql('v.language')} AS code, COUNT(*) AS n {from_where} GROUP BY 1",
+            base_params)])
+        language_where, language_params = "", []
+        if languages:
+            language_sql, language_params = language.filter_sql("v.language", languages)
+            language_where = f" AND {language_sql}"
+        total = await db.fetch_val(
+            f"{cte} SELECT COUNT(*) {from_where}{language_where}", [*base_params, *language_params]) or 0
         rows = await db.fetch_all(
-            f"{cte} SELECT v.* {from_where} {keyword_order} LIMIT ? OFFSET ?",
-            [*base_params, per_page, offset])
+            f"{cte} SELECT v.* {from_where}{language_where} {keyword_order} LIMIT ? OFFSET ?",
+            [*base_params, *language_params, per_page, offset])
     else:
         # Mehrere Ranglisten zu EINER verschmelzen: Worttreffer am Video,
         # Bedeutungstreffer am Video, Wort- und Bedeutungstreffer im Transkript.
@@ -370,6 +383,11 @@ async def search_videos(
         semantic_ids = permitted(semantic_order)
         ranked = fuse_rankings(keyword_ids, semantic_ids,
                                permitted(word_passage_order), permitted(meaning_passage_order))
+        # Sprache: Zähler über alle Treffer, danach der Filter
+        codes = await _language_codes(ranked)
+        language_counts = language.counts_from_rows(Counter(codes.values()).items())
+        if languages:
+            ranked = [vid for vid in ranked if codes.get(vid) in languages]
         keyword_set = set(keyword_ids) | set(permitted(word_passage_order))
         meaning_set = set(semantic_ids) | set(permitted(meaning_passage_order))
         match_kind = {vid: ("beides" if vid in keyword_set and vid in meaning_set
@@ -401,11 +419,25 @@ async def search_videos(
     related = (await semantic_items.related(query, level)).model_dump() if level and page == 1 else None
     return {
         "query": query, "videos": videos, "total": total,
+        "language_counts": [count.model_dump() for count in language_counts],
         "semantic": semantic is not None,
         "related": related,   # Kanäle, Playlists, noch nicht geladene Feed-Einträge
         "page": page, "per_page": per_page,
         "total_pages": max(1, (total + per_page - 1) // per_page),
     }
+
+
+async def _language_codes(video_ids: list[str]) -> dict[str, str]:
+    """Sprache je Video für Zähler und Filter ("und" = ohne Sprache)."""
+    from app.services import language
+    codes: dict[str, str] = {}
+    for start in range(0, len(video_ids), 500):
+        chunk = video_ids[start:start + 500]
+        rows = await db.fetch_all(
+            f"SELECT id, {language.code_sql('language')} AS code FROM videos "
+            f"WHERE id IN ({','.join('?' * len(chunk))})", chunk)
+        codes.update((row["id"], row["code"]) for row in rows)
+    return codes
 
 
 def fuse_rankings(*rankings: list[str]) -> list[str]:

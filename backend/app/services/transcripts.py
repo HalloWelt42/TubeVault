@@ -301,9 +301,13 @@ async def claim_ai(worker: str) -> Optional[AiJob]:
     if cursor.rowcount != 1:
         return None
     video = await db.fetch_one(
-        "SELECT id, title, duration, language FROM videos WHERE id = ?", (row["id"],))
+        "SELECT id, title, duration, language, language_source FROM videos WHERE id = ?", (row["id"],))
+    # Nur eine belegte gesprochene Sprache vorgeben - eine aus dem Titel
+    # erkannte könnte die Spracherkennung in die falsche Sprache zwingen
+    from app.services import language
+    spoken = video["language"] if video["language_source"] in language.SPOKEN else None
     return AiJob(video_id=video["id"], title=video["title"], duration=video["duration"],
-                 language=(video["language"] or None))
+                 language=spoken or None)
 
 
 async def heartbeat_ai(video_id: str, note: Optional[str] = None) -> bool:
@@ -329,9 +333,9 @@ async def finish_ai(video_id: str, result: AiResult) -> int:
         path.write_text(subtitle_segments.to_vtt(
             sentences, note="KI-Transkript (Spracherkennung, nicht vom Autor)"), encoding="utf-8")
         count = await store(video_id, language, "ai", sentences)
-        await db.execute(
-            "UPDATE videos SET language = ? WHERE id = ? AND COALESCE(language, '') = ''",
-            (language, video_id))
+        # Die erkannte gesprochene Sprache zählt für das Video (Vorrang in language)
+        from app.services import language_assign
+        await language_assign.reassess(video_id)
     else:
         count = 0
     await db.execute(

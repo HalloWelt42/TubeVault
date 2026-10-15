@@ -110,6 +110,10 @@ export const api = {
   // Hörbuch/Hörspiel von Hand festlegen (die Automatik ändert das nie mehr)
   setAudiobookBatch: (videoIds, isAudiobook) =>
     request('/api/videos/audiobook/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, is_audiobook: isAudiobook }) }),
+  // Sprache: Katalog (Namen, Flaggen, Herkünfte) und von Hand festlegen (language null = wieder automatisch)
+  getLanguages: () => request('/api/languages'),
+  setLanguageBatch: (videoIds, language) =>
+    request('/api/videos/language/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, language }) }),
 
   // Downloads
   addDownload: (data) => request('/api/downloads', { method: 'POST', body: JSON.stringify(data) }),
@@ -174,6 +178,7 @@ export const api = {
     if (filters.video_types) p.set('video_types', filters.video_types);
     if (filters.channel_ids) p.set('channel_ids', filters.channel_ids);
     if (filters.category_ids) p.set('category_ids', filters.category_ids);
+    if (filters.language) p.set('language', filters.language);   // kommagetrennt, "und" = ohne Sprache
     if (filters.archived) p.set('archived', 'true');
     const qs = p.toString();
     return request(`/api/videos/tags${qs ? '?' + qs : ''}`);
@@ -441,7 +446,7 @@ export const api = {
   removeSubscription: (id, { deleteVideos = false } = {}) =>
     request(`/api/subscriptions/${id}${deleteVideos ? '?delete_videos=true' : ''}`, { method: 'DELETE' }),
   getFeedVideos: (params = {}) => {
-    const { channelId, channelIds, videoType = 'all', videoTypes, keywords, durationMin, durationMax, feedTab = 'active', page = 1, perPage = 40 } = params;
+    const { channelId, channelIds, videoType = 'all', videoTypes, keywords, durationMin, durationMax, feedTab = 'active', page = 1, perPage = 40, languages } = params;
     const q = new URLSearchParams({ video_type: videoType, feed_tab: feedTab, page, per_page: perPage });
     if (channelId) q.set('channel_id', channelId);
     if (channelIds) q.set('channel_ids', channelIds);
@@ -449,6 +454,7 @@ export const api = {
     if (keywords) q.set('keywords', keywords);
     if (durationMin != null) q.set('duration_min', durationMin);
     if (durationMax != null) q.set('duration_max', durationMax);
+    if (languages) q.set('language', languages);   // kommagetrennt, "und" = ohne Sprache
     return request(`/api/subscriptions/feed?${q}`);
   },
   getFeedTags: (feedTab = 'active') =>

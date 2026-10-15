@@ -60,10 +60,14 @@ class MetadataService:
         is_archived: bool | None = None,
         is_music: bool | None = None,
         has_extra_audio: bool | None = None,
+        languages: list[str] | None = None,
+        with_language_counts: bool = False,
     ) -> dict:
         """Videos mit Paginierung, Filter und Sortierung abrufen.
         Mehrfachfilter: category_ids, channel_ids, video_types als Komma-getrennte Werte.
         is_archived: True=nur archivierte, False=nur nicht-archivierte, None=alle.
+        languages: Sprachkürzel (language.parse_filter), "und" = ohne Sprache.
+        with_language_counts: Zähler je Sprache mit allen Filtern außer der Sprache.
         """
         conditions = []
         params = []
@@ -135,6 +139,20 @@ class MetadataService:
         if has_extra_audio:
             conditions.append("EXISTS (SELECT 1 FROM audio_tracks a WHERE a.video_id = v.id)")
 
+        # Zähler je Sprache: alle Filter außer der Sprache selbst
+        language_counts = None
+        if with_language_counts:
+            from app.services import language_assign
+            language_counts = await language_assign.counts(
+                f"FROM videos v WHERE {' AND '.join(conditions) or '1'}", params, "v.language")
+
+        # Sprach-Filter (mehrfach, "und" = ohne Sprache)
+        if languages:
+            from app.services import language
+            language_sql, language_params = language.filter_sql("v.language", languages)
+            conditions.append(language_sql)
+            params.extend(language_params)
+
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
         # Erlaubte Sortierfelder
@@ -190,6 +208,7 @@ class MetadataService:
             "page": page,
             "per_page": per_page,
             "total_pages": total_pages,
+            "language_counts": language_counts,
         }
 
     @staticmethod
@@ -536,6 +555,7 @@ class MetadataService:
         channel_ids: str = None,
         category_ids: str = None,
         is_archived: bool = False,
+        languages: list[str] | None = None,
     ) -> list[dict]:
         """Tags aggregieren — optional gefiltert auf dieselben Kriterien
         wie /api/videos. Damit zeigt der Tag-Filter nur Tags der aktuell
@@ -547,6 +567,7 @@ class MetadataService:
           channel_ids:  komma-getrennte channel_id-Liste
           category_ids: komma-getrennte category_id-Liste (M2M über video_categories)
           is_archived:  True → nur archivierte, False → nur nicht-archivierte
+          languages:    Sprachkürzel (language.parse_filter), "und" = ohne Sprache
         """
         conditions = ["status = 'ready'", "tags != '[]'"]
         params: list = []
@@ -583,6 +604,12 @@ class MetadataService:
                     f"id IN (SELECT video_id FROM video_categories WHERE category_id IN ({placeholders}))"
                 )
                 params.extend(catids)
+
+        if languages:
+            from app.services import language
+            language_sql, language_params = language.filter_sql("language", languages)
+            conditions.append(language_sql)
+            params.extend(language_params)
 
         from app.services import video_classifier
         where = " AND ".join(conditions) + await video_classifier.without_shorts()

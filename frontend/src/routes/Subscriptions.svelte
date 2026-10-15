@@ -20,6 +20,8 @@
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   import CollectionBar from '../lib/components/collection/CollectionBar.svelte';
   import ChannelSettingsSheet from '../lib/components/channel/ChannelSettingsSheet.svelte';
+  import LanguageChips from '../lib/components/common/LanguageChips.svelte';
+  import LanguageLabel from '../lib/components/common/LanguageLabel.svelte';
   import {
     FILTERS, MEDAL_FILTERS, SORTS, channelBadges, channelName, coveragePercent, coverageShare, coverageTitle,
     dayText, dripCount, filterChannels, filterCounts, medalOf, medalStyle, missingCount, momentText, num,
@@ -54,6 +56,8 @@
   // ── Ansicht ──
   let search = $state('');
   let filter = $state('');
+  let languages = $state([]);          // Kanalsprache: Kürzel, "mul" gemischt, "und" unbekannt
+  let languageCounts = $state([]);     // Zähler je Kanalsprache (vom Backend)
   let sort = $state(savedChoice('sort', SORTS.map((s) => s.key), 'name'));
   let view = $state(savedChoice('view', ['kacheln', 'liste'], 'kacheln'));
   let selecting = $state(false);
@@ -75,7 +79,7 @@
   let menu, confirmRef, refreshTimer;
 
   let counts = $derived(filterCounts(subs));
-  let shown = $derived(sortChannels(filterChannels(subs, { filter, search }), sort));
+  let shown = $derived(sortChannels(filterChannels(subs, { filter, search, languages }), sort));
   let visibleFilters = $derived(FILTERS.filter((f) => !f.optional || counts[f.key] > 0 || filter === f.key));
   let selectedSubs = $derived(shown.filter((s) => selected.has(s.id)));
   let batchAll = $derived({
@@ -155,6 +159,7 @@
       const result = await api.getSubscriptions({ page: 1, per_page: 1000 });
       subs = result.subscriptions || [];
       total = result.total || 0;
+      languageCounts = result.language_counts || [];
       loaded = true;
       [rssStats, scheduler] = await Promise.all([api.getRSSStats(), api.getSchedulerStatus()]);
     } catch (e) { toast.error(e.message); }
@@ -380,7 +385,7 @@
   function setView(value) { view = value; saveFilters(PAGE, { view: value }); }
   function setSort(key) { sort = key; saveFilters(PAGE, { sort: key }); }
   const chooseFilter = (key) => { filter = filter === key ? '' : key; };
-  const showAll = () => { filter = ''; search = ''; };
+  const showAll = () => { filter = ''; search = ''; languages = []; };
 
   function openSheet(sub, { problems = false } = {}) { sheet = { id: sub.id, problems }; }
 
@@ -587,6 +592,7 @@
           {/if}
         {/snippet}
       </CollectionBar>
+      <LanguageChips counts={languageCounts} selected={languages} onchange={(list) => languages = list} />
     {/if}
   </div>
 
@@ -640,6 +646,7 @@
                 {#if sub.shorts_count}<span><span class="zahl">{num(sub.shorts_count)}</span> Shorts</span>{/if}
               </div>
               <div class="merkmale">
+                <LanguageLabel code={sub.language} channel />
                 {#each channelBadges(sub) as badge (badge.key)}
                   <button class="merkmal vorn {badge.cls || ''}" title={badge.title} onclick={() => badgeClick(sub, badge)}>
                     {#if badge.icon}<i class="fa-solid {badge.icon}"></i>{/if}
@@ -683,7 +690,7 @@
                 {/if}
                 <td class="sp-kanal">
                   <button class="wer" onclick={() => activate(sub)} title={selecting ? 'Auswählen' : 'Kanal öffnen'}>
-                    {@render avatar(sub)}<span class="wer-name">{channelName(sub)}</span>{@render medalBadge(sub, false)}</button>
+                    {@render avatar(sub)}<span class="wer-name">{channelName(sub)}</span>{@render medalBadge(sub, false)}<LanguageLabel code={sub.language} channel /></button>
                 </td>
                 <td class="sp-abdeckung">
                   <button class="abdeckung" onclick={() => openSheet(sub)} title={coverageTitle(sub)}>
@@ -785,6 +792,9 @@
   .k-inhalt { display: flex; flex-direction: column; gap: var(--tv-a2); padding: var(--tv-a3) var(--tv-a4) var(--tv-a4); }
   .k-meta { display: flex; gap: var(--tv-a3); flex-wrap: wrap; font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
   .merkmale { display: flex; gap: 6px; flex-wrap: wrap; min-height: 24px; }
+  /* Sprach-Label über der Klickfläche der Kachel, damit sein Tooltip erscheint */
+  .merkmale :global(.sprache) { position: relative; z-index: 2; }
+  .tv-seitenkopf :global(.sprachen) { margin-top: var(--tv-a2); }
   .merkmal { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 0; border-radius: var(--tv-ecke-klein);
              background: var(--tv-karte-2); color: var(--tv-text-2); font: inherit; font-size: var(--tv-gr-marke); font-weight: 700; cursor: pointer; }
   .merkmal:hover { color: var(--tv-text); }

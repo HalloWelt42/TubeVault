@@ -60,7 +60,8 @@
     </div>
   {:else}
     {#each list.items as entry (entry.id)}
-      <VideoRow title={entry.title || entry.video_id} channel={entry.channel_name} duration={entry.duration}
+      <VideoRow language={entry.language} languageSource={entry.language_source}
+                title={entry.title || entry.video_id} channel={entry.channel_name} duration={entry.duration}
                 thumb={isLoaded(entry) ? api.thumbnailUrl(entry.video_id) : api.rssThumbUrl(entry.video_id)}
                 note={formatDateRelative(entry.published)}
                 onopen={isLoaded(entry) ? () => go(`/video/${entry.video_id}`) : null}>

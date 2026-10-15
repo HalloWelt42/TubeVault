@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 52
+SCHEMA_VERSION = 53
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1197,6 +1197,14 @@ class Database:
             """)
             await self._connection.commit()
             logger.info("Migration v45: Videoalter und Tageslimit 'ohne Grenze' als 0")
+
+        # v53: Sprache als durchgängiger Aspekt (language_assign): Herkunft je
+        # Video, Sprache je Feed-Eintrag, abgeleitete Kanalsprache. Vorhandene
+        # Angaben gelten als Angabe beim Laden; den Rest zieht der Hintergrundlauf nach.
+        from app.services import language_assign
+        adopted = await language_assign.install_schema(self._connection, adopt_existing=current_version < 53)
+        if current_version < 53:
+            logger.info(f"Migration v53: Sprache je Video, Feed-Eintrag und Kanal, {adopted} Angaben übernommen")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

@@ -1047,10 +1047,10 @@ class DownloadService:
             # Früher gelöscht und jetzt ausdrücklich neu geladen: eigene Angaben zurück
             await deleted_videos.restore(vid)
 
-            # Sprache der geladenen (Original-)Tonspur festhalten
-            if meta.get("language"):
-                await db.execute(
-                    "UPDATE videos SET language = ? WHERE id = ?", (meta["language"], vid))
+            # Sprache: Angabe der Quelle zur (Original-)Tonspur festhalten und
+            # neu bewerten; die Wahl des Nutzers bleibt (language_assign)
+            from app.services import language, language_assign
+            await language_assign.reassess(vid, meta.get("language"), language.QUELLE)
 
             try:
                 from app.services import text_export

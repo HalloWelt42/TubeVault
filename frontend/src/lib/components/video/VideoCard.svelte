@@ -3,8 +3,8 @@
    * TubeVault – Videokachel (Gestaltung nach mockups/stil.css: .kachel)
    *
    * Bild mit dünner Kante, darunter Titel und eine Zeile Angaben. Auf dem
-   * Bild nur Abweichendes: Art (Short, Live), zusätzliche Tonspuren, Dauer und
-   * wie weit schon gesehen. Beim Überfahren: in Playlist, archivieren.
+   * Bild nur Abweichendes: Art (Short, Live), Sprache (außer der
+   * Hauptsprache), zusätzliche Tonspuren, Dauer und wie weit schon gesehen. Beim Überfahren: in Playlist, archivieren.
    * © HalloWelt42 – Private Nutzung
    */
   import { api } from '../../api/client.js';
@@ -15,6 +15,7 @@
   import QuickPlaylistBtn from '../common/QuickPlaylistBtn.svelte';
   import HoverActionOverlay from '../common/HoverActionOverlay.svelte';
   import HoverActionBtn from '../common/HoverActionBtn.svelte';
+  import LanguageLabel from '../common/LanguageLabel.svelte';
 
   // onPlay: statt einfach zu öffnen, z.B. in einer Warteschlange abspielen
   let { video, showArchiveBtn = true, onUpdate = null, onPlay = null } = $props();
@@ -72,6 +73,7 @@
       {:else if video.video_type === 'live'}
         <span class="art live"><i class="fa-solid fa-tower-broadcast"></i> Live</span>
       {/if}
+      <LanguageLabel code={video.language} source={video.language_source} art="bild" />
       {#each video.extra_audio || [] as track}
         {#if track === 'neu'}
           <span class="art vertont" title="In der Originalsprache mit anderer Stimme neu gesprochen - in der Wiedergabe umschaltbar">

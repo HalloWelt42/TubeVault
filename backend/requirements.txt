@@ -19,4 +19,7 @@ mutagen>=1.47.0
 rapidfuzz>=3.0.0
 # Vektorvergleich der Bedeutungssuche
 numpy>=2.0
+# Sprache aus Titel und Beschreibung erkennen (language_detect): reines Python
+# auf numpy, Modell im Paket (py3-none-any, auch auf ARM64), keine Abrufe
+py3langid==0.4.0
 ytmusicapi>=1.12.2

@@ -9,6 +9,7 @@ from typing import Optional
 import logging
 
 from app.models.video import VideoCreate, VideoUpdate, VideoResponse, VideoListResponse, VideoInfo
+from app.models.language import LanguageBatchRequest, LanguageBatchResult
 from app.services.download_service import download_service
 from app.services.metadata_service import metadata_service
 from app.database import db
@@ -38,8 +39,12 @@ async def list_videos(
     is_archived: Optional[bool] = None,
     is_music: Optional[bool] = None,
     has_extra_audio: Optional[bool] = None,
+    language: Optional[list[str]] = Query(None, description="Sprachkürzel, mehrfach oder kommagetrennt; und = ohne Sprache"),
+    with_language_counts: bool = False,
 ):
-    """Alle Videos abrufen (paginiert, filterbar, sortierbar). Mehrfachfilter via Komma-getrennte IDs."""
+    """Alle Videos abrufen (paginiert, filterbar, sortierbar). Mehrfachfilter via Komma-getrennte IDs.
+    with_language_counts: Zähler je Sprache für den Sprachfilter (alle übrigen Filter gelten)."""
+    from app.services import language as language_service
     result = await metadata_service.get_videos(
         page=page, per_page=per_page, status=status,
         sort_by=sort_by, sort_order=sort_order,
@@ -48,6 +53,7 @@ async def list_videos(
         channel_id=channel_id, channel_ids=channel_ids,
         tag=tag, tags=tags, video_type=video_type, video_types=video_types,
         is_archived=is_archived, is_music=is_music, has_extra_audio=has_extra_audio,
+        languages=language_service.parse_filter(language), with_language_counts=with_language_counts,
     )
     return result
 
@@ -65,15 +71,18 @@ async def get_all_tags(
     channel_ids: str = None,
     category_ids: str = None,
     archived: bool = False,
+    language: Optional[list[str]] = Query(None),
 ):
     """Tags mit Anzahl — identische Filter wie /api/videos, damit der Tag-Filter
     nur die Tags der aktuell angezeigten Videos listet (nicht alle globalen)."""
+    from app.services import language as language_service
     return await metadata_service.get_all_tags(
         video_type=video_type,
         video_types=video_types,
         channel_ids=channel_ids,
         category_ids=category_ids,
         is_archived=archived,
+        languages=language_service.parse_filter(language),
     )
 
 
@@ -485,6 +494,21 @@ async def set_audiobook_batch(req: AudiobookBatchRequest):
     from app.services import audiobook_flag
     count = await audiobook_flag.set_by_user(req.video_ids[:500], req.is_audiobook)
     return {"updated": count, "is_audiobook": req.is_audiobook}
+
+
+@router.post("/language/batch", response_model=LanguageBatchResult)
+async def set_language_batch(req: LanguageBatchRequest) -> LanguageBatchResult:
+    """Sprache von Hand festlegen (keine Automatik ändert sie mehr); language
+    leer = wieder automatisch bestimmen."""
+    from app.services import language_assign
+    try:
+        count = await language_assign.set_by_user(req.video_ids, req.language)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not count:
+        raise HTTPException(status_code=404, detail="Video nicht gefunden")
+    from app.services import language
+    return LanguageBatchResult(updated=count, language=language.normalize(req.language))
 
 
 @router.delete("/{video_id}")

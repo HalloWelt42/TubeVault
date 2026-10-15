@@ -26,10 +26,10 @@ import { getFilter, saveFilters } from '../stores/filterPersist.js';
 
 const DEFAULT_SORT = 'upload_date';
 const DEFAULT_ORDER = 'desc';
-const EMPTY_MULTI = { types: null, channels: null, categories: null, search: null, is_music: null, extra_audio: null };
+const EMPTY_MULTI = { types: null, channels: null, categories: null, search: null, is_music: null, extra_audio: null, languages: null };
 
 /** URL-Parameter, die einen Filter tragen (Sortierung zählt nicht als Filter). */
-const URL_FILTER_KEYS = ['tags', 'types', 'channels', 'categories', 'q', 'music', 'ton'];
+const URL_FILTER_KEYS = ['tags', 'types', 'channels', 'categories', 'q', 'music', 'ton', 'sprache'];
 
 function normalizeMulti(f = {}) {
   return {
@@ -39,6 +39,7 @@ function normalizeMulti(f = {}) {
     search: f.search || null,
     is_music: f.is_music || null,
     extra_audio: f.extra_audio || null,
+    languages: f.languages || null,
   };
 }
 
@@ -53,7 +54,7 @@ function readInitial(routeKey) {
       activeTags: p.tags ? p.tags.split(',').filter(Boolean) : [],
       multi: normalizeMulti({
         types: p.types, channels: p.channels, categories: p.categories,
-        search: p.q, is_music: p.music === '1', extra_audio: p.ton === '1',
+        search: p.q, is_music: p.music === '1', extra_audio: p.ton === '1', languages: p.sprache,
       }),
     };
   }
@@ -74,7 +75,8 @@ export function createVideoListFilters(routeKey) {
 
   const signature = $derived(JSON.stringify([sortBy, sortOrder, activeTags, multi]));
   const hasActive = $derived(
-    activeTags.length > 0 || !!(multi.types || multi.channels || multi.categories || multi.search || multi.is_music || multi.extra_audio)
+    activeTags.length > 0 || !!(multi.types || multi.channels || multi.categories || multi.search || multi.is_music
+                                || multi.extra_audio || multi.languages)
   );
 
   function toggleTag(tag) {
@@ -99,6 +101,7 @@ export function createVideoListFilters(routeKey) {
       q: multi.search,
       music: multi.is_music ? '1' : null,
       ton: multi.extra_audio ? '1' : null,
+      sprache: multi.languages,
     });
   }
 
@@ -112,6 +115,7 @@ export function createVideoListFilters(routeKey) {
     if (multi.search) params.search = multi.search;
     if (multi.is_music) params.is_music = true;
     if (multi.extra_audio) params.has_extra_audio = true;
+    if (multi.languages) params.language = multi.languages;
     return params;
   }
 
@@ -121,6 +125,7 @@ export function createVideoListFilters(routeKey) {
       video_types: multi.types || undefined,
       channel_ids: multi.channels || undefined,
       category_ids: multi.categories || undefined,
+      language: multi.languages || undefined,
     };
   }
 

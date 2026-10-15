@@ -10,6 +10,7 @@ Eine neue Hintergrundarbeit trägt sich hier mit einer Funktion ein, die
 ihren Stand als WorkItem liefert (oder None, wenn nichts zu tun ist).
 """
 from app.utils.file_utils import now_sqlite
+from datetime import datetime
 from typing import Awaitable, Callable, Optional
 
 from pydantic import BaseModel
@@ -30,6 +31,8 @@ class WorkItem(BaseModel):
     switch_key: Optional[str] = None  # Einstellung, die die Arbeit an- und abschaltet
     paused: bool = False              # angehalten (switch_key steht auf aus)
 
+
+_STAMP = "%Y-%m-%d %H:%M:%S"     # Schreibweise von now_sqlite
 
 # Höchststand je Arbeit seit Programmstart: daraus ergibt sich "x von y"
 _peak: dict[str, int] = {}
@@ -196,6 +199,23 @@ async def _passage_index() -> Optional[WorkItem]:
         done=done, total=total, progress=done / total if total else None, since=since)
 
 
+async def _languages() -> Optional[WorkItem]:
+    """Sprache des Bestands zuordnen (language_assign): rein lokal, in Portionen."""
+    from app.services import language_assign
+    remaining = await language_assign.pending()
+    if remaining < 50:   # einzelne neue Einträge sind sofort bewertet
+        _forget("languages")
+        return None
+    done, total, since = _countdown("languages", remaining)
+    # Restdauer aus dem bisherigen Tempo (der Lauf ist rein lokal und gleichmäßig)
+    elapsed = (datetime.strptime(now_sqlite(), _STAMP) - datetime.strptime(since, _STAMP)).total_seconds()
+    eta = int(elapsed / done * remaining) if done and elapsed > 0 else None
+    return WorkItem(key="languages", label="Sprachen werden zugeordnet",
+                    detail="Aus Untertiteln, Titel und Beschreibung, sonst nach dem Kanal - rein lokal.",
+                    done=done, total=total, progress=done / total if total else None, since=since,
+                    eta_seconds=eta)
+
+
 async def _own_videos() -> Optional[WorkItem]:
     from app.models.own_files import ScanPhase
     from app.services import own_actions, own_scan
@@ -222,7 +242,7 @@ async def _own_videos() -> Optional[WorkItem]:
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
     _dubbing, _ai_transcripts, _channel_scan, _own_videos, _search_index, _semantic_index, _passage_index,
-    _type_check]
+    _type_check, _languages]
 
 
 async def overview() -> list[WorkItem]:

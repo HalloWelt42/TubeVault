@@ -7,9 +7,10 @@
 <script>
   import { api } from '../../api/client.js';
   import { formatDuration } from '../../utils/format.js';
+  import LanguageLabel from '../common/LanguageLabel.svelte';
 
   let {
-    item,                  // { id, title, channel_name, duration, position, progress, state }
+    item,                  // { id, title, channel_name, duration, position, progress, state, language, language_source }
     nr = null,
     time = null,           // statt der Nummer, z.B. Uhrzeit im Verlauf
     meta = null,           // weitere Angabe neben dem Kanal (Zahlenschrift, z.B. Datum)
@@ -55,7 +56,7 @@
 
   <div class="text">
     <button class="titel" onclick={() => mode === 'auswahl' ? onToggle?.(item) : onPlay(item)}>{item.title}</button>
-    <div class="meta"><span>{item.channel_name || ''}</span>{#if meta}<span class="zahl">{meta}</span>{/if}{#if note}<span class="hinweis">{note}</span>{/if}</div>
+    <div class="meta"><span>{item.channel_name || ''}</span><LanguageLabel code={item.language} source={item.language_source} />{#if meta}<span class="zahl">{meta}</span>{/if}{#if note}<span class="hinweis">{note}</span>{/if}</div>
   </div>
 
   <div class="stand">
@@ -121,7 +122,7 @@
   .titel { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding: 0; border: 0;
            background: none; color: var(--tv-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
   .titel:hover { color: var(--tv-akzent); }
-  .meta { display: flex; gap: var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-2); white-space: nowrap; overflow: hidden; }
+  .meta { display: flex; align-items: center; gap: var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-2); white-space: nowrap; overflow: hidden; }
   .meta .zahl, .meta .hinweis { color: var(--tv-text-3); }
   .stand { font-size: var(--tv-gr-klein); color: var(--tv-text-2); text-align: right; }
   .tun { display: flex; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity var(--tv-schnell); }

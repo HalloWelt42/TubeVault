@@ -55,9 +55,11 @@ class SubscriptionUpdate(BaseModel):
 async def get_subscriptions(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=1000),
+    language: Optional[list[str]] = Query(None, description="Kanalsprache, mehrfach oder kommagetrennt; mul = gemischt, und = unbekannt"),
 ):
-    """Alle Abonnements abrufen."""
-    return await rss_service.get_subscriptions(page, per_page)
+    """Alle Abonnements abrufen (wahlweise nach Kanalsprache gefiltert)."""
+    from app.services import language as language_service
+    return await rss_service.get_subscriptions(page, per_page, languages=language_service.parse_filter(language))
 
 
 @router.post("")
@@ -279,7 +281,7 @@ async def _get_channel_videos_impl(
                       v.file_size, v.thumbnail_path, v.upload_date,
                       v.upload_date as published, v.status as video_status,
                       v.storage_type, v.view_count, v.description,
-                      v.suggest_override,
+                      v.suggest_override, v.language, v.language_source,
                       1 as is_downloaded, 0 as is_in_queue,
                       'downloaded' as source,
                       COALESCE(re2.video_type, 'video') as video_type
@@ -310,6 +312,7 @@ async def _get_channel_videos_impl(
         rows = await db.fetch_all(
             f"""SELECT re.video_id, re.title, re.published, re.thumbnail_url,
                        re.status as rss_status, re.description as rss_description,
+                       re.language, re.language_source,
                        COALESCE(re.video_type, 'video') as video_type,
                        CASE WHEN v.id IS NOT NULL AND v.status = 'ready' THEN 1 ELSE 0 END as is_downloaded,
                        CASE WHEN (SELECT j.id FROM jobs j WHERE j.type='download' AND json_extract(j.metadata, '$.video_id') = re.video_id AND j.status IN ('queued','active') LIMIT 1) IS NOT NULL THEN 1 ELSE 0 END as is_in_queue,
@@ -343,6 +346,7 @@ async def _get_channel_videos_impl(
         rss_rows = await db.fetch_all(
             f"""SELECT re.video_id, re.title as rss_title, re.published, re.thumbnail_url,
                        re.status as rss_status, re.description as rss_description,
+                       re.language, re.language_source,
                        COALESCE(re.video_type, 'video') as video_type,
                        v.id as vid, v.title as dl_title,
                        COALESCE(v.duration, re.duration) as duration,
@@ -383,7 +387,7 @@ async def _get_channel_videos_impl(
                 extra_rows = await db.fetch_all(
                     f"""SELECT id as video_id, title, channel_name, duration, file_size,
                                thumbnail_path, upload_date, upload_date as published,
-                               status as video_status, view_count, description,
+                               status as video_status, view_count, description, language, language_source,
                                1 as is_downloaded, 0 as is_in_queue,
                                'downloaded' as source, 'video' as video_type
                         FROM videos
@@ -397,7 +401,7 @@ async def _get_channel_videos_impl(
                 extra_rows = await db.fetch_all(
                     """SELECT id as video_id, title, channel_name, duration, file_size,
                               thumbnail_path, upload_date, upload_date as published,
-                              status as video_status, view_count, description,
+                              status as video_status, view_count, description, language, language_source,
                               1 as is_downloaded, 0 as is_in_queue,
                               'downloaded' as source, 'video' as video_type
                        FROM videos

@@ -15,6 +15,9 @@
   import HoverActionBtn from '../lib/components/common/HoverActionBtn.svelte';
   import StreamDialog from '../lib/components/common/StreamDialog.svelte';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  import LanguageChips from '../lib/components/common/LanguageChips.svelte';
+  import LanguageLabel from '../lib/components/common/LanguageLabel.svelte';
+  import { parseLanguageList } from '../lib/utils/language.js';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   import { settings } from '../lib/stores/settings.js';
@@ -72,12 +75,22 @@
   let localSemantic = $state(false);   // Bedeutungssuche war an dieser Trefferliste beteiligt
   // Was die Bedeutungssuche außer Videos findet: Kanäle, Playlists, noch nicht geladene Feed-Einträge
   let related = $state(null);
+  // Sprache der lokalen Treffer: Auswahl (in der Adresse) und Zähler über alle Treffer
+  let languages = $state(parseLanguageList($route.params.sprache));
+  let languageCounts = $state([]);
+  const languageParams = () => (languages.length ? { language: languages.join(',') } : {});
   const local = createListLoader(async (page) => {
     if (scope === 'youtube' || !query.trim()) return { items: [], total: 0 };
-    const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE, ...(precision ? { precision } : {}) });
-    if (page === 1) { localSemantic = !!r.semantic; related = r.related || null; }
+    const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE, ...(precision ? { precision } : {}), ...languageParams() });
+    if (page === 1) { localSemantic = !!r.semantic; related = r.related || null; languageCounts = r.language_counts || []; }
     return { items: r.videos || [], total: r.total || 0 };
   });
+
+  function chooseLanguages(list) {
+    languages = list;
+    updateParams({ sprache: list.length ? list.join(',') : null });
+    if (query.trim() && scope !== 'youtube') local.load(true);
+  }
 
   async function runSearch(reset = true) {
     if (!query.trim()) return;
@@ -112,7 +125,7 @@
       // Alle Treffer holen, nicht nur die gerade angezeigten
       const ids = [];
       for (let page = 1; ids.length < Math.min(local.total, PLAYLIST_MAX); page++) {
-        const r = await api.searchLocal(query, { page, per_page: 100 });
+        const r = await api.searchLocal(query, { page, per_page: 100, ...languageParams() });
         if (!r.videos?.length) break;
         ids.push(...r.videos.map(v => v.id));
       }
@@ -240,6 +253,10 @@
     </button>
   </form>
 
+  {#if scope !== 'youtube' && query.trim()}
+    <LanguageChips counts={languageCounts} selected={languages} onchange={chooseLanguages} />
+  {/if}
+
   {#if meaningAvailable && scope !== 'youtube'}
     <div class="genauigkeit" title="Wie eng die Bedeutungssuche Verwandtes fasst">
       <span class="tv-etikett">Bedeutungssuche</span>
@@ -303,7 +320,10 @@
               </div>
               <div class="info">
                 <h3 class="title">{v.title}</h3>
-                <span class="channel">{v.channel_name || 'Unbekannt'}</span>
+                <div class="info-zeile">
+                  <span class="channel">{v.channel_name || 'Unbekannt'}</span>
+                  <LanguageLabel code={v.language} source={v.language_source} />
+                </div>
               </div>
             </div>
             {#if v.passage}
@@ -512,6 +532,8 @@
   .passage-time { flex-shrink: 0; font-weight: 600; color: var(--accent-primary); white-space: nowrap; }
   .passage-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .genauigkeit { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; margin: 0 0 var(--tv-a4); }
+  .tv-seitenkopf :global(.sprachen) { margin: 0 0 var(--tv-a3); }
+  .info-zeile { display: flex; align-items: center; gap: var(--tv-a2); min-width: 0; }
   .verwandt-etikett { margin: var(--tv-a3) 0 var(--tv-a2); }
   .verwandt-reihe { display: flex; flex-wrap: wrap; gap: var(--tv-a2); }
   .verwandt-kanal { display: inline-flex; align-items: center; gap: var(--tv-a2); padding: 6px 12px 6px 6px; border: 1px solid var(--tv-rand);

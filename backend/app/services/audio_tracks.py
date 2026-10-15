@@ -49,8 +49,6 @@ CREATE INDEX IF NOT EXISTS idx_audio_tracks_video ON audio_tracks(video_id);
 ALLOWED_SUFFIXES = (".m4a", ".mp3", ".ogg", ".opus", ".wav", ".aac", ".flac")
 _MIME = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".opus": "audio/ogg",
          ".wav": "audio/wav", ".aac": "audio/aac", ".flac": "audio/flac"}
-LANGUAGE_NAMES = {"de": "Deutsch", "en": "Englisch", "fr": "Französisch", "es": "Spanisch",
-                  "it": "Italienisch", "nl": "Niederländisch", "pl": "Polnisch", "ja": "Japanisch"}
 
 
 class AudioTrack(BaseModel):
@@ -66,7 +64,10 @@ class AudioTrack(BaseModel):
 
 
 def language_name(code: str | None) -> str:
-    return LANGUAGE_NAMES.get((code or "").lower(), (code or "unbekannt").upper())
+    """Deutscher Name der Sprache einer Tonspur (eine Liste: services/language)."""
+    from app.services import language
+    known = language.normalize(code)
+    return language.name(known) if known else (code or "unbekannt").upper()
 
 
 def mime_for(path: Path) -> str:

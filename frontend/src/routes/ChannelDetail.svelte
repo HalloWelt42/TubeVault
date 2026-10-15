@@ -16,6 +16,7 @@
   import { startQueue } from '../lib/stores/playlistQueue.js';
   import { formatDateRelative, formatDuration, formatDurationLong, formatSize, formatViews } from '../lib/utils/format.js';
   import QuickPlaylistBtn from '../lib/components/common/QuickPlaylistBtn.svelte';
+  import LanguageLabel from '../lib/components/common/LanguageLabel.svelte';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
   import { marked } from 'marked';
@@ -465,6 +466,7 @@
               <i class="fa-solid fa-arrow-up-right-from-square"></i> YouTube
             </a>
           {/if}
+          <LanguageLabel code={channel.language} channel />
           {#if channel.subscriber_count}
             <span class="meta-item">{formatViews(channel.subscriber_count)} Abonnenten</span>
           {/if}
@@ -1132,6 +1134,7 @@
                 {:else if video.rss_status === 'new'}
                   <span class="badge badge-new">Neu</span>
                 {/if}
+                <LanguageLabel code={video.language} source={video.language_source} />
                 {#if channel?.audio_only}
                   <span class="type-badge badge-audio" title="Audio-Only Kanal">
                     <i class="fa-solid fa-podcast"></i> Audio

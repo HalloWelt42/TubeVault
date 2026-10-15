@@ -55,7 +55,8 @@
   {#if started.length > 0}
     <h2 class="m-h2">Weiter ansehen</h2>
     {#each started as v (v.id)}
-      <VideoRow title={v.title} channel={v.channel_name} duration={v.duration}
+      <VideoRow language={v.language} languageSource={v.language_source}
+                title={v.title} channel={v.channel_name} duration={v.duration}
                 thumb={api.thumbnailUrl(v.id)} archived={!!v.is_archived}
                 progress={(v.history_position ?? v.last_position ?? 0) / v.duration}
                 onopen={() => go(`/video/${v.id}`)} />
@@ -64,7 +65,8 @@
 
   <h2 class="m-h2">Zuletzt geladen</h2>
   {#each latest as v (v.id)}
-    <VideoRow title={v.title} channel={v.channel_name} duration={v.duration}
+    <VideoRow language={v.language} languageSource={v.language_source}
+              title={v.title} channel={v.channel_name} duration={v.duration}
               thumb={api.thumbnailUrl(v.id)} archived={!!v.is_archived}
               onopen={() => go(`/video/${v.id}`)} />
   {:else}

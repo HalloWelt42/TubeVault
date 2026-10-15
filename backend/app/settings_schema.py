@@ -20,6 +20,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+from app.services import language
+
 # Qualitäten, die Download und Auswahllisten kennen (höchste zuerst)
 VIDEO_QUALITIES = ["best", "2160p", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"]
 
@@ -94,6 +96,12 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="general.videos_per_page", default="24", kind="number", category="general",
                section="view", min=12, max=96, label="Videos je Ladeschritt",
                description="So viele Videos lädt eine Liste je Schritt nach."),
+    SettingDef(key="language.main", default="de", kind="select", category="general", section="view",
+               options=[lang.code for lang in language.LANGUAGES],
+               option_labels={lang.code: lang.name for lang in language.LANGUAGES},
+               label="Hauptsprache",
+               description="Sprach-Labels erscheinen nur bei Videos und Kanälen in anderen Sprachen - so steht "
+                           "nicht auf fast jeder Kachel dieselbe Flagge."),
     # ── Erweiterungen ─────────────────────────────────────────────────
     SettingDef(key="dub.enabled", default="false", kind="toggle", category="dub",
                section="extensions", label="Nachvertonung",

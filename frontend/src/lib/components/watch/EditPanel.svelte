@@ -9,6 +9,7 @@
   import { api } from '../../api/client.js';
   import { VIDEO_QUALITIES } from '../../constants/qualities.js';
   import { toast } from '../../stores/notifications.js';
+  import { languageCatalog, languageInfo, loadLanguages, sourceLabel } from '../../utils/language.js';
 
   let {
     video,
@@ -21,6 +22,7 @@
   let editTags = $state('');
   let editCategory = $state([]);
   let editVideoType = $state('video');
+  let editLanguage = $state('');   // '' = automatisch bestimmen, sonst von Hand gesetzt
   let saving = $state(false);
   let enriching = $state(false);
   let thumbLoading = $state(false);
@@ -130,12 +132,26 @@
       editTags = (video.tags || []).join(', ');
       editCategory = video.category_ids || [];
       editVideoType = video.video_type || 'video';
+      editLanguage = handLanguage(video);
+      loadLanguages();
       loadCategories();
       loadStreams();
       // Audio-Fix-State bei Video-Wechsel zurücksetzen
       afTracks = null; afStage = 'idle'; afMeta = null;
       afBuildInfo = null; afCommitPrimed = false;
     }
+  });
+
+  /** Von Hand gesetzte Sprache des Videos, sonst '' (automatisch). */
+  function handLanguage(v) {
+    return v?.language_source === 'hand' ? (v.language || '') : '';
+  }
+
+  // Was die Automatik derzeit annimmt (nur wenn nicht von Hand gesetzt)
+  let autoLanguageText = $derived.by(() => {
+    if (!video?.language || video.language_source === 'hand') return '';
+    const origin = sourceLabel($languageCatalog, video.language_source);
+    return `${languageInfo($languageCatalog, video.language).name}${origin ? `, ${origin}` : ''}`;
   });
 
   async function loadCategories() {
@@ -178,6 +194,10 @@
         category_ids: editCategory,
         video_type: editVideoType !== (video.video_type || 'video') ? editVideoType : undefined,
       });
+      // Sprache: von Hand festlegen oder wieder der Automatik überlassen
+      if (editLanguage !== handLanguage(video)) {
+        await api.setLanguageBatch([video.id], editLanguage || null);
+      }
       toast.success('Gespeichert');
       onVideoUpdate();
     } catch (e) { toast.error(e.message); }
@@ -277,6 +297,16 @@
           </button>
         {/each}
       </div>
+    </div>
+    <div class="edit-group">
+      <label for="edit-language"><i class="fa-solid fa-language"></i> Sprache</label>
+      <select id="edit-language" class="tv-eingabe sprache-wahl" bind:value={editLanguage}>
+        <option value="">Automatisch{autoLanguageText ? ` (${autoLanguageText})` : ''}</option>
+        {#each $languageCatalog?.languages || [] as lang (lang.code)}
+          <option value={lang.code}>{lang.flag ? `${lang.flag} ` : ''}{lang.name}</option>
+        {/each}
+      </select>
+      <span class="sprache-hinweis">Von Hand gewählt bleibt die Sprache, bis du wieder Automatisch wählst.</span>
     </div>
     <div class="edit-group">
       <span class="edit-label">Kategorien</span>
@@ -525,6 +555,8 @@
   .cat-dot-sm { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .no-cats { font-size: 0.8rem; color: var(--text-tertiary); }
   .hint { font-size: 0.7rem; color: var(--text-tertiary); font-weight: 400; }
+  .sprache-wahl { max-width: 560px; }
+  .sprache-hinweis { font-size: var(--tv-gr-marke); color: var(--tv-text-3); }
   label { font-size: 0.85rem; color: var(--text-secondary); }
   input[type="text"], textarea { padding: 8px 12px; border: 1px solid var(--border-primary); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.85rem; font-family: inherit; }
   textarea { resize: vertical; }

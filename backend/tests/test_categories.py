@@ -355,7 +355,8 @@ async def test_migration_erhaelt_kategorien_und_zuordnungen(tmp_path):
     migrated = Database(db_path=path)
     await migrated.connect()
     try:
-        assert await migrated.fetch_val("SELECT MAX(version) FROM schema_version") == 52
+        from app.database import SCHEMA_VERSION
+        assert await migrated.fetch_val("SELECT MAX(version) FROM schema_version") == SCHEMA_VERSION
         assert [r["name"] for r in await migrated.fetch_all("SELECT name FROM categories ORDER BY id")] == ["Lieblinge", "Leer"]
         rows = await migrated.fetch_all(
             "SELECT video_id, origin, rule_id FROM video_categories WHERE category_id = 7 ORDER BY position")
