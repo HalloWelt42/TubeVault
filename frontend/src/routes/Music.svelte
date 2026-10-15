@@ -54,6 +54,7 @@
   let overview = $state(null);
   let groups = $state([]);                             // Interpreten, Alben, Kanäle, Wiedergabelisten
   let groupTracks = $state(null);                      // Titel der geöffneten Gruppe oder des Verlaufs
+  let groupHeadHeight = $state(0);                     // Höhe des stehenden Gruppenkopfs (Spaltenköpfe darunter)
   let books = $state([]);                              // Hörbücher (eigener Bereich)
   let loading = $state(false);
   let menu;
@@ -238,7 +239,7 @@
     <div class="tv-rollfeld" data-scroll-root>
       {#if source}
         <!-- Geöffnete Gruppe: Interpret, Album, Kanal, Wiedergabeliste, Mix -->
-        <div class="gruppenkopf">
+        <div class="gruppenkopf" bind:clientHeight={groupHeadHeight}>
           <button class="tv-knopf ohne klein" onclick={() => { source = null; updateParams({ quelle: null }); }}>
             <i class="fa-solid fa-arrow-left"></i> Zurück</button>
           {#if groupTracks}
@@ -258,7 +259,7 @@
           {/if}
         </div>
         {#if groupTracks}
-          <TrackTable tracks={groupTracks.tracks} onMenu={openMenu} onFavorite={favorite}
+          <TrackTable tracks={groupTracks.tracks} onMenu={openMenu} onFavorite={favorite} stickyTop={`calc(${groupHeadHeight}px - var(--tv-a2))`}
                       onPlay={(i) => playFrom(groupTracks.tracks, i, groupName, source)} />
         {:else if loading}
           <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
@@ -494,7 +495,9 @@
   .mix i { font-size: 24px; color: var(--tv-art-musik); }
   .mix:hover { filter: brightness(1.15); }
 
-  .gruppenkopf { display: flex; align-items: center; gap: var(--tv-a4); flex-wrap: wrap; margin-bottom: var(--tv-a4); }
+  /* Kopf der geöffneten Gruppe bleibt beim Rollen stehen, die Spaltenköpfe direkt darunter */
+  .gruppenkopf { position: sticky; top: calc(-1 * var(--tv-a2)); z-index: 3; display: flex; align-items: center; gap: var(--tv-a4);
+                 flex-wrap: wrap; margin: calc(-1 * var(--tv-a2)) 0 0; padding: var(--tv-a3) 0; background: var(--tv-grund); }
   .gruppen-titel h2 { margin: 0; font-size: 26px; }
   .gruppenkopf .tasten { margin-left: auto; display: flex; gap: var(--tv-a2); }
   .leiste { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; margin-bottom: var(--tv-a3); }

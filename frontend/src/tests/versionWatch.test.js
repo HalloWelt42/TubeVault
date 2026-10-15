@@ -6,16 +6,17 @@ import { writable, get } from 'svelte/store';
 
 vi.mock('../lib/api/client.js', () => ({ FE_VERSION: '1.0.0' }));
 
+const stops = [];   // jede gestartete Wache wird nach dem Test wieder abgebaut
 const served = (version) => vi.fn(async () => ({ json: async () => ({ version }) }));
 
-async function start({ version, after = 0 }) {
+async function start({ version, after = 0, eager = false }) {
   vi.resetModules();
   vi.stubGlobal('fetch', served(version));
   const watch = await import('../lib/utils/versionWatch.js');
   const reload = vi.spyOn(watch.page, 'reload').mockImplementation(() => {});
   vi.setSystemTime(Date.now() + after);
   const route = writable('/');
-  watch.startVersionWatch(route);
+  stops.push(watch.startVersionWatch(route, { eager }));
   await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
   await new Promise(r => setTimeout(r));
   return { watch, reload, route };
@@ -28,6 +29,7 @@ describe('Versionswache', () => {
     document.body.innerHTML = '';
   });
   afterEach(() => {
+    stops.splice(0).forEach((stop) => stop());
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -60,5 +62,40 @@ describe('Versionswache', () => {
     const { reload, route } = await start({ version: '1.1.0' });
     route.set('/downloads');
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('Handy-App: lädt sofort neu, sobald nichts spielt, auch bei offener Seite', async () => {
+    const { reload } = await start({ version: '1.1.0', after: 20000, eager: true });
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('Handy-App: lässt den laufenden Titel zu Ende spielen und lädt beim Anhalten neu', async () => {
+    vi.useRealTimers();   // neu einrichten, diesmal mit setTimeout (Wartezeit nach dem Anhalten)
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'setTimeout'] });
+    const audio = document.createElement('audio');
+    let paused = false;
+    Object.defineProperty(audio, 'paused', { get: () => paused });
+    document.body.append(audio);
+    vi.resetModules();
+    vi.stubGlobal('fetch', served('1.1.0'));
+    const watch = await import('../lib/utils/versionWatch.js');
+    const reload = vi.spyOn(watch.page, 'reload').mockImplementation(() => {});
+    vi.setSystemTime(Date.now() + 20000);
+    stops.push(watch.startVersionWatch(writable('/'), { eager: true }));
+    await vi.waitFor(() => expect(get(watch.newVersion)).toBe('1.1.0'));
+    expect(reload).not.toHaveBeenCalled();
+
+    // Titelwechsel: kurz angehalten, gleich weiter - kein Neuladen
+    paused = true;
+    audio.dispatchEvent(new Event('pause'));
+    paused = false;
+    vi.advanceTimersByTime(2000);
+    expect(reload).not.toHaveBeenCalled();
+
+    // Angehalten und bleibt so: jetzt
+    paused = true;
+    audio.dispatchEvent(new Event('pause'));
+    vi.advanceTimersByTime(2000);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

@@ -77,8 +77,9 @@
     ['TIS_NfTO_7w', 'Der Physik-Nobelpreis für einen Kubikkilometer Eis', 'Prof. Lemeshko', 921, 'vor 5 Tagen', 'de'],
     ['-gfgQfw2g_E', 'Build & Train a GLM-5.3-Flash Model From Scratch with Python', 'freeCodeCamp.org', 2666, 'vor 8 Tagen'],
   ];
-  const STIMMEN = [['Zeit Stimme', 'eigene Stimme', true], ['Stimme: Florian', 'eigene Stimme'], ['Stimme: phil', 'eigene Stimme'], ['Thorsten', 'Katalog'],
-                   ['Kerstin', 'Katalog'], ['Eva K.', 'Katalog'], ['Karlsson', 'Katalog'], ['Ramona', 'Katalog'], ['Pavoque', 'Katalog']];
+  // Nur Katalog-Stimmen: eigene Stimmen erscheinen nie in Entwürfen oder Bildern
+  const STIMMEN = [['Thorsten', 'Katalog', true], ['Kerstin', 'Katalog'], ['Eva K.', 'Katalog'], ['Karlsson', 'Katalog'],
+                   ['Ramona', 'Katalog'], ['Pavoque', 'Katalog']];
 
   const KOPF = (aus) => `
     <div class="rahmen-kopf">
@@ -104,7 +105,7 @@
       <img src="${bild('JZKdej7uHLA')}" alt="">
       <div>
         <div class="titel">Indien: Kindheit unter Einfluss | Doku HD | ARTE</div>
-        <div class="leise klein">ARTEde · <span class="zahl">55:21</span> · <span class="sprachen">Französisch <i class="fa-solid fa-arrow-right"></i> Deutsch</span> · Stimme Zeit Stimme</div>
+        <div class="leise klein">ARTEde · <span class="zahl">55:21</span> · <span class="sprachen">Französisch <i class="fa-solid fa-arrow-right"></i> Deutsch</span> · Stimme Thorsten</div>
         <div class="schritte">
           <div class="schritt fertig"><span>Ton holen</span><div class="balken"><b></b></div></div>
           <div class="schritt fertig"><span>Verstehen</span><div class="balken"><b></b></div></div>
@@ -122,7 +123,7 @@
     return `<div class="auftrag">
       <img src="${bild(id)}" alt="">
       <div><div class="t">${titel}</div><div class="m">${kanal} · <span class="zahl">${dauer(d)}</span> · fertig ${wann}</div></div>
-      <div><span class="sprachen">${neu ? 'Deutsch, neu gesprochen' : 'Englisch <i class="fa-solid fa-arrow-right"></i> Deutsch'}</span><div class="m">Zeit Stimme</div></div>
+      <div><span class="sprachen">${neu ? 'Deutsch, neu gesprochen' : 'Englisch <i class="fa-solid fa-arrow-right"></i> Deutsch'}</span><div class="m">Thorsten</div></div>
       <div class="tun">
         <button class="spielen" title="Auf Deutsch abspielen"><i class="fa-solid fa-play"></i></button>
         <button title="Original und Neu im Wechsel vergleichen"><i class="fa-solid fa-code-compare"></i></button>

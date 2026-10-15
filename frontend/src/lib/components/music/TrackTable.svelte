@@ -1,6 +1,7 @@
 <!--
   Titelliste der Musik: dicht, ein Klick spielt ab dieser Stelle (onPlay
-  bekommt den Index), Herz und Menü je Zeile.
+  bekommt den Index), Herz und Menü je Zeile. Mit stickyTop (CSS-Länge) bleiben die
+  Spaltenköpfe beim Rollen stehen, unter einem ebenfalls stehenden Kopf.
 -->
 <script>
   import { api } from '../../api/client.js';
@@ -8,11 +9,13 @@
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../utils/format.js';
 
-  let { tracks = [], numbered = true, showPlays = false, onPlay = () => {}, onMenu = () => {}, onFavorite = () => {} } = $props();
+  let { tracks = [], numbered = true, showPlays = false, stickyTop = null,
+        onPlay = () => {}, onMenu = () => {}, onFavorite = () => {} } = $props();
 </script>
 
 <div class="liste">
-  <div class="zeile kopfzeile" class:mit-zahl={showPlays}>
+  <div class="zeile kopfzeile" class:mit-zahl={showPlays} class:haftend={stickyTop !== null}
+       style:top={stickyTop}>
     <span class="nr">{numbered ? '#' : ''}</span><span></span><span>Titel</span><span>Interpret</span>
     {#if showPlays}<span>Gehört</span>{/if}<span>Dauer</span><span></span><span></span>
   </div>
@@ -48,6 +51,7 @@
   .kopfzeile { cursor: default; font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
                color: var(--tv-text-3); }
   .kopfzeile:hover { background: none; }
+  .kopfzeile.haftend { position: sticky; z-index: 2; background: var(--tv-grund); border-radius: 0; }
   .nr { text-align: right; color: var(--tv-text-3); font-family: var(--tv-schrift-zahl); }
   .nr .spielen { display: none; color: var(--tv-text); }
   .zeile:not(.kopfzeile):hover .nr .ziffer { display: none; }

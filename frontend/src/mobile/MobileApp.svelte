@@ -33,7 +33,8 @@
   let visited = $state(new Set());
 
   loadSettings().finally(() => { ready = true; });
-  startVersionWatch(route);   // nach einem Update selbst neu laden
+  // Nach einem Update neu laden: sofort, wenn nichts spielt, sonst beim nächsten Anhalten
+  startVersionWatch(route, { eager: true });
 
   // Fernsteuerung: dieses Handy ist ein Gerät; übernommene Wiedergaben öffnen sich hier
   remote.start({

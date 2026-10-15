@@ -4,6 +4,8 @@
 // Zurückkehren in den Tab ab. Ist eine neue Version ausgeliefert:
 //   - in den ersten Sekunden nach dem Start oder im verdeckten Tab sofort neu laden,
 //   - sonst beim nächsten Seitenwechsel; bis dahin zeigt eine Leiste den Knopf.
+// Erzwungen (Handy-App, { eager: true }): sofort, sobald nichts spielt - läuft
+// Ton oder Video, beim nächsten Anhalten (nie mitten im Titel).
 // Je Version nur ein selbsttätiger Versuch (sessionStorage) - keine Schleifen.
 import { writable, get } from 'svelte/store';
 import { FE_VERSION } from '../api/client.js';
@@ -11,11 +13,14 @@ import { FE_VERSION } from '../api/client.js';
 const QUICK_RELOAD_MS = 10000;    // so lange nach dem Start wird sofort neu geladen
 const CHECK_EVERY_MS = 60000;
 const GUARD_KEY = 'tv.neu_geladen';
+const PAUSE_SETTLE_MS = 1500;     // Titelwechsel pausiert kurz - erst danach gilt "angehalten"
 
 /** Neue, schon ausgelieferte Version (null, solange die laufende aktuell ist). */
 export const newVersion = writable(null);
 
 const startedAt = Date.now();
+
+let eager = false;
 
 /** Neu laden (eigene Stelle, damit Tests es beobachten können). */
 export const page = { reload: () => location.reload() };
@@ -49,19 +54,36 @@ async function check() {
   } catch { return; }   // Server gerade nicht erreichbar: beim nächsten Mal
   if (!version || version === FE_VERSION) return;
   newVersion.set(version);
-  if (Date.now() - startedAt < QUICK_RELOAD_MS || document.hidden) reloadOnce(version);
+  if (eager || Date.now() - startedAt < QUICK_RELOAD_MS || document.hidden) reloadOnce(version);
 }
 
-/** Wache starten; route: Store, der sich bei jedem Seitenwechsel meldet. */
-export function startVersionWatch(route) {
-  if (FE_VERSION === 'dev') return;   // ohne eingebaute Version (Tests)
+/** Erzwungen: hält die Wiedergabe an (und bleibt angehalten), wird neu geladen */
+function reloadWhenStopped() {
+  const version = get(newVersion);
+  if (version) setTimeout(() => reloadOnce(version), PAUSE_SETTLE_MS);
+}
+
+/** Wache starten; route: Store, der sich bei jedem Seitenwechsel meldet.
+ *  eager: Update erzwingen, sobald nichts spielt (Handy-App).
+ *  Liefert eine Funktion, die die Wache wieder abbaut. */
+export function startVersionWatch(route, { eager: force = false } = {}) {
+  if (FE_VERSION === 'dev') return () => {};   // ohne eingebaute Version (Tests)
+  eager = force;
+  const onVisible = () => { if (!document.hidden) check(); };
+  const listeners = [['visibilitychange', onVisible, false]];
+  if (eager) listeners.push(['pause', reloadWhenStopped, true], ['ended', reloadWhenStopped, true]);
+  listeners.forEach(([name, handler, capture]) => document.addEventListener(name, handler, capture));
   check();
-  setInterval(check, CHECK_EVERY_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  const timer = setInterval(check, CHECK_EVERY_MS);
   let first = true;
-  route.subscribe(() => {
+  const unsubscribe = route.subscribe(() => {
     if (first) { first = false; return; }
     const version = get(newVersion);
     if (version) reloadOnce(version);
   });
+  return () => {
+    clearInterval(timer);
+    unsubscribe();
+    listeners.forEach(([name, handler, capture]) => document.removeEventListener(name, handler, capture));
+  };
 }
