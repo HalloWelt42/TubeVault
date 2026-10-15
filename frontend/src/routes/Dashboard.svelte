@@ -1,4 +1,5 @@
 <script>
+  import SystemStatus from '../lib/components/common/SystemStatus.svelte';
   import { api } from '../lib/api/client.js';
   import { navigate } from '../lib/router/router.js';
   import { pendingDownloadUrl } from '../lib/stores/app.js';
@@ -84,6 +85,7 @@
  <div class="tv-seitenkopf">
   <div class="welcome-section">
     <h1 class="page-title">Dashboard</h1>
+    <SystemStatus />
   </div>
 
   <!-- Quick Download -->

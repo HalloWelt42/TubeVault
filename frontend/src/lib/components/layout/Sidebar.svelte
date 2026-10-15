@@ -3,6 +3,7 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import VersionMark from './VersionMark.svelte';
   import { route, navigate } from '../../router/router.js';
   import { getMainRoutes, getSystemRoutes, getAdminRoutes } from '../../router/routes.js';
   import { sidebarOpen } from '../../stores/app.js';
@@ -99,7 +100,7 @@
   </div>
 
   <div class="sidebar-footer">
-    © HalloWelt42 - TubeVault
+    <VersionMark />
   </div>
 </aside>
 {/if}

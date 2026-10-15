@@ -7,7 +7,9 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
-  import { api, createActivitySocket, FE_VERSION } from '../../api/client.js';
+  import { api, createActivitySocket } from '../../api/client.js';
+  import CompactPlayer from '../music/CompactPlayer.svelte';
+  import { playerBar } from '../../stores/playerBar.svelte.js';
   import BackgroundWork from './BackgroundWork.svelte';
   import { formatDateRelative } from '../../utils/format.js';
   import { feedVersion } from '../../stores/app.js';
@@ -42,16 +44,6 @@
   }
 
   // System-Status (Service-LEDs)
-  let backendVersion = $state('…');
-  let dbVersion = $state('?');
-  let backendOk = $state(false);
-  let rssRunning = $state(false);
-  let rateWarning = $state(false);
-  let rateLimiterDisabled = $state(false);
-  let ytOk = $state(true);
-  let ytBlockCount = $state(0);
-  let botDetected = $state(false);
-  let rydOk = $state(false);
 
   // Cooldown-Timer
   let cooldownState = $state({ active: false, remaining: 0, cooldown: 30, base: 30 });
@@ -132,20 +124,11 @@
     } catch {}
   }
 
+  // Nur der Abstand bis zum nächsten Job (Fallback, wenn der WebSocket fehlt);
+  // den Zustand der Dienste zeigt die Übersicht (SystemStatus)
   async function pollSystemStatus() {
     try {
       const s = await api.getStatus();
-      backendVersion = s.version || '?';
-      dbVersion = s.db_version || '?';
-      backendOk = true;
-      rssRunning = s.services?.rss?.running ?? s.rss?.worker_running ?? false;
-      rateWarning = s.rate_limiter_warning ?? false;
-      rateLimiterDisabled = s.rate_limiter_disabled ?? false;
-      ytOk = s.services?.youtube?.ok ?? true;
-      ytBlockCount = s.services?.youtube?.block_count ?? 0;
-      botDetected = s.services?.youtube?.bot_detected ?? false;
-      rydOk = s.services?.ryd?.ok ?? false;
-      // Cooldown-State aus Status (Fallback wenn WS nicht verbunden)
       if (s.cooldown) {
         cooldownState = {
           active: s.cooldown.cooldown_active ?? false,
@@ -157,10 +140,7 @@
           cooldownRemaining = s.cooldown.cooldown_remaining;
         }
       }
-    } catch {
-      backendOk = false;
-      backendVersion = '?';
-    }
+    } catch { /* Statusleiste bleibt still */ }
   }
 
   // ─── WebSocket-Handler ────────────────────────────
@@ -266,28 +246,6 @@
         stats = { ...stats, paused: true, pause_reason: 'user' };
         toast('Queue pausiert', 'info');
       }
-    } catch {}
-  }
-
-  async function resetRateLimit() {
-    try {
-      await api.resetRateLimit();
-      rateWarning = false;
-      if (stats.paused && stats.pause_reason === 'rate_limit') {
-        stats = { ...stats, paused: false, pause_reason: '' };
-      }
-      toast('Rate-Limit zurückgesetzt', 'success');
-      await pollSystemStatus();
-    } catch {}
-  }
-
-  // Die Bremse lässt sich hier nur wieder einschalten. Ausschalten gab es
-  // früher als Knopf; das führte nur zu schnelleren Sperren durch die Quelle.
-  async function enableRateLimit() {
-    try {
-      const res = await api.toggleRateLimit();
-      rateLimiterDisabled = res.disabled;
-      await pollSystemStatus();
     } catch {}
   }
 
@@ -737,50 +695,8 @@
     </div>
 
     <div class="ubar-right">
+      {#if playerBar.compact}<CompactPlayer />{/if}
       <BackgroundWork />
-      <!-- Rechts: Zustand in Worten, Erklärung beim Überfahren. Ein Eintrag je
-           Sache: Version, Quelle, Kanalprüfung, Bewertungsdienst. -->
-      <span class="ubar-sys" title={backendOk
-              ? (FE_VERSION === backendVersion ? 'Oberfläche und Server laufen in dieser Version'
-                 : `Oberfläche ${FE_VERSION}, Server ${backendVersion} - Seite neu laden`)
-              : 'Server nicht erreichbar'}>
-        <span class="led" class:led-ok={backendOk && FE_VERSION === backendVersion}
-              class:led-warn={backendOk && FE_VERSION !== backendVersion} class:led-err={!backendOk}></span>
-        {backendOk ? backendVersion : 'Server?'}{#if backendOk && FE_VERSION !== backendVersion} · neu laden{/if}
-      </span>
-      <span class="ubar-sep"></span>
-      {#if botDetected}
-        <span class="ubar-sys" title="Die Quelle hält uns für einen Automaten und sperrt; eine Stunde Pause, dann geht es weiter.">
-          <span class="led led-bot"></span> Quelle gesperrt
-        </span>
-      {:else if !ytOk}
-        <span class="ubar-sys" title="Abrufe bei der Quelle scheitern gerade{ytBlockCount > 0 ? ` (${ytBlockCount} Sperren)` : ''}.">
-          <span class="led led-err"></span> Quelle blockiert
-        </span>
-      {:else if rateWarning || cooldownState.cooldown > cooldownState.base}
-        <span class="ubar-sys" title="Die Quelle hat gebremst; Abrufe laufen vorerst in größerem Abstand. Mit dem Pfeil hebst du die Bremse auf.">
-          <span class="led led-warn"></span> Quelle gebremst
-        </span>
-        <button class="ubar-btn" onclick={resetRateLimit} title="Bremse aufheben: wieder im normalen Abstand abrufen">
-          <i class="fa-solid fa-rotate-right"></i>
-        </button>
-      {:else}
-        <span class="ubar-sys" title="Abrufe bei der Quelle laufen normal."><span class="led led-ok"></span> Quelle</span>
-      {/if}
-      {#if rateLimiterDisabled}
-        <span class="ubar-sys" title="Die Abstände zwischen Abrufen sind ausgeschaltet. Die Quelle sperrt dann schneller.">
-          <span class="led led-warn"></span> ohne Bremse
-        </span>
-        <button class="ubar-btn" onclick={enableRateLimit} title="Abstände zwischen Abrufen wieder einschalten">
-          <i class="fa-solid fa-toggle-off"></i>
-        </button>
-      {/if}
-      <span class="ubar-sys" title={rssRunning ? 'Kanäle werden regelmäßig auf neue Videos geprüft.' : 'Die Kanalprüfung ist ausgeschaltet (Einstellungen).'}>
-        <span class="led" class:led-ok={rssRunning} class:led-off={!rssRunning}></span> Kanalprüfung
-      </span>
-      <span class="ubar-sys" title={rydOk ? 'Der Dienst für Mag-ich- und Mag-ich-nicht-Zahlen ist erreichbar.' : 'Der Dienst für Mag-ich-Zahlen ist nicht erreichbar; neue Videos bekommen vorerst keine.'}>
-        <span class="led" class:led-ok={rydOk} class:led-off={!rydOk}></span> Bewertungen
-      </span>
     </div>
   </div>
 </div>
@@ -1099,19 +1015,6 @@
     border-radius: 2px; transition: width 0.6s ease;
   }
 
-  .ubar-sys {
-    display: flex; align-items: center; gap: 3px; white-space: nowrap;
-  }
-  .led {
-    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
-  }
-  .led-ok { background: var(--status-success); box-shadow: 0 0 4px var(--status-success); }
-  .led-warn { background: var(--status-warning); box-shadow: 0 0 4px var(--status-warning); }
-  .led-bot { background: #f5c542; box-shadow: 0 0 6px #f5c542; animation: led-pulse 1.5s ease-in-out infinite; }
-  @keyframes led-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-  .led-err { background: var(--status-error); box-shadow: 0 0 4px var(--status-error); }
-  .led-off { background: var(--text-tertiary); opacity: 0.4; }
-
   /* ═══ Responsive ═══ */
   @media (max-width: 768px) {
     .ubar-right { gap: 5px; }
@@ -1121,8 +1024,6 @@
     .ubar-job-group { max-width: 200px; }
   }
   @media (max-width: 480px) {
-    .ubar-right .ubar-sys { font-size: 0; gap: 0; }
-    .ubar-right .ubar-sys .led { margin: 0 1px; }
     .ubar-job-group { display: none; }
   }
 </style>

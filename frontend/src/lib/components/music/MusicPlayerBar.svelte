@@ -14,6 +14,7 @@
   import { dragValue, playerBarHeight } from '../../utils/playerBar.js';
   import { remote } from '../../stores/remote.svelte.js';
   import DeviceButton from '../remote/DeviceButton.svelte';
+  import { playerBar } from '../../stores/playerBar.svelte.js';
 
   let track = $derived(player.current);
   let progress = $derived(player.duration ? player.time / player.duration : 0);
@@ -37,7 +38,8 @@
   }
 </script>
 
-{#if track}
+<!-- Eingeklappt steht die Steuerung schlank in der Fußleiste (CompactPlayer) -->
+{#if track && !playerBar.compact}
   <div class="spieler" use:playerBarHeight>
     <div class="links">
       <button class="cover" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Läuft gerade">
@@ -118,6 +120,8 @@
         <b style:width="{player.volume * 100}%"></b>
       </div>
       <DeviceButton up />
+      <button class="taste" onclick={() => playerBar.setCompact(true)} title="Leiste verkleinern: nur die Steuerung, unten in der Fußleiste">
+        <i class="fa-solid fa-chevron-down"></i></button>
       <button class="taste" onclick={() => player.stop()} title="Musik beenden"><i class="fa-solid fa-xmark"></i></button>
     </div>
   </div>
