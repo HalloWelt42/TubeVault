@@ -35,6 +35,7 @@ def _pytubefix():
 
 def make_youtube(url: str, **kwargs):
     if YT_BACKEND == "pytubefix":
+        kwargs.pop("should_stop", None)    # kennt pytubefix nicht
         YouTube, _, _, _ = _pytubefix()
         kwargs.setdefault("client", PYTUBE_CLIENT)
         return YouTube(url, **kwargs)

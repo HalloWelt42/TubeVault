@@ -25,6 +25,15 @@ import yt_dlp
 
 from app.utils import source_net
 
+
+class DownloadStopped(yt_dlp.utils.DownloadCancelled):
+    """Der Nutzer hat angehalten oder abgebrochen: sofort aufhören, nicht
+    wiederholen. reason ist "angehalten" oder "abgebrochen" (job_service)."""
+
+    def __init__(self, reason: str):
+        super().__init__(f"Download {reason}")
+        self.reason = reason
+
 logger = logging.getLogger(__name__)
 
 # Live-Throttle: KB/s des aktuell laufenden Downloads (0 = kein Limit).
@@ -606,13 +615,15 @@ def _vtt_to_srt(vtt_text: str) -> str:
 class StreamAdapter:
     """pytubefix.Stream-kompatibel."""
 
-    __slots__ = ("_fmt", "_on_progress", "_watch_url", "_video_duration")
+    __slots__ = ("_fmt", "_on_progress", "_watch_url", "_video_duration", "_should_stop")
 
-    def __init__(self, fmt: dict, on_progress_callback=None, watch_url: str = "", video_duration: int = 0):
+    def __init__(self, fmt: dict, on_progress_callback=None, watch_url: str = "", video_duration: int = 0,
+                 should_stop=None):
         self._fmt = fmt
         self._video_duration = video_duration
         self._on_progress = on_progress_callback
         self._watch_url = watch_url
+        self._should_stop = should_stop     # () -> Grund oder None; geprüft bei jedem Fortschritt
 
     @property
     def itag(self) -> str:
@@ -745,6 +756,9 @@ class StreamAdapter:
         final_path = {"path": None}
 
         def _hook(d):
+            reason = this._should_stop() if this._should_stop else None
+            if reason:
+                raise DownloadStopped(reason)
             status = d.get("status")
             if status == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
@@ -880,6 +894,8 @@ class StreamAdapter:
                 if use_login:
                     logger.info(f"[YTBOT-OK] {_label} via Login-Cookies-Eskalation")
                 break
+            except DownloadStopped:
+                raise
             except Exception as _dl_e:
                 last_exc = _dl_e
                 clients_used = opts.get("extractor_args", {}).get("youtube", {}).get("player_client") or []
@@ -1165,10 +1181,11 @@ class CaptionAdapter:
 class YoutubeAdapter:
     """pytubefix.YouTube-kompatibel."""
 
-    def __init__(self, url: str, on_progress_callback=None, **_kwargs):
+    def __init__(self, url: str, on_progress_callback=None, should_stop=None, **_kwargs):
         self.watch_url = url
         self.video_id = _extract_video_id(url) or ""
         self.on_progress_callback = on_progress_callback
+        self.should_stop = should_stop
         self._info: Optional[dict] = None
 
     def _ensure(self) -> dict:
@@ -1304,6 +1321,7 @@ class YoutubeAdapter:
                 on_progress_callback=self.on_progress_callback,
                 watch_url=self.watch_url,
                 video_duration=video_duration,
+                should_stop=self.should_stop,
             )
             for f in fmts
         ])

@@ -36,6 +36,10 @@ from app.utils.file_utils import now_sqlite
 logger = logging.getLogger(__name__)
 
 
+# Gründe, aus denen ein laufender Job sofort aufhört (stop_reason)
+STOP_CANCEL = "abgebrochen"
+STOP_PAUSE = "angehalten"
+
 class JobService:
     """Zentraler Job-Manager mit Echtzeit-Updates und Abbruch-Unterstützung.
     Nur EIN Job gleichzeitig aktiv (Semaphore)."""
@@ -450,6 +454,16 @@ class JobService:
             except Exception as e:
                 logger.warning(f"requeue_many: Job #{r['id']} fail: {e}")
         return len(rows)
+
+    def stop_reason(self, job_id: int) -> Optional[str]:
+        """Soll ein laufender Job sofort aufhören? STOP_CANCEL nach Abbrechen,
+        STOP_PAUSE, wenn der Nutzer die Warteschlange angehalten hat (eine
+        automatische Pause bei Drosselung lässt ihn fertig laufen)."""
+        if job_id in self._cancelled:
+            return STOP_CANCEL
+        if self._paused and self._pause_reason == "user":
+            return STOP_PAUSE
+        return None
 
     def is_cancelled(self, job_id: int) -> bool:
         """Prüfen ob ein Job abgebrochen wurde."""

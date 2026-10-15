@@ -35,10 +35,11 @@ from app.config import (
 )
 from app.database import db
 from app.services.rate_limiter import rate_limiter
-from app.services.job_service import job_service
+from app.services.job_service import STOP_PAUSE, job_service
 from app.services import audiobook_flag, deleted_videos, download_options, music_flag, reupload_guard, video_classifier
 from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
+from app.utils.ytdlp_adapter import DownloadStopped
 from app.utils.tag_utils import sanitize_tags
 
 logger = logging.getLogger(__name__)
@@ -1140,6 +1141,8 @@ class DownloadService:
             except Exception as e:
                 logger.debug(f"RYD-Fetch für {vid}: {e}")
 
+        except DownloadStopped as stop:
+            await self._after_stop(job_id, vid, stop.reason)
         except asyncio.CancelledError:
             # Das Programm wird beendet (Neustart, Aktualisierung): der Download
             # ist nicht gescheitert, er wurde unterbrochen. Zurück in die
@@ -1468,6 +1471,25 @@ class DownloadService:
         await job_service.complete(job_id, f"Schon vorhanden: {twin.title[:80]}")
         await self._stage(job_id, vid, "done", 1.0, "Schon vorhanden, nicht geladen")
 
+    async def _after_stop(self, job_id: int, vid: str, reason: str):
+        """Der Nutzer hat mitten im Laden angehalten oder abgebrochen.
+        Angehalten: zurück in die Warteschlange; die Teildatei im Arbeitsordner
+        bleibt, beim Fortsetzen lädt es dort weiter. Abgebrochen: der Job steht
+        schon auf abgebrochen, die Teildateien kommen weg."""
+        if reason == STOP_PAUSE:
+            await job_service.requeue(job_id, reset_retry=False, reset_progress=False)
+            label = "Angehalten - lädt beim Fortsetzen an dieser Stelle weiter"
+            logger.info(f"Download #{job_id} ({vid}) angehalten, wieder eingereiht")
+            status = "queued"
+        else:
+            job_service.clear_cancel(job_id)
+            shutil.rmtree(VIDEOS_DIR / vid / STAGING_DIRNAME, ignore_errors=True)
+            label = "Abgebrochen"
+            logger.info(f"Download #{job_id} ({vid}) abgebrochen, Teildateien entfernt")
+            status = "cancelled"
+        await self._ws_broadcast({"job_id": job_id, "queue_id": job_id, "video_id": vid, "status": status,
+                                  "stage": status, "stage_label": label})
+
     async def _download(self, job_id: int, vid: str, url: str, opts: dict, meta: dict):
         # Tracking fürs Retry-Hook: welcher Job läuft gerade?
         self._current_job_id = job_id
@@ -1561,7 +1583,9 @@ class DownloadService:
             })
 
         def _do():
-            yt = make_youtube(url, on_progress_callback=_on_progress)
+            # Anhalten und Abbrechen greifen sofort, auch mitten im Laden
+            yt = make_youtube(url, on_progress_callback=_on_progress,
+                              should_stop=lambda: job_service.stop_reason(job_id))
             vs = None
             aus = None
             adaptive = False
