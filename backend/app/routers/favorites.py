@@ -4,10 +4,18 @@ TubeVault – Favorites Router v1.0.0
 """
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
 from app.models.category import FavoriteCreate, FavoriteResponse, FavoriteListResponse
 from app.database import db
 
 router = APIRouter(prefix="/api/favorites", tags=["Favoriten"])
+
+
+class FavoriteMove(BaseModel):
+    video_ids: list[str]
+    from_list: str
+    to_list: str = Field(min_length=1, max_length=80)
 
 
 @router.get("")
@@ -103,6 +111,27 @@ async def reorder_favorites(list_name: str, video_ids: list[str]):
             (pos, vid, list_name)
         )
     return {"reordered": True, "count": len(video_ids)}
+
+
+@router.put("/move")
+async def move_favorites(req: FavoriteMove):
+    """Videos in eine andere Liste verschieben (hinten angefügt). Eine neue
+    Liste entsteht so mit ihrem ersten Video."""
+    to_list = req.to_list.strip()
+    if not to_list or to_list == req.from_list:
+        raise HTTPException(status_code=400, detail="Zielliste fehlt")
+    next_pos = await db.fetch_val(
+        "SELECT COALESCE(MAX(position), -1) + 1 FROM favorites WHERE list_name = ?", (to_list,))
+    moved = 0
+    for video_id in dict.fromkeys(req.video_ids):
+        if await db.fetch_one("SELECT 1 FROM favorites WHERE video_id = ? AND list_name = ?", (video_id, to_list)):
+            await db.execute("DELETE FROM favorites WHERE video_id = ? AND list_name = ?", (video_id, req.from_list))
+        else:
+            await db.execute("UPDATE favorites SET list_name = ?, position = ? WHERE video_id = ? AND list_name = ?",
+                             (to_list, next_pos, video_id, req.from_list))
+            next_pos += 1
+        moved += 1
+    return {"moved": moved, "to_list": to_list}
 
 
 @router.post("/lists")

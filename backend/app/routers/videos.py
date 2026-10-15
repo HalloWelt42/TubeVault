@@ -103,20 +103,29 @@ async def get_watch_history(
     channel_ids: Optional[str] = None,
     video_type: Optional[str] = None,
     video_types: Optional[str] = None,
+    state: Optional[str] = Query(None, pattern="^(new|started|finished)$"),
+    since: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$"),
 ):
-    """Watch-History abrufen (filterbar)."""
+    """Watch-History abrufen (filterbar, auch nach Stand und Zeitraum)."""
     return await metadata_service.get_watch_history(
         page=page, per_page=per_page, search=search,
         channel_id=channel_id, channel_ids=channel_ids,
-        video_type=video_type, video_types=video_types,
+        video_type=video_type, video_types=video_types, state=state, since=since,
     )
 
 
 @router.delete("/history")
-async def clear_watch_history():
-    """Komplette Watch-History löschen."""
-    await metadata_service.clear_watch_history()
-    return {"message": "Watch-History gelöscht"}
+async def clear_watch_history(older_than_days: Optional[int] = Query(None, ge=1)):
+    """Verlauf leeren, ganz oder nur Einträge älter als older_than_days.
+    Gemerkte Stellen und Wiedergabezahlen bleiben."""
+    removed = await metadata_service.clear_watch_history(older_than_days)
+    return {"removed": removed}
+
+
+@router.delete("/history/{video_id}")
+async def remove_from_history(video_id: str):
+    """Ein Video aus dem Verlauf nehmen."""
+    return {"removed": await metadata_service.remove_from_history(video_id)}
 
 
 @router.get("/info")

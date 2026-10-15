@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Favoriten</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt rahmen">
+    <!-- Fester Kopf: Titel, Abspielen, Listen, Steuerleiste -->
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <h1>Favoriten</h1>
+        <span class="zahl">41 Videos · 21:37 Std. · 6 angefangen</span>
+        <div class="aktionen">
+          <button class="knopf" title="Das zuletzt angefangene Video an der gemerkten Stelle"><i class="fa-solid fa-rotate-left"></i> Weiterschauen</button>
+          <button class="knopf" title="Alle Videos der Liste nur als Ton im Musikspieler"><i class="fa-solid fa-headphones"></i> Als Ton hören</button>
+          <button class="knopf"><i class="fa-solid fa-shuffle"></i> Zufällig</button>
+          <button class="knopf haupt"><i class="fa-solid fa-play"></i> Alle abspielen</button>
+        </div>
+      </div>
+
+      <div class="reiter">
+        <button class="aktiv"><i class="fa-solid fa-heart"></i> Standard <span class="zaehler">41</span></button>
+        <button class="ohne" title="Neue Liste anlegen"><i class="fa-solid fa-plus"></i> Neue Liste</button>
+      </div>
+
+      <div id="leiste"></div>
+    </div>
+
+    <div class="rollfeld" id="inhalt"></div>
+  </main>
+
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite } from './gemeinsam.js';
+  import { FAVORITEN, zeile, kachel, zustaende } from './sammlung.js';
+  seite('favoriten');
+
+  const leiste = document.getElementById('leiste');
+  const inhalt = document.getElementById('inhalt');
+
+  const STEUER = `
+    <div class="steuer">
+      <input class="eingabe" placeholder="In den Favoriten suchen">
+      <span class="trenner"></span>
+      <button class="chip aktiv">Alle <span class="zaehler">41</span></button>
+      <button class="chip">Neu <span class="zaehler">28</span></button>
+      <button class="chip">Angefangen <span class="zaehler">6</span></button>
+      <button class="chip">Gesehen <span class="zaehler">7</span></button>
+      <span class="trenner"></span>
+      <span class="etikett">Sortieren</span>
+      <button class="chip aktiv" title="Wie du sie angeordnet hast - per Ziehen änderbar">Eigene Reihenfolge</button>
+      <button class="chip">Hinzugefügt</button>
+      <button class="chip">Titel</button>
+      <button class="chip">Dauer</button>
+      <button class="chip">Kanal</button>
+      <div class="rechts">
+        <div class="ansicht"><button class="an" title="Liste"><i class="fa-solid fa-list"></i></button><button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button></div>
+        <button class="knopf klein"><i class="fa-regular fa-square-check"></i> Auswählen</button>
+      </div>
+    </div>`;
+
+  const AUSWAHL = `
+    <div class="auswahl-leiste">
+      <span class="anzahl"><span class="zahl">3</span> ausgewählt</span>
+      <button class="knopf klein"><i class="fa-solid fa-play"></i> Abspielen</button>
+      <button class="knopf klein"><i class="fa-solid fa-list-ul"></i> Zur Playlist</button>
+      <button class="knopf klein"><i class="fa-solid fa-arrow-right-arrow-left"></i> In Liste verschieben</button>
+      <button class="knopf klein"><i class="fa-solid fa-check"></i> Als gesehen</button>
+      <button class="knopf klein gefahr"><i class="fa-solid fa-heart-crack"></i> Aus Favoriten</button>
+      <div class="rechts">
+        <button class="knopf klein ohne">Alle 41 wählen</button>
+        <button class="knopf klein ohne"><i class="fa-solid fa-xmark"></i> Fertig</button>
+      </div>
+    </div>`;
+
+  const MENUE = `
+    <div class="menue" style="right: 48px; top: 172px">
+      <div class="kopf-zeile">Atlas Airborne</div>
+      <button><i class="fa-solid fa-play"></i> Abspielen</button>
+      <button><i class="fa-solid fa-forward"></i> Als Nächstes</button>
+      <button><i class="fa-solid fa-list"></i> Hinten anstellen</button>
+      <button><i class="fa-solid fa-headphones"></i> Nur Ton hören</button>
+      <hr>
+      <button><i class="fa-solid fa-list-ul"></i> Zur Playlist hinzufügen <i class="fa-solid fa-chevron-right nach"></i></button>
+      <button><i class="fa-solid fa-arrow-right-arrow-left"></i> In Liste verschieben <i class="fa-solid fa-chevron-right nach"></i></button>
+      <button><i class="fa-solid fa-arrow-up"></i> Ganz nach oben</button>
+      <button><i class="fa-solid fa-arrow-down"></i> Ganz nach unten</button>
+      <button><i class="fa-solid fa-check"></i> Als gesehen markieren</button>
+      <hr>
+      <button class="gefahr"><i class="fa-solid fa-heart-crack"></i> Aus Favoriten entfernen</button>
+    </div>`;
+
+  function liste(modus) {
+    return `<div class="zeilen">${FAVORITEN.map((v, i) => zeile(v, i + 1, {
+      modus, gewaehlt: modus === 'auswahl' && [1, 4, 7].includes(i),
+      klasse: modus === 'menue' && i === 4 ? 'menue-offen' : '',
+    })).join('')}</div>`;
+  }
+
+  zustaende([
+    ['liste', 'Liste'], ['kacheln', 'Kacheln'], ['menue', 'Menü'], ['ziehen', 'Ziehen'],
+    ['auswahl', 'Auswahl'], ['entfernt', 'Entfernt'], ['leer', 'Leer'],
+  ], (z) => {
+    leiste.innerHTML = z === 'auswahl' ? AUSWAHL : STEUER;
+    inhalt.style.position = 'relative';
+    if (z === 'kacheln') {
+      leiste.querySelectorAll('.ansicht button').forEach((b, i) => b.classList.toggle('an', i === 1));
+      inhalt.innerHTML = `<div class="vraster">${FAVORITEN.map((v, i) => kachel(v, i + 1)).join('')}</div>`;
+    } else if (z === 'ziehen') {
+      const zeilen = FAVORITEN.map((v, i) => zeile(v, i + 1, { klasse: i === 6 ? 'gehoben' : '' }));
+      zeilen.splice(2, 0, '<div class="einfuegen"><span>Hier ablegen: Position 3</span></div>');
+      inhalt.innerHTML = `<div class="zeilen">${zeilen.join('')}</div>`;
+    } else if (z === 'leer') {
+      inhalt.innerHTML = `<div class="leer-gross"><i class="fa-regular fa-heart"></i><h2>Diese Liste ist leer</h2>
+        <p>Mit dem Herz an jedem Video landet es hier. Videos aus anderen Listen lassen sich auch hierher verschieben.</p>
+        <button class="knopf"><i class="fa-solid fa-photo-film"></i> Zur Bibliothek</button></div>`;
+    } else {
+      inhalt.innerHTML = liste(z) + (z === 'menue' ? MENUE : '')
+        + (z === 'entfernt' ? `<div class="rueckmeldung"><i class="fa-solid fa-heart-crack"></i> "Atlas Airborne" aus den Favoriten entfernt
+             <button class="knopf klein ohne">Rückgängig</button></div>` : '');
+    }
+  });
+</script>
+</body>
+</html>

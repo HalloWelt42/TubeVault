@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Verlauf</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt rahmen">
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <h1>Verlauf</h1>
+        <span class="zahl">965 Videos · 14 angefangen</span>
+        <div class="aktionen">
+          <button class="knopf" title="Verlauf vorübergehend nicht mitschreiben"><i class="fa-solid fa-pause"></i> Pausieren</button>
+          <button class="knopf ohne gefahr" id="leeren"><i class="fa-solid fa-trash-can"></i> Verlauf leeren</button>
+          <button class="knopf haupt" title="Das zuletzt angefangene Video an der gemerkten Stelle"><i class="fa-solid fa-rotate-left"></i> Weiterschauen</button>
+        </div>
+      </div>
+      <div id="leiste"></div>
+      <div id="frage"></div>
+    </div>
+    <div class="rollfeld" id="inhalt" style="position: relative"></div>
+  </main>
+
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, vorschau, dauer } from './gemeinsam.js';
+  import { VERLAUF, zustaende } from './sammlung.js';
+  seite('verlauf');
+
+  const leiste = document.getElementById('leiste');
+  const frage = document.getElementById('frage');
+  const inhalt = document.getElementById('inhalt');
+
+  const STEUER = `
+    <div class="steuer">
+      <input class="eingabe" placeholder="Im Verlauf suchen">
+      <span class="trenner"></span>
+      <button class="chip aktiv">Alle</button>
+      <button class="chip">Angefangen <span class="zaehler">14</span></button>
+      <button class="chip">Zu Ende gesehen</button>
+      <span class="trenner"></span>
+      <span class="etikett">Zeitraum</span>
+      <button class="chip">Heute</button>
+      <button class="chip">7 Tage</button>
+      <button class="chip">30 Tage</button>
+      <button class="chip aktiv">Alles</button>
+      <div class="rechts">
+        <button class="knopf klein"><i class="fa-solid fa-tv"></i> Kanäle</button>
+        <button class="knopf klein"><i class="fa-regular fa-square-check"></i> Auswählen</button>
+      </div>
+    </div>`;
+
+  const FRAGE = `
+    <div class="bestaetigen">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>Den ganzen Verlauf (<span class="zahl">965</span> Einträge) leeren? Gemerkte Stellen zum Weiterschauen bleiben erhalten.</span>
+      <div class="rechts">
+        <button class="knopf klein">Nur älter als 30 Tage</button>
+        <button class="knopf klein gefahr-voll">Alles leeren</button>
+        <button class="knopf klein ohne">Abbrechen</button>
+      </div>
+    </div>`;
+
+  const anteil = (e) => e.pos / e.dauer;
+  const angefangen = VERLAUF.flatMap(t => t.eintraege).filter(e => anteil(e) > 0.01 && anteil(e) < 0.97);
+
+  function weiter() {
+    return `<div class="tag-kopf"><h2>Weiterschauen</h2><span class="zahl">14 angefangen</span>
+        <button class="knopf klein ohne" style="margin-left:auto">Alle 14 zeigen</button></div>
+      <div class="weiter-reihe">${angefangen.slice(0, 4).map(e => `
+        <div class="weiter-karte">
+          <div class="vbild"><img src="${vorschau(e.id)}" alt=""><div class="fort"><b style="width:${anteil(e) * 100}%"></b></div>
+            <span class="rest">noch ${dauer(e.dauer - e.pos)}</span><span class="los"><i class="fa-solid fa-circle-play"></i></span></div>
+          <div class="vtitel">${e.titel}</div><div class="vmeta">${e.kanal}</div>
+        </div>`).join('')}</div>`;
+  }
+
+  function eintrag(e, menue) {
+    const a = anteil(e);
+    const fertig = a >= 0.97;
+    return `<div class="vzeile verlauf${menue ? ' menue-offen' : ''}">
+      <span class="uhr">${e.uhr}</span>
+      <div class="vbild"><img src="${vorschau(e.id)}" alt="" loading="lazy"><span class="d">${dauer(e.dauer)}</span>
+        <div class="fort${fertig ? ' fertig' : ''}"><b style="width:${Math.max(2, a * 100)}%"></b></div></div>
+      <div class="vtext"><div class="vtitel">${e.titel}</div><div class="vmeta"><span>${e.kanal}</span></div></div>
+      <div class="stand">${fertig ? '<span class="zustand fertig"><i class="fa-solid fa-check"></i> Zu Ende</span>'
+        : `bei <span class="zahl">${dauer(e.pos)}</span> von <span class="zahl">${dauer(e.dauer)}</span>`}</div>
+      <div class="tun">
+        <button class="spielen" title="${fertig ? 'Nochmal ansehen' : 'Weiterschauen'}"><i class="fa-solid fa-${fertig ? 'rotate-right' : 'play'}"></i></button>
+        <button class="weg" title="Aus dem Verlauf entfernen"><i class="fa-solid fa-xmark"></i></button>
+        <button title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
+      </div>
+    </div>`;
+  }
+
+  const MENUE = `
+    <div class="menue" style="right: 40px; top: 470px">
+      <div class="kopf-zeile">Mind Games mit Maya: Was merkt sie sich?</div>
+      <button><i class="fa-solid fa-play"></i> Weiterschauen bei 3:14</button>
+      <button><i class="fa-solid fa-backward-step"></i> Von vorn</button>
+      <button><i class="fa-solid fa-heart"></i> Zu den Favoriten</button>
+      <button><i class="fa-solid fa-list-ul"></i> Zur Playlist hinzufügen <i class="fa-solid fa-chevron-right nach"></i></button>
+      <button><i class="fa-solid fa-tv"></i> Zum Kanal</button>
+      <hr>
+      <button><i class="fa-solid fa-check"></i> Als gesehen markieren</button>
+      <button><i class="fa-solid fa-eraser"></i> Gemerkte Stelle vergessen</button>
+      <button class="gefahr"><i class="fa-solid fa-xmark"></i> Aus dem Verlauf entfernen</button>
+    </div>`;
+
+  function tage(menue) {
+    return VERLAUF.map(t => `<div class="tag-kopf"><h2>${t.tag}</h2><span class="zahl">${t.eintraege.length} Videos</span></div>
+      <div class="zeilen">${t.eintraege.map(e => eintrag(e, menue && e.id === 'rHh4JyIvHJ0')).join('')}</div>`).join('');
+  }
+
+  zustaende([['normal', 'Normal'], ['menue', 'Menü'], ['leeren', 'Leeren fragen'], ['entfernt', 'Entfernt'], ['leer', 'Leer']], (z) => {
+    leiste.innerHTML = STEUER;
+    frage.innerHTML = z === 'leeren' ? FRAGE : '';
+    if (z === 'leer') {
+      inhalt.innerHTML = `<div class="leer-gross"><i class="fa-solid fa-clock-rotate-left"></i><h2>Der Verlauf ist leer</h2>
+        <p>Was du ansiehst, erscheint hier nach Tagen geordnet - mit der Stelle, an der du aufgehört hast.</p></div>`;
+      return;
+    }
+    inhalt.innerHTML = weiter() + tage(z === 'menue') + (z === 'menue' ? MENUE : '')
+      + (z === 'entfernt' ? `<div class="rueckmeldung"><i class="fa-solid fa-xmark"></i> Aus dem Verlauf entfernt
+          <button class="knopf klein ohne">Rückgängig</button></div>` : '');
+  });
+</script>
+</body>
+</html>

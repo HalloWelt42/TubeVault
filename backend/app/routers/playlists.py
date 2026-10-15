@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.database import db
+from app.services import watch_state
 
 router = APIRouter(prefix="/api/playlists", tags=["Playlists (Lokal)"])
 
@@ -80,24 +81,35 @@ async def playlist_from_videos(request: PlaylistFromVideos):
 
 @router.get("")
 async def get_playlists():
-    """Alle Playlists abrufen (nur global sichtbare)."""
-    rows = await db.fetch_all("""
-        SELECT p.*,
-               (SELECT COUNT(*) FROM playlist_videos pv2
-                JOIN videos v2 ON v2.id = pv2.video_id AND v2.status = 'ready'
-                WHERE pv2.playlist_id = p.id) as video_count,
-               (SELECT SUM(v3.duration) FROM playlist_videos pv3
-                JOIN videos v3 ON v3.id = pv3.video_id AND v3.status = 'ready'
-                WHERE pv3.playlist_id = p.id) as total_duration,
-               (SELECT pv2.video_id FROM playlist_videos pv2
-                JOIN videos v ON v.id = pv2.video_id AND v.status = 'ready'
-                WHERE pv2.playlist_id = p.id
-                ORDER BY pv2.position LIMIT 1) as cover_video_id
+    """Alle Playlists (nur global sichtbare) mit Kennzahlen je Playlist:
+    Anzahl, Dauer, wie viele gesehen bzw. angefangen (watch_state), wann
+    zuletzt etwas daraus lief, und die ersten drei Videos für das Bild."""
+    state = watch_state.state_sql("v")
+    rows = await db.fetch_all(f"""
+        WITH inhalt AS (
+            SELECT pv.playlist_id, pv.video_id, pv.position, v.duration, v.last_played, {state} AS stand
+            FROM playlist_videos pv JOIN videos v ON v.id = pv.video_id AND v.status = 'ready'
+        )
+        SELECT p.id, p.name, p.description, p.source, p.source_url, p.source_id, p.thumbnail_path,
+               p.channel_id, p.visibility, p.created_at,
+               (SELECT COUNT(*) FROM inhalt i WHERE i.playlist_id = p.id) AS video_count,
+               (SELECT SUM(i.duration) FROM inhalt i WHERE i.playlist_id = p.id) AS total_duration,
+               (SELECT COUNT(*) FROM inhalt i WHERE i.playlist_id = p.id AND i.stand = 'finished') AS finished_count,
+               (SELECT COUNT(*) FROM inhalt i WHERE i.playlist_id = p.id AND i.stand = 'started') AS started_count,
+               (SELECT MAX(i.last_played) FROM inhalt i WHERE i.playlist_id = p.id) AS last_played,
+               (SELECT GROUP_CONCAT(video_id) FROM (SELECT i.video_id FROM inhalt i WHERE i.playlist_id = p.id
+                                                   ORDER BY i.position LIMIT 3)) AS cover_ids
         FROM playlists p
         WHERE COALESCE(p.visibility, 'global') = 'global'
         ORDER BY p.created_at DESC
     """)
-    return [dict(r) for r in rows]
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["cover_ids"] = (item["cover_ids"] or "").split(",") if item["cover_ids"] else []
+        item["cover_video_id"] = item["cover_ids"][0] if item["cover_ids"] else None
+        result.append(item)
+    return result
 
 
 @router.post("")
@@ -152,6 +164,23 @@ async def update_playlist(playlist_id: int, data: PlaylistUpdate):
     values = list(updates.values()) + [playlist_id]
     await db.execute(f"UPDATE playlists SET {set_clause} WHERE id = ?", values)
     return {"updated": True}
+
+
+@router.post("/{playlist_id}/copy")
+async def copy_playlist(playlist_id: int):
+    """Kopie mit allen Videos in derselben Reihenfolge anlegen."""
+    source = await db.fetch_one("SELECT name, description FROM playlists WHERE id = ?", (playlist_id,))
+    if not source:
+        raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
+    cursor = await db.execute("INSERT INTO playlists (name, description) VALUES (?, ?)",
+                              (f"{source['name']} (Kopie)", source["description"]))
+    new_id = cursor.lastrowid
+    await db.execute(
+        """INSERT INTO playlist_videos (playlist_id, video_id, position)
+           SELECT ?, video_id, position FROM playlist_videos WHERE playlist_id = ?""", (new_id, playlist_id))
+    count = await db.fetch_val("SELECT COUNT(*) FROM playlist_videos WHERE playlist_id = ?", (new_id,))
+    await db.execute("UPDATE playlists SET video_count = ? WHERE id = ?", (count or 0, new_id))
+    return {"id": new_id, "name": f"{source['name']} (Kopie)", "video_count": count or 0}
 
 
 @router.delete("/{playlist_id}")

@@ -124,6 +124,10 @@ SETTINGS: list[SettingDef] = [
                label="KI-Transkripte erstellen",
                description="Der Rechner mit der Spracherkennung holt sich laufend das nächste Video. "
                            "Angehalten wird nach dem Video, das gerade bearbeitet wird."),
+    SettingDef(key="history.paused", default="false", kind="toggle", category="history",
+               label="Verlauf pausiert",
+               description="Solange an, schreibt TubeVault keinen Verlauf mit. Gemerkte Stellen "
+                           "zum Weiterschauen werden weiter gespeichert."),
     # ── System ────────────────────────────────────────────────────────
     SettingDef(key="archive.mount_check_interval", default="30", kind="number", category="archive",
                min=5, max=3600, unit="s", label="Prüfintervall für externe Archive"),

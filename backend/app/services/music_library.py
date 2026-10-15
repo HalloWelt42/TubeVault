@@ -81,25 +81,41 @@ def group_key(name: str) -> str:
     return re.sub(r"\s+", " ", name.casefold()).strip()
 
 
+_TRACK_SQL = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name,
+                         v.duration, COALESCE(v.play_count, 0) AS play_count, v.last_played, v.download_date,
+                         COALESCE(v.has_lyrics, 0) AS has_lyrics, COALESCE(v.is_music, 0) AS is_music,
+                         EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id) AS favorite
+                  FROM videos v WHERE v.status = 'ready'"""
+
+
+def _track(row) -> Track:
+    """Ein Video als Titel. Musik heißt "Interpret - Song", alles andere
+    behält seinen Videotitel, der Kanal steht als Interpret."""
+    if row["is_music"]:
+        artist, title = names_of(row)
+    else:
+        artist, title = clean_channel(row["channel_name"]) or "Unbekannt", row["title"] or row["id"]
+    return Track(id=row["id"], title=title, artist=artist, artist_source=f"artist:{group_key(artist)}",
+                 album=row["music_album"] or None,
+                 channel_id=row["channel_id"], channel_name=row["channel_name"],
+                 duration=row["duration"], play_count=row["play_count"], last_played=row["last_played"],
+                 added=row["download_date"], favorite=bool(row["favorite"]),
+                 has_lyrics=bool(row["has_lyrics"]))
+
+
 async def tracks() -> list[Track]:
     """Alle Musiktitel der Bibliothek (neueste zuerst)."""
-    rows = await db.fetch_all(
-        """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name,
-                  v.duration, COALESCE(v.play_count, 0) AS play_count, v.last_played, v.download_date,
-                  COALESCE(v.has_lyrics, 0) AS has_lyrics,
-                  EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id) AS favorite
-           FROM videos v WHERE v.status = 'ready' AND v.is_music = 1
-           ORDER BY v.download_date DESC, v.id""")
-    result = []
-    for row in rows:
-        artist, title = names_of(row)
-        result.append(Track(id=row["id"], title=title, artist=artist, artist_source=f"artist:{group_key(artist)}",
-                            album=row["music_album"] or None,
-                            channel_id=row["channel_id"], channel_name=row["channel_name"],
-                            duration=row["duration"], play_count=row["play_count"], last_played=row["last_played"],
-                            added=row["download_date"], favorite=bool(row["favorite"]),
-                            has_lyrics=bool(row["has_lyrics"])))
-    return result
+    rows = await db.fetch_all(f"{_TRACK_SQL} AND v.is_music = 1 ORDER BY v.download_date DESC, v.id")
+    return [_track(row) for row in rows]
+
+
+async def tracks_of(video_ids: list[str]) -> list[Track]:
+    """Beliebige geladene Videos als Titel, in der übergebenen Reihenfolge."""
+    if not video_ids:
+        return []
+    marks = ",".join("?" * len(video_ids))
+    by_id = {r["id"]: _track(r) for r in await db.fetch_all(f"{_TRACK_SQL} AND v.id IN ({marks})", video_ids)}
+    return [by_id[i] for i in video_ids if i in by_id]
 
 
 def _groups(items: list[Track], kind: str, key_of, name_of, subtitle_of=None) -> list[Group]:
@@ -160,10 +176,17 @@ SOURCE_TITLES = {"all": "Alle Titel", "favorites": "Lieblingssongs", "often": "O
 
 async def play_list(source: str, shuffle: bool = False, start: Optional[str] = None) -> PlayList:
     """Titel einer Quelle in Abspielreihenfolge. start: dieser Titel zuerst
-    (beim Zufall), bzw. die Liste beginnt dort (ohne Zufall)."""
-    items = await tracks()
+    (beim Zufall), bzw. die Liste beginnt dort (ohne Zufall).
+    sammlung:<Quelle> spielt eine Favoritenliste oder Playlist ganz als Ton,
+    auch Videos, die keine Musik sind (collections)."""
     kind, _, value = source.partition(":")
     title = SOURCE_TITLES.get(kind, "Musik")
+    if kind == "sammlung":
+        from app.services import collections
+        collection = await collections.load(value)
+        items = await tracks_of([item.id for item in collection.items])
+        return _arranged(source, collection.title, items, shuffle, start)
+    items = await tracks()
     if kind == "all":
         chosen = sorted(items, key=SORTS["artist"])
     elif kind == "artist":
@@ -198,7 +221,10 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
         title = f"Ähnlich wie {seed.title}" if seed else "Ähnliche Titel"
     else:
         raise ValueError("Unbekannte Quelle")
+    return _arranged(source, title, chosen, shuffle, start)
 
+
+def _arranged(source: str, title: str, chosen: list[Track], shuffle: bool, start: Optional[str]) -> PlayList:
     if shuffle:
         chosen = list(chosen)
         random.shuffle(chosen)

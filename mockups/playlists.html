@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Playlists</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+  <main class="haupt rahmen" id="haupt"></main>
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, vorschau, dauer } from './gemeinsam.js';
+  import { PLAYLISTS, JAVA, zeile, zustaende } from './sammlung.js';
+  seite('playlists');
+
+  const haupt = document.getElementById('haupt');
+  const stunden = (s) => `${Math.floor(s / 3600)}:${String(Math.round(s % 3600 / 60)).padStart(2, '0')} Std.`;
+
+  function pl(p) {
+    const ganz = p.gesehen >= p.anzahl;
+    return `<div class="pl-kachel">
+      <div class="pl-bild">
+        ${p.bilder.map(id => `<img src="${vorschau(id)}" alt="" loading="lazy">`).join('')}
+        <div class="menge"><b>${p.anzahl}</b><span>Videos</span></div>
+        ${p.angeheftet ? '<span class="stift" title="Angeheftet"><i class="fa-solid fa-thumbtack"></i></span>' : ''}
+        <button class="mehr" title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>
+        <div class="los">
+          <button class="spielen"><i class="fa-solid fa-${p.gesehen && !ganz ? 'rotate-left' : 'play'}"></i> ${p.gesehen && !ganz ? 'Weiter' : 'Abspielen'}</button>
+          <button title="Zufällig"><i class="fa-solid fa-shuffle"></i></button>
+        </div>
+      </div>
+      <div class="pl-name">${p.name}</div>
+      <div class="pl-meta"><span class="zahl">${stunden(p.dauer)}</span>
+        <span>${ganz ? 'alles gesehen' : p.gesehen ? `<span class="zahl">${p.gesehen}</span> von <span class="zahl">${p.anzahl}</span> gesehen` : 'noch nichts gesehen'}</span></div>
+      <div class="pl-fort"><b style="width:${Math.round(p.gesehen / p.anzahl * 100)}%"></b></div>
+    </div>`;
+  }
+
+  const UEBERSICHT_KOPF = `
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <h1>Playlists</h1>
+        <span class="zahl">54 Playlists · 1.187 Videos</span>
+        <div class="aktionen">
+          <button class="knopf"><i class="fa-solid fa-layer-group"></i> Serienvorschläge <span class="zaehler akzent">7</span></button>
+          <button class="knopf haupt"><i class="fa-solid fa-plus"></i> Neue Playlist</button>
+        </div>
+      </div>
+      <div class="steuer">
+        <input class="eingabe" placeholder="Playlists suchen">
+        <span class="trenner"></span>
+        <span class="etikett">Sortieren</span>
+        <button class="chip aktiv">Zuletzt gespielt</button>
+        <button class="chip">Neu angelegt</button>
+        <button class="chip">Name</button>
+        <button class="chip">Größe</button>
+        <span class="trenner"></span>
+        <button class="chip">Angefangen <span class="zaehler">5</span></button>
+        <button class="chip">Ungesehen <span class="zaehler">41</span></button>
+      </div>
+    </div>`;
+
+  const NEU = `
+    <div class="steuer" style="margin-top: var(--tv-a3)">
+      <input class="eingabe" style="width: 320px" value="Physik Grundlagen" autofocus>
+      <input class="eingabe" style="flex: 1; min-width: 240px" placeholder="Beschreibung (optional)">
+      <button class="knopf haupt">Anlegen</button>
+      <button class="knopf ohne">Abbrechen</button>
+    </div>`;
+
+  const DETAIL_KOPF = `
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <button class="knopf ohne symbol zurueck" title="Zu allen Playlists"><i class="fa-solid fa-arrow-left"></i></button>
+        <h1>Java Tutorials</h1>
+        <span class="zahl">99 Videos · 12:02 Std. · 3 gesehen</span>
+        <div class="aktionen">
+          <button class="knopf" title="Ab Folge 4 an der gemerkten Stelle"><i class="fa-solid fa-rotate-left"></i> Weiter mit Folge 4</button>
+          <button class="knopf"><i class="fa-solid fa-shuffle"></i> Zufällig</button>
+          <button class="knopf haupt"><i class="fa-solid fa-play"></i> Von vorn</button>
+          <button class="knopf symbol" title="Mehr: Umbenennen, Anheften, Ton als ZIP, Löschen"><i class="fa-solid fa-ellipsis"></i></button>
+        </div>
+      </div>
+      <div class="steuer">
+        <input class="eingabe" placeholder="In der Playlist suchen">
+        <span class="trenner"></span>
+        <button class="chip aktiv">Alle <span class="zaehler">99</span></button>
+        <button class="chip">Neu <span class="zaehler">95</span></button>
+        <button class="chip">Angefangen <span class="zaehler">1</span></button>
+        <button class="chip">Gesehen <span class="zaehler">3</span></button>
+        <span class="trenner"></span>
+        <span class="etikett">Sortieren</span>
+        <button class="chip aktiv">Eigene Reihenfolge</button>
+        <button class="chip">Titel</button>
+        <button class="chip">Dauer</button>
+        <button class="chip">Hinzugefügt</button>
+        <div class="rechts">
+          <button class="knopf klein"><i class="fa-solid fa-plus"></i> Videos hinzufügen</button>
+          <button class="knopf klein"><i class="fa-regular fa-square-check"></i> Auswählen</button>
+        </div>
+      </div>
+    </div>`;
+
+  const DETAIL_MENUE = `
+    <div class="menue" style="right: 32px; top: 128px">
+      <button><i class="fa-solid fa-pen"></i> Umbenennen und beschreiben</button>
+      <button><i class="fa-solid fa-thumbtack"></i> Losheften</button>
+      <button><i class="fa-solid fa-repeat"></i> Endlos wiederholen <span class="nach">aus</span></button>
+      <button><i class="fa-solid fa-headphones"></i> Als Ton hören</button>
+      <button><i class="fa-solid fa-file-zipper"></i> Ton als ZIP herunterladen</button>
+      <button><i class="fa-solid fa-copy"></i> Kopie anlegen</button>
+      <hr>
+      <button><i class="fa-solid fa-check-double"></i> Alles als ungesehen</button>
+      <button class="gefahr"><i class="fa-solid fa-trash-can"></i> Playlist löschen</button>
+    </div>`;
+
+  // Videos hinzufügen: Suche der Bibliothek als rechte Spalte neben der Liste
+  const HINZU = `
+    <div class="spalten">
+      <div class="rollfeld"><div class="zeilen">${JAVA.map((v, i) => zeile(v, i + 1)).join('')}</div></div>
+      <div class="rollfeld" style="background: var(--tv-flaeche); border-radius: var(--tv-ecke); padding: var(--tv-a3)">
+        <div class="etikett" style="margin-bottom: var(--tv-a2)">Aus der Bibliothek hinzufügen</div>
+        <input class="eingabe" style="width: 100%" value="Java Tutorial 7">
+        <div class="zeilen" style="margin-top: var(--tv-a3)">
+          ${[['Iam6mzq4v-Q', 'Java Tutorial 7 - Arrays', 712], ['h9fdk3jDNEI', 'Java Tutorial 7.5 - Mehrdimensionale Arrays', 498], ['kDuyfr4ZOfE', 'Java Tutorial 8 - Methoden', 655]]
+            .map(([id, t, d]) => `<div class="vzeile" style="grid-template-columns: 112px minmax(0,1fr) 40px">
+              <div class="vbild"><img src="${vorschau(id)}" alt=""><span class="d">${dauer(d)}</span></div>
+              <div class="vtext"><div class="vtitel">${t}</div><div class="vmeta">Brotcrunsher</div></div>
+              <div class="tun" style="opacity:1"><button class="spielen" title="Hinten anfügen"><i class="fa-solid fa-plus"></i></button></div>
+            </div>`).join('')}
+        </div>
+        <p class="schwach klein" style="margin-top: var(--tv-a3)">Auch per Ziehen: Video aus der Bibliothek auf eine Playlist in der Seitenleiste ziehen.</p>
+      </div>
+    </div>`;
+
+  zustaende([
+    ['uebersicht', 'Übersicht'], ['neu', 'Neue Playlist'], ['detail', 'Playlist'], ['menue', 'Playlist-Menü'],
+    ['ziehen', 'Umordnen'], ['hinzu', 'Videos hinzufügen'],
+  ], (z) => {
+    if (z === 'uebersicht' || z === 'neu') {
+      haupt.innerHTML = UEBERSICHT_KOPF + `<div class="rollfeld"><div class="pl-raster">${PLAYLISTS.map(pl).join('')}</div></div>`;
+      if (z === 'neu') haupt.querySelector('.rahmen-kopf').insertAdjacentHTML('beforeend', NEU);
+      return;
+    }
+    haupt.innerHTML = DETAIL_KOPF;
+    if (z === 'hinzu') { haupt.insertAdjacentHTML('beforeend', HINZU); return; }
+    const zeilen = JAVA.map((v, i) => zeile(v, i + 1, { klasse: (z === 'ziehen' && i === 5 ? 'gehoben' : '') + (i === 3 ? ' laeuft' : '') }));
+    if (z === 'ziehen') zeilen.splice(1, 0, '<div class="einfuegen"><span>Hier ablegen: Folge 2</span></div>');
+    haupt.insertAdjacentHTML('beforeend', `<div class="rollfeld" style="position: relative"><div class="zeilen">${zeilen.join('')}</div></div>`);
+    if (z === 'menue') haupt.insertAdjacentHTML('beforeend', DETAIL_MENUE);
+  });
+  haupt.style.position = 'relative';
+</script>
+</body>
+</html>

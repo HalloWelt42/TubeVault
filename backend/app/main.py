@@ -30,7 +30,7 @@ from app.routers import (
     jobs, subscriptions, playlists, chapters, search, exports, imports,
     ad_markers, own_collection, music, video_repair, backup, api_endpoints, admin_cleanup, transcripts as transcripts_router,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
-    cookies, admin, dubbing,
+    cookies, admin, dubbing, collections as collections_router,
 )
 
 # Logging
@@ -448,6 +448,7 @@ app.include_router(channel_playlists.router)
 app.include_router(imports.router)
 app.include_router(own_collection.router)
 app.include_router(music.router)
+app.include_router(collections_router.router)
 app.include_router(video_repair.router)
 app.include_router(admin_cleanup.router)
 app.include_router(transcripts_router.router)

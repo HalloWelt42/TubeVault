@@ -86,11 +86,14 @@ async def channel_list():
 async def play(source: str = Query(..., min_length=3), shuffle: bool = False, start: Optional[str] = None):
     """Dynamische Wiedergabeliste: all, artist:<name>, album:<schlüssel>,
     channel:<id>, favorites, often, new, recent, forgotten, playlist:<id>,
-    similar:<video_id> - wahlweise zufällig."""
+    similar:<video_id>, sammlung:<favorites:Liste|playlist:id> (alle Videos
+    als Ton) - wahlweise zufällig."""
     try:
         return await music_library.play_list(source, shuffle=shuffle, start=start)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/audio-info/{video_id}", response_model=audio_export.AudioInfo)

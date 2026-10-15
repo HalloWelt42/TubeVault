@@ -13,6 +13,8 @@ from app.utils.tag_utils import sanitize_tags
 
 logger = logging.getLogger(__name__)
 
+HISTORY_PAUSED = "history.paused"
+
 # Grund auf der Ignorierliste für vom Nutzer gelöschte Videos
 
 
@@ -382,7 +384,10 @@ class MetadataService:
         return deleted
 
     async def record_play(self, video_id: str, position: int = 0):
-        """Wiedergabe aufzeichnen."""
+        """Wiedergabe aufzeichnen (nicht, solange der Verlauf pausiert ist)."""
+        from app.services import setting_values
+        if await setting_values.is_on(HISTORY_PAUSED):
+            return
         now = now_sqlite()
         await db.execute(
             "UPDATE videos SET play_count = play_count + 1, last_played = ?, updated_at = ? WHERE id = ?",
@@ -394,11 +399,16 @@ class MetadataService:
         )
 
     async def save_position(self, video_id: str, position: int):
-        """Wiedergabeposition speichern (auf videos + watch_history)."""
+        """Wiedergabeposition speichern (auf videos + watch_history). Die
+        gemerkte Stelle bleibt auch bei pausiertem Verlauf, nur der Eintrag
+        im Verlauf entfällt dann."""
+        from app.services import setting_values
         await db.execute(
             "UPDATE videos SET last_position = ? WHERE id = ?",
             (position, video_id)
         )
+        if await setting_values.is_on(HISTORY_PAUSED):
+            return
         await db.execute(
             """INSERT OR REPLACE INTO watch_history (video_id, position, watched_at)
                VALUES (?, ?, datetime('now'))""",
@@ -422,10 +432,22 @@ class MetadataService:
         channel_ids: str | None = None,
         video_type: str | None = None,
         video_types: str | None = None,
+        state: str | None = None,
+        since: str | None = None,
     ) -> dict:
-        """Watch-History mit Video-Details und Filtern abrufen."""
+        """Watch-History mit Video-Details und Filtern abrufen.
+        state: new | started | finished (watch_state); since: nur zuletzt
+        gesehen ab diesem Zeitpunkt ('YYYY-MM-DD HH:MM:SS', UTC wie gespeichert)."""
+        from app.services import watch_state
         conditions = []
         params = []
+
+        if state in watch_state.STATES:
+            conditions.append(f"{watch_state.state_sql('v')} = ?")
+            params.append(state)
+        if since:
+            conditions.append("wh.watched_at >= ?")
+            params.append(since)
 
         if search:
             conditions.append("(v.title LIKE ? OR v.channel_name LIKE ?)")
@@ -451,9 +473,10 @@ class MetadataService:
         extra_where += await video_classifier.without_shorts("v")
 
         total = await db.fetch_val(
-            f"""SELECT COUNT(DISTINCT wh.video_id)
-                FROM watch_history wh
-                JOIN videos v ON v.id = wh.video_id
+            f"""SELECT COUNT(*)
+                FROM videos v
+                JOIN (SELECT video_id, MAX(watched_at) AS watched_at FROM watch_history GROUP BY video_id) wh
+                  ON v.id = wh.video_id
                 WHERE 1=1 {extra_where}""",
             params
         )
@@ -482,10 +505,20 @@ class MetadataService:
             "total_pages": total_pages,
         }
 
-    async def clear_watch_history(self):
-        """Komplette Watch-History löschen."""
-        await db.execute("DELETE FROM watch_history")
-        await db.execute("UPDATE videos SET play_count = 0, last_played = NULL, last_position = 0")
+    async def clear_watch_history(self, older_than_days: int | None = None) -> int:
+        """Verlauf leeren, ganz oder nur älter als older_than_days. Gemerkte
+        Stellen zum Weiterschauen und Wiedergabezahlen bleiben."""
+        if older_than_days:
+            cursor = await db.execute(
+                "DELETE FROM watch_history WHERE watched_at < datetime('now', ?)", (f"-{int(older_than_days)} days",))
+        else:
+            cursor = await db.execute("DELETE FROM watch_history")
+        return cursor.rowcount
+
+    async def remove_from_history(self, video_id: str) -> int:
+        """Ein Video aus dem Verlauf nehmen (seine gemerkte Stelle bleibt)."""
+        cursor = await db.execute("DELETE FROM watch_history WHERE video_id = ?", (video_id,))
+        return cursor.rowcount
 
     async def get_all_tags(
         self,

@@ -1,0 +1,184 @@
+/* TubeVault – Sammlungen (Favoriten, Playlists, Verlauf)
+ * Gemeinsame Bausteine der drei Entwürfe: Abspiel-Knöpfe im Kopf,
+ * Steuerleiste (Suche, Zustand, Sortierung, Ansicht), Videozeilen mit
+ * Fortschritt, Auswahl und Ziehen. In der App wird daraus eine Komponente
+ * für alle Sammlungen, damit sich die drei Seiten gleich bedienen. */
+
+/* Kopf: Titel links, Abspielen rechts */
+.sammlung-kopf { display: flex; align-items: flex-end; gap: var(--tv-a4); margin-bottom: var(--tv-a4); flex-wrap: wrap; }
+.sammlung-kopf h1 { margin: 0; }
+.sammlung-kopf .zahl { color: var(--tv-text-3); font-size: var(--tv-gr-titel); font-weight: 500; }
+.sammlung-kopf .aktionen { margin-left: auto; display: flex; gap: var(--tv-a2); flex-wrap: wrap; }
+.sammlung-kopf .zurueck { align-self: center; }
+.beschreibung { margin: -8px 0 var(--tv-a4); color: var(--tv-text-2); font-size: var(--tv-gr-klein); max-width: 820px; }
+
+/* Steuerleiste: eine Zeile, rechts Ansicht und Auswahl */
+.steuer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--tv-a2) var(--tv-a3);
+          padding: var(--tv-a3) var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke); }
+.steuer .trenner { width: 1px; align-self: stretch; background: var(--tv-rand); margin: 0 var(--tv-a1); }
+.steuer .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; }
+.steuer .eingabe { width: 260px; }
+.ansicht { display: inline-flex; background: var(--tv-karte); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke); }
+.ansicht button { width: 38px; height: 32px; border: 0; background: none; color: var(--tv-text-3); cursor: pointer; border-radius: var(--tv-ecke-klein); }
+.ansicht button.an { background: var(--tv-karte-3); color: var(--tv-akzent); }
+
+/* Auswahl-Leiste ersetzt im Auswahl-Zustand die Steuerleiste */
+.auswahl-leiste { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap;
+                  padding: var(--tv-a2) var(--tv-a4); background: rgba(var(--tv-akzent-rgb), 0.08);
+                  border: 1px solid rgba(var(--tv-akzent-rgb), 0.35); border-radius: var(--tv-ecke); }
+.auswahl-leiste .anzahl { font-weight: 700; margin-right: var(--tv-a2); }
+.auswahl-leiste .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); }
+
+/* Bestätigung direkt auf der Seite (kein Browser-Dialog) */
+.bestaetigen { display: flex; align-items: center; gap: var(--tv-a3); flex-wrap: wrap; margin-top: var(--tv-a3);
+               padding: var(--tv-a3) var(--tv-a4); background: rgba(var(--tv-gefahr-rgb), 0.08);
+               border: 1px solid rgba(var(--tv-gefahr-rgb), 0.4); border-radius: var(--tv-ecke); }
+.bestaetigen i { color: var(--tv-gefahr); }
+.bestaetigen .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); }
+.knopf.gefahr-voll { background: var(--tv-gefahr); color: #1a0606; border-color: transparent; }
+
+/* Videozeilen */
+.zeilen { display: flex; flex-direction: column; gap: 2px; }
+.vzeile { position: relative; display: grid; align-items: center; gap: var(--tv-a3);
+          grid-template-columns: 22px 34px 160px minmax(0, 1fr) 150px 132px;
+          padding: 6px var(--tv-a2); border-radius: var(--tv-ecke); }
+.vzeile:hover { background: var(--tv-flaeche); }
+.vzeile .griff { color: var(--tv-text-3); cursor: grab; text-align: center; }
+.vzeile .nr { text-align: right; color: var(--tv-text-3); font-family: var(--tv-schrift-zahl); font-size: var(--tv-gr-klein); }
+.vzeile .vbild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke-klein); overflow: hidden; background: var(--tv-mulde); cursor: pointer; }
+.vzeile .vbild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vzeile .vbild .d { position: absolute; right: 5px; bottom: 7px; padding: 0 5px; height: 20px; display: grid; place-items: center;
+                    background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); font-size: var(--tv-gr-marke);
+                    font-weight: 700; font-family: var(--tv-schrift-zahl); }
+.vzeile .vbild .fort { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.55); }
+.vzeile .vbild .fort b { display: block; height: 100%; background: var(--tv-akzent); }
+.vzeile .vbild .fort.fertig b { background: var(--tv-text-3); }
+.vzeile .vtext { min-width: 0; }
+.vzeile .vtitel { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.vzeile .vtitel:hover { color: var(--tv-akzent); }
+.vzeile .vmeta { font-size: var(--tv-gr-klein); color: var(--tv-text-2); display: flex; gap: var(--tv-a3); white-space: nowrap; overflow: hidden; }
+.vzeile .vmeta .zahl { color: var(--tv-text-3); }
+.vzeile .stand { font-size: var(--tv-gr-klein); color: var(--tv-text-2); text-align: right; }
+.vzeile .stand .zahl { font-family: var(--tv-schrift-zahl); }
+.vzeile .tun { display: flex; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity var(--tv-schnell); }
+.vzeile:hover .tun, .vzeile.menue-offen .tun { opacity: 1; }
+.vzeile .tun button { width: 38px; height: 38px; border: 0; background: none; color: var(--tv-text-2); border-radius: var(--tv-ecke);
+                      cursor: pointer; font-size: 15px; }
+.vzeile .tun button:hover { background: var(--tv-karte-2); color: var(--tv-text); }
+.vzeile .tun button.spielen { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+.vzeile .tun button.weg:hover { color: var(--tv-gefahr); }
+.vzeile.laeuft .vtitel { color: var(--tv-akzent); }
+.vzeile.gewaehlt { background: rgba(var(--tv-akzent-rgb), 0.08); }
+.vzeile .haken { width: 22px; height: 22px; border: 0; background: none; color: var(--tv-text-3); cursor: pointer; font-size: 18px; padding: 0; }
+.vzeile.gewaehlt .haken { color: var(--tv-akzent); }
+
+/* Ziehen in Aktion: die gehobene Zeile und die Einfügelinie */
+.vzeile.gehoben { background: var(--tv-karte-2); box-shadow: var(--tv-schatten); transform: translateX(10px) rotate(-0.4deg); opacity: 0.95; z-index: 2; }
+.einfuegen { position: relative; height: 0; }
+.einfuegen::before { content: ""; position: absolute; left: 30px; right: 0; top: -2px; height: 3px; background: var(--tv-akzent); border-radius: 1px; }
+.einfuegen span { position: absolute; left: 30px; top: -24px; font-size: var(--tv-gr-marke); font-weight: 700; color: var(--tv-akzent);
+                  background: var(--tv-grund); padding: 0 6px; }
+
+/* Kachel-Ansicht derselben Videos */
+.vraster { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--tv-a5) var(--tv-a4); }
+.vkachel { cursor: pointer; }
+.vkachel .vbild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde); }
+.vkachel .vbild img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 300ms ease; }
+.vkachel:hover .vbild img { transform: scale(1.04); }
+.vkachel .vbild .d { position: absolute; right: 8px; bottom: 10px; padding: 0 7px; height: 24px; display: grid; place-items: center;
+                     background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); font-size: var(--tv-gr-marke); font-weight: 700;
+                     font-family: var(--tv-schrift-zahl); }
+.vkachel .vbild .fort { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.55); }
+.vkachel .vbild .fort b { display: block; height: 100%; background: var(--tv-akzent); }
+.vkachel .vbild .fort.fertig b { background: var(--tv-text-3); }
+.vkachel .nr { position: absolute; left: 8px; top: 8px; min-width: 28px; height: 24px; padding: 0 6px; display: grid; place-items: center;
+               background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); font-family: var(--tv-schrift-zahl); font-size: var(--tv-gr-marke); font-weight: 700; }
+.vkachel .vtitel { margin-top: var(--tv-a2); font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.vkachel .vmeta { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+
+/* Abschnitte im Rollfeld (Verlauf: je Tag) */
+.tag-kopf { display: flex; align-items: baseline; gap: var(--tv-a3); margin: var(--tv-a5) 0 var(--tv-a2); }
+.tag-kopf:first-child { margin-top: var(--tv-a2); }
+.tag-kopf h2 { margin: 0; font-size: var(--tv-gr-titel); }
+.tag-kopf .zahl { color: var(--tv-text-3); font-size: var(--tv-gr-klein); }
+.vzeile.verlauf { grid-template-columns: 58px 160px minmax(0, 1fr) 170px 132px; }
+.vzeile .uhr { font-family: var(--tv-schrift-zahl); color: var(--tv-text-3); font-size: var(--tv-gr-klein); text-align: right; }
+
+/* Weiterschauen: eine Reihe Karten, nie seitlich rollend */
+.weiter-reihe { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--tv-a4); }
+.weiter-karte { cursor: pointer; }
+.weiter-karte .vbild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde); }
+.weiter-karte .vbild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.weiter-karte .vbild .fort { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0, 0, 0, 0.55); }
+.weiter-karte .vbild .fort b { display: block; height: 100%; background: var(--tv-akzent); }
+.weiter-karte .vbild .rest { position: absolute; right: 8px; bottom: 12px; height: 24px; padding: 0 8px; display: grid; place-items: center;
+                             background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); font-size: var(--tv-gr-marke); font-weight: 700; }
+.weiter-karte .vbild .los { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity var(--tv-schnell);
+                            background: rgba(8, 13, 16, 0.45); font-size: 34px; color: var(--tv-akzent); }
+.weiter-karte:hover .los { opacity: 1; }
+.weiter-karte .vtitel { margin-top: var(--tv-a2); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.weiter-karte .vmeta { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+
+/* Playlist-Kacheln: Collage aus vier Vorschaubildern */
+.pl-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--tv-a5) var(--tv-a4); }
+.pl-kachel { position: relative; cursor: pointer; }
+.pl-bild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--tv-ecke); overflow: hidden; background: var(--tv-mulde);
+           display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; }
+.pl-bild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pl-bild img:first-child { grid-row: 1 / 3; }
+.pl-bild .menge { position: absolute; right: 0; top: 0; bottom: 0; width: 33.4%; display: flex; flex-direction: column; align-items: center;
+                  justify-content: center; gap: 2px; background: rgba(8, 13, 16, 0.78); font-weight: 700; }
+.pl-bild .menge b { font-family: var(--tv-schrift-zahl); font-size: 24px; }
+.pl-bild .menge span { font-size: var(--tv-gr-marke); color: var(--tv-text-2); letter-spacing: 0.06em; text-transform: uppercase; }
+.pl-bild .los { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 6px; opacity: 0; transform: translateY(6px);
+                transition: opacity var(--tv-schnell), transform var(--tv-schnell); }
+.pl-kachel:hover .los { opacity: 1; transform: none; }
+.pl-bild .los button { height: 40px; padding: 0 12px; border: 0; border-radius: var(--tv-ecke); cursor: pointer; font-weight: 700;
+                       background: var(--tv-schleier); color: var(--tv-text); display: inline-flex; align-items: center; gap: 6px; }
+.pl-bild .los button.spielen { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+.pl-bild .stift { position: absolute; left: 8px; top: 8px; width: 28px; height: 28px; display: grid; place-items: center;
+                  background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); color: var(--tv-akzent); font-size: 13px; }
+.pl-bild .mehr { position: absolute; right: calc(33.4% + 8px); top: 8px; width: 32px; height: 32px; border: 0; display: grid; place-items: center;
+                 background: var(--tv-schleier); border-radius: var(--tv-ecke-klein); color: var(--tv-text); opacity: 0; cursor: pointer; }
+.pl-kachel:hover .mehr { opacity: 1; }
+.pl-name { margin-top: var(--tv-a2); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-meta { font-size: var(--tv-gr-klein); color: var(--tv-text-2); display: flex; gap: var(--tv-a3); }
+.pl-meta .zahl { color: var(--tv-text-3); }
+.pl-fort { margin-top: 6px; height: 4px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+.pl-fort b { display: block; height: 100%; background: var(--tv-akzent); }
+
+/* Kontextmenü */
+.menue { position: absolute; z-index: 10; width: 290px; padding: 6px; background: var(--tv-karte-2); border: 1px solid var(--tv-rand-stark);
+         border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten); }
+.menue .kopf-zeile { padding: 6px 10px 8px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                     border-bottom: 1px solid var(--tv-rand); margin-bottom: 4px; }
+.menue button { display: flex; align-items: center; gap: var(--tv-a3); width: 100%; padding: 9px 10px; border: 0; background: none;
+                color: var(--tv-text); font: inherit; text-align: left; border-radius: var(--tv-ecke-klein); cursor: pointer; }
+.menue button:hover { background: var(--tv-karte-3); }
+.menue button i { width: 18px; color: var(--tv-text-2); }
+.menue button .nach { margin-left: auto; color: var(--tv-text-3); }
+.menue button.gefahr, .menue button.gefahr i { color: var(--tv-gefahr); }
+.menue hr { border: 0; border-top: 1px solid var(--tv-rand); margin: 6px 4px; }
+
+/* Leerer Zustand mit Weg nach vorn */
+.leer-gross { padding: 72px var(--tv-a5); text-align: center; color: var(--tv-text-2); }
+.leer-gross i { font-size: 44px; color: var(--tv-text-3); margin-bottom: var(--tv-a4); }
+.leer-gross h2 { margin: 0 0 var(--tv-a2); color: var(--tv-text); }
+.leer-gross p { margin: 0 auto var(--tv-a4); max-width: 520px; }
+
+/* Rückmeldung nach einer Aktion, mit Rückgängig */
+.rueckmeldung { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tv-fuss-hoehe) + 64px); z-index: 40;
+                display: flex; align-items: center; gap: var(--tv-a3); padding: var(--tv-a2) var(--tv-a2) var(--tv-a2) var(--tv-a4);
+                background: var(--tv-karte-2); border: 1px solid var(--tv-rand-stark); border-radius: var(--tv-ecke); box-shadow: var(--tv-schatten); }
+
+/* Zustands-Umschalter der Entwürfe (nicht Teil der App) */
+.zustaende { position: fixed; right: var(--tv-a4); bottom: calc(var(--tv-fuss-hoehe) + var(--tv-a3)); z-index: 50;
+             display: flex; gap: 4px; align-items: center; padding: var(--tv-a2) var(--tv-a3); background: #0b1114;
+             border: 1px dashed var(--tv-rand-stark); border-radius: 4px; font-size: 13px; }
+.zustaende span { color: var(--tv-text-3); margin-right: 4px; }
+.zustaende button { padding: 3px 8px; background: transparent; color: var(--tv-text-2); border: 1px solid var(--tv-rand);
+                    border-radius: 3px; font-size: 13px; cursor: pointer; }
+.zustaende button.an { color: var(--tv-akzent); border-color: var(--tv-akzent); }
+
+/* Der Umschalter für Ecken und Akzent würde hier den Zustands-Umschalter verdecken */
+.entwurf-schalter { display: none; }
