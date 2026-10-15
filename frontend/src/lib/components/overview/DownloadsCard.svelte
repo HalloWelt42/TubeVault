@@ -55,7 +55,7 @@
       <div class="job">
         <div class="zeile">
           <span class="t">{job.title || job.video_id}</span>
-          <span class="zahl tv-leise">{Math.round((job.progress || 0) * 100)} %</span>
+          <span class="anteil zahl tv-leise">{Math.round((job.progress || 0) * 100)} %</span>
         </div>
         <div class="balken"><b style:width="{Math.round((job.progress || 0) * 100)}%"></b></div>
       </div>
@@ -80,6 +80,7 @@
   .job + .job { margin-top: var(--tv-a3); }
   .zeile { display: flex; justify-content: space-between; gap: var(--tv-a2); }
   .t { min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .anteil { flex: none; white-space: nowrap; }
   .balken { position: relative; height: 6px; margin-top: 6px; border-radius: var(--tv-ecke-klein); background: var(--tv-karte-3); overflow: hidden; }
   .balken b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--tv-akzent); transition: width 0.4s; }
   .fuss { display: flex; align-items: center; justify-content: space-between; gap: var(--tv-a2); margin-top: var(--tv-a3); font-size: var(--tv-gr-klein); }
