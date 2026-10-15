@@ -24,7 +24,7 @@ from app.services.download_service import download_service
 from app.services.job_service import job_service
 from app.services.rss_service import rss_service
 from app.services.task_manager import task_manager
-from app.services import loadable as loadable_entries, video_classifier
+from app.services import video_classifier
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
@@ -85,91 +85,13 @@ async def _backfill_banners():
 
 
 async def _drip_cron_loop():
-    """Drip-Feed Cron: Prüft alle 15 Min ob Kanäle fällig sind.
-    Lädt 2 älteste + 1 neuestes fehlendes Video pro Kanal."""
-    import random
+    """Alle 15 Minuten fällige Kanäle und Playlists nach und nach laden (drip)."""
+    from app.services import drip
     await asyncio.sleep(120)  # 2 Min warten bis System bereit
     logger.info("[DRIP-CRON] Drip-Feed-Timer gestartet (alle 15 Min)")
     while True:
         try:
-            # Auto-Archivieren passiert beim Abschluss jedes Downloads
-            # (download_service). Früher archivierte diese Schleife alle 15 Min
-            # ALLE Videos des Kanals erneut - auch von Hand dearchivierte.
-
-            # Fällige Drip-Kanäle suchen (abgeschaltete Kanäle laden nichts)
-            due = await db.fetch_all(
-                """SELECT s.id, s.channel_id, s.channel_name, s.drip_count
-                   FROM subscriptions s
-                   WHERE s.drip_enabled = 1 AND s.enabled = 1
-                     AND s.drip_next_run IS NOT NULL
-                     AND s.drip_next_run <= datetime('now')"""
-            )
-            for sub in due:
-                # "Direkt ins Archiv" (drip_auto_archive) setzt der Download selbst
-                # beim Abschluss, siehe download_service.
-                loadable = await loadable_entries.clause()
-                drip_count = sub["drip_count"] or 3
-                # Je Lauf genau drip_count Videos: das neueste fehlende plus
-                # die ältesten fehlenden (bei 1 also nur das neueste).
-                new_count = 1
-                old_count = max(0, drip_count - new_count)
-
-                # Älteste fehlende
-                oldest = await db.fetch_all(
-                    f"""SELECT r.video_id, r.title FROM rss_entries r
-                       WHERE r.channel_id = ? AND {loadable}
-                       ORDER BY r.published ASC, r.id ASC LIMIT ?""",
-                    (sub["channel_id"], old_count)
-                ) if old_count else []
-                # Neuestes fehlendes (nicht in oldest)
-                old_ids = [o["video_id"] for o in oldest]
-                exclude_clause = ""
-                params = [sub["channel_id"]]
-                if old_ids:
-                    placeholders = ",".join("?" * len(old_ids))
-                    exclude_clause = f"AND r.video_id NOT IN ({placeholders})"
-                    params.extend(old_ids)
-                params.append(new_count)
-                newest = await db.fetch_all(
-                    f"""SELECT r.video_id, r.title FROM rss_entries r
-                        WHERE r.channel_id = ? AND {loadable}
-                          {exclude_clause}
-                        ORDER BY r.published DESC, r.id DESC LIMIT ?""",
-                    tuple(params)
-                )
-
-                to_download = oldest + newest
-                if not to_download:
-                    # Kanal komplett → deaktivieren
-                    await db.execute(
-                        """UPDATE subscriptions SET drip_enabled = 0,
-                           drip_completed_at = datetime('now'), drip_next_run = NULL
-                           WHERE id = ?""", (sub["id"],)
-                    )
-                    logger.info(f"[DRIP] {sub['channel_name']}: komplett! Drip deaktiviert.")
-                    continue
-
-                # In Download-Queue stellen
-                queued = 0
-                for vid in to_download:
-                    try:
-                        url = f"https://www.youtube.com/watch?v={vid['video_id']}"
-                        # Qualität und Nur-Audio kommen vom Kanal bzw. aus den
-                        # Einstellungen (download_options), nicht von hier.
-                        await download_service.add_to_queue(url=url, origin="auto")
-                        queued += 1
-                    except Exception as e:
-                        logger.warning(f"[DRIP] Queue-Fehler {vid['video_id']}: {e}")
-
-                # Nächsten Lauf würfeln (morgen im nächtlichen Zeitfenster)
-                from app.utils.file_utils import next_drip_run
-                next_run = next_drip_run()
-                await db.execute(
-                    "UPDATE subscriptions SET drip_next_run = ? WHERE id = ?",
-                    (next_run, sub["id"])
-                )
-                logger.info(f"[DRIP] {sub['channel_name']}: {queued} Videos gequeued, nächster Run: {next_run}")
-
+            await drip.run_due()
         except Exception as e:
             logger.error(f"[DRIP-CRON] Fehler: {e}", exc_info=True)
         await asyncio.sleep(900)  # 15 Minuten

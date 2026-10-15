@@ -24,7 +24,7 @@ export const VIDEOS = [
 
 // Entwurfsseiten je Eintrag der Seitenleiste
 const SEITEN = { bibliothek: 'bibliothek.html', musik: 'musik.html', downloads: 'downloads.html', eigene: 'eigene-videos.html', einstellungen: 'einstellungen.html',
-                 favoriten: 'favoriten.html', playlists: 'playlists.html', verlauf: 'verlauf.html' };
+                 favoriten: 'favoriten.html', playlists: 'playlists.html', verlauf: 'verlauf.html', kanaele: 'kanaele.html' };
 
 // Wie in der App (Sidebar.svelte): Symbolfarben einzelner Einträge bleiben
 const NAVI = [
@@ -82,7 +82,7 @@ function schale(aktiv) {
       <i class="fa-solid ${symbol}"${farbe ? ` style="--symbolfarbe: ${farbe}"` : ''}></i>${name}${zahl ? `<span class="zaehler">${zahl}</span>` : ''}</a>`;
   document.querySelector('[data-block="kopf"]').outerHTML = `
     <header class="kopf">
-      <div class="marke"><span class="marke-zeichen"><i class="fa-solid fa-play"></i></span>TubeVault</div>
+      <div class="marke"><img class="marke-bild" src="../frontend/public/favicon.svg" alt="">TubeVault</div>
       <label class="suche"><i class="fa-solid fa-magnifying-glass"></i><input placeholder="Bibliothek, Transkripte und Kanäle durchsuchen"></label>
       <div class="kopf-aktionen">
         <button class="knopf ohne symbol" title="Neuer Download"><i class="fa-solid fa-plus"></i></button>

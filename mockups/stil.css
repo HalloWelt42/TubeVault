@@ -133,10 +133,8 @@ h3 { font-size: var(--tv-gr-text); font-weight: 600; }
   padding: 0 var(--tv-a4); background: var(--tv-leiste); border-bottom: 1px solid var(--tv-rand);
 }
 .marke { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: 0.02em; width: calc(var(--tv-seite-breite) - var(--tv-a4)); }
-.marke-zeichen {
-  width: 32px; height: 32px; display: grid; place-items: center;
-  background: var(--tv-akzent); color: var(--tv-akzent-text); border-radius: var(--tv-ecke-klein); font-size: 15px;
-}
+/* App-Symbol (Kastengerät), wie in der App */
+.marke-bild { width: 34px; height: 34px; display: block; border-radius: var(--tv-ecke-klein); }
 .suche {
   flex: 1; max-width: 640px; display: flex; align-items: center; gap: var(--tv-a2);
   height: 40px; padding: 0 var(--tv-a3); background: var(--tv-karte); border: 1px solid var(--tv-rand);

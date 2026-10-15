@@ -22,6 +22,7 @@
     onNext = null,
     onRemove = null,
     removeTitle = 'Entfernen',
+    onLoad = null,         // noch nicht geladen: jetzt laden
     onMenu = null,
     onToggle = null,
     ...rest
@@ -30,7 +31,7 @@
   let rest_seconds = $derived(Math.max(0, (item.duration || 0) - (item.position || 0)));
 </script>
 
-<div class="zeile" class:gewaehlt={selected} class:gehoben={lifted} class:laeuft={playing}
+<div class="zeile" class:gewaehlt={selected} class:gehoben={lifted} class:laeuft={playing} class:fehlt={item.loaded === false}
      class:mit-zeit={time !== null} role="listitem" {...rest}>
   {#if mode === 'auswahl'}
     <button class="haken" onclick={() => onToggle?.(item)} title={selected ? 'Abwählen' : 'Auswählen'}>
@@ -57,7 +58,9 @@
   </div>
 
   <div class="stand">
-    {#if item.state === 'finished'}
+    {#if item.loaded === false}
+      <span class="tv-zustand wartet"><i class="fa-solid fa-hourglass-half"></i> Noch nicht geladen</span>
+    {:else if item.state === 'finished'}
       <span class="tv-zustand fertig"><i class="fa-solid fa-check"></i> {showPosition ? 'Zu Ende' : 'Gesehen'}</span>
     {:else if item.state === 'started'}
       {#if showPosition}
@@ -71,7 +74,11 @@
   </div>
 
   <div class="tun">
-    {#if mode !== 'auswahl'}
+    {#if mode !== 'auswahl' && item.loaded === false}
+      {#if onLoad}<button class="spielen" onclick={() => onLoad(item)} title="Jetzt laden"><i class="fa-solid fa-download"></i></button>{/if}
+      {#if onRemove}<button class="weg" onclick={() => onRemove(item)} title={removeTitle}><i class="fa-solid fa-xmark"></i></button>{/if}
+      {#if onMenu}<button onclick={(e) => onMenu(e, item)} title="Mehr"><i class="fa-solid fa-ellipsis"></i></button>{/if}
+    {:else if mode !== 'auswahl'}
       <button class="spielen" onclick={() => onPlay(item)} title={item.state === 'started' ? 'Weiterschauen' : 'Abspielen'}>
         <i class="fa-solid {item.state === 'finished' ? 'fa-rotate-right' : 'fa-play'}"></i></button>
       {#if onNext}
@@ -96,6 +103,7 @@
   .zeile.gewaehlt { background: rgba(var(--tv-akzent-rgb), 0.08); }
   .zeile.gehoben { opacity: 0.45; }
   .zeile.laeuft .titel { color: var(--tv-akzent); }
+  .zeile.fehlt .bild, .zeile.fehlt .titel { opacity: 0.6; }
   .griff { color: var(--tv-text-3); cursor: grab; text-align: center; }
   .haken { width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--tv-text-3); cursor: pointer; font-size: 18px; }
   .gewaehlt .haken { color: var(--tv-akzent); }

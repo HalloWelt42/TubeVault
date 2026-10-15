@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 48
+SCHEMA_VERSION = 49
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1123,6 +1123,14 @@ class Database:
         if current_version < 48:
             reset = await music_flag.reset_to_certain(self._connection)
             logger.info(f"Migration v47/v48: {reset} Videos nicht mehr als Musik, nur Eindeutiges bleibt")
+
+        # v49: Playlists laden ihre noch fehlenden Videos nach und nach (drip)
+        for column in ("drip_enabled INTEGER DEFAULT 0", "drip_count INTEGER DEFAULT 3",
+                       "drip_next_run TEXT", "drip_completed_at TEXT"):
+            try:
+                await self._connection.execute(f"ALTER TABLE playlists ADD COLUMN {column}")
+            except Exception:
+                pass  # Spalte existiert bereits
 
         # v43: Prüftakt nach dem Alter des neuesten Videos (rss_service.interval_for).
         # Nutzerentscheidung 15.10.2026: Grundtakt 2x täglich, höchstens 30 Tage.

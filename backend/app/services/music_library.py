@@ -184,7 +184,7 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     if kind == "sammlung":
         from app.services import collections
         collection = await collections.load(value)
-        items = await tracks_of([item.id for item in collection.items])
+        items = await tracks_of([item.id for item in collection.items if item.loaded])
         return _arranged(source, collection.title, items, shuffle, start)
     items = await tracks()
     if kind == "all":

@@ -57,7 +57,7 @@ async def test_favoriten_als_sammlung(test_db):
     await _bestand(test_db)
     favs = await collections.load("favorites:Standard")
     assert favs.title == "Favoriten" and [i.id for i in favs.items] == ["fertig00001", "neu00000001", "angef000001"]
-    assert favs.counts == {"new": 1, "started": 1, "finished": 1} and favs.duration == 1800
+    assert favs.counts == {"new": 1, "started": 1, "finished": 1, "pending": 0} and favs.duration == 1800
     assert favs.items[2].state == "started" and favs.items[2].progress == 0.5
 
 
@@ -146,3 +146,36 @@ async def test_sammlung_ganz_als_ton(test_db):
     assert liste.title == "Lernen" and len(liste.tracks) == 5
     assert liste.tracks[0].title == "Halb gesehen" and liste.tracks[0].artist == "Kanal"
     assert liste.tracks[-1].artist == "ABBA" and liste.tracks[-1].title == "Waterloo"
+
+
+async def test_playlist_mit_vorgemerkten_und_drip(test_db, monkeypatch):
+    """Vorgemerkte (noch nicht geladene) Videos stehen in der Playlist, abspielbar
+    ist nur Geladenes; der Drip reiht die nächsten fehlenden ein und schaltet
+    sich ab, wenn nichts mehr fehlt."""
+    from app.routers import playlists as playlists_router
+    from app.services import drip
+    pl = await _bestand(test_db)
+    for pos, vid in enumerate(["fehlt000001", "fehlt000002", "fehlt000003"], start=10):
+        await test_db.execute("INSERT INTO videos (id, title, status) VALUES (?, ?, 'bookmarked')", (vid, f"Fehlt {pos}"))
+        await test_db.execute("INSERT INTO playlist_videos (playlist_id, video_id, position) VALUES (?, ?, ?)", (pl, vid, pos))
+    lernen = await collections.load(f"playlist:{pl}")
+    assert lernen.counts["pending"] == 3 and len(lernen.items) == 7
+    assert "fehlt000001" not in await collections.video_ids(f"playlist:{pl}")
+    eintrag = next(p for p in await playlists_router.get_playlists() if p["id"] == pl)
+    assert eintrag["pending_count"] == 3 and eintrag["video_count"] == 4
+
+    eingereiht = []
+    async def merken(ids, origin="auto"):
+        eingereiht.extend(ids)
+        return len(ids)
+    monkeypatch.setattr(drip, "queue", merken)
+    await playlists_router.update_playlist(pl, playlists_router.PlaylistUpdate(drip_enabled=True, drip_count=1))
+    await test_db.execute("UPDATE playlists SET drip_count = 5, drip_next_run = datetime('now', '-1 minute') WHERE id = ?", (pl,))
+    await drip.run_due()
+    assert eingereiht == ["fehlt000001", "fehlt000002", "fehlt000003"]
+    # Alles geladen: der nächste Lauf findet nichts und schaltet ab
+    await test_db.execute("UPDATE videos SET status = 'ready' WHERE id LIKE 'fehlt%'")
+    await test_db.execute("UPDATE playlists SET drip_next_run = datetime('now', '-1 minute') WHERE id = ?", (pl,))
+    await drip.run_due()
+    row = await test_db.fetch_one("SELECT drip_enabled, drip_completed_at FROM playlists WHERE id = ?", (pl,))
+    assert row["drip_enabled"] == 0 and row["drip_completed_at"]

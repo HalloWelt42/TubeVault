@@ -197,6 +197,9 @@ export const api = {
   removeFromPlaylist: (id, videoId) => request(`/api/playlists/${id}/videos/${videoId}`, { method: 'DELETE' }),
   reorderPlaylist: (id, videoIds) => request(`/api/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ video_ids: videoIds }) }),
   copyPlaylist: (id) => request(`/api/playlists/${id}/copy`, { method: 'POST' }),
+  // Fehlende (vorgemerkte) Videos jetzt laden, wahlweise nur die nächsten limit
+  loadPlaylistPending: (id, limit = null) =>
+    request(`/api/playlists/${id}/load-pending${limit ? `?limit=${limit}` : ''}`, { method: 'POST' }),
 
   // Import
 

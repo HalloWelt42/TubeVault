@@ -178,8 +178,9 @@
           try {
             const collection = await api.getCollection(urlPl);
             // Beim laufenden Video weitermachen, auch wenn die Reihe gemischt war
-            const here = collection.items?.findIndex(v => v.id === id) ?? -1;
-            if (collection.items?.length) startQueue(urlPl, collection.title, collection.items, here >= 0 ? here : urlIdx);
+            const playable = (collection.items || []).filter(v => v.loaded !== false);
+            const here = playable.findIndex(v => v.id === id);
+            if (playable.length) startQueue(urlPl, collection.title, playable, here >= 0 ? here : urlIdx);
           } catch {}
         }
 

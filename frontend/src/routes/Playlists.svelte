@@ -15,7 +15,7 @@
   import { playlistQueue } from '../lib/stores/playlistQueue.js';
   import { musicPlayer } from '../lib/stores/musicPlayer.svelte.js';
   import { quickPlaylist, pinPlaylist, unpinPlaylist } from '../lib/stores/quickPlaylist.js';
-  import { formatDuration } from '../lib/utils/format.js';
+  import { formatDuration, parseServerTime } from '../lib/utils/format.js';
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import { stateChips, filterItems, sortItems, moveItem, continueIndex, totalTime } from '../lib/utils/collection.js';
   import { playCollection, continueCollection, listenCollection, playAfterCurrent } from '../lib/utils/collectionPlay.js';
@@ -40,6 +40,8 @@
     name: (a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' }),
     groesse: (a, b) => (b.video_count || 0) - (a.video_count || 0),
   };
+  // Fehlende Videos nach und nach laden: so viele je Tag (wie im Backend drip.PLAYLIST_DRIP_COUNTS)
+  const DRIP_COUNTS = [1, 3, 5, 10, 20, 50];
   const progressOf = (pl) => {
     const count = pl.video_count || 0, done = pl.finished_count || 0, started = pl.started_count || 0;
     return { count, done, started, key: !count ? '' : done >= count ? 'fertig' : done || started ? 'angefangen' : 'ungesehen' };
@@ -87,12 +89,21 @@
   let shown = $derived(sortItems(filterItems(items, { search, state: stateFilter }), sort));
   let canOrder = $derived(sort === 'eigene' && !search && !stateFilter && !selecting);
   let selectedIds = $derived(shown.filter(i => selected.has(i.id)).map(i => i.id));
-  let nextIndex = $derived(continueIndex(items));
+  // "Weiter mit Folge N": nur Geladenes zählt, die Nummer ist die Stelle in der ganzen Playlist
+  let loadedItems = $derived(items.filter(i => i.loaded !== false));
+  let nextIndex = $derived.by(() => {
+    const index = continueIndex(loadedItems);
+    return index < 0 ? -1 : items.indexOf(loadedItems[index]);
+  });
+  let pendingCount = $derived(detail?.counts.pending || 0);
+  let nextRun = $derived(meta?.drip_enabled && meta.drip_next_run
+    ? parseServerTime(meta.drip_next_run).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : null);
   let queueActive = $derived($playlistQueue.active);
   let detailInfo = $derived(detail ? [
-    `${items.length} ${items.length === 1 ? 'Video' : 'Videos'}`,
+    `${loadedItems.length} ${loadedItems.length === 1 ? 'Video' : 'Videos'}`,
     detail.duration ? totalTime(detail.duration) : null,
     detail.counts.finished ? `${detail.counts.finished} gesehen` : null,
+    detail.counts.pending ? `${detail.counts.pending} noch nicht geladen` : null,
   ].filter(Boolean).join(' · ') : null);
 
   async function loadPlaylists() {
@@ -212,6 +223,29 @@
       await api.reorderPlaylist(plId, before);
       await Promise.all([loadDetail(), loadPlaylists()]);
     });
+  }
+
+  async function setDrip(enabled, count = null) {
+    try {
+      await api.updatePlaylist(openId, { drip_enabled: enabled, ...(count ? { drip_count: count } : {}) });
+      toast.success(enabled ? `Lädt ab heute Nacht ${count ?? meta?.drip_count} am Tag` : 'Lädt nicht mehr nach und nach');
+      await loadPlaylists();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  async function loadPending(limit = null) {
+    try {
+      const { queued } = await api.loadPlaylistPending(openId, limit);
+      toast.success(`${queued} ${queued === 1 ? 'Video' : 'Videos'} in die Warteschlange`);
+      await loadPlaylists();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  async function loadOne(item) {
+    try {
+      await api.addDownload({ url: `https://www.youtube.com/watch?v=${item.id}` });
+      toast.success('In die Warteschlange');
+    } catch (e) { toast.error(e.message); }
   }
 
   async function setWatched(ids, watched) {
@@ -368,6 +402,27 @@
         <p class="beschreibung">{meta.description}</p>
       {/if}
 
+      {#if detail && (pendingCount || meta?.drip_enabled)}
+        <div class="tv-filter nachladen">
+          <i class="fa-solid fa-hourglass-half"></i>
+          {#if pendingCount}<span><span class="zahl">{pendingCount}</span> noch nicht geladen</span>{:else}<span>Alles geladen</span>{/if}
+          <span class="tv-trenner"></span>
+          <span class="tv-etikett">Nach und nach laden</span>
+          <button class="tv-chip" class:aktiv={!meta?.drip_enabled} onclick={() => setDrip(false)}>aus</button>
+          {#each DRIP_COUNTS as n (n)}
+            <button class="tv-chip" class:aktiv={meta?.drip_enabled && meta.drip_count === n} onclick={() => setDrip(true, n)}>
+              <span class="zahl">{n}</span> am Tag</button>
+          {/each}
+          {#if nextRun}<span class="tv-leise tv-klein">nächster Lauf {nextRun}</span>{/if}
+          {#if pendingCount}
+            <div class="rechts">
+              {#if pendingCount > 10}<button class="tv-knopf klein" onclick={() => loadPending(10)}>Nächste <span class="zahl">10</span> jetzt</button>{/if}
+              <button class="tv-knopf klein" onclick={() => loadPending()}>Alle <span class="zahl">{pendingCount}</span> jetzt laden</button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       {#if selecting}
         <BatchToolbar selectedCount={selectedIds.length} totalCount={shown.length}
                       onSelectAll={() => selected = new Set(shown.map(i => i.id))} onDone={() => { selecting = false; selected = new Set(); }}>
@@ -412,6 +467,8 @@
                         selected={selected.has(item.id)} lifted={dragFrom === i}
                         playing={queueActive && $playlistQueue.source === source && $playlistQueue.videos[$playlistQueue.currentIndex]?.id === item.id}
                         onPlay={playAt} onNext={queueActive ? playAfterCurrent : null} onMenu={itemMenu} onToggle={toggle}
+                        onLoad={loadOne} onRemove={item.loaded === false ? (it) => removeItems([it.id]) : null}
+                        removeTitle="Aus der Playlist entfernen"
                         draggable={canOrder}
                         ondragstart={() => dragFrom = i}
                         ondragover={(e) => { if (dragFrom !== null) { e.preventDefault(); dropAt = i; } }}
@@ -521,7 +578,11 @@
                 <span class="pl-name">{pl.name}</span>
                 <span class="pl-meta">
                   {#if pl.total_duration}<span class="zahl">{totalTime(pl.total_duration)}</span>{/if}
-                  <span>{p.key === 'fertig' ? 'alles gesehen' : p.done ? `${p.done} von ${p.count} gesehen` : p.started ? `${p.started} angefangen` : p.count ? 'noch nichts gesehen' : 'leer'}</span>
+                  <span>{p.key === 'fertig' ? 'alles gesehen' : p.done ? `${p.done} von ${p.count} gesehen` : p.started ? `${p.started} angefangen` : p.count ? 'noch nichts gesehen' : pl.pending_count ? '' : 'leer'}</span>
+                  {#if pl.pending_count}
+                    <span title={pl.drip_enabled ? `Lädt ${pl.drip_count} am Tag` : 'Noch nicht geladen'}>
+                      <i class="fa-solid fa-hourglass-half"></i> <span class="zahl">{pl.pending_count}</span> fehlen{pl.drip_enabled ? ` · ${pl.drip_count} am Tag` : ''}</span>
+                  {/if}
                 </span>
               </button>
               <div class="pl-fort"><b style:width="{p.count ? Math.round(p.done / p.count * 100) : 0}%"></b></div>
@@ -537,6 +598,9 @@
 
 <style>
   .bearbeiten { margin-bottom: var(--tv-a3); }
+  .nachladen { margin-bottom: var(--tv-a3); }
+  .nachladen > i { color: var(--tv-info); }
+  .nachladen .rechts { margin-left: auto; display: flex; gap: var(--tv-a2); }
   .bearbeiten .name { width: 320px; }
   .bearbeiten .beschreibung { flex: 1; min-width: 240px; }
   .beschreibung { margin: calc(-1 * var(--tv-a3)) 0 var(--tv-a3); color: var(--tv-text-2); font-size: var(--tv-gr-klein); max-width: 820px; }

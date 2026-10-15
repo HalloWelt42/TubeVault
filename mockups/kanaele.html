@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Kanäle</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<link rel="stylesheet" href="sammlung.css">
+<style>
+  .pruefstand { margin: -6px 0 var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-2); display: flex; gap: var(--tv-a2); align-items: center; }
+  .pruefstand i { color: var(--tv-akzent); }
+
+  /* Kanal-Kacheln: Banner, Bild, Medaille, Abdeckung, nur eingeschaltete Merkmale */
+  .k-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--tv-a4); }
+  .k-kachel { position: relative; background: var(--tv-karte); border-radius: var(--tv-ecke); overflow: hidden; cursor: pointer;
+              outline: 1px solid var(--tv-rand); outline-offset: -1px; }
+  .k-kachel:hover { outline-color: var(--tv-rand-stark); }
+  .k-kachel.aus { opacity: 0.55; }
+  .banner { height: 72px; background: linear-gradient(120deg, #1d3640, #172127); background-size: cover; background-position: center; }
+  .k-kopf { display: flex; gap: var(--tv-a3); align-items: flex-end; padding: 0 var(--tv-a4); margin-top: -28px; }
+  .avatar { width: 60px; height: 60px; border-radius: var(--tv-ecke); object-fit: cover; background: var(--tv-mulde); outline: 3px solid var(--tv-karte); flex: none; }
+  .k-name { font-weight: 700; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 2px; min-width: 0; flex: 1; }
+  .medaille { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: var(--tv-ecke-klein);
+              font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .medaille.gold { background: rgba(255, 202, 40, 0.16); color: #ffd54f; }
+  .medaille.silber { background: rgba(207, 216, 220, 0.16); color: #cfd8dc; }
+  .medaille.bronze { background: rgba(215, 136, 80, 0.18); color: #e0a070; }
+  .k-inhalt { padding: var(--tv-a3) var(--tv-a4) var(--tv-a4); display: flex; flex-direction: column; gap: var(--tv-a2); }
+  .abdeckung { display: flex; align-items: center; gap: var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .abdeckung .balken { flex: 1; height: 6px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+  .abdeckung .balken b { display: block; height: 100%; background: var(--tv-akzent); }
+  .abdeckung .balken.gold b { background: #ffd54f; } .abdeckung .balken.silber b { background: #cfd8dc; } .abdeckung .balken.bronze b { background: #e0a070; }
+  .abdeckung .zahl { color: var(--tv-text); font-weight: 600; }
+  .k-meta { font-size: var(--tv-gr-klein); color: var(--tv-text-3); display: flex; gap: var(--tv-a3); flex-wrap: wrap; }
+  .merkmale { display: flex; gap: 6px; flex-wrap: wrap; min-height: 24px; }
+  .merkmal { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: var(--tv-ecke-klein);
+             font-size: var(--tv-gr-marke); font-weight: 700; background: var(--tv-karte-2); color: var(--tv-text-2); }
+  .merkmal.neu { background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent); }
+  .merkmal.musik { color: #c084fc; }
+  .k-tun { position: absolute; right: 8px; top: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity var(--tv-schnell); }
+  .k-kachel:hover .k-tun, .k-kachel.menue-offen .k-tun { opacity: 1; }
+  .k-tun button { width: 34px; height: 34px; border: 0; border-radius: var(--tv-ecke-klein); background: var(--tv-schleier); color: var(--tv-text); cursor: pointer; }
+  .k-kachel .haken { position: absolute; left: 8px; top: 8px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--tv-ecke-klein);
+                     background: var(--tv-schleier); color: var(--tv-text-2); font-size: 18px; }
+  .k-kachel.gewaehlt { outline: 2px solid var(--tv-akzent); }
+  .k-kachel.gewaehlt .haken { color: var(--tv-akzent); }
+
+  /* Dichte Liste */
+  .k-tabelle { width: 100%; border-collapse: collapse; }
+  .k-tabelle th { position: sticky; top: 0; background: var(--tv-grund); text-align: left; font-size: var(--tv-gr-marke); font-weight: 700;
+                  letter-spacing: 0.08em; text-transform: uppercase; color: var(--tv-text-3); padding: 8px; }
+  .k-tabelle th.sortiert { color: var(--tv-akzent); }
+  .k-tabelle td { padding: 8px; border-top: 1px solid var(--tv-rand); vertical-align: middle; font-size: var(--tv-gr-klein); }
+  .k-tabelle tr:hover td { background: var(--tv-flaeche); }
+  .k-tabelle .wer { display: flex; align-items: center; gap: var(--tv-a3); font-weight: 600; font-size: var(--tv-gr-text); }
+  .k-tabelle .wer img { width: 36px; height: 36px; border-radius: var(--tv-ecke-klein); object-fit: cover; background: var(--tv-mulde); }
+  .k-tabelle .abdeckung { min-width: 220px; }
+  .schalter-reihe { display: flex; gap: 4px; }
+  .schalter-reihe span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--tv-ecke-klein); color: var(--tv-text-3); background: var(--tv-karte); }
+  .schalter-reihe span.an { color: var(--tv-akzent); background: rgba(var(--tv-akzent-rgb), 0.12); }
+  .schalter-reihe span.an.m { color: #c084fc; background: rgba(192, 132, 252, 0.12); }
+
+  /* Einstellungen eines Kanals als Seitenblatt */
+  .blatt { position: absolute; right: 0; top: 0; bottom: 0; width: 420px; background: var(--tv-karte); border-left: 1px solid var(--tv-rand-stark);
+           box-shadow: var(--tv-schatten); display: flex; flex-direction: column; z-index: 8; }
+  .blatt-kopf { display: flex; gap: var(--tv-a3); align-items: center; padding: var(--tv-a4); border-bottom: 1px solid var(--tv-rand); }
+  .blatt-kopf img { width: 48px; height: 48px; border-radius: var(--tv-ecke); object-fit: cover; }
+  .blatt-kopf .n { font-weight: 700; font-size: 19px; flex: 1; }
+  .blatt-inhalt { flex: 1; overflow-y: auto; padding: var(--tv-a2) var(--tv-a4) var(--tv-a4); }
+  .blatt h3 { margin: var(--tv-a4) 0 var(--tv-a2); font-size: var(--tv-gr-marke); letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+  .zeile-s { display: flex; align-items: center; gap: var(--tv-a3); padding: 10px 0; border-top: 1px solid var(--tv-rand); }
+  .zeile-s:first-of-type { border-top: 0; }
+  .zeile-s .t { flex: 1; }
+  .zeile-s .e { font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
+  .wahl { display: inline-flex; background: var(--tv-mulde); border-radius: var(--tv-ecke); padding: 2px; }
+  .wahl button { height: 30px; padding: 0 10px; border: 0; background: none; color: var(--tv-text-2); border-radius: var(--tv-ecke-klein); cursor: pointer; font: inherit; font-size: var(--tv-gr-klein); }
+  .wahl button.an { background: var(--tv-karte-3); color: var(--tv-akzent); font-weight: 700; }
+  .blatt-fuss { padding: var(--tv-a3) var(--tv-a4); border-top: 1px solid var(--tv-rand); display: flex; gap: var(--tv-a2); }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt rahmen" style="position: relative">
+    <div class="rahmen-kopf">
+      <div class="sammlung-kopf">
+        <h1>Kanäle</h1>
+        <span class="zahl">397 Kanäle · 64 Gold · 13 Silber · 7 Bronze</span>
+        <div class="aktionen">
+          <button class="knopf ohne"><i class="fa-solid fa-rss"></i> Neu bei Abos</button>
+          <button class="knopf" id="hinzuKnopf"><i class="fa-solid fa-plus"></i> Hinzufügen</button>
+          <button class="knopf haupt"><i class="fa-solid fa-rotate"></i> Alle jetzt prüfen</button>
+        </div>
+      </div>
+      <div class="pruefstand"><i class="fa-solid fa-circle-check"></i> 12 Kanäle sind fällig · nächste Prüfung in <span class="zahl">4 Min.</span> · 3 Videos für Auto-Download vorgemerkt</div>
+      <div id="zusatz"></div>
+      <div id="leiste"></div>
+    </div>
+    <div class="rollfeld" id="inhalt" style="position: relative"></div>
+    <div id="blatt"></div>
+  </main>
+
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite } from './gemeinsam.js';
+  import { zustaende } from './sammlung.js';
+  import { KANAELE, SUMMEN } from './kanaele-daten.js';
+  seite('kanaele');
+
+  const QUELLE = 'http://192.168.178.49:8031';
+  const avatar = (id) => `${QUELLE}/api/subscriptions/avatar/${id}`;
+  const banner = (id) => `${QUELLE}/api/subscriptions/banner/${id}`;
+  const MEDAILLE = { gold: 'Gold', silver: 'Silber', bronze: 'Bronze' };
+  const KLASSE = { gold: 'gold', silver: 'silber', bronze: 'bronze' };
+  const anteil = (k) => k.soll ? Math.round(k.da / k.soll * 100) : 0;
+  const datum = (iso) => iso ? iso.split('-').reverse().join('.') : 'noch nie';
+
+  const leiste = document.getElementById('leiste');
+  const zusatz = document.getElementById('zusatz');
+  const inhalt = document.getElementById('inhalt');
+  const blatt = document.getElementById('blatt');
+
+  const STEUER = (ansicht) => `
+    <div class="steuer">
+      <input class="eingabe" placeholder="Kanäle suchen">
+      <span class="trenner"></span>
+      <button class="chip aktiv">Alle <span class="zaehler">${SUMMEN.alle}</span></button>
+      <button class="chip"><i class="fa-solid fa-bolt"></i> Auto-Download <span class="zaehler">${SUMMEN.auto}</span></button>
+      <button class="chip"><i class="fa-solid fa-droplet"></i> Drip <span class="zaehler">${SUMMEN.drip}</span></button>
+      <button class="chip"><i class="fa-solid fa-music"></i> Musik <span class="zaehler">${SUMMEN.musik}</span></button>
+      <button class="chip">Ohne Musik</button>
+      <button class="chip">Nie gescannt <span class="zaehler">${SUMMEN.nieGescannt}</span></button>
+      <button class="chip">Abgeschaltet <span class="zaehler">${SUMMEN.aus}</span></button>
+      <span class="trenner"></span>
+      <button class="chip"><i class="fa-solid fa-medal" style="color:#ffd54f"></i> Gold <span class="zaehler">${SUMMEN.gold}</span></button>
+      <button class="chip"><i class="fa-solid fa-medal" style="color:#cfd8dc"></i> Silber <span class="zaehler">${SUMMEN.silber}</span></button>
+      <button class="chip"><i class="fa-solid fa-medal" style="color:#e0a070"></i> Bronze <span class="zaehler">${SUMMEN.bronze}</span></button>
+      <span class="trenner"></span>
+      <span class="etikett">Sortieren</span>
+      <button class="chip aktiv">Name</button>
+      <button class="chip">Neue Videos</button>
+      <button class="chip">Abdeckung</button>
+      <button class="chip">Zuletzt hochgeladen</button>
+      <div class="rechts">
+        <div class="ansicht"><button class="${ansicht === 'kacheln' ? 'an' : ''}" title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button><button class="${ansicht === 'liste' ? 'an' : ''}" title="Liste"><i class="fa-solid fa-list"></i></button></div>
+        <button class="knopf klein"><i class="fa-regular fa-square-check"></i> Auswählen</button>
+      </div>
+    </div>`;
+
+  const AUSWAHL = `
+    <div class="auswahl-leiste">
+      <span class="anzahl"><span class="zahl">4</span> Kanäle ausgewählt</span>
+      <button class="knopf klein"><i class="fa-solid fa-bolt"></i> Auto-Download an</button>
+      <button class="knopf klein"><i class="fa-solid fa-droplet"></i> Drip an</button>
+      <button class="knopf klein"><i class="fa-solid fa-music"></i> Als Musikkanal</button>
+      <button class="knopf klein"><i class="fa-solid fa-sliders"></i> Qualität ...</button>
+      <button class="knopf klein"><i class="fa-solid fa-rotate"></i> Jetzt prüfen</button>
+      <button class="knopf klein gefahr"><i class="fa-solid fa-xmark"></i> Abo beenden</button>
+      <div class="rechts"><button class="knopf klein ohne">Alle 397 wählen</button><button class="knopf klein ohne"><i class="fa-solid fa-xmark"></i> Fertig</button></div>
+    </div>`;
+
+  const HINZU = `
+    <div class="steuer" style="margin-bottom: var(--tv-a3)">
+      <input class="eingabe" style="width: 420px" value="@HOERBERLIN" placeholder="Kanal-Adresse, @Name oder Suchbegriff">
+      <button class="knopf haupt">Abonnieren</button>
+      <span class="trenner"></span>
+      <span class="leise klein">Mehrere auf einmal: eine Adresse je Zeile einfügen</span>
+      <button class="knopf klein">Liste einfügen ...</button>
+      <div class="rechts"><button class="knopf klein ohne"><i class="fa-solid fa-xmark"></i> Schließen</button></div>
+    </div>`;
+
+  function merkmale(k) {
+    return [
+      k.neu ? `<span class="merkmal neu">${k.neu} neu</span>` : '',
+      k.auto ? '<span class="merkmal" title="Neue Videos werden automatisch geladen"><i class="fa-solid fa-bolt"></i> Auto</span>' : '',
+      k.drip ? `<span class="merkmal" title="Lädt den Bestand nach und nach"><i class="fa-solid fa-droplet"></i> ${k.dripZahl} am Tag</span>` : '',
+      k.musik ? '<span class="merkmal musik"><i class="fa-solid fa-music"></i> Musik</span>' : '',
+      k.qualitaet ? `<span class="merkmal">${k.qualitaet === 'best' ? 'Beste' : k.qualitaet}</span>` : '',
+      k.nurTon ? '<span class="merkmal"><i class="fa-solid fa-headphones"></i> Nur Ton</span>' : '',
+      !k.aktiv ? '<span class="merkmal">abgeschaltet</span>' : '',
+    ].join('');
+  }
+
+  function kachel(k, { auswahl = false, gewaehlt = false, menue = false } = {}) {
+    const m = k.medaille;
+    return `<div class="k-kachel${k.aktiv ? '' : ' aus'}${gewaehlt ? ' gewaehlt' : ''}${menue ? ' menue-offen' : ''}">
+      <div class="banner" style="background-image: url('${banner(k.id)}')"></div>
+      ${auswahl ? `<span class="haken"><i class="fa-${gewaehlt ? 'solid fa-square-check' : 'regular fa-square'}"></i></span>` : ''}
+      ${auswahl ? '' : `<div class="k-tun"><button title="Jetzt prüfen"><i class="fa-solid fa-rotate"></i></button><button title="Einstellungen"><i class="fa-solid fa-sliders"></i></button><button title="Mehr"><i class="fa-solid fa-ellipsis"></i></button></div>`}
+      <div class="k-kopf">
+        <img class="avatar" src="${avatar(k.id)}" alt="" onerror="this.style.visibility='hidden'">
+        <div class="k-name">${k.name}</div>
+        ${m ? `<span class="medaille ${KLASSE[m]}"><i class="fa-solid fa-medal"></i> ${MEDAILLE[m]}</span>` : ''}
+      </div>
+      <div class="k-inhalt">
+        <div class="abdeckung"><div class="balken ${KLASSE[m] || ''}"><b style="width:${anteil(k)}%"></b></div>
+          <span><span class="zahl">${k.da.toLocaleString('de-DE')}</span> von <span class="zahl">${k.soll.toLocaleString('de-DE')}</span></span></div>
+        <div class="k-meta"><span>neuestes Video <span class="zahl">${datum(k.letztes)}</span></span>${k.shorts ? `<span><span class="zahl">${k.shorts}</span> Shorts</span>` : ''}</div>
+        <div class="merkmale">${merkmale(k)}</div>
+      </div>
+    </div>`;
+  }
+
+  function tabelle() {
+    return `<table class="k-tabelle"><thead><tr>
+      <th class="sortiert">Kanal <i class="fa-solid fa-arrow-down-long"></i></th><th>Abdeckung</th><th>Neu</th><th>Neuestes Video</th><th>Geprüft</th><th>Merkmale</th><th></th></tr></thead><tbody>
+      ${KANAELE.map(k => `<tr>
+        <td><div class="wer"><img src="${avatar(k.id)}" alt="" onerror="this.style.visibility='hidden'">${k.name}
+          ${k.medaille ? `<span class="medaille ${KLASSE[k.medaille]}" style="margin:0"><i class="fa-solid fa-medal"></i></span>` : ''}</div></td>
+        <td><div class="abdeckung"><div class="balken ${KLASSE[k.medaille] || ''}"><b style="width:${anteil(k)}%"></b></div><span class="zahl">${anteil(k)} %</span></div></td>
+        <td class="zahl">${k.neu || ''}</td>
+        <td class="zahl">${datum(k.letztes)}</td>
+        <td class="zahl leise">${k.geprueft ? k.geprueft.slice(8, 10) + '.' + k.geprueft.slice(5, 7) + '. ' + k.geprueft.slice(11) : 'noch nie'}</td>
+        <td><div class="schalter-reihe">
+          <span class="${k.auto ? 'an' : ''}" title="Auto-Download"><i class="fa-solid fa-bolt"></i></span>
+          <span class="${k.drip ? 'an' : ''}" title="Drip"><i class="fa-solid fa-droplet"></i></span>
+          <span class="${k.musik ? 'an m' : ''}" title="Musikkanal"><i class="fa-solid fa-music"></i></span>
+          <span class="${k.aktiv ? 'an' : ''}" title="Prüfung an"><i class="fa-solid fa-power-off"></i></span></div></td>
+        <td><button class="knopf ohne symbol klein" title="Mehr"><i class="fa-solid fa-ellipsis"></i></button></td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  const MENUE = `
+    <div class="menue" style="left: 560px; top: 60px">
+      <div class="kopf-zeile">coldmirror</div>
+      <button><i class="fa-solid fa-folder-open"></i> Kanal öffnen</button>
+      <button><i class="fa-solid fa-rotate"></i> Jetzt prüfen</button>
+      <button><i class="fa-solid fa-download"></i> 5 fehlende laden</button>
+      <hr>
+      <button><i class="fa-solid fa-bolt"></i> Auto-Download <span class="nach">an</span></button>
+      <button><i class="fa-solid fa-droplet"></i> Drip, 3 am Tag <span class="nach">an</span></button>
+      <button><i class="fa-solid fa-music"></i> Musikkanal <span class="nach">aus</span></button>
+      <button><i class="fa-solid fa-sliders"></i> Alle Einstellungen ...</button>
+      <hr>
+      <button><i class="fa-solid fa-power-off"></i> Prüfung abschalten</button>
+      <button class="gefahr"><i class="fa-solid fa-xmark"></i> Abo beenden ...</button>
+    </div>`;
+
+  const k = KANAELE.find(x => x.name === 'coldmirror');
+  const BLATT = `
+    <div class="blatt">
+      <div class="blatt-kopf"><img src="${avatar(k.id)}" alt=""><div class="n">${k.name}</div>
+        <span class="medaille bronze"><i class="fa-solid fa-medal"></i> Bronze</span>
+        <button class="knopf ohne symbol klein" title="Schließen"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="blatt-inhalt">
+        <div class="abdeckung" style="margin-top: var(--tv-a3)"><div class="balken bronze"><b style="width:${anteil(k)}%"></b></div>
+          <span><span class="zahl">412</span> von <span class="zahl">499</span> geladen</span></div>
+        <p class="leise klein">Silber ab 90 %, Gold bei allen. Noch <span class="zahl">38</span> Videos bis Silber.</p>
+        <h3>Laden</h3>
+        <div class="zeile-s"><div class="t">Auto-Download<div class="e">Neue Videos sofort laden</div></div><button class="schalter an"></button></div>
+        <div class="zeile-s"><div class="t">Drip<div class="e">Den Bestand nach und nach laden, nachts</div></div><div class="wahl"><button>1</button><button class="an">3</button><button>5</button><button>10</button></div><button class="schalter an"></button></div>
+        <div class="zeile-s"><div class="t">Danach archivieren<div class="e">Per Drip Geladenes gleich ins Archiv</div></div><button class="schalter"></button></div>
+        <div class="zeile-s"><div class="t">Qualität</div><div class="wahl"><button class="an">Standard</button><button>720p</button><button>1080p</button><button>Beste</button></div></div>
+        <div class="zeile-s"><div class="t">Nur Ton</div><button class="schalter"></button></div>
+        <h3>Einordnen</h3>
+        <div class="zeile-s"><div class="t">Musikkanal<div class="e">Alle Videos zählen als Musik, Ausnahmen einzeln</div></div><button class="schalter"></button></div>
+        <div class="zeile-s"><div class="t">In Vorschlägen<div class="e">Videos tauchen im Zufallsvorschlag auf</div></div><button class="schalter an"></button></div>
+        <h3>Prüfen</h3>
+        <div class="zeile-s"><div class="t">Prüfung an<div class="e">Zuletzt geprüft <span class="zahl">14.10. 09:04</span>, alle <span class="zahl">3 Tage</span></div></div><button class="schalter an"></button></div>
+      </div>
+      <div class="blatt-fuss"><button class="knopf"><i class="fa-solid fa-rotate"></i> Jetzt prüfen</button><button class="knopf"><i class="fa-solid fa-satellite-dish"></i> Ganz scannen</button>
+        <button class="knopf ohne gefahr" style="margin-left:auto"><i class="fa-solid fa-xmark"></i> Abo beenden</button></div>
+    </div>`;
+
+  zustaende([['kacheln', 'Kacheln'], ['liste', 'Liste'], ['menue', 'Menü'], ['einstellungen', 'Einstellungen'], ['auswahl', 'Auswahl'], ['hinzu', 'Hinzufügen']], (z) => {
+    zusatz.innerHTML = z === 'hinzu' ? HINZU : '';
+    leiste.innerHTML = z === 'auswahl' ? AUSWAHL : STEUER(z === 'liste' ? 'liste' : 'kacheln');
+    blatt.innerHTML = z === 'einstellungen' ? BLATT : '';
+    if (z === 'liste') { inhalt.innerHTML = tabelle(); return; }
+    inhalt.innerHTML = `<div class="k-raster">${KANAELE.map((x, i) => kachel(x, {
+      auswahl: z === 'auswahl', gewaehlt: z === 'auswahl' && [1, 4, 7, 9].includes(i), menue: z === 'menue' && x.name === 'coldmirror' })).join('')}</div>`
+      + (z === 'menue' ? MENUE : '');
+  });
+</script>
+</body>
+</html>

@@ -10,7 +10,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import watch_state
+from app.services import drip, loadable, watch_state
+from app.utils.file_utils import next_drip_run
 
 router = APIRouter(prefix="/api/playlists", tags=["Playlists (Lokal)"])
 
@@ -23,6 +24,8 @@ class PlaylistCreate(BaseModel):
 class PlaylistUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    drip_enabled: Optional[bool] = None      # fehlende Videos nach und nach laden
+    drip_count: Optional[int] = None         # je Lauf (einmal am Tag), siehe drip.PLAYLIST_DRIP_COUNTS
 
 
 class PlaylistAddVideo(BaseModel):
@@ -92,6 +95,8 @@ async def get_playlists():
         )
         SELECT p.id, p.name, p.description, p.source, p.source_url, p.source_id, p.thumbnail_path,
                p.channel_id, p.visibility, p.created_at,
+               COALESCE(p.drip_enabled, 0) AS drip_enabled, COALESCE(p.drip_count, 3) AS drip_count, p.drip_next_run,
+               (SELECT COUNT(*) FROM playlist_videos pv WHERE pv.playlist_id = p.id AND {loadable.condition("pv.video_id")}) AS pending_count,
                (SELECT COUNT(*) FROM inhalt i WHERE i.playlist_id = p.id) AS video_count,
                (SELECT SUM(i.duration) FROM inhalt i WHERE i.playlist_id = p.id) AS total_duration,
                (SELECT COUNT(*) FROM inhalt i WHERE i.playlist_id = p.id AND i.stand = 'finished') AS finished_count,
@@ -159,11 +164,27 @@ async def update_playlist(playlist_id: int, data: PlaylistUpdate):
     updates = data.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="Keine Änderungen")
+    if "drip_count" in updates and updates["drip_count"] not in drip.PLAYLIST_DRIP_COUNTS:
+        raise HTTPException(status_code=400, detail="Unbekannte Menge je Tag")
+    if "drip_enabled" in updates:
+        # Der erste Lauf kommt im nächsten nächtlichen Zeitfenster, wie bei Kanälen
+        updates["drip_enabled"] = int(updates["drip_enabled"])
+        updates["drip_next_run"] = next_drip_run() if updates["drip_enabled"] else None
+        if updates["drip_enabled"]:
+            updates["drip_completed_at"] = None
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [playlist_id]
     await db.execute(f"UPDATE playlists SET {set_clause} WHERE id = ?", values)
     return {"updated": True}
+
+
+@router.post("/{playlist_id}/load-pending")
+async def load_pending(playlist_id: int, limit: Optional[int] = Query(None, ge=1, le=500)):
+    """Fehlende Videos der Playlist jetzt laden (ausdrücklich gewählt), wahlweise nur die nächsten limit."""
+    if not await db.fetch_one("SELECT 1 FROM playlists WHERE id = ?", (playlist_id,)):
+        raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
+    return {"queued": await drip.queue(await drip.pending(playlist_id, limit), origin="manual")}
 
 
 @router.post("/{playlist_id}/copy")
