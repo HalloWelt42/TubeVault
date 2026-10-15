@@ -109,10 +109,10 @@ def _remove_leftovers(rel_path: str) -> None:
 
 
 async def _after_library_change(video_id: str, title: str) -> None:
-    """Begleitdatei, Suche und offene Dateien, die dasselbe Video meinen."""
-    from app.services import meta_sidecar
+    """Inhaltsdateien, Suche und offene Dateien, die dasselbe Video meinen."""
+    from app.services import content_files
     try:
-        await meta_sidecar.write_sidecar(video_id)
+        await content_files.write_for(video_id)
         await db.fts_sync_video(video_id)
     except Exception as e:
         logger.warning(f"[EIGENE] Nacharbeit für {video_id}: {e}")

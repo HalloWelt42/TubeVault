@@ -53,6 +53,19 @@ def _forget(key: str) -> None:
     _first_seen.pop(key, None)
 
 
+async def _content_files() -> Optional[WorkItem]:
+    """Inhalte als Datei: fehlende Beschreibungen, Kapitel und Begleitdateien (content_files)."""
+    from app.services import content_files
+    remaining = await content_files.remaining()
+    if remaining < 20:   # einzelne schreibt die nächste Runde von selbst
+        _forget("content_files")
+        return None
+    done, total, since = _countdown("content_files", remaining)
+    return WorkItem(key="content_files", label="Inhalte werden als Datei geschrieben",
+                    detail="Beschreibungen, Kapitel und Begleitdateien neben die Videos; daraus lässt sich die Datenbank neu aufbauen.",
+                    done=done, total=total, progress=done / total if total else None, since=since)
+
+
 async def _search_index() -> Optional[WorkItem]:
     from app.services import search_index
     remaining = await search_index.pending()
@@ -263,7 +276,7 @@ async def _own_videos() -> Optional[WorkItem]:
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
     _dubbing, _ai_transcripts, _channel_scan, _subtitle_import, _own_videos, _search_index, _semantic_index, _passage_index,
-    _type_check, _languages]
+    _type_check, _languages, _content_files]
 
 
 async def overview() -> list[WorkItem]:

@@ -198,21 +198,26 @@ async def install_schema(connection) -> None:
 _refresh_lock = asyncio.Lock()
 
 
-async def refresh_stale(throttle_every: int = 50, throttle_sleep: float = 0.1) -> int:
-    """Vorgemerkte Begleitdateien schreiben, bis keine mehr warten. Läuft
-    schon ein Durchgang, übernimmt der auch die neu Vorgemerkten."""
+async def refresh_stale(throttle_every: int = 50, throttle_sleep: float = 0.1,
+                        limit: int | None = None) -> int:
+    """Vorgemerkte Begleitdateien schreiben, bis keine mehr warten (oder
+    limit erreicht ist; content_files ruft paketweise). Läuft schon ein
+    Durchgang, übernimmt der auch die neu Vorgemerkten."""
     if _refresh_lock.locked():
         return 0
     written = 0
     async with _refresh_lock:
-        while rows := await db.fetch_all("SELECT video_id FROM sidecar_stale LIMIT 200"):
+        while rows := await db.fetch_all("SELECT video_id FROM sidecar_stale LIMIT ?",
+                                         (min(200, limit - written) if limit else 200,)):
             for row in rows:
                 await write_sidecar(row["video_id"])
                 await db.execute("DELETE FROM sidecar_stale WHERE video_id = ?", (row["video_id"],))
                 written += 1
                 if throttle_every and written % throttle_every == 0:
                     await asyncio.sleep(throttle_sleep)
-    if written:
+            if limit and written >= limit:
+                break
+    if written and not limit:
         logger.info(f"[sidecar] {written} vorgemerkte Begleitdateien nachgeschrieben")
     return written
 

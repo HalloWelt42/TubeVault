@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 56
+SCHEMA_VERSION = 57
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1228,6 +1228,18 @@ class Database:
             from app.services import transcripts as transcript_service
             cleaned = await transcript_service.remove_annotations(self._connection)
             logger.info(f"Migration v56: Geräuschmarken aus {cleaned} Abschnitten entfernt, Volltext neu")
+
+        # v57: Inhalte als Datei (content_files) - alle geladenen Videos für ihre
+        # Begleitdatei vormerken; fehlende werden im Hintergrund geschrieben,
+        # vorhandene und unveränderte bleiben unberührt. Beschreibungen und
+        # Kapitel ohne Datei findet content_files selbst.
+        if current_version < 57:
+            from app.services import meta_sidecar
+            await meta_sidecar.install_schema(self._connection)
+            cursor = await self._connection.execute(
+                "INSERT OR IGNORE INTO sidecar_stale (video_id) SELECT id FROM videos WHERE status = 'ready'")
+            await self._connection.commit()
+            logger.info(f"Migration v57: {cursor.rowcount} Videos für ihre Begleitdatei vorgemerkt")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

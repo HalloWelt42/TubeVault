@@ -15,6 +15,7 @@ Unterstützte Kinds:
 - description  →  description.txt   (Freitext aus videos.description)
 - chapters     →  chapters.json     (JSON-Array aus chapters-Tabelle)
 """
+import asyncio
 import hashlib
 import json
 import logging
@@ -60,7 +61,6 @@ async def _write_text_file(video_id: str, kind: str, content: str) -> dict:
     """Schreibt content als Datei und registriert sie in text_files.
     Idempotent: identischer sha256-Hash → kein Write."""
     target = _resolve_text_file(video_id, kind)
-    target.parent.mkdir(parents=True, exist_ok=True)
     new_hash = _sha256(content)
     rel_name = storage.relative_text_path(video_id, kind)
 
@@ -76,8 +76,13 @@ async def _write_text_file(video_id: str, kind: str, content: str) -> dict:
             "skipped": True,
         }
 
-    target.write_text(content, encoding="utf-8")
-    size = target.stat().st_size
+    def _write() -> int:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return target.stat().st_size
+
+    # Datei-I/O nie auf der Ereignisschleife (Nachziehen schreibt tausende)
+    size = await asyncio.to_thread(_write)
     await db.execute(
         """INSERT OR REPLACE INTO text_files
            (video_id, kind, filename, size_bytes, sha256, synced_at)
