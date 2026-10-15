@@ -257,39 +257,24 @@
   }
 
   /**
-   * Kanal-Vollständigkeits-Siegel (prozentual, skaliert mit Kanal-Größe):
-   * 🥇 Gold:   100 % komplett ODER bei ≥100 Videos höchstens 1 fehlend
-   * 🥈 Silber: ≥ 90 % geladen
-   * 🥉 Bronze: ≥ 70 % geladen ODER Kanal war mal komplett (drip_completed_at)
-   * keine Medaille: unter 70 % oder zu wenig Datenbasis (< 3 Videos im Feed).
+   * Vollständigkeit eines Kanals: die Medaille rechnet das Backend
+   * (channel_coverage) an den gewünschten Feed-Einträgen - ohne ausgeblendete,
+   * nicht ladbare und ausgeschlossene Shorts. Gold: alles geladen, Silber: ab
+   * 90 %, Bronze: ab 75 %.
    */
+  const MEDALS = {
+    gold: { icon: '🥇', cls: 'medal-gold' },
+    silver: { icon: '🥈', cls: 'medal-silver' },
+    bronze: { icon: '🥉', cls: 'medal-bronze' },
+  };
+
   function channelMedal(sub) {
-    const rss = sub.rss_count || 0;
-    const dl = sub.downloaded_count || 0;
-    if (rss < 3 || !sub.last_scanned) return null;
-    const missing = Math.max(0, rss - dl);
-    const pct = Math.round((dl / rss) * 100);
-
-    // Gold: komplett, oder bei großem Feed (≥100) max 1 fehlend
-    if (missing === 0) return { icon: '🥇', cls: 'medal-gold', label: 'Vollständig' };
-    if (rss >= 100 && missing <= 1) {
-      return { icon: '🥇', cls: 'medal-gold', label: `1 fehlt bei ${rss} gesamt — faktisch komplett` };
-    }
-
-    // Silber: ≥90 % geladen
-    if (pct >= 90) {
-      return { icon: '🥈', cls: 'medal-silver', label: `${pct} % geladen · ${missing} fehlen` };
-    }
-
-    // Bronze: ≥70 % oder war mal komplett
-    if (pct >= 70) {
-      return { icon: '🥉', cls: 'medal-bronze', label: `${pct} % geladen · ${missing} fehlen` };
-    }
-    if (sub.drip_completed_at) {
-      return { icon: '🥉', cls: 'medal-bronze', label: `War komplett · ${missing} fehlen wieder` };
-    }
-
-    return null;
+    const look = MEDALS[sub.medal];
+    if (!look || !sub.last_scanned) return null;
+    const missing = Math.max(0, sub.wanted_count - sub.have_count);
+    const pct = Math.floor(sub.have_count / sub.wanted_count * 100);
+    return { ...look, label: missing ? `${sub.have_count} von ${sub.wanted_count} geladen (${pct} %) · ${missing} fehlen`
+                                     : `Vollständig: alle ${sub.wanted_count} gewünschten Videos geladen` };
   }
 
   function dripTooltip(sub) {
@@ -352,22 +337,10 @@
   let uncheckedCount = $derived(subs.filter(s => !s.last_checked).length);
   let disabledCount = $derived(subs.filter(s => !s.enabled).length);
 
-  /**
-   * Medaillen-Level eines Kanals (identisch zur channelMedal()-Logik oben).
-   * Liefert: 'gold' | 'silver' | 'bronze' | 'none' | 'never-scanned'
-   */
+  /** 'gold' | 'silver' | 'bronze' | 'none' | 'never-scanned' für Filter und Zähler */
   function medalLevel(sub) {
     if (!sub.last_scanned) return 'never-scanned';
-    const rss = sub.rss_count || 0;
-    const dl = sub.downloaded_count || 0;
-    if (rss < 3) return 'never-scanned';  // zu wenig Datenbasis ≈ nicht wertbar
-    const missing = Math.max(0, rss - dl);
-    const pct = rss > 0 ? (dl / rss) : 0;
-    if (missing === 0) return 'gold';
-    if (rss >= 100 && missing <= 1) return 'gold';
-    if (pct >= 0.90) return 'silver';
-    if (pct >= 0.70 || sub.drip_completed_at) return 'bronze';
-    return 'none';
+    return sub.medal || 'none';
   }
   let goldCount    = $derived(subs.filter(s => medalLevel(s) === 'gold').length);
   let silverCount  = $derived(subs.filter(s => medalLevel(s) === 'silver').length);
@@ -427,21 +400,21 @@
     {#if goldCount > 0}
       <button class="filter-chip medal-gold-chip" class:active={filterMode==='gold'}
               onclick={()=>filterMode='gold'}
-              title="Gold: komplett geladen oder ≥100 Videos mit höchstens 1 fehlend">
+              title="Gold: alle gewünschten Videos des Feeds geladen (ohne ausgeblendete, nicht ladbare und ausgeschlossene Shorts)">
         <strong>{goldCount}</strong> 🥇 Gold
       </button>
     {/if}
     {#if silverCount > 0}
       <button class="filter-chip medal-silver-chip" class:active={filterMode==='silver'}
               onclick={()=>filterMode='silver'}
-              title="Silber: ≥90 % geladen">
+              title="Silber: mindestens 90 % der gewünschten Videos geladen">
         <strong>{silverCount}</strong> 🥈 Silber
       </button>
     {/if}
     {#if bronzeCount > 0}
       <button class="filter-chip medal-bronze-chip" class:active={filterMode==='bronze'}
               onclick={()=>filterMode='bronze'}
-              title="Bronze: ≥70 % geladen oder war mal komplett">
+              title="Bronze: mindestens 75 % der gewünschten Videos geladen">
         <strong>{bronzeCount}</strong> 🥉 Bronze
       </button>
     {/if}

@@ -29,7 +29,7 @@ from app.utils.file_utils import now_sqlite, past_sqlite
 from app.utils import source_net
 from app.database import db
 from app.services.job_service import job_service
-from app.services import feed_scope, loadable, video_classifier
+from app.services import channel_coverage, feed_scope, loadable, video_classifier
 from app.services.rate_limiter import rate_limiter
 from app.services.channel_scanner import (
     fetch_all_channel_videos as _scan_channel,
@@ -1096,6 +1096,12 @@ class RSSService:
                    SELECT v.channel_id, COUNT(*) AS downloaded_count
                    FROM videos v WHERE v.status = 'ready'{await video_classifier.without_shorts("v")}
                    GROUP BY v.channel_id),
+                 coverage AS (
+                   SELECT r.channel_id, COUNT(*) AS wanted_count,
+                          SUM({channel_coverage.have_sql("r")}) AS have_count
+                   FROM rss_entries r
+                   WHERE {channel_coverage.wanted_sql("r")}{await video_classifier.without_shorts("r")}
+                   GROUP BY r.channel_id),
                  problems AS (
                    SELECT r.channel_id, COUNT(*) AS problem_count
                    FROM jobs j
@@ -1106,17 +1112,25 @@ class RSSService:
                       COALESCE(feed.new_videos, 0) AS new_videos,
                       COALESCE(feed.rss_count, 0) AS rss_count,
                       COALESCE(loaded.downloaded_count, 0) AS downloaded_count,
-                      COALESCE(problems.problem_count, 0) AS problem_count
+                      COALESCE(problems.problem_count, 0) AS problem_count,
+                      COALESCE(coverage.wanted_count, 0) AS wanted_count,
+                      COALESCE(coverage.have_count, 0) AS have_count
                FROM subscriptions s
                LEFT JOIN feed ON feed.channel_id = s.channel_id
+               LEFT JOIN coverage ON coverage.channel_id = s.channel_id
                LEFT JOIN loaded ON loaded.channel_id = s.channel_id
                LEFT JOIN problems ON problems.channel_id = s.channel_id
                ORDER BY s.channel_name COLLATE NOCASE ASC, s.id
                LIMIT ? OFFSET ?""",
             (per_page, offset)
         )
+        subscriptions = []
+        for row in rows:
+            item = dict(row)
+            item["medal"] = channel_coverage.medal(item["wanted_count"], item["have_count"])
+            subscriptions.append(item)
         return {
-            "subscriptions": [dict(r) for r in rows],
+            "subscriptions": subscriptions,
             "total": total or 0,
             "page": page,
             "per_page": per_page,
