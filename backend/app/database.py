@@ -1110,9 +1110,11 @@ class Database:
 
         # v47: Musik nur noch eindeutig automatisch, sonst von Hand (music_flag).
         # Nutzerentscheidung 15.10.2026: Bestand zurück auf "keine Musik".
-        from app.services import meta_sidecar, music_flag
+        from app.services import audio_export, deleted_videos, meta_sidecar, music_flag
+        await deleted_videos.install_schema(self._connection)
         await meta_sidecar.install_schema(self._connection)
         await music_flag.install_schema(self._connection)
+        await audio_export.install_schema(self._connection)
         try:
             await self._connection.execute("ALTER TABLE videos ADD COLUMN music_source TEXT")
         except Exception:

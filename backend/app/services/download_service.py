@@ -36,7 +36,7 @@ from app.config import (
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.services.job_service import job_service
-from app.services import download_options, music_flag, reupload_guard, video_classifier
+from app.services import deleted_videos, download_options, music_flag, reupload_guard, video_classifier
 from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
 from app.utils.tag_utils import sanitize_tags
@@ -1042,6 +1042,8 @@ class DownloadService:
                    WHERE id = ?""",
                 (music.get("artist"), music.get("title"), music.get("album"), vid))
             await music_flag.apply_auto(vid, meta.get("channel_id"), meta.get("channel_name"), meta.get("description"))
+            # Früher gelöscht und jetzt ausdrücklich neu geladen: eigene Angaben zurück
+            await deleted_videos.restore(vid)
 
             # Sprache der geladenen (Original-)Tonspur festhalten
             if meta.get("language"):

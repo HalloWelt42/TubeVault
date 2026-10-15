@@ -504,6 +504,8 @@ export const api = {
   musicArtists: () => request('/api/music/artists'),
   musicAlbums: () => request('/api/music/albums'),
   musicChannels: () => request('/api/music/channels'),
+  musicAudioInfo: (videoId) => request(`/api/music/audio-info/${videoId}`),
+  musicZipUrl: (source, format = 'original') => `${API_BASE}/api/music/export.zip?source=${encodeURIComponent(source)}&format=${format}`,
   musicPlay: (source, { shuffle = false, start = null } = {}) => {
     const params = new URLSearchParams({ source, shuffle });
     if (start) params.set('start', start);

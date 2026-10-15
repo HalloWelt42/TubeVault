@@ -225,3 +225,23 @@ async def _similar(items: list[Track], video_id: str, limit: int = 50) -> list[T
         random.shuffle(rest)
         chosen += rest[:limit]
     return chosen
+
+
+async def export_items(source: str) -> tuple[str, list[tuple[str, str]]]:
+    """(Titel, [(video_id, "Interpret - Titel")]) für den Ton-Export einer
+    Quelle. Eine Wiedergabeliste gibt alle ihre geladenen Videos aus, nicht
+    nur die als Musik gekennzeichneten."""
+    kind, _, value = source.partition(":")
+    if kind == "playlist":
+        name = await db.fetch_val("SELECT name FROM playlists WHERE id = ?", (value,))
+        if name is None:
+            raise ValueError("Wiedergabeliste unbekannt")
+        rows = await db.fetch_all(
+            """SELECT v.id, v.title, v.music_artist, v.music_title, v.channel_name, v.is_music
+               FROM playlist_videos p JOIN videos v ON v.id = p.video_id
+               WHERE p.playlist_id = ? AND v.status = 'ready' ORDER BY p.position""", (value,))
+        # Musik als "Interpret - Titel", alles andere unter seinem Videotitel
+        return name, [(r["id"], " - ".join(names_of(r)) if r["is_music"] else (r["title"] or r["id"])) for r in rows]
+    playlist = await play_list(source)
+    return playlist.title, [(t.id, f"{t.artist} - {t.title}") for t in playlist.tracks]
+

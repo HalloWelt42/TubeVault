@@ -7,6 +7,7 @@
   import { formatDuration } from '../../lib/utils/format.js';
   import NowPlaying from '../../lib/components/music/NowPlaying.svelte';
   import { back, go } from '../router.js';
+  import { api } from '../../lib/api/client.js';
 
   let progress = $derived(player.duration ? player.time / player.duration : 0);
 
@@ -36,6 +37,15 @@
         <button class:an={player.repeat !== 'off'} onclick={() => player.cycleRepeat()} aria-label="Wiederholen">
           <i class="fa-solid fa-repeat"></i>{#if player.repeat === 'one'}<b>1</b>{/if}</button>
       </div>
+      <div class="nebenbei">
+        {#if player.pendingDelete}
+          <button class="m-btn" onclick={() => player.undoDelete()}><i class="fa-solid fa-rotate-left"></i> Löschen rückgängig</button>
+        {:else}
+          <button onclick={() => player.removeFromList()} aria-label="Aus der Liste nehmen"><i class="fa-solid fa-circle-minus"></i></button>
+          <button onclick={() => player.deleteTrack()} aria-label="Gefällt nicht: löschen"><i class="fa-solid fa-trash-can"></i></button>
+          <a href={api.audioDownloadUrl(player.current.id, 'original')} download aria-label="Ton herunterladen"><i class="fa-solid fa-download"></i></a>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -56,5 +66,9 @@
   .tasten button.an { color: var(--m-accent); }
   .tasten button.gross { width: 72px; height: 72px; font-size: 1.7rem; background: var(--m-text); color: var(--m-bg); border-radius: var(--m-radius); }
   .tasten b { position: absolute; right: 10px; bottom: 10px; font-size: 0.75rem; }
+  .nebenbei { display: flex; justify-content: center; gap: 28px; margin-top: 8px; }
+  .nebenbei button, .nebenbei a { width: var(--m-touch); height: var(--m-touch); display: grid; place-items: center;
+                                  font-size: 1.15rem; color: var(--m-dim); }
+  .nebenbei .m-btn { width: auto; }
   .rest { flex: 1; min-height: 0; overflow: hidden; }
 </style>

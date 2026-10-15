@@ -29,7 +29,7 @@ from app.utils.file_utils import now_sqlite, past_sqlite
 from app.utils import source_net
 from app.database import db
 from app.services.job_service import job_service
-from app.services import channel_coverage, feed_scope, loadable, video_classifier
+from app.services import channel_coverage, deleted_videos, feed_scope, loadable, video_classifier
 from app.services.rate_limiter import rate_limiter
 from app.services.channel_scanner import (
     fetch_all_channel_videos as _scan_channel,
@@ -1034,7 +1034,8 @@ class RSSService:
 
     async def remove_subscription(self, sub_id: int, delete_videos: bool = False) -> dict:
         """Abo entfernen. delete_videos=True löscht zusätzlich alle Videos des
-        Kanals restlos; sonst bleiben sie in Bibliothek und Archiv."""
+        Kanals (ihre Angaben bleiben, sie kommen nie von selbst zurück); sonst
+        bleiben sie in Bibliothek und Archiv."""
         channel_id = await db.fetch_val(
             "SELECT channel_id FROM subscriptions WHERE id = ?", (sub_id,))
         if not channel_id:
@@ -1043,7 +1044,10 @@ class RSSService:
         if delete_videos:
             from app.services.metadata_service import metadata_service
             videos_deleted = await metadata_service.delete_channel_videos(channel_id)
-            await db.execute("DELETE FROM ignored_videos WHERE channel_id = ?", (channel_id,))
+            # Technische Sperren (Members-Only, nicht verfügbar ...) entfallen,
+            # gelöschte Videos bleiben gesperrt
+            await db.execute("DELETE FROM ignored_videos WHERE channel_id = ? AND COALESCE(reason, '') <> ?",
+                             (channel_id, deleted_videos.MANUALLY_DELETED))
         await db.execute("DELETE FROM rss_entries WHERE channel_id = ?", (channel_id,))
         await db.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
         for folder, name in ((AVATARS_DIR, f"{channel_id}.jpg"), (BANNERS_DIR, f"{channel_id}.jpg")):

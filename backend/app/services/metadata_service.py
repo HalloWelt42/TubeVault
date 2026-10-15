@@ -14,7 +14,6 @@ from app.utils.tag_utils import sanitize_tags
 logger = logging.getLogger(__name__)
 
 # Grund auf der Ignorierliste für vom Nutzer gelöschte Videos
-MANUALLY_DELETED = "manuell gelöscht"
 
 
 class MetadataService:
@@ -316,24 +315,26 @@ class MetadataService:
             storage.video_dir(video_id),
         ]
 
-    async def delete_video(self, video_id: str, ignore_for_future: bool = True) -> bool:
-        """Video restlos löschen - danach ist es, als wäre es nie geladen worden:
-        keine Dateien (Video, Vorschaubilder, Untertitel, Tonspuren, Texte,
-        Kapitelbilder), keine Zeilen in abhängigen Tabellen, kein Treffer in
-        der Suche. Im Feed steht es wieder als nicht geladen.
+    async def delete_video(self, video_id: str) -> bool:
+        """Video aus der Bibliothek löschen: alle Dateien (Video, Vorschaubilder,
+        Untertitel, Tonspuren, Texte, Kapitelbilder), die Zeilen in abhängigen
+        Tabellen und der Treffer in der Suche verschwinden. Im Feed steht es
+        wieder als nicht geladen.
 
-        ignore_for_future=True (Standard): Das Video kommt auf die Ignorierliste,
-        damit Auto-Download und Drip es nicht von selbst wieder holen. Von Hand
-        lässt es sich jederzeit erneut laden (das hebt den Eintrag auf).
-        Dateien ausserhalb des Datenordners (z.B. Originale importierter
+        Die Angaben des Videos bleiben erhalten, und Auto-Download wie Drip
+        holen es nie von selbst zurück (deleted_videos). Von Hand lässt es
+        sich jederzeit erneut laden, dann kommen die eigenen Angaben zurück.
+        Dateien außerhalb des Datenordners (z.B. Originale importierter
         eigener Videos) werden nicht angefasst."""
         import shutil
         from pathlib import Path
         from app import config
+        from app.services import deleted_videos
 
         video = await self.get_video(video_id)
         if not video:
             return False
+        await deleted_videos.remember(video)
 
         for location in self._video_locations(video_id):
             if location.exists():
@@ -358,13 +359,6 @@ class MetadataService:
         await db.execute(
             "UPDATE rss_entries SET status = 'new', auto_queued = 0 WHERE video_id = ?", (video_id,))
 
-        if ignore_for_future:
-            await db.execute(
-                """INSERT OR IGNORE INTO ignored_videos (video_id, channel_id, reason)
-                   VALUES (?, ?, ?)""",
-                (video_id, video.get("channel_id"), MANUALLY_DELETED),
-            )
-
         # Video selbst löschen (der Suchindex zieht per Trigger nach)
         await db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
 
@@ -374,17 +368,16 @@ class MetadataService:
             )"""
         )
 
-        logger.info(f"Video restlos gelöscht: {video_id}"
-                    + (" (auf Ignorierliste für automatische Downloads)" if ignore_for_future else ""))
+        logger.info(f"Video gelöscht: {video_id} (Angaben bleiben, nie wieder automatisch geladen)")
         return True
 
     async def delete_channel_videos(self, channel_id: str) -> int:
-        """Alle Videos eines Kanals restlos löschen. Ohne Ignorierliste: der
-        Kanal wird ohnehin entfernt, ein späteres neues Abo soll frei laden."""
+        """Alle Videos eines Kanals löschen - wie jedes Löschen: die Angaben
+        bleiben, und ein späteres neues Abo lädt sie nicht von selbst wieder."""
         rows = await db.fetch_all("SELECT id FROM videos WHERE channel_id = ?", (channel_id,))
         deleted = 0
         for row in rows:
-            if await self.delete_video(row["id"], ignore_for_future=False):
+            if await self.delete_video(row["id"]):
                 deleted += 1
         return deleted
 

@@ -7,9 +7,11 @@ Wiedergabelisten für die Musikseite und den Musikspieler.
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
-from app.services import music_library
+from app.services import ad_free_export, audio_export, music_library
 from app.services.music_library import Group, PlayList, Track
 
 router = APIRouter(prefix="/api/music", tags=["Musik"])
@@ -89,3 +91,34 @@ async def play(source: str = Query(..., min_length=3), shuffle: bool = False, st
         return await music_library.play_list(source, shuffle=shuffle, start=start)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/audio-info/{video_id}", response_model=audio_export.AudioInfo)
+async def audio_info(video_id: str):
+    """Format, Bitrate und Abtastrate der Tonspur (für die Anzeige im Spieler)."""
+    measured = await audio_export.info(video_id)
+    if not measured:
+        raise HTTPException(status_code=404, detail="Datei nicht vorhanden")
+    return measured
+
+
+@router.get("/export.zip")
+async def export_zip(source: str = Query(..., min_length=3),
+                     format: str = Query(audio_export.ORIGINAL, pattern="^(original|mp3|m4a|flac|ogg)$")):
+    """Alle Titel einer dynamischen Liste (Wiedergabeliste, Interpret,
+    Lieblingssongs ...) als ZIP nur mit Ton. original = ohne Neukodierung."""
+    try:
+        title, items = await music_library.export_items(source)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not items:
+        raise HTTPException(status_code=404, detail="Keine Titel")
+    folder = ad_free_export.work_dir()
+    try:
+        archive = await audio_export.zip_tracks(items, format, folder, title)
+    except LookupError as e:
+        ad_free_export.remove(folder)
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(str(archive), media_type="application/zip", filename=archive.name,
+                        background=BackgroundTask(ad_free_export.remove, folder))
+

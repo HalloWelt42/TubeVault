@@ -14,6 +14,21 @@
   let progress = $derived(player.duration ? player.time / player.duration : 0);
   const REPEAT_TITLES = { off: 'Wiederholen aus', all: 'Alle wiederholen', one: 'Diesen Titel wiederholen' };
 
+  // "OPUS · 160 kbit/s · 48 kHz" - was die Datei hergibt
+  let quality = $derived.by(() => {
+    const info = player.audioInfo;
+    if (!info?.codec) return '';
+    return [info.codec.toUpperCase(), info.bitrate ? `${Math.round(info.bitrate / 1000)} kbit/s` : null,
+            info.sample_rate ? `${(info.sample_rate / 1000).toLocaleString('de-DE')} kHz` : null].filter(Boolean).join(' · ');
+  });
+
+  async function removeFromList() {
+    try {
+      await player.removeFromList();
+      toast.info(player.playlistId ? 'Aus der Wiedergabeliste genommen' : 'Aus der Warteschlange genommen');
+    } catch (e) { toast.error(e.message); }
+  }
+
   // Zeitleiste und Lautstärke: Klick oder Ziehen setzt den Wert
   function drag(node, onValue) {
     function at(e) {
@@ -50,6 +65,11 @@
       </div>
       <button class="taste" class:an={track.favorite} onclick={favorite} title="Lieblingssong">
         <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
+      <button class="taste weg" onclick={removeFromList}
+              title={player.playlistId ? 'Aus der Wiedergabeliste nehmen und weiter' : 'Aus der Warteschlange nehmen und weiter'}>
+        <i class="fa-solid fa-circle-minus"></i></button>
+      <button class="taste weg" onclick={() => player.deleteTrack()} title="Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück">
+        <i class="fa-solid fa-trash-can"></i></button>
     </div>
 
     <div class="mitte">
@@ -72,6 +92,18 @@
         </div>
         <span class="zahl">{formatDuration(Math.floor(player.duration))}</span>
       </div>
+      <!-- Feste Zeile: Rückgängig nach dem Löschen, sonst die Tonqualität -->
+      <div class="info">
+        {#if player.pendingDelete}
+          <div class="rueckgaengig">
+            <i class="fa-solid fa-trash-can"></i>
+            <span class="was" title={player.pendingDelete.track.title}>Gelöscht: {player.pendingDelete.track.title}</span>
+            <button onclick={() => player.undoDelete()}>Rückgängig</button>
+          </div>
+        {:else if quality}
+          <div class="qualitaet zahl" title="Tonspur der Datei">{quality}</div>
+        {/if}
+      </div>
     </div>
 
     <div class="rechts">
@@ -79,6 +111,8 @@
         <i class="fa-solid fa-align-left"></i></button>
       <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Warteschlange">
         <i class="fa-solid fa-list-ol"></i></button>
+      <a class="taste" href={api.audioDownloadUrl(track.id, 'original')} download title="Ton herunterladen (wie geladen, ohne Neukodierung)">
+        <i class="fa-solid fa-download"></i></a>
       <button class="taste" onclick={() => { player.pause(); navigate(`/watch/${track.id}`); }} title="Als Video ansehen">
         <i class="fa-solid fa-display"></i></button>
       <button class="taste" onclick={() => player.toggleMute()} title={player.muted ? 'Ton an' : 'Stumm'}>
@@ -94,7 +128,7 @@
 
 <style>
   .spieler { flex: none; display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 320px);
-             align-items: center; gap: var(--tv-a5); height: 84px; padding: 0 var(--tv-a4);
+             align-items: center; gap: var(--tv-a5); height: 108px; padding: 0 var(--tv-a4);
              background: var(--tv-karte); border-top: 1px solid var(--tv-rand-stark); }
   .links { display: flex; align-items: center; gap: var(--tv-a3); min-width: 0; }
   .cover { flex: none; width: 56px; height: 56px; padding: 0; border: 0; border-radius: var(--tv-ecke-klein); overflow: hidden;
@@ -103,7 +137,7 @@
   .text { min-width: 0; }
   .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .w { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .mitte { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+  .mitte { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
   .tasten { display: flex; align-items: center; gap: var(--tv-a2); }
   .taste { position: relative; width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: 0; background: none;
            color: var(--tv-text-2); border-radius: var(--tv-ecke); cursor: pointer; font-size: 16px; }
@@ -111,6 +145,14 @@
   .taste.an { color: var(--tv-akzent); }
   .taste.gross { width: 46px; height: 46px; background: var(--tv-text); color: var(--tv-grund); font-size: 18px; }
   .taste.gross:hover { background: var(--tv-akzent); color: var(--tv-akzent-text); }
+  .taste.weg:hover { color: var(--tv-gefahr); }
+  .info { height: 20px; line-height: 20px; max-width: 100%; min-width: 0; }
+  .qualitaet { font-size: 13px; color: var(--tv-text-3); letter-spacing: 0.03em; }
+  .rueckgaengig { display: flex; align-items: center; gap: var(--tv-a2); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .rueckgaengig i { color: var(--tv-gefahr); }
+  .rueckgaengig .was { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rueckgaengig button { flex: none; border: 0; background: none; color: var(--tv-akzent); font: inherit; font-weight: 700;
+                         white-space: nowrap; cursor: pointer; }
   .wiederholen b { position: absolute; right: 5px; bottom: 4px; font-size: 13px; font-family: var(--tv-schrift-zahl); }
   .zeitleiste { display: flex; align-items: center; gap: var(--tv-a3); width: 100%; max-width: 620px;
                 font-size: var(--tv-gr-klein); color: var(--tv-text-3); }

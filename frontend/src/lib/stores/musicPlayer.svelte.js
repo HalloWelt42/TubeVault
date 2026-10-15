@@ -10,12 +10,14 @@
 // Startet ein Video, hält die Musik an - und umgekehrt.
 import { api } from '../api/client.js';
 import { loadSkipRanges, skipTarget } from '../utils/adSkip.js';
+import { emitVideoMutation } from '../utils/videoMutations.js';
 
 const STATE_KEY = 'musik.zustand';          // Weiterhören: Warteschlange dieses Geräts
 const VOLUME_KEY = 'player.lastVolume';     // wie beim Videoplayer
 const COUNT_AFTER_S = 30;                    // ab dann zählt ein Titel als gehört
 const RESTART_AFTER_S = 3;                   // "Zurück" springt danach erst an den Titelanfang
 const REPEAT_MODES = ['off', 'all', 'one'];
+const UNDO_MS = 6000;                        // so lange lässt sich ein Löschen zurücknehmen
 // Stille, um die Wiedergabe in einer Nutzeraktion freizuschalten (iOS)
 const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
@@ -39,12 +41,15 @@ class MusicPlayer {
   muted = $state(false);
   shuffle = $state(false);
   repeat = $state('off');
+  pendingDelete = $state(null);  // { track } - wird nach UNDO_MS endgültig gelöscht
+  audioInfo = $state(null);      // Format und Bitrate des laufenden Titels
 
   #audio = null;
   #counted = null;               // Kennung, deren Wiedergabe schon gezählt ist
   #skipRanges = [];
   #saveTimer = null;
   #unlocked = false;
+  #deleteTimer = null;
 
   get current() { return this.queue[this.index] || null; }
   get active() { return this.queue.length > 0; }
@@ -60,6 +65,8 @@ class MusicPlayer {
     }
     const volume = parseFloat(localStorage.getItem(VOLUME_KEY));
     if (volume >= 0 && volume <= 1) this.volume = volume;
+    // Wird die Seite geschlossen, gilt ein angestoßenes Löschen sofort
+    window.addEventListener('pagehide', () => this.#commitDelete());
   }
 
   // ─── Audio-Element ───
@@ -143,6 +150,8 @@ class MusicPlayer {
     this.#updateMetadata();
     this.#save();
     audio.play().catch(() => { this.playing = false; });
+    this.audioInfo = null;
+    api.musicAudioInfo(track.id).then((info) => { if (this.current?.id === track.id) this.audioInfo = info; }).catch(() => {});
     this.#skipRanges = [];
     loadSkipRanges(track.id).then((ranges) => { if (this.current?.id === track.id) this.#skipRanges = ranges; });
   }
@@ -260,6 +269,61 @@ class MusicPlayer {
     if (this.#audio) this.#audio.removeAttribute('src');
     this.#save();
     if ('mediaSession' in navigator) navigator.mediaSession.metadata = null;
+  }
+
+  // ─── Bei Nichtgefallen: ein Klick ───
+  /** Aus der Warteschlange nehmen; ist es der laufende Titel, geht es weiter */
+  #drop(track) {
+    const position = this.queue.findIndex(t => t.id === track.id);
+    if (position < 0) return;
+    const wasCurrent = position === this.index;
+    this.queue = this.queue.filter((_, i) => i !== position);
+    if (position < this.index) this.index -= 1;
+    if (wasCurrent) {
+      if (this.index < this.queue.length) this.#start(this.index);
+      else { this.index = this.queue.length - 1; this.pause(); }
+    }
+    this.#save();
+  }
+
+  /** Läuft gerade eine Wiedergabeliste? Dann deren Nummer */
+  get playlistId() {
+    return this.source?.startsWith('playlist:') ? this.source.slice(9) : null;
+  }
+
+  /** Aus der Wiedergabeliste werfen (oder nur aus der Warteschlange) */
+  async removeFromList(track = this.current) {
+    if (!track) return;
+    if (this.playlistId) await api.removeFromPlaylist(this.playlistId, track.id);
+    this.#drop(track);
+  }
+
+  /** Löschen: sofort weiter, endgültig erst nach UNDO_MS (Rückgängig möglich) */
+  deleteTrack(track = this.current) {
+    if (!track) return;
+    this.#commitDelete();
+    this.#drop(track);
+    this.pendingDelete = { track, at: this.index };
+    this.#deleteTimer = setTimeout(() => this.#commitDelete(), UNDO_MS);
+  }
+
+  undoDelete() {
+    if (!this.pendingDelete) return;
+    clearTimeout(this.#deleteTimer);
+    const { track } = this.pendingDelete;
+    this.pendingDelete = null;
+    this.queue = [...this.queue.slice(0, this.index + 1), track, ...this.queue.slice(this.index + 1)];
+    this.#save();
+  }
+
+  #commitDelete() {
+    clearTimeout(this.#deleteTimer);
+    const pending = this.pendingDelete;
+    this.pendingDelete = null;
+    if (!pending) return;
+    api.deleteVideo(pending.track.id)
+      .then(() => emitVideoMutation(pending.track.id, 'deleted'))
+      .catch(() => {});
   }
 
   /** Lieblingssong an- oder abwählen (Favoriten der Bibliothek) */

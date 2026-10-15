@@ -1117,6 +1117,10 @@
                   <span class="badge badge-ok">Lokal</span>
                 {:else if video.is_in_queue}
                   <span class="badge badge-queue"><i class="fa-solid fa-download"></i> Wartet</span>
+                {:else if video.is_deleted}
+                  <span class="badge badge-deleted"
+                    title="Von dir gelöscht: wird nie automatisch geladen, nur wenn du es ausdrücklich herunterlädst">
+                    <i class="fa-solid fa-trash-can"></i> Gelöscht</span>
                 {:else if video.rss_status === 'new'}
                   <span class="badge badge-new">Neu</span>
                 {/if}
@@ -1534,6 +1538,7 @@
   .badge-ok { background: rgba(34,197,94,0.15); color: var(--status-success); }
   .badge-queue { background: var(--accent-muted); color: var(--accent-primary); }
   .badge-new { background: rgba(239,68,68,0.15); color: var(--status-error); }
+  .badge-deleted { background: var(--bg-tertiary); color: var(--text-secondary); }
   .badge-short { background: rgba(171,71,188,0.15); color: #AB47BC; }
   .badge-live { background: rgba(244,67,54,0.15); color: #EF5350; }
   .type-badge {

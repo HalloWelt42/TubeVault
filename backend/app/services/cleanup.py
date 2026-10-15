@@ -109,8 +109,8 @@ async def channels() -> list[ChannelSize]:
 
 
 async def delete(video_ids: list[str]) -> DeleteResult:
-    """Videos restlos löschen. Sie landen auf der Ignorierliste, damit der
-    Auto-Download sie nicht von selbst zurückholt."""
+    """Videos löschen. Ihre Angaben bleiben, und der Auto-Download holt sie
+    nicht von selbst zurück (deleted_videos)."""
     ids = list(dict.fromkeys(video_ids))
     if not ids:
         return DeleteResult(deleted=0, freed_bytes=0)
@@ -119,7 +119,7 @@ async def delete(video_ids: list[str]) -> DeleteResult:
         f"SELECT id, file_size FROM videos WHERE id IN ({marks})", ids)}
     deleted, freed, missing = 0, 0, []
     for video_id in ids:
-        if await metadata_service.delete_video(video_id, ignore_for_future=True):
+        if await metadata_service.delete_video(video_id):
             deleted += 1
             freed += sizes.get(video_id, 0)
         else:

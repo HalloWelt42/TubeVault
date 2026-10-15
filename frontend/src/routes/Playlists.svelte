@@ -230,6 +230,9 @@
       <div class="detail-actions">
         {#if plVideos.length > 0}
           <button class="btn-play-all" onclick={() => playAll(0)}><i class="fa-solid fa-play"></i> Alle abspielen</button>
+          <a class="btn-add-video" href={api.musicZipUrl(`playlist:${selectedPl.id}`)} download
+             title="Alle Videos der Playlist nur als Ton in einem ZIP (wie geladen, ohne Werbestellen)">
+            <i class="fa-solid fa-file-zipper"></i> Ton als ZIP</a>
         {/if}
         <button class="btn-add-video" onclick={() => showAddVideo = !showAddVideo}>
           <i class="fa-solid fa-plus"></i> Video hinzufügen
@@ -447,6 +450,7 @@
   .btn-play-all { padding: 8px 20px; background: var(--accent-primary); color: var(--accent-text); border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .btn-add-video { padding: 8px 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; font-size: 0.82rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .btn-add-video:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+  a.btn-add-video { text-decoration: none; }
 
   /* Add Video Panel */
   .add-video-panel { padding: 12px 14px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; margin-bottom: 14px; }

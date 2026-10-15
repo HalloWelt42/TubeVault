@@ -45,6 +45,12 @@
         onChanged(t, { favorite });
         toast.success(favorite ? 'Zu den Lieblingssongs' : 'Aus den Lieblingssongs entfernt');
       } },
+    { icon: 'fa-download', label: 'Ton herunterladen', run: (t) => {
+        const link = document.createElement('a');
+        link.href = api.audioDownloadUrl(t.id, 'original');
+        link.download = '';
+        link.click();
+      } },
     { icon: 'fa-display', label: 'Als Video ansehen', run: (t) => { player.pause(); navigate(`/watch/${t.id}`); } },
     { icon: 'fa-ban', label: 'Keine Musik', run: async (t) => {
         await api.setMusicBatch([t.id], false);

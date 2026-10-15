@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import AVATARS_DIR, RSS_THUMBS_DIR
 from app.database import db
-from app.services import channel_reference, feed_scope, loadable, music_flag, video_classifier
+from app.services import channel_reference, deleted_videos, feed_scope, loadable, music_flag, video_classifier
 from app.services.rss_service import rss_service, ChannelNotFound
 from app.routers.jobs import activity_ws
 
@@ -313,6 +313,7 @@ async def _get_channel_videos_impl(
                        COALESCE(re.video_type, 'video') as video_type,
                        CASE WHEN v.id IS NOT NULL AND v.status = 'ready' THEN 1 ELSE 0 END as is_downloaded,
                        CASE WHEN (SELECT j.id FROM jobs j WHERE j.type='download' AND json_extract(j.metadata, '$.video_id') = re.video_id AND j.status IN ('queued','active') LIMIT 1) IS NOT NULL THEN 1 ELSE 0 END as is_in_queue,
+                       {deleted_videos.is_deleted_sql('re.video_id')} as is_deleted,
                        COALESCE(v.duration, re.duration) as duration,
                        v.file_size,
                        COALESCE(v.view_count, re.views) as view_count,
@@ -353,6 +354,7 @@ async def _get_channel_videos_impl(
                        v.suggest_override,
                        CASE WHEN v.id IS NOT NULL AND v.status = 'ready' THEN 1 ELSE 0 END as is_downloaded,
                        CASE WHEN (SELECT j.id FROM jobs j WHERE j.type='download' AND json_extract(j.metadata, '$.video_id') = re.video_id AND j.status IN ('queued','active') LIMIT 1) IS NOT NULL THEN 1 ELSE 0 END as is_in_queue,
+                       {deleted_videos.is_deleted_sql('re.video_id')} as is_deleted,
                        COALESCE((SELECT j.status FROM jobs j WHERE j.type='download' AND json_extract(j.metadata, '$.video_id') = re.video_id AND j.status IN ('queued','active') LIMIT 1), '') as queue_status
                 FROM rss_entries re
                 LEFT JOIN videos v ON re.video_id = v.id

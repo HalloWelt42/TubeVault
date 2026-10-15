@@ -4,9 +4,10 @@ Löschen ohne Reste.
 Kontrakt:
 - Ein gelöschtes Video hinterlässt weder Dateien noch Zeilen in abhängigen
   Tabellen; der Feed zeigt es wieder als nicht geladen; die Suche findet es
-  nicht mehr.
+  nicht mehr. Nur seine Angaben bleiben (deleted_videos).
 - Von Hand lässt es sich erneut laden (die Sperre gilt nur für Automatik).
-- Ein Kanal wird wahlweise mit oder ohne seine Videos entfernt.
+- Ein Kanal wird wahlweise mit oder ohne seine Videos entfernt; mit dem
+  Kanal gelöschte Videos bleiben für die Automatik gesperrt.
 """
 import pytest
 
@@ -134,5 +135,5 @@ async def test_kanal_entfernen_mit_videos(test_db, dirs):
 
     assert result == {"removed": True, "videos_deleted": 2}
     assert [r["id"] for r in await test_db.fetch_all("SELECT id FROM videos")] == ["fremd"]
-    assert await test_db.fetch_val("SELECT COUNT(*) FROM ignored_videos") == 0
+    assert {r["video_id"] for r in await test_db.fetch_all("SELECT video_id FROM ignored_videos")} == {"v1", "v2"}
     assert await test_db.fetch_val("SELECT COUNT(*) FROM rss_entries WHERE channel_id = ?", (CH,)) == 0

@@ -39,7 +39,8 @@ def remove(folder: Path) -> None:
     shutil.rmtree(folder, ignore_errors=True)
 
 
-async def _run(*cmd: str) -> str:
+async def run_tool(*cmd: str) -> str:
+    """ffmpeg/ffprobe als eigener Prozess; wirft ExportError mit der Meldung."""
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     out, err = await proc.communicate()
@@ -49,14 +50,14 @@ async def _run(*cmd: str) -> str:
 
 
 async def duration(src: Path) -> float:
-    out = await _run("ffprobe", "-v", "error", "-show_entries", "format=duration",
+    out = await run_tool("ffprobe", "-v", "error", "-show_entries", "format=duration",
                      "-of", "default=nw=1:nk=1", str(src))
     return float(out.strip())
 
 
 async def keyframes(src: Path) -> list[float]:
     """Zeitpunkte der Schlüsselbilder (nur aus den Paketen gelesen, ohne Dekodieren)."""
-    out = await _run("ffprobe", "-v", "error", "-select_streams", "v:0",
+    out = await run_tool("ffprobe", "-v", "error", "-select_streams", "v:0",
                      "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0", str(src))
     times = []
     for line in out.splitlines():
@@ -87,14 +88,14 @@ async def video(src: Path, keep: list[tuple[float, float]], folder: Path) -> Pat
     names = []
     for index, (start, end) in enumerate(pieces):
         part = folder / f"teil_{index:03d}{ext}"
-        await _run("ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-i", str(src),
+        await run_tool("ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-i", str(src),
                    "-t", f"{end - start:.3f}", "-map", "0:v:0", "-map", "0:a?", "-c", "copy",
                    "-avoid_negative_ts", "make_zero", str(part))
         names.append(f"file '{part.name}'")
     listing = folder / "teile.txt"
     listing.write_text("\n".join(names) + "\n", encoding="utf-8")
     out = folder / f"video{ext}"
-    await _run("ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(listing),
+    await run_tool("ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(listing),
                "-map", "0", "-c", "copy", str(out))
     return out
 
@@ -105,6 +106,6 @@ async def audio(src: Path, keep: list[tuple[float, float]], fmt: str, folder: Pa
         raise ExportError("Nach dem Entfernen der Werbung bleibt nichts übrig")
     select = "+".join(f"between(t,{start:.3f},{end:.3f})" for start, end in keep)
     out = folder / f"audio.{fmt}"
-    await _run("ffmpeg", "-v", "error", "-y", "-i", str(src), "-vn",
+    await run_tool("ffmpeg", "-v", "error", "-y", "-i", str(src), "-vn",
                "-af", f"aselect='{select}',asetpts=N/SR/TB", *AUDIO_CODECS[fmt], str(out))
     return out

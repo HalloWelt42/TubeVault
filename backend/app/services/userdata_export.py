@@ -31,7 +31,7 @@ KEEP_EXPORTS = 14
 TABLES = [
     "favorites", "watch_history", "categories", "video_categories",
     "playlists", "playlist_videos", "subscriptions",
-    "blocked_channels", "ignored_videos",
+    "blocked_channels", "ignored_videos", "deleted_videos",
 ]
 
 # Nutzerfelder aus videos (nur Zeilen, in denen tatsächlich etwas steht).

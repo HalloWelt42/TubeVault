@@ -208,6 +208,9 @@
                 <i class="fa-solid fa-play"></i> Abspielen</button>
               <button class="tv-knopf" onclick={() => play(source, true)} disabled={!groupTracks.tracks.length}>
                 <i class="fa-solid fa-shuffle"></i> Zufällig</button>
+              <a class="tv-knopf" href={api.musicZipUrl(source)} download
+                 title="Alle Titel nur als Ton in einem ZIP (wie geladen, ohne Neukodierung, ohne Werbestellen)">
+                <i class="fa-solid fa-file-zipper"></i> Als ZIP</a>
             </div>
           {/if}
         </div>

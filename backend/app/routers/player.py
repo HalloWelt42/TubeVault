@@ -350,6 +350,20 @@ async def download_audio(video_id: str, format: str = "mp3"):
     from app.utils.file_utils import sanitize_filename
     from app.services.download_service import download_service
 
+    from app.services import audio_export
+    if format == audio_export.ORIGINAL:
+        # Tonspur wie geladen, ohne Neukodierung (Werbestellen trotzdem heraus)
+        folder = ad_free_export.work_dir()
+        try:
+            out = await audio_export.export(video_id, format, folder)
+        except LookupError as e:
+            ad_free_export.remove(folder)
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            ad_free_export.remove(folder)
+            raise _export_failed(e)
+        return FileResponse(str(out), media_type=audio_export.MIME.get(out.suffix[1:], "audio/mp4"),
+                            filename=out.name, background=BackgroundTask(ad_free_export.remove, folder))
     if format not in ad_free_export.AUDIO_CODECS:
         format = "mp3"
     row = await _video_row(video_id)
