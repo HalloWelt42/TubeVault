@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS transcripts (
     language TEXT,
     kind TEXT,                       -- manual | auto | ai
     note TEXT,
-    imported INTEGER DEFAULT 0,      -- aus mitgeladenen Untertitel-Dateien (subtitle_import): nur Wortsuche
+    imported INTEGER DEFAULT 0,      -- aus mitgeladenen Untertitel-Dateien (subtitle_import)
     spoken INTEGER DEFAULT 1,        -- Sprache ist die gesprochene (nicht übersetzt), zählt für language_assign
     fetched_at TEXT DEFAULT (datetime('now'))
 );
@@ -153,7 +153,7 @@ async def store(video_id: str, language: str, kind: str, sentences: list[Segment
     """Transkript eines Videos ablegen (ersetzt ein vorhandenes). Sätze in
     Werbestellen fallen weg - sie sollen weder gefunden noch angezeigt werden
     (die Untertitel-Datei bleibt vollständig, siehe ad_segments).
-    imported: aus einer mitgeladenen Datei (nur Wortsuche, siehe subtitle_import);
+    imported: aus einer mitgeladenen Datei (siehe subtitle_import);
     spoken: die Sprache ist die gesprochene, nicht übersetzt; note: Hinweis
     (bei eingelesenen Untertiteln der Dateiname)."""
     from app.services import ad_segments

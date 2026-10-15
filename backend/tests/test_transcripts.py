@@ -48,7 +48,7 @@ async def test_bedeutung_im_transkript(stock, set_setting, monkeypatch):
     async def reachable():
         return True
     monkeypatch.setattr(semantic_index, "available", reachable)
-    monkeypatch.setattr(semantic_index, "_chunk_vectors", semantic_index._ChunkVectors())
+    monkeypatch.setattr(semantic_index, "_chunk_codes", semantic_index._ChunkCodes())
     semantic_index._query_cache.clear()
     await set_setting("ai.enabled", "true")
     await set_setting("ai.url", "http://ki.test/v1")

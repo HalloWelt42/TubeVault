@@ -70,6 +70,10 @@ class Query(BaseModel):
     groups: list[list[Term]] = []     # UND über die Gruppen, ODER innerhalb
     excluded: list[Term] = []
     operators: Operators = Operators()
+    # Die gesuchten Begriffe so, wie sie getippt wurden (Groß- und Kleinschreibung,
+    # ohne Angaben und Ausschlüsse) - für die Bedeutungssuche: das Einbettungsmodell
+    # versteht "Kernfusion" deutlich besser als "kernfusion"
+    meaning_text: str = ""
 
     @property
     def empty(self) -> bool:
@@ -210,6 +214,7 @@ def parse(text: str) -> Query:
     query = Query(text=(text or "").strip())
     operators = Operators()
     join_next = False
+    typed: list[str] = []
     for raw in _scan(query.text):
         if raw.key and not raw.negative and _apply_operator(operators, raw.key, raw.value):
             continue
@@ -224,12 +229,15 @@ def parse(text: str) -> Query:
                 continue
             if raw.negative:
                 query.excluded.append(term)
-            elif join_next:
+                continue
+            if join_next:
                 query.groups[-1].append(term)
             else:
                 query.groups.append([term])
+            typed.append(value.strip())
             join_next = False
     query.operators = operators
+    query.meaning_text = " ".join(typed)
     return query
 
 

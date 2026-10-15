@@ -2,8 +2,9 @@
   TubeVault - Suchfeld im Kopf mit Aufklappliste (Gestaltung nach mockups/suche.html, "Beim Tippen")
 
   Leer: zuletzt gesucht und gemerkte Suchen. Beim Tippen eine gebündelte
-  Anfrage (nur Wörter, ohne Bedeutungssuche - das bleibt schnell): Ergänzungen
-  aus dem Wortschatz, dann je Bereich die besten Treffer. Pfeiltasten wählen,
+  Anfrage über die Wörter (schnell): Ergänzungen aus dem Wortschatz, dann je
+  Bereich die besten Treffer. Die Bedeutungssuche läuft daneben und hängt
+  ihre Treffer als eigene Gruppe an, sobald sie da sind. Pfeiltasten wählen,
   Enter öffnet, Tab übernimmt eine Ergänzung ins Feld, Strg+Enter zeigt alle
   Treffer auf der Suche-Seite, Esc schließt. Eine Adresse der Quelle (oder
   eine Video-Kennung) geht zum Laden an die Downloads.
@@ -23,15 +24,18 @@
 
   const DEBOUNCE_MS = 220;
   const MIN_CHARS = 2;
-  const SHOW = { videos: 3, gesagt: 2, kapitel: 2, abos: 2, kanaele: 2, musik: 3, playlists: 2 };
+  const MEANING_FROM = 3;            // Bedeutungssuche erst ab so vielen Zeichen
+  const SHOW = { videos: 3, gesagt: 2, kapitel: 2, abos: 2, kanaele: 2, musik: 3, playlists: 2, sinngemaess: 3 };
   const GROUPS = [
     ['videos', 'Videos'], ['gesagt', 'Im Gesagten'], ['kapitel', 'Kapitel'], ['abos', 'Bei Abos, noch nicht geladen'],
-    ['kanaele', 'Kanäle'], ['musik', 'Musik'], ['playlists', 'Playlists'],
+    ['kanaele', 'Kanäle'], ['musik', 'Musik'], ['playlists', 'Playlists'], ['sinngemaess', 'Sinngemäß verwandt'],
   ];
 
   let text = $state('');
   let open = $state(false);
   let overview = $state(null);
+  let meaning = $state(null);        // Bereich "sinngemaess", kommt nach den Wörtern
+  let meaningPending = $state(false);
   let completions = $state([]);
   let saved = $state([]);
   let active = $state(-1);           // gewählter Eintrag (Pfeiltasten)
@@ -63,7 +67,8 @@
     }
     const list = suggestions.map((s) => ({ kind: 'vorschlag', key: `s:${s.query}`, ...s }));
     for (const [id] of GROUPS) {
-      for (const hit of (overview?.sections?.[id]?.items || []).slice(0, SHOW[id])) {
+      const page = id === 'sinngemaess' ? meaning : overview?.sections?.[id];
+      for (const hit of (page?.items || []).slice(0, SHOW[id])) {
         list.push({ kind: id, key: `${id}:${hit.id ?? hit.channel_id ?? hit.track?.id}`, hit });
       }
     }
@@ -93,6 +98,7 @@
     open = true;
     active = -1;
     clearTimeout(timer);
+    meaning = null;
     if (typed.length < MIN_CHARS) {
       run++;
       overview = null;
@@ -105,6 +111,13 @@
   async function lookup() {
     const mine = ++run;
     const query = typed;
+    if (query.length >= MEANING_FROM) {
+      meaningPending = true;
+      api.searchSection('sinngemaess', query, { per_page: SHOW.sinngemaess })
+        .then((page) => { if (mine === run) meaning = page; })
+        .catch(() => { /* ohne KI-Dienst bleibt es bei den Wörtern */ })
+        .finally(() => { if (mine === run) meaningPending = false; });
+    }
     try {
       const [result, words] = await Promise.all([
         api.search(query, { limit: 3, meaning: false }),
@@ -155,7 +168,7 @@
     if (entry.kind === 'playlists') return navigate('/playlists', { open: hit.id });
     if (entry.kind === 'abos') return navigate(`/watch/${hit.video_id}`);
     const start = hit.spots?.[0]?.start;
-    navigate(`/watch/${hit.id}`, (entry.kind === 'gesagt' || entry.kind === 'kapitel') && start ? { t: Math.floor(start) } : {});
+    navigate(`/watch/${hit.id}`, ['gesagt', 'kapitel', 'sinngemaess'].includes(entry.kind) && start ? { t: Math.floor(start) } : {});
   }
 
   function onKeydown(event) {
@@ -232,7 +245,7 @@
         {:else}
           {#each entries as entry, i (entry.key)}
             {#if entry.kind !== 'vorschlag' && i === groupStart(entry.kind)}
-              {@const total = overview?.sections?.[entry.kind]?.total || 0}
+              {@const total = (entry.kind === 'sinngemaess' ? meaning : overview?.sections?.[entry.kind])?.total || 0}
               <div class="gruppe">{GROUPS.find(([id]) => id === entry.kind)[1]}
                 {#if total > SHOW[entry.kind]}<button class="alle" onclick={() => toPage(typed, entry.kind)}>{total.toLocaleString('de-DE')} ansehen</button>{/if}
               </div>
@@ -283,7 +296,7 @@
               </div>
             {/if}
           {/each}
-          {#if overview && !entries.some((entry) => entry.kind !== 'vorschlag')}
+          {#if overview && !meaningPending && !entries.some((entry) => entry.kind !== 'vorschlag')}
             <div class="leer">Nichts gefunden.{#if overview.suggestion} Meintest du
               <button class="alle" onclick={() => toPage(overview.suggestion.text)}>{overview.suggestion.text}</button>?{/if}</div>
           {/if}

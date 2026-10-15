@@ -17,9 +17,9 @@ Welche Datei (eine je Video), in dieser Reihenfolge:
 Als gesprochene Sprache (language_assign) zählt nur, was die Datei belegt:
 1., 2. und 3. ohne eine "-orig"-Datei daneben; der Rest kann übersetzt sein.
 
-Nur Wortsuche: Bedeutungsvektoren entstehen für diese Abschnitte nicht
-(semantic_index), sie würden den Speicher sprengen. Läuft als
-Hintergrundarbeit mit Schalter (transcripts.import_enabled, Standard an),
+Danach bettet semantic_index die Abschnitte für die Bedeutungssuche ein
+(zweistufig über vector_store, damit sie den Speicher nicht sprengen). Läuft
+als Hintergrundarbeit mit Schalter (transcripts.import_enabled, Standard an),
 bis alles eingelesen ist; danach schaut sie selten nach Neuem.
 """
 import asyncio

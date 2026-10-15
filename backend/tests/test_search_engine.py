@@ -52,6 +52,11 @@ def test_suchsprache_wird_gelesen():
         ("Terra X", ["en"], 1200, 2020, 2024, "archiv")
 
 
+def test_bedeutung_bekommt_den_getippten_text():
+    q = query_module.parse('Kernfusion "Harald Lesch" -Werbung kanal:ARTE Tokamak')
+    assert q.meaning_text == "Kernfusion Harald Lesch Tokamak"
+
+
 def test_unlesbare_angabe_zaehlt_als_woerter():
     q = query_module.parse("länge:viel")
     assert [t.words for t in q.terms] == [["länge"], ["viel"]]

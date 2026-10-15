@@ -31,7 +31,7 @@ async def find(query: Query, precision: str | None) -> MeaningHits:
     level = await semantic_index.precision(precision)
     if not level or not await semantic_index.config() or not await semantic_index.available():
         return MeaningHits()               # aus oder Dienst nicht erreichbar
-    text = " ".join(term.text() for term in query.terms)
+    text = query.meaning_text
     scores = dict(await semantic_index.search(text, level) or [])   # None: noch keine Videovektoren
     for video_id, score in await semantic_items.search(text, "lyrics", level, LYRICS):
         scores[video_id] = max(score, scores.get(video_id, score))

@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 54
+SCHEMA_VERSION = 55
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1214,6 +1214,14 @@ class Database:
         await saved_searches.install_schema(self._connection)
         if current_version < 54:
             logger.info("Migration v54: Kapitel und Feed durchsuchbar, gemerkte Suchen")
+
+        # v55: Bedeutungssuche zweistufig (vector_store): Binärschlüssel zu jedem
+        # gespeicherten Vektor der Abschnitte und übrigen Arten nachtragen
+        if current_version < 55:
+            from app.services import semantic_index
+            chunks = await semantic_index.fill_codes(self._connection, "chunk_embeddings", "seq")
+            items = await semantic_index.fill_codes(self._connection, "item_embeddings", "rowid")
+            logger.info(f"Migration v55: Binärschlüssel für {chunks} Abschnitte und {items} weitere Vektoren")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

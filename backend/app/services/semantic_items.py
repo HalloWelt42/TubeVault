@@ -11,8 +11,10 @@ einen Vektor - mit demselben KI-Dienst und Modell:
   lyrics    Liedtexte geladener Musikvideos (Interpret, Song, Text)
 
 Ein Eintrag wird neu gerechnet, wenn sich sein Text ändert (Prüfsumme);
-Feed-Einträge ändern sich nicht und werden nur einmal gerechnet. Die
-Vektoren einer Art liegen erst im Speicher, wenn eine Suche sie braucht.
+Feed-Einträge ändern sich nicht und werden nur einmal gerechnet. Gesucht
+wird zweistufig (vector_store): im Speicher liegen nur die Binärschlüssel
+einer Art, erst wenn eine Suche sie braucht; die Kandidaten werden mit
+ihren Vektoren aus der Datenbank genau bewertet.
 """
 import asyncio
 import hashlib
@@ -47,6 +49,15 @@ CREATE TABLE IF NOT EXISTS item_embeddings (
 
 async def install_schema(connection) -> None:
     await connection.executescript(SCHEMA_SQL)
+    try:
+        await connection.execute("ALTER TABLE item_embeddings ADD COLUMN code BLOB")
+    except Exception:
+        pass  # Spalte existiert bereits
+    # Schlüssel und Stand je Art lesen, ohne die Vektoren anzufassen
+    await connection.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_item_embeddings_codes ON item_embeddings(kind, model, ref, code);
+        CREATE INDEX IF NOT EXISTS idx_item_embeddings_stamp ON item_embeddings(kind, model, updated_at);
+    """)
     await connection.commit()
 
 
@@ -135,11 +146,12 @@ async def index_batch(url: str, model: str) -> int:
             continue
         vectors = await semantic_index.embed_texts([text for _, text, _ in todo], url, model, timeout=_TIMEOUT_S)
         for (ref, _, text_hash), vector in zip(todo, vectors):
+            packed, code = semantic_index.pack_with_code(vector)
             await db.conn.execute(
-                """INSERT INTO item_embeddings (kind, ref, model, text_hash, vector) VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO item_embeddings (kind, ref, model, text_hash, vector, code) VALUES (?, ?, ?, ?, ?, ?)
                    ON CONFLICT(kind, ref) DO UPDATE SET model = excluded.model, text_hash = excluded.text_hash,
-                       vector = excluded.vector, updated_at = datetime('now')""",
-                (kind, ref, model, text_hash, semantic_index.pack_vector(vector)))
+                       vector = excluded.vector, code = excluded.code, updated_at = datetime('now')""",
+                (kind, ref, model, text_hash, packed, code))
         await db.conn.commit()
         return len(todo)
     return 0
@@ -154,39 +166,51 @@ async def overview(model: Optional[str]) -> dict[str, int]:
 # ─── Suchen ───────────────────────────────────────────────────────────
 
 @dataclass
-class _Matrix:
+class _Codes:
     stamp: tuple
-    refs: list[str]
-    matrix: object
+    index: object          # vector_store.BinaryIndex
+    sample: object         # genaue Vektoren der Stichprobe (numpy) für die Schwelle
 
 
-_matrices: dict[str, _Matrix] = {}
+_codes: dict[str, _Codes] = {}
 
 
-async def _matrix(kind: str, model: str) -> Optional[_Matrix]:
-    import numpy as np
+async def _vectors_of(kind: str, refs: list[str]) -> dict[str, bytes]:
+    rows = await db.fetch_all(
+        "SELECT ref, vector FROM item_embeddings WHERE kind = ? AND ref IN (SELECT value FROM json_each(?))",
+        (kind, json.dumps(refs)))
+    return {row["ref"]: row["vector"] for row in rows}
+
+
+async def _loaded(kind: str, model: str) -> Optional[_Codes]:
+    """Schlüssel einer Art, neu gelesen, wenn sich ihr Bestand geändert hat."""
+    from app.services import vector_store
     stamp = tuple(await db.fetch_one(
         "SELECT COUNT(*), COALESCE(MAX(updated_at), '') FROM item_embeddings WHERE kind = ? AND model = ?", (kind, model)))
-    cached = _matrices.get(kind)
+    cached = _codes.get(kind)
     if cached and cached.stamp == (model, stamp):
         return cached
-    rows = await db.fetch_all("SELECT ref, vector FROM item_embeddings WHERE kind = ? AND model = ?", (kind, model))
+    rows = await db.fetch_all(
+        "SELECT ref, code FROM item_embeddings WHERE kind = ? AND model = ? AND code IS NOT NULL", (kind, model))
     if not rows:
         return None
-    matrix = np.frombuffer(b"".join(r["vector"] for r in rows), dtype=np.float32).reshape(len(rows), -1)
-    _matrices[kind] = _Matrix((model, stamp), [r["ref"] for r in rows], matrix)
-    return _matrices[kind]
+    index = vector_store.BinaryIndex()
+    index.append([row["ref"] for row in rows], vector_store.codes_from_bytes([row["code"] for row in rows]))
+    sample_refs = [index.refs[i] for i in vector_store.sample_positions(len(index))]
+    sample = vector_store.vectors_from_bytes(list((await _vectors_of(kind, sample_refs)).values()))
+    _codes[kind] = _Codes((model, stamp), index, sample)
+    return _codes[kind]
 
 
 async def search(query: str, kind: str, level, limit: int = 12) -> list[tuple[str, float]]:
     """Ähnlichste Einträge einer Art als (ref, Ähnlichkeit), beste zuerst;
     leer, wenn die Bedeutungssuche nicht zur Verfügung steht."""
-    import numpy as np
+    from app.services import vector_store
     cfg = await semantic_index.config()
     if not cfg or not query.strip() or not level or not await semantic_index.available():
         return []
     url, model = cfg
-    loaded = await _matrix(kind, model)
+    loaded = await _loaded(kind, model)
     if loaded is None:
         return []
     try:
@@ -194,9 +218,10 @@ async def search(query: str, kind: str, level, limit: int = 12) -> list[tuple[st
     except Exception:
         semantic_index.reset_availability()
         return []
-    if q.shape[0] != loaded.matrix.shape[1]:
+    stats = vector_store.spread(loaded.sample, q)
+    if stats is None or loaded.sample.shape[1] != q.shape[0]:
         return []
-    scores = loaded.matrix @ q
-    floor = semantic_index.score_floor(scores, level, len(loaded.refs))
-    top = np.argsort(-scores)[:limit]
-    return [(loaded.refs[i], float(scores[i])) for i in top if scores[i] >= floor]
+    found = await _vectors_of(kind, loaded.index.candidates(q))
+    refs = list(found)
+    floor = semantic_index.floor_from(stats, level, len(loaded.index))
+    return vector_store.best(refs, vector_store.vectors_from_bytes([found[r] for r in refs]), q, floor, limit)

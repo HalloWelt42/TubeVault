@@ -133,6 +133,11 @@ SETTINGS: list[SettingDef] = [
                label="Genauigkeit der Bedeutungssuche",
                description="Standard für jede Suche: Weit findet auch lose Verwandtes (mehr Treffer), "
                            "Sehr genau nur eng Passendes. Auf der Suchseite je Suche umstellbar."),
+    SettingDef(key="ai.passages_enabled", default="true", kind="toggle", category="ai", section="extensions",
+               label="Gesagtes für die Bedeutungssuche einbetten",
+               description="Rechnet für jeden Abschnitt aus Transkripten und Untertiteln einen Vektor auf dem "
+                           "KI-Dienst, damit die Bedeutungssuche auch im Gesagten findet. Viele Abschnitte "
+                           "belegen den KI-Dienst stundenlang; Anhalten wirkt nach dem laufenden Stapel."),
     # ── Hintergrundarbeiten (geschaltet in deren Liste, nicht auf der Einstellungsseite) ──
     SettingDef(key="types.check_enabled", default="true", kind="toggle", category="types",
                label="Video-Typen bei der Quelle prüfen",

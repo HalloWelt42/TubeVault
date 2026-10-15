@@ -165,7 +165,7 @@ async def test_bedeutung_findet_kanaele_playlists_feed_und_liedtexte(ai, test_db
     """Kanalbeschreibungen, Playlists, noch nicht geladene Feed-Einträge und
     Liedtexte haben eigene Vektoren (semantic_items) und kommen in die Suche."""
     from app.services import lyrics_service, semantic_items
-    semantic_items._matrices.clear()
+    semantic_items._codes.clear()
     await test_db.execute(
         "INSERT INTO subscriptions (channel_id, channel_name, channel_description) VALUES "
         "('UCback', 'Backstube', 'Rund um Brot und Hefe'), ('UCtech', 'Werkbank', 'Löten und Platinen')")

@@ -60,8 +60,6 @@ CREATE TABLE IF NOT EXISTS chunk_embeddings (
     model TEXT NOT NULL,
     vector BLOB NOT NULL
 );
--- Zählen je Modell ohne die Vektoren zu lesen (pending_chunks)
-CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model ON chunk_embeddings(model);
 CREATE TRIGGER IF NOT EXISTS trg_chunk_embedding_delete AFTER DELETE ON transcript_chunks
 BEGIN
     DELETE FROM chunk_embeddings WHERE chunk_id = old.id;
@@ -119,6 +117,35 @@ _query_cache: dict[tuple[str, str], list[float]] = {}
 
 async def install_schema(connection) -> None:
     await connection.executescript(SCHEMA_SQL)
+    # Binärschlüssel je Vektor (vector_store) samt Index, der ihn ohne die
+    # Vektoren liefert; der frühere Index nur über das Modell ist darin enthalten
+    try:
+        await connection.execute("ALTER TABLE chunk_embeddings ADD COLUMN code BLOB")
+    except Exception:
+        pass  # Spalte existiert bereits
+    await connection.executescript("""
+        DROP INDEX IF EXISTS idx_chunk_embeddings_model;
+        CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_codes ON chunk_embeddings(model, seq, chunk_id, code);
+    """)
+
+
+async def fill_codes(connection, table: str, key: str) -> int:
+    """Fehlende Binärschlüssel aus den gespeicherten Vektoren nachtragen
+    (einmalig nach dem Umbau; neue Vektoren bekommen ihn beim Speichern)."""
+    from app.services import vector_store
+    done = 0
+    while True:
+        cursor = await connection.execute(
+            f"SELECT {key}, vector FROM {table} WHERE code IS NULL LIMIT 5000")
+        rows = await cursor.fetchall()
+        if not rows:
+            return done
+        codes = vector_store.codes_from_vectors(vector_store.vectors_from_bytes([row[1] for row in rows]))
+        await connection.executemany(
+            f"UPDATE {table} SET code = ? WHERE {key} = ?",
+            [(code.tobytes(), row[0]) for code, row in zip(codes, rows)])
+        await connection.commit()
+        done += len(rows)
 
 
 # ─── Einstellungen und Erreichbarkeit ─────────────────────────────────
@@ -186,6 +213,14 @@ def pack_vector(vector: list[float]) -> bytes:
     return (array / norm if norm else array).tobytes()
 
 
+def pack_with_code(vector: list[float]) -> tuple[bytes, bytes]:
+    """Normierter Vektor und sein Binärschlüssel (vector_store), zum Speichern."""
+    import numpy as np
+    from app.services import vector_store
+    packed = pack_vector(vector)
+    return packed, vector_store.binary_code(np.frombuffer(packed, dtype=np.float32))
+
+
 async def pending() -> int:
     return await db.fetch_val("SELECT COUNT(*) FROM semantic_dirty") or 0
 
@@ -239,6 +274,23 @@ async def mark_missing() -> None:
            WHERE v.status = 'ready' AND (e.video_id IS NULL OR e.model <> ?)""", (cfg[1],))
 
 
+PASSAGE_SLICE_S = 120
+
+
+async def _passages_slice(cfg: tuple[str, str]) -> bool:
+    """Abschnitte einbetten, höchstens PASSAGE_SLICE_S lang; True, wenn noch welche warten."""
+    global _chunk_cursor
+    _chunk_cursor = 0
+    started = time.monotonic()
+    while time.monotonic() - started < PASSAGE_SLICE_S:
+        if not await index_chunk_batch(*cfg):
+            return False
+        await asyncio.sleep(0.05)
+        if not await setting_values.is_on(PASSAGES_SWITCH):
+            return False
+    return True
+
+
 async def background_index() -> None:
     """Hintergrundlauf: wartende Videos einbetten, solange der KI-Dienst
     erreichbar ist. Ist er aus, wird in Ruhe wieder nachgesehen."""
@@ -250,12 +302,14 @@ async def background_index() -> None:
                 await mark_missing()
                 while await index_batch(*cfg):
                     await asyncio.sleep(0.05)
-                while await index_chunk_batch(*cfg):
-                    await asyncio.sleep(0.05)
                 # Kanäle, Playlists, Liedtexte, Feed-Einträge (semantic_items)
                 from app.services import semantic_items
                 while await semantic_items.index_batch(*cfg):
                     await asyncio.sleep(0.05)
+                # Abschnitte des Gesagten: viele, deshalb nur eine Weile je Runde -
+                # neue Videos und Feed-Einträge sollen nicht stundenlang warten
+                if await setting_values.is_on(PASSAGES_SWITCH) and await _passages_slice(cfg):
+                    continue   # es wartet noch mehr: gleich die nächste Runde
         except Exception as e:
             reset_availability()
             logger.info(f"[BEDEUTUNG] Einbetten unterbrochen: {e.__class__.__name__}: {e}")
@@ -268,73 +322,84 @@ async def background_index() -> None:
 
 # ─── Transkript-Abschnitte ────────────────────────────────────────────
 
-# Eingelesene Untertitel (subtitle_import) bekommen keine Vektoren: es sind
-# Hunderttausende Abschnitte, ihre Vektoren lägen mit je 4 KB im Speicher
-# (gemessen 15.10.2026: etwa 440.000 Abschnitte, also rund 1,8 GB).
-# Die Abfragen gehen deshalb von den Transkripten aus (wenige) und nutzen
-# den Index der Abschnitte je Video, statt alle Abschnitte zu durchlaufen.
-_EMBEDDABLE = "FROM transcripts t JOIN transcript_chunks c ON c.video_id = t.video_id WHERE COALESCE(t.imported, 0) = 0"
+# Abschnitte ohne Vektor: der Lauf merkt sich, bis wohin er gekommen ist
+# (neue Abschnitte bekommen immer größere Nummern), statt bei jedem Stapel
+# alle schon gerechneten zu überspringen. Jede Runde beginnt wieder vorn.
+_chunk_cursor = 0
+# Schalter: Abschnitte des Gesagten einbetten (lange Arbeit auf dem KI-Dienst)
+PASSAGES_SWITCH = "ai.passages_enabled"
 
 
 async def pending_chunks(model: str) -> int:
-    embeddable = await db.fetch_val(f"SELECT COUNT(*) {_EMBEDDABLE}") or 0
+    chunks = await db.fetch_val("SELECT COUNT(*) FROM transcript_chunks") or 0
     embedded = await db.fetch_val("SELECT COUNT(*) FROM chunk_embeddings WHERE model = ?", (model,)) or 0
-    return max(0, embeddable - embedded)
+    return max(0, chunks - embedded)
 
 
 async def index_chunk_batch(url: str, model: str) -> int:
     """Einen Stapel Transkript-Abschnitte einbetten. Gibt die Zahl zurück."""
+    global _chunk_cursor
     rows = await db.fetch_all(
-        f"""SELECT c.id, c.text {_EMBEDDABLE}
-            AND NOT EXISTS (SELECT 1 FROM chunk_embeddings e WHERE e.chunk_id = c.id AND e.model = ?)
-            ORDER BY c.id LIMIT ?""", (model, _BATCH))
+        """SELECT c.id, c.text FROM transcript_chunks c
+           WHERE c.id > ? AND NOT EXISTS (SELECT 1 FROM chunk_embeddings e WHERE e.chunk_id = c.id AND e.model = ?)
+           ORDER BY c.id LIMIT ?""", (_chunk_cursor, model, _BATCH))
     if not rows:
         return 0
     vectors = await embed_texts([row["text"] for row in rows], url, model, timeout=_REQUEST_TIMEOUT_S)
     for row, vector in zip(rows, vectors):
+        packed, code = pack_with_code(vector)
         await db.conn.execute(
-            """INSERT INTO chunk_embeddings (chunk_id, model, vector) VALUES (?, ?, ?)
-               ON CONFLICT(chunk_id) DO UPDATE SET model = excluded.model, vector = excluded.vector""",
-            (row["id"], model, pack_vector(vector)))
+            """INSERT INTO chunk_embeddings (chunk_id, model, vector, code) VALUES (?, ?, ?, ?)
+               ON CONFLICT(chunk_id) DO UPDATE SET model = excluded.model, vector = excluded.vector,
+                   code = excluded.code""",
+            (row["id"], model, packed, code))
     await db.conn.commit()
+    _chunk_cursor = rows[-1]["id"]
     return len(rows)
 
 
-class _ChunkVectors:
-    """Vektoren der Abschnitte im Speicher. Neue werden blockweise angehängt,
-    statt bei jeder Suche alles neu zu laden - der Bestand wächst im
-    Hintergrund laufend. Gelöschte Abschnitte bleiben bis zum Neustart als
-    Zeile stehen; die Suche verwirft Treffer, deren Abschnitt es nicht mehr gibt."""
+class _ChunkCodes:
+    """Binärschlüssel der Abschnitte im Speicher (vector_store), neue werden
+    blockweise angehängt - der Bestand wächst im Hintergrund laufend. Die
+    Stichprobe für die Schwelle wird erneuert, wenn der Bestand um ein Viertel
+    gewachsen ist. Gelöschte Abschnitte bleiben bis zum Neustart als Schlüssel
+    stehen; ihr Vektor fehlt dann bei der Nachbewertung, der Treffer entfällt."""
 
     def __init__(self):
+        from app.services import vector_store
         self.model = ""
         self.last_seq = 0
-        self.ids: list[int] = []
-        self.blocks: list = []
+        self.index = vector_store.BinaryIndex()
+        self.sample = None
+        self.sampled_size = 0
 
     async def refresh(self, model: str) -> None:
-        import numpy as np
+        from app.services import vector_store
         if model != self.model:
             self.__init__()
             self.model = model
         rows = await db.fetch_all(
-            "SELECT seq, chunk_id, vector FROM chunk_embeddings WHERE model = ? AND seq > ? ORDER BY seq",
-            (model, self.last_seq))
-        if not rows:
-            return
-        self.blocks.append(np.frombuffer(
-            b"".join(row["vector"] for row in rows), dtype=np.float32).reshape(len(rows), -1))
-        self.ids.extend(row["chunk_id"] for row in rows)
-        self.last_seq = rows[-1]["seq"]
-        if len(self.blocks) > 32:
-            self.blocks = [np.vstack(self.blocks)]
-
-    def scores(self, query):
-        import numpy as np
-        return np.concatenate([block @ query for block in self.blocks]) if self.blocks else None
+            """SELECT seq, chunk_id, code FROM chunk_embeddings
+               WHERE model = ? AND seq > ? AND code IS NOT NULL ORDER BY seq""", (model, self.last_seq))
+        if rows:
+            self.index.append([row["chunk_id"] for row in rows], vector_store.codes_from_bytes([row["code"] for row in rows]))
+            self.last_seq = rows[-1]["seq"]
+        if len(self.index) and (self.sample is None or len(self.index) > self.sampled_size * 1.25):
+            refs = [self.index.refs[i] for i in vector_store.sample_positions(len(self.index))]
+            self.sample = vector_store.vectors_from_bytes(list((await _chunk_vectors_of(refs)).values()))
+            self.sampled_size = len(self.index)
 
 
-_chunk_vectors = _ChunkVectors()
+async def _chunk_vectors_of(chunk_ids: list[int]) -> dict[int, bytes]:
+    if not chunk_ids:
+        return {}
+    rows = await db.fetch_all(
+        "SELECT chunk_id, vector FROM chunk_embeddings WHERE chunk_id IN (SELECT value FROM json_each(?))",
+        (json.dumps(chunk_ids),))
+    return {row["chunk_id"]: row["vector"] for row in rows}
+
+
+_chunk_codes = _ChunkCodes()
 
 
 async def query_vector(query: str, url: str, model: str):
@@ -361,10 +426,16 @@ async def precision(choice: Optional[str] = None) -> Optional[Precision]:
     return PRECISIONS.get(choice) or PRECISIONS[DEFAULT_PRECISION]
 
 
-def score_floor(scores, level: Precision, collection_size: int) -> float:
-    # In kleinen Beständen sagt die Streuung wenig; dort genügt "über dem Durchschnitt".
+def floor_from(stats: tuple[float, float], level: Precision, collection_size: int) -> float:
+    """Schwelle aus Durchschnitt und Streuung aller Ähnlichkeiten. In kleinen
+    Beständen sagt die Streuung wenig; dort genügt "über dem Durchschnitt"."""
+    mean, deviation = stats
     z = level.min_z if collection_size >= SMALL_COLLECTION else 0.0
-    return max(level.min_similarity, float(scores.mean()) + z * float(scores.std()))
+    return max(level.min_similarity, mean + z * deviation)
+
+
+def score_floor(scores, level: Precision, collection_size: int) -> float:
+    return floor_from((float(scores.mean()), float(scores.std())), level, collection_size)
 
 
 def rule_floor(scores, level: Precision, collection_size: int) -> float:
@@ -407,25 +478,28 @@ async def all_vectors():
 
 
 async def search_passages(query: str, level: Precision) -> Optional[list[tuple[int, float]]]:
-    """Inhaltlich ähnlichste Transkript-Abschnitte als (chunk_id, Ähnlichkeit).
-    None, wenn die Bedeutungssuche gerade nicht zur Verfügung steht."""
+    """Inhaltlich ähnlichste Transkript-Abschnitte als (chunk_id, Ähnlichkeit),
+    zweistufig (vector_store). None, wenn die Bedeutungssuche gerade nicht zur
+    Verfügung steht."""
+    from app.services import vector_store
     cfg = await config()
     if not cfg or not query.strip() or not await available():
         return None
     url, model = cfg
-    import numpy as np
-    await _chunk_vectors.refresh(model)
+    await _chunk_codes.refresh(model)
     try:
         q = await query_vector(query, url, model)
     except Exception:
         reset_availability()
         return None
-    scores = _chunk_vectors.scores(q)
-    if scores is None or q.shape[0] != _chunk_vectors.blocks[0].shape[1]:
+    candidates = _chunk_codes.index.candidates(q)
+    stats = vector_store.spread(_chunk_codes.sample, q)
+    if not candidates or stats is None:
         return []
-    floor = score_floor(scores, level, len(scores))
-    top = np.argsort(-scores)[:level.top_k]
-    return [(_chunk_vectors.ids[i], float(scores[i])) for i in top if scores[i] >= floor]
+    found = await _chunk_vectors_of(candidates)
+    refs = list(found)
+    floor = floor_from(stats, level, len(_chunk_codes.index))
+    return vector_store.best(refs, vector_store.vectors_from_bytes([found[r] for r in refs]), q, floor, level.top_k)
 
 
 # ─── Suchen ───────────────────────────────────────────────────────────

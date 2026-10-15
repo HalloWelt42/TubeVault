@@ -5,7 +5,7 @@ Kontrakt:
 - je Video eine Datei: vom Autor in der Videosprache, sonst automatisch im
   Original, sonst automatisch in der Videosprache, sonst irgendeine
 - als gesprochene Sprache zählt nur, was die Datei belegt
-- eingelesene Abschnitte sind per Wort auffindbar, bekommen aber keine Vektoren
+- eingelesene Abschnitte sind per Wort auffindbar und warten auf ihren Vektor (Bedeutungssuche)
 - ohne lesbare Datei wird das Video vermerkt und nicht wieder versucht
 """
 import pytest
@@ -62,11 +62,11 @@ async def test_einlesen_macht_gesagtes_durchsuchbar(test_db, folder, set_setting
     # Werbestellen nachziehen liest dieselbe Datei wieder
     assert await transcripts.rebuild("sub00000001") == 1
 
-    # Keine Vektoren für eingelesene Abschnitte
+    # Auch eingelesene Abschnitte bekommen einen Vektor (Bedeutungssuche im Gesagten)
     await set_setting("ai.enabled", "true")
     await set_setting("ai.url", "http://ki.test/v1")
     _, model = await semantic_index.config()
-    assert await semantic_index.pending_chunks(model) == 0
+    assert await semantic_index.pending_chunks(model) == 1
 
 
 async def test_angehalten_liest_nichts(test_db, folder, set_setting):

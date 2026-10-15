@@ -210,10 +210,14 @@ async def _passage_index() -> Optional[WorkItem]:
         return None
     done, total, since = _countdown("passage_index", remaining)
     reachable = await semantic_index.available()
+    from app.services import setting_values
+    paused = not await setting_values.is_on(semantic_index.PASSAGES_SWITCH)
+    detail = ("Angehalten - die Bedeutungssuche findet im Gesagten nur, was schon eingebettet ist." if paused
+              else None if reachable else "Wartet auf den KI-Dienst (nicht erreichbar).")
     return WorkItem(
-        key="passage_index", label="Bedeutungssuche: Transkripte werden eingebettet",
-        detail=None if reachable else "Wartet auf den KI-Dienst (nicht erreichbar).",
-        done=done, total=total, progress=done / total if total else None, since=since)
+        key="passage_index", label="Bedeutungssuche: Gesagtes wird eingebettet", detail=detail,
+        done=done, total=total, progress=done / total if total else None, since=since,
+        switch_key=semantic_index.PASSAGES_SWITCH, paused=paused)
 
 
 async def _languages() -> Optional[WorkItem]:
