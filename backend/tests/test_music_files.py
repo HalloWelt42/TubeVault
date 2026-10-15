@@ -122,6 +122,21 @@ async def test_quelle_und_doppelte_songs(test_db, sammlung, set_setting):
     assert (overview.source, overview.sources.videos, overview.sources.sammlung) == ("videos", 2, 4)
 
 
+async def test_gruppen_nennen_herkunft_dateien_ihr_format(test_db, sammlung):
+    """Für die Anzeige am Handy: "Sammlung, Videos" je Interpret und "FLAC" je Datei."""
+    await music_files.scan()
+    await test_db.execute(
+        """INSERT INTO videos (id, title, channel_id, channel_name, is_music, status, download_date, duration)
+           VALUES ('dmvideo0002', 'Depeche Mode - Personal Jesus (Official Video)', 'UCdm', 'Depeche Mode', 1, 'ready', '2026-10-01', 230)""")
+    items = await music_library.tracks()
+    by_name = {g.name: g for g in music_library.artists(items)}
+    assert by_name["Depeche Mode"].kinds == ["datei", "video"]
+    assert by_name["Robert Miles"].kinds == ["datei"]
+    formats = {t.title: (t.kind, t.codec) for t in items}
+    assert formats["Enjoy the Silence"] == ("datei", "FLAC")
+    assert formats["Personal Jesus"] == ("video", None)
+
+
 async def test_abspielen_wiedergaben_lieblingssong_export(test_db, sammlung, async_client_factory, tmp_path):
     await music_files.scan()
     rm = next(f for f in await music_files.all_files() if f.title == "Children")

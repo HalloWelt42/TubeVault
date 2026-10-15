@@ -1,655 +1,631 @@
 <!--
-  TubeVault – Categories v1.5.91
-  © HalloWelt42 – Private Nutzung
-  Material Design Farbpalette statt freier Farbauswahl
+  Kategorien (Entwurf mockups/kategorien.html)
+  Übersicht: Kopf mit Kennzahlen, Themen erkennen und Neue Kategorie, Suche
+  und Sortierung (Größe, Name, Zuletzt gefüllt); Kasten "Videos ohne
+  Kategorie" (je Kanal eine Kategorie wählen = Regel "Kanal ist"); Kacheln
+  mit Bildcollage, Farbe, Zahlen und Regeln.
+  Themen erkennen: Vorschläge der lokalen KI mit Übernehmen, Ansehen, Verwerfen.
+  Kategorie (?open=<id>): Regeln als Chips, Stand, Sortierung, Videos mit
+  Grund je Video, Umordnen per Ziehen, Auswahl, von Hand hinzufügen und
+  herausnehmen, Abspielen; Seitenblatt "Regeln" mit Vorschau und Farbe.
 -->
 <script>
+  import { onMount, untrack } from 'svelte';
   import { api } from '../lib/api/client.js';
-  import { navigate } from '../lib/router/router.js';
+  import { navigate, route, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
-  import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
-  import { formatDuration, formatSize, formatDateRelative } from '../lib/utils/format.js';
+  import { playlistQueue } from '../lib/stores/playlistQueue.js';
+  import { musicPlayer } from '../lib/stores/musicPlayer.svelte.js';
+  import { formatDuration } from '../lib/utils/format.js';
+  import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
+  import { onVideoMutation } from '../lib/utils/videoMutations.js';
+  import { stateChips, filterItems, sortItems, moveItem, totalTime } from '../lib/utils/collection.js';
+  import { playCollection, continueCollection, listenCollection, playAfterCurrent } from '../lib/utils/collectionPlay.js';
+  import { OVERVIEW_SORTS, REASON_LABELS, arrangeCategories, freeColors, overviewInfo } from '../lib/utils/categoryRules.js';
+  import PageHeader from '../lib/components/common/PageHeader.svelte';
+  import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
+  import ActionMenu from '../lib/components/common/ActionMenu.svelte';
+  import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
+  import CollectionBar from '../lib/components/collection/CollectionBar.svelte';
+  import VideoRow from '../lib/components/collection/VideoRow.svelte';
+  import VideoCard from '../lib/components/video/VideoCard.svelte';
+  import CategoryCard from '../lib/components/categories/CategoryCard.svelte';
+  import RuleChips from '../lib/components/categories/RuleChips.svelte';
+  import RulesSheet from '../lib/components/categories/RulesSheet.svelte';
+  import TopicSuggestions from '../lib/components/categories/TopicSuggestions.svelte';
+  import UnsortedChannels from '../lib/components/categories/UnsortedChannels.svelte';
 
-  let categories = $state([]);
-  let selectedCat = $state(null);
-  let catVideos = $state([]);
-  let loading = $state(true);
-  let catSearch = $state('');
-  let catSort = $state(getFilter('categories', 'catSort', 'created_at'));
-  let catSortOrder = $state(getFilter('categories', 'catSortOrder', 'desc'));
-
-  // Material Design Farben
-  const MD_COLORS = [
-    { name: 'Rot',        hex: '#F44336' },
-    { name: 'Pink',       hex: '#E91E63' },
-    { name: 'Lila',       hex: '#9C27B0' },
-    { name: 'Tiefviolett',hex: '#673AB7' },
-    { name: 'Indigo',     hex: '#3F51B5' },
-    { name: 'Blau',       hex: '#2196F3' },
-    { name: 'Hellblau',   hex: '#03A9F4' },
-    { name: 'Cyan',       hex: '#00BCD4' },
-    { name: 'Teal',       hex: '#009688' },
-    { name: 'Grün',       hex: '#4CAF50' },
-    { name: 'Hellgrün',   hex: '#8BC34A' },
-    { name: 'Lime',       hex: '#CDDC39' },
-    { name: 'Gelb',       hex: '#FFEB3B' },
-    { name: 'Bernstein',  hex: '#FFC107' },
-    { name: 'Orange',     hex: '#FF9800' },
-    { name: 'Tiefrot',    hex: '#FF5722' },
-    { name: 'Braun',      hex: '#795548' },
-    { name: 'Grau',       hex: '#607D8B' },
+  const DETAIL_SORTS = [
+    { key: 'eigene', label: 'Eigene Reihenfolge', title: 'Neues kommt oben dazu - per Ziehen änderbar' },
+    { key: 'neueste', label: 'Neueste', title: 'Nach Erscheinen, neueste zuerst' },
+    { key: 'titel', label: 'Titel' }, { key: 'dauer', label: 'Dauer' },
   ];
+  const STEP = 150;          // so viele Videos zeigt die Liste je Nachladen mehr
 
-  // Create
-  let newName = $state('');
-  let newColor = $state('#3F51B5');
-  let newDesc = $state('');
+  // ── Übersicht ──
+  let data = $state(null);
+  let loading = $state(true);
+  let search = $state('');
+  let sort = $state('groesse');
+  let creating = $state(null);         // { name, description, color, rules }
+  let showTopics = $state(false);
+  let topics = $state(null);
+  let topicsTimer = null;
 
-  // Edit
-  let editing = $state(null);
-  let editName = $state('');
-  let editColor = $state('');
-  let editDesc = $state('');
-  let autoAssignQuery = $state('');
-  let assigning = $state(false);
-  let unassignedStats = $state(null);
-  let catSearchTimer = null;
-  let debugStats = $state(null);
-  let lastApiResponse = $state(null); // Debug: letzte Rohtwort der API
+  // ── Eine Kategorie ──
+  let openId = $state(null);
+  let detail = $state(null);           // Sammlung category:<id>
+  let itemSearch = $state('');
+  let stateFilter = $state('');
+  let itemSort = $state('eigene');
+  let view = $state('liste');
+  let limit = $state(STEP);
+  let selecting = $state(false);
+  let selected = $state(new Set());
+  let editing = $state(null);          // { name, description }
+  let adding = $state(false);
+  let addQuery = $state('');
+  let addResults = $state([]);
+  let addTimer = null;
+  let dragFrom = $state(null);
+  let dropAt = $state(null);
+  let sheet = $state(null);            // { categoryId | null, title, rules, color, name?, suggestion? }
+  let menu;
+  let confirmRef;
 
-  async function load() {
-    loading = true;
-    try { categories = await api.getCategoriesFlat(); } catch (e) { toast.error(e.message); }
+  let cards = $derived(data ? arrangeCategories(data.categories, { search, sort }) : []);
+  let meta = $derived(data?.categories.find((c) => c.id === openId) || null);
+  let source = $derived(openId ? `category:${openId}` : null);
+  let items = $derived(detail?.items || []);
+  let shown = $derived(sortItems(filterItems(items, { search: itemSearch, state: stateFilter }), itemSort));
+  let visible = $derived(shown.slice(0, limit));
+  let canOrder = $derived(itemSort === 'eigene' && !itemSearch && !stateFilter && !selecting);
+  let selectedIds = $derived(shown.filter((i) => selected.has(i.id)).map((i) => i.id));
+  let queueActive = $derived($playlistQueue.active);
+  let detailInfo = $derived(detail ? [
+    `${items.length.toLocaleString('de-DE')} ${items.length === 1 ? 'Video' : 'Videos'}`,
+    detail.duration ? totalTime(detail.duration) : null,
+    detail.counts.finished ? `${detail.counts.finished.toLocaleString('de-DE')} gesehen` : null,
+  ].filter(Boolean).join(' · ') : null);
+
+  // ── Laden ──
+  async function loadOverview() {
+    try { data = await api.getCategoryOverview(); } catch (e) { toast.error(e.message); }
     loading = false;
   }
 
-  async function selectCategory(cat) {
-    selectedCat = cat;
-    catSearch = '';
-    await loadCatVideos();
+  async function loadDetail() {
+    const id = openId;
+    if (!id) return;
+    try {
+      const collection = await api.getCollection(`category:${id}`);
+      if (id === openId) detail = collection;
+    } catch (e) { toast.error(e.message); close(); }
   }
 
-  async function loadCatVideos() {
-    if (!selectedCat) return;
-    saveFilters('categories', { catSort, catSortOrder });
-    try {
-      const raw = await api.getCategoryVideos(selectedCat.id, {
-        sort_by: catSort,
-        sort_order: catSortOrder,
-        search: catSearch || undefined,
-      });
-      lastApiResponse = { catId: selectedCat.id, catName: selectedCat.name, type: typeof raw, isArray: Array.isArray(raw), length: Array.isArray(raw) ? raw.length : null, keys: raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.keys(raw) : null, raw: JSON.stringify(raw).substring(0, 500) };
-      console.log('[Categories] API response:', lastApiResponse);
-      catVideos = Array.isArray(raw) ? raw : (raw?.videos || raw?.items || []);
-      selectedCat = { ...selectedCat, video_count: catVideos.length };
-    } catch (e) {
-      lastApiResponse = { error: e.message, catId: selectedCat?.id };
-      console.error('[Categories] API error:', e);
-      catVideos = [];
+  const refresh = () => Promise.all([loadOverview(), loadDetail()]);
+
+  function open(card) { updateParams({ open: card.id }); }
+  function close() { updateParams({ open: null }); }
+
+  function openCategory(id) {
+    if (openId !== id) {
+      openId = id;
+      detail = null;
+      itemSearch = ''; stateFilter = ''; itemSort = 'eigene'; limit = STEP;
+      selecting = false; selected = new Set(); adding = false; editing = null;
+      if (sheet && sheet.categoryId !== id) sheet = null;
     }
+    loadDetail();
   }
 
-  async function addCategory() {
-    if (!newName.trim()) return;
+  // ── Abspielen ──
+  const titleOf = () => detail?.title || meta?.name || 'Kategorie';
+  const playAt = (item) => playCollection(source, titleOf(), shown, shown.indexOf(item), { resume: item.state === 'started' });
+  const playAll = () => playCollection(source, titleOf(), shown);
+  const playShuffled = () => playCollection(source, titleOf(), shown, 0, { shuffle: true });
+
+  async function quickPlay(card, how) {
+    const collection = await api.getCollection(`category:${card.id}`).catch((e) => { toast.error(e.message); return null; });
+    if (!collection?.items.length) { if (collection) toast.info('Die Kategorie ist leer'); return; }
+    const src = `category:${card.id}`;
+    if (how === 'zufall') playCollection(src, collection.title, collection.items, 0, { shuffle: true });
+    else if (how === 'weiter') continueCollection(src, collection.title, collection.items);
+    else playCollection(src, collection.title, collection.items);
+  }
+
+  // ── Anlegen, Ändern, Löschen ──
+  function startCreate(channel = null) {
+    const used = (data?.categories || []).map((c) => c.color);
+    creating = {
+      name: channel?.name || '', description: '', color: freeColors(data?.colors || [], used, 1)[0],
+      rules: channel ? [{ kind: 'channel', value: channel.channel_id, label: channel.name }] : [],
+    };
+    showTopics = false;
+  }
+
+  async function create() {
+    const draft = creating;
+    if (!draft?.name.trim()) return;
     try {
-      await api.createCategory({ name: newName.trim(), color: newColor, description: newDesc.trim() || null });
-      toast.success(`"${newName}" erstellt`);
-      newName = ''; newDesc = '';
-      load();
+      const { id } = await api.createCategory({ name: draft.name.trim(), description: draft.description.trim() || null, color: draft.color });
+      creating = null;
+      await loadOverview();
+      open({ id });
+      openRules({ id, name: draft.name.trim(), color: draft.color, rules: draft.rules });
     } catch (e) { toast.error(e.message); }
-  }
-
-  function startEdit(cat) {
-    editing = cat.id;
-    editName = cat.name;
-    editColor = cat.color || '#3F51B5';
-    editDesc = cat.description || '';
   }
 
   async function saveEdit() {
-    if (!editName.trim() || !editing) return;
+    if (!editing?.name.trim()) return;
     try {
-      await api.updateCategory(editing, { name: editName.trim(), color: editColor, description: editDesc.trim() || null });
-      toast.success('Kategorie aktualisiert');
+      await api.updateCategory(openId, { name: editing.name.trim(), description: editing.description.trim() || null });
       editing = null;
-      load();
-      if (selectedCat?.id === editing) selectedCat = { ...selectedCat, name: editName, color: editColor, description: editDesc };
+      await refresh();
     } catch (e) { toast.error(e.message); }
   }
 
-  async function deleteCategory(id, name) {
+  async function deleteCategory(card) {
+    const ok = await confirmRef.ask(`"${card.name}" löschen?`,
+      'Die Kategorie und ihre Regeln verschwinden. Die Videos bleiben in der Bibliothek.', { confirmLabel: 'Löschen' });
+    if (!ok) return;
     try {
-      await api.deleteCategory(id);
-      toast.info(`"${name}" gelöscht`);
-      if (selectedCat?.id === id) { selectedCat = null; catVideos = []; }
-      load();
+      await api.deleteCategory(card.id);
+      if (openId === card.id) close();
+      sheet = null;
+      toast.info(`"${card.name}" gelöscht`);
+      await loadOverview();
     } catch (e) { toast.error(e.message); }
   }
 
-  function playVideo(id) {
-    navigate(`/watch/${id}`);
+  // ── Regeln ──
+  function openRules(card) {
+    sheet = { categoryId: card.id, title: `Regeln: ${card.name}`, rules: card.rules || [], color: card.color };
   }
 
-  function back() { selectedCat = null; catVideos = []; catSearch = ''; }
+  async function saveRules({ rules, color }) {
+    const id = sheet.categoryId;
+    const card = data?.categories.find((c) => c.id === id);
+    if (color && color !== card?.color) await api.updateCategory(id, { color });
+    const result = await api.saveCategoryRules(id, rules);
+    sheet = null;
+    const changes = [result.added ? `${result.added.toLocaleString('de-DE')} eingeordnet` : null,
+                     result.removed ? `${result.removed.toLocaleString('de-DE')} herausgenommen` : null].filter(Boolean);
+    toast.success(changes.length ? `Regeln gespeichert: ${changes.join(', ')}` : 'Regeln gespeichert');
+    await refresh();
+  }
 
-  async function cleanupOrphans() {
+  // Kasten "Videos ohne Kategorie": Kanal einer Kategorie zuordnen (Regel "Kanal ist")
+  function channelMenu(event, channel) {
+    const list = [...(data?.categories || [])].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+    menu.open(event, channel.name, [
+      ...list.map((card) => ({ icon: 'fa-folder', label: card.name, hint: card.video_count.toLocaleString('de-DE'),
+                                run: () => addChannelRule(card, channel) })),
+      ...(list.length ? [{ trenner: true }] : []),
+      { icon: 'fa-plus', label: 'Neue Kategorie ...', run: () => startCreate(channel) },
+    ]);
+  }
+
+  async function addChannelRule(card, channel) {
+    const before = card.rules.map(({ kind, value, precision }) => ({ kind, value, precision }));
+    const result = await api.saveCategoryRules(card.id, [...before, { kind: 'channel', value: channel.channel_id }]);
+    await loadOverview();
+    toast.undo(`${result.added.toLocaleString('de-DE')} Videos von "${channel.name}" in "${card.name}"`, async () => {
+      await api.saveCategoryRules(card.id, before);
+      await refresh();
+    });
+  }
+
+  // ── Themen erkennen ──
+  async function loadTopics() {
+    clearTimeout(topicsTimer);
+    try { topics = await api.getCategoryTopics(); } catch (e) { toast.error(e.message); return; }
+    if (topics.running) topicsTimer = setTimeout(loadTopics, 2000);
+  }
+
+  async function startTopics() {
+    try { topics = await api.startCategoryTopics(); } catch (e) { toast.error(e.message); return; }
+    loadTopics();
+  }
+
+  async function toggleTopics() {
+    showTopics = !showTopics;
+    creating = null;
+    if (!showTopics) return;
+    await loadTopics();
+    if (topics && !topics.running && !topics.suggestions.length && !topics.finished_at) startTopics();
+  }
+
+  async function acceptTopic(suggestion, changes = {}) {
+    const { id } = await api.acceptCategoryTopic(suggestion.id, changes);
+    toast.success(`"${changes.name || suggestion.name}" angelegt`);
+    await Promise.all([loadOverview(), loadTopics()]);
+    return id;
+  }
+
+  async function acceptQuick(suggestion) {
+    try { await acceptTopic(suggestion); } catch (e) { toast.error(e.message); }
+  }
+
+  function viewTopic(suggestion) {
+    sheet = {
+      categoryId: null, suggestion, title: `Vorschlag: ${suggestion.name}`, name: suggestion.name,
+      rules: [{ kind: 'semantic', value: suggestion.query, precision: suggestion.precision }],
+      color: freeColors(data?.colors || [], (data?.categories || []).map((c) => c.color), 1)[0],
+    };
+  }
+
+  async function saveTopic({ rules, color, name }) {
+    await acceptTopic(sheet.suggestion, { name, color, rules });
+    sheet = null;
+  }
+
+  async function dismissTopic(suggestion) {
     try {
-      const res = await api.cleanupCategoryOrphans();
-      if (res.cleaned > 0) {
-        toast.success(`${res.cleaned} verwaiste Zuordnungen entfernt`);
-        load();
-        loadUnassigned();
-      } else {
-        toast.info('Keine verwaisten Zuordnungen gefunden');
-      }
+      await api.dismissCategoryTopic(suggestion.id);
+      topics = { ...topics, suggestions: topics.suggestions.filter((s) => s.id !== suggestion.id) };
     } catch (e) { toast.error(e.message); }
   }
 
-  async function autoAssign(mode = 'channel') {
-    if (!selectedCat || !autoAssignQuery.trim()) return;
-    assigning = true;
+  // ── Videos der Kategorie ──
+  async function saveOrder(ids) {
+    detail = { ...detail, items: ids.map((id) => items.find((i) => i.id === id)) };
+    try { await api.reorderCategory(openId, ids); } catch { toast.error('Reihenfolge speichern fehlgeschlagen'); loadDetail(); }
+  }
+
+  async function removeItems(ids) {
+    const id = openId;
+    let entries = [];
+    try { entries = await api.removeFromCategory(id, ids); } catch (e) { toast.error(e.message); return; }
+    selected = new Set();
+    await refresh();
+    toast.undo(ids.length === 1 ? 'Aus der Kategorie genommen' : `${ids.length} Videos aus der Kategorie genommen`, async () => {
+      await api.restoreToCategory(id, entries);
+      await refresh();
+    });
+  }
+
+  async function setWatched(ids, watched) {
+    try { await api.setWatched(ids, watched); } catch (e) { toast.error(e.message); }
+    selected = new Set();
+    await refresh();
+  }
+
+  function onAddInput() {
+    clearTimeout(addTimer);
+    if (!addQuery.trim()) { addResults = []; return; }
+    addTimer = setTimeout(async () => {
+      try {
+        const res = await api.searchLocal(addQuery, { per_page: 30 });
+        const present = new Set(items.map((i) => i.id));
+        addResults = (res.videos || []).filter((v) => !present.has(v.id));
+      } catch { addResults = []; }
+    }, 300);
+  }
+
+  async function addVideo(video) {
     try {
-      const opts = mode === 'channel'
-        ? { channel: autoAssignQuery.trim() }
-        : { keyword: autoAssignQuery.trim() };
-      const res = await api.autoAssignCategory(selectedCat.id, opts);
-      if (res.assigned > 0) {
-        toast.success(`${res.assigned} Videos zugeordnet`);
-        await loadCatVideos();
-        load();
-        loadUnassigned();
-      } else {
-        toast.info('Keine neuen Videos gefunden');
-      }
-      autoAssignQuery = '';
-    } catch (e) { toast.error(e.message); }
-    assigning = false;
-  }
-
-  async function loadUnassigned() {
-    try { unassignedStats = await api.getUnassignedStats(); } catch { }
-  }
-
-  async function quickAssignChannel(channelName) {
-    try {
-      const res = await api.quickChannelAssign(channelName);
-      toast.success(`${res.assigned} Videos → „${res.category_name}"`);
-      load();
-      loadUnassigned();
+      await api.addToCategory(openId, [video.id]);
+      addResults = addResults.filter((v) => v.id !== video.id);
+      await refresh();
     } catch (e) { toast.error(e.message); }
   }
 
-  async function quickAssignAll() {
-    assigning = true;
-    try {
-      const res = await api.quickChannelAssignAll();
-      if (res.assigned > 0) {
-        toast.success(`${res.assigned} Videos in ${res.categories_created} neue Kategorien sortiert`);
-      } else {
-        toast.info('Keine unkategorisierten Videos gefunden');
-      }
-      load();
-      loadUnassigned();
-    } catch (e) { toast.error(e.message); }
-    assigning = false;
+  // ── Menüs ──
+  function cardMenu(event, card) {
+    menu.open(event, card.name, [
+      { icon: 'fa-folder-open', label: 'Öffnen', run: () => open(card) },
+      { icon: 'fa-sliders', label: 'Regeln', run: () => openRules(card) },
+      ...(card.video_count ? [
+        { icon: 'fa-rotate-left', label: 'Weiterschauen', run: () => quickPlay(card, 'weiter') },
+        { icon: 'fa-headphones', label: 'Als Ton hören', run: () => listenCollection(`category:${card.id}`) },
+      ] : []),
+      { trenner: true },
+      { icon: 'fa-trash-can', label: 'Kategorie löschen', danger: true, run: () => deleteCategory(card) },
+    ]);
   }
 
-  async function showDiagnose() {
-    try {
-      debugStats = await api.getCategoryDebugStats();
-    } catch (e) { toast.error(e.message); }
+  function detailMenu(event) {
+    const card = meta || { id: openId, name: titleOf(), rules: [] };
+    menu.open(event, titleOf(), [
+      { icon: 'fa-pen', label: 'Umbenennen und beschreiben', run: () => { editing = { name: card.name, description: card.description || '' }; } },
+      ...(items.length ? [
+        { icon: 'fa-rotate-left', label: 'Weiterschauen', run: () => continueCollection(source, titleOf(), items) },
+        { icon: 'fa-headphones', label: 'Als Ton hören', run: () => listenCollection(source) },
+        { trenner: true },
+        { icon: 'fa-eye-slash', label: 'Alles als ungesehen', run: () => setWatched(items.map((i) => i.id), false) },
+      ] : []),
+      { icon: 'fa-trash-can', label: 'Kategorie löschen', danger: true, run: () => deleteCategory(card) },
+    ]);
   }
 
-  async function removeFromCategory(videoId) {
-    if (!selectedCat) return;
-    try {
-      const current = await api.getVideoCategories(videoId);
-      const remaining = current.filter(c => c.id !== selectedCat.id).map(c => c.id);
-      await api.assignVideoCategories(videoId, remaining);
-      catVideos = catVideos.filter(v => v.id !== videoId);
-      selectedCat = { ...selectedCat, video_count: catVideos.length };
-      load(); // Zähler in Hauptliste aktualisieren
-      toast.info('Aus Kategorie entfernt');
-    } catch (e) { toast.error(e.message); }
+  function itemMenu(event, item) {
+    const ids = [item.id];
+    const index = items.indexOf(item);
+    menu.open(event, item.title, [
+      { icon: item.state === 'started' ? 'fa-rotate-left' : 'fa-play', label: item.state === 'started' ? 'Weiterschauen' : 'Abspielen', run: () => playAt(item) },
+      ...(queueActive ? [{ icon: 'fa-forward', label: 'Als Nächstes', run: () => playAfterCurrent(item) }] : []),
+      { icon: 'fa-headphones', label: 'Ab hier als Ton hören', run: () => musicPlayer.playSource(`sammlung:${source}`, { start: item.id }) },
+      { trenner: true },
+      ...(canOrder && index > 0 ? [{ icon: 'fa-arrow-up', label: 'Ganz nach oben', run: () => saveOrder(moveItem(items.map((i) => i.id), index, 0)) }] : []),
+      ...(canOrder && index < items.length - 1 ? [{ icon: 'fa-arrow-down', label: 'Ganz nach unten', run: () => saveOrder(moveItem(items.map((i) => i.id), index, items.length)) }] : []),
+      item.state === 'finished'
+        ? { icon: 'fa-eye-slash', label: 'Als neu markieren', run: () => setWatched(ids, false) }
+        : { icon: 'fa-check', label: 'Als gesehen markieren', run: () => setWatched(ids, true) },
+      { trenner: true },
+      { icon: 'fa-xmark', label: 'Aus der Kategorie nehmen', hint: 'bleibt draußen', danger: true, run: () => removeItems(ids) },
+    ]);
   }
 
-  $effect(() => { load(); loadUnassigned(); });
+  function toggle(item) {
+    const next = new Set(selected);
+    next.has(item.id) ? next.delete(item.id) : next.add(item.id);
+    selected = next;
+  }
+
+  function onDrop(index) {
+    if (dragFrom !== null && dragFrom !== index) saveOrder(moveItem(items.map((i) => i.id), dragFrom, index));
+    dragFrom = null; dropAt = null;
+  }
+
+  // Geöffnete Kategorie folgt der Adresse (?open=<id>)
+  $effect(() => {
+    const id = $route.params.open;
+    untrack(() => {
+      if (id) openCategory(Number(id));
+      else { openId = null; detail = null; if (sheet?.categoryId) sheet = null; }
+    });
+  });
+
+  // Laden nur beim Öffnen und nach Änderungen an Videos - ein $effect würde
+  // sich über die gelesenen Daten selbst neu auslösen
+  onMount(() => {
+    if ($route.page === 'category' && $route.id) navigate('/categories', { open: $route.id }, true);
+    loadOverview();
+    const stop = onVideoMutation(() => refresh());
+    return () => { stop(); clearTimeout(topicsTimer); };
+  });
 </script>
 
-<div class="tv-seite">
-  {#if selectedCat}
-   <!-- Category Detail: fester Kopf mit Zurück, Zuordnen, Suche und Sortierung -->
-   <div class="tv-seitenkopf">
-    <div class="detail-header">
-      <button class="btn-back" onclick={back}><i class="fa-solid fa-arrow-left"></i> Zurück</button>
-      <div class="detail-info">
-        <div class="detail-title-row">
-          <span class="cat-dot-lg" style="background: {selectedCat.color}"></span>
-          <h1>{selectedCat.name}</h1>
-        </div>
-        {#if selectedCat.description}
-          <p class="detail-desc">{selectedCat.description}</p>
+<div class="tv-seite kategorien">
+  {#if openId}
+    <!-- ═══ Eine Kategorie ═══ -->
+    <div class="tv-seitenkopf">
+      <PageHeader title={detail?.title || meta?.name || 'Kategorie'} info={detailInfo} onBack={close}
+                  icon={meta ? 'fa-solid fa-square' : null} iconColor={meta?.color}>
+        <button class="tv-knopf" class:aktiv={sheet?.categoryId === openId} onclick={() => meta && openRules(meta)}
+                title="Welche Videos von selbst hineinkommen: Kanal, Schlagwort, inhaltlich wie">
+          <i class="fa-solid fa-sliders"></i> Regeln</button>
+        {#if items.length}
+          <button class="tv-knopf" onclick={playShuffled}><i class="fa-solid fa-shuffle"></i> Zufällig</button>
+          <button class="tv-knopf haupt" onclick={playAll}><i class="fa-solid fa-play"></i> Abspielen</button>
         {/if}
-        <span class="detail-meta">{catVideos.length} Video{catVideos.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div class="auto-assign-bar">
-        <input class="aa-input" type="text" bind:value={autoAssignQuery} placeholder="Kanal oder Stichwort…"
-          onkeydown={(e) => e.key === 'Enter' && autoAssign()} />
-        <button class="btn-sm" onclick={() => autoAssign('channel')} disabled={!autoAssignQuery.trim() || assigning}>
-          <i class="fa-solid fa-user"></i> Kanal zuordnen
-        </button>
-        <button class="btn-sm" onclick={() => autoAssign('keyword')} disabled={!autoAssignQuery.trim() || assigning}>
-          <i class="fa-solid fa-tag"></i> Stichwort zuordnen
-        </button>
-      </div>
-    </div>
+        <button class="tv-knopf symbol" onclick={detailMenu} title="Mehr: Umbenennen, Weiterschauen, Als Ton hören, Löschen">
+          <i class="fa-solid fa-ellipsis"></i></button>
+      </PageHeader>
 
-    <!-- Such- und Sortierleiste -->
-    <div class="cat-toolbar">
-      <div class="cat-search-box">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" placeholder="In Kategorie suchen…" bind:value={catSearch}
-          oninput={() => { clearTimeout(catSearchTimer); catSearchTimer = setTimeout(loadCatVideos, 300); }} />
-        {#if catSearch}
-          <button class="cat-search-clear" onclick={() => { catSearch = ''; loadCatVideos(); }}>
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        {/if}
-      </div>
-      <select class="cat-sort-select" bind:value={catSort} onchange={loadCatVideos}>
-        <option value="created_at">Hinzugefügt</option>
-        <option value="title">Titel</option>
-        <option value="channel_name">Kanal</option>
-        <option value="rating">Bewertung</option>
-        <option value="duration">Dauer</option>
-        <option value="file_size">Größe</option>
-      </select>
-      <button class="cat-sort-dir" onclick={() => { catSortOrder = catSortOrder === 'desc' ? 'asc' : 'desc'; loadCatVideos(); }}
-        title={catSortOrder === 'desc' ? 'Absteigend' : 'Aufsteigend'}>
-        <i class="fa-solid {catSortOrder === 'desc' ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-short-wide'}"></i>
-      </button>
-    </div>
-   </div>
-
-   <!-- Nur die Videos der Kategorie rollen -->
-   <div class="tv-rollfeld" data-scroll-root>
-    {#if catVideos.length === 0}
-      <div class="empty">
-        <i class="fa-solid fa-folder-open empty-icon"></i>
-        <p>Keine Videos in dieser Kategorie.</p>
-        <p class="empty-hint">Videos über den Bearbeiten-Tab im Player zuordnen.</p>
-      </div>
-      <!-- Debug-Info: API-Antwort anzeigen -->
-      {#if lastApiResponse}
-        <details class="debug-panel" open>
-          <summary><i class="fa-solid fa-bug"></i> Diagnose</summary>
-          <pre class="debug-pre">{JSON.stringify(lastApiResponse, null, 2)}</pre>
-          <button class="btn-sm" onclick={showDiagnose} style="margin-top: 8px">
-            <i class="fa-solid fa-stethoscope"></i> DB-Diagnose laden
-          </button>
-          {#if debugStats}
-            <pre class="debug-pre">{JSON.stringify(debugStats, null, 2)}</pre>
-          {/if}
-        </details>
+      {#if editing}
+        <form class="tv-filter bearbeiten" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
+          <input class="tv-eingabe name" bind:value={editing.name} placeholder="Name" maxlength="80" />
+          <input class="tv-eingabe beschreibung" bind:value={editing.description} placeholder="Beschreibung (optional)" maxlength="300" />
+          <button class="tv-knopf klein haupt" disabled={!editing.name.trim()}>Speichern</button>
+          <button type="button" class="tv-knopf klein ohne" onclick={() => editing = null}>Abbrechen</button>
+        </form>
+      {:else if meta?.description}
+        <p class="beschreibung">{meta.description}</p>
       {/if}
-    {:else}
-      <div class="video-grid">
-        {#each catVideos as v}
-          <div class="video-card">
-            <button class="card-click" onclick={() => playVideo(v.id)}>
-              <div class="thumb-wrap">
-                <img src={api.thumbnailUrl(v.id)} alt="" loading="lazy" onerror={(e) => e.target.style.display='none'} />
-                {#if v.duration}<span class="duration">{formatDuration(v.duration)}</span>{/if}
-              </div>
-              <div class="video-info">
-                <h3 class="video-title">{v.title}</h3>
-                <span class="video-channel">{v.channel_name || 'Unbekannt'}</span>
-                <div class="video-meta">
-                  <span>{formatSize(v.file_size)}</span>
-                  <span>·</span>
-                  <span>{formatDateRelative(v.download_date)}</span>
-                </div>
-              </div>
-            </button>
-            <button class="card-remove" title="Aus Kategorie entfernen" onclick={() => removeFromCategory(v.id)}>
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-        {/each}
-      </div>
-    {/if}
-   </div>
 
-  {:else}
-   <!-- Category List: fester Kopf mit Titel, Zuordnungshinweis und Anlegen -->
-   <div class="tv-seitenkopf">
-    <h1 class="page-title"><i class="fa-solid fa-list-ul"></i> Kategorien</h1>
-
-    {#if unassignedStats && unassignedStats.unassigned > 0}
-      <div class="unassigned-info">
-        <i class="fa-solid fa-circle-info"></i>
-        <span><strong>{unassignedStats.unassigned}</strong> von {unassignedStats.total} Videos ohne Kategorie</span>
-        {#if unassignedStats.top_unassigned_channels.length > 0}
-          <div class="ua-channels">
-            {#each unassignedStats.top_unassigned_channels.slice(0, 5) as ch}
-              <button class="ua-channel-btn" onclick={() => quickAssignChannel(ch.name)} title={'Kategorie "' + ch.name + '" erstellen + ' + ch.count + ' Videos zuordnen'}>
-                {ch.name} <span class="ua-ch-count">{ch.count}</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-        <div class="ua-actions">
-          <button class="btn-sm ua-auto" onclick={quickAssignAll} disabled={assigning} title="Alle Videos automatisch nach Kanal sortieren">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> {assigning ? 'Läuft…' : 'Alle nach Kanal'}
-          </button>
-          <button class="btn-sm ua-cleanup" onclick={cleanupOrphans} title="Verwaiste Zuordnungen entfernen">
-            <i class="fa-solid fa-broom"></i> Bereinigen
-          </button>
-          <button class="btn-sm" onclick={showDiagnose} title="Diagnose anzeigen">
-            <i class="fa-solid fa-stethoscope"></i> Diagnose
-          </button>
+      {#if meta?.rules.length}
+        <div class="regeln">
+          <RuleChips rules={meta.rules} onOpen={() => openRules(meta)} />
+          <span class="tv-leise tv-klein">neue Videos ordnen sich von selbst ein</span>
         </div>
-      </div>
-    {/if}
+      {/if}
 
-    <!-- Create Form -->
-    <div class="add-card">
-      <div class="add-top">
-        <input type="text" class="input" placeholder="Neue Kategorie…" bind:value={newName}
-               onkeydown={(e) => e.key === 'Enter' && addCategory()} />
-        <input type="text" class="input desc-input" placeholder="Beschreibung (optional)" bind:value={newDesc} />
-        <button class="btn-primary" onclick={addCategory} disabled={!newName.trim()}>
-          <i class="fa-solid fa-plus"></i> Erstellen
-        </button>
-      </div>
-      <!-- Color Palette -->
-      <div class="color-palette">
-        <span class="palette-label">Farbe:</span>
-        {#each MD_COLORS as c}
-          <button class="color-swatch" class:selected={newColor === c.hex}
-                  style="background: {c.hex}" title={c.name}
-                  onclick={() => newColor = c.hex}>
-            {#if newColor === c.hex}<i class="fa-solid fa-check swatch-check"></i>{/if}
-          </button>
-        {/each}
-      </div>
+      {#if selecting}
+        <BatchToolbar selectedCount={selectedIds.length} totalCount={shown.length}
+                      onSelectAll={() => selected = new Set(shown.map((i) => i.id))} onDone={() => { selecting = false; selected = new Set(); }}>
+          <button class="tv-knopf klein" onclick={() => playCollection(source, titleOf(), shown.filter((i) => selected.has(i.id)))}>
+            <i class="fa-solid fa-play"></i> Abspielen</button>
+          <button class="tv-knopf klein" onclick={() => setWatched(selectedIds, true)}><i class="fa-solid fa-check"></i> Als gesehen</button>
+          <button class="tv-knopf klein" onclick={() => setWatched(selectedIds, false)}><i class="fa-solid fa-eye-slash"></i> Als neu</button>
+          <button class="tv-knopf klein gefahr" onclick={() => removeItems(selectedIds)}
+                  title="Herausnehmen; keine Regel bringt sie zurück"><i class="fa-solid fa-xmark"></i> Aus der Kategorie</button>
+        </BatchToolbar>
+      {:else if detail}
+        <CollectionBar bind:search={itemSearch} placeholder="In der Kategorie suchen"
+                       states={stateChips(detail.counts, items.length)} bind:state={stateFilter}
+                       sorts={DETAIL_SORTS} bind:sort={itemSort} bind:view
+                       onSelect={items.length ? () => { selecting = true; adding = false; view = 'liste'; } : null}>
+          {#snippet rechts()}
+            <button class="tv-knopf klein" class:aktiv={adding} onclick={() => { adding = !adding; addQuery = ''; addResults = []; }}
+                    title="Videos aus der Bibliothek von Hand hineinlegen">
+              <i class="fa-solid fa-plus"></i> Videos hinzufügen</button>
+          {/snippet}
+        </CollectionBar>
+      {/if}
     </div>
-   </div>
 
-   <!-- Nur die Kategorien darunter rollen -->
-   <div class="tv-rollfeld" data-scroll-root>
-    {#if debugStats}
-      <div class="debug-panel">
-        <div class="debug-header">
-          <strong><i class="fa-solid fa-stethoscope"></i> Kategorie-Diagnose</strong>
-          <button class="btn-xs" onclick={() => debugStats = null}><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="debug-stats">
-          <span>Zuordnungen gesamt: <strong>{debugStats.total_assignments}</strong></span>
-          <span>Videos (ready): <strong>{debugStats.total_ready_videos}</strong></span>
-          <span>Davon zugeordnet: <strong>{debugStats.assigned_ready_videos}</strong></span>
-          <span>Verwaist: <strong>{debugStats.orphan_assignments}</strong></span>
-        </div>
-        {#if debugStats.per_category?.length > 0}
-          <div class="debug-cats">
-            {#each debugStats.per_category as dc}
-              <span class="debug-cat-item">
-                {dc.name}: <strong>{dc.ready}</strong>/{dc.total}
-              </span>
+    <div class="inhalt" class:tv-spalten={adding}>
+      <div class="tv-rollfeld" data-scroll-root>
+        {#if !detail}
+          <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+        {:else if !items.length}
+          <div class="leer-gross">
+            <i class="fa-solid fa-folder-open"></i>
+            <h2>Noch keine Videos</h2>
+            <p>Mit Regeln füllt sich die Kategorie von selbst; einzelne Videos lassen sich auch von Hand hinzufügen.</p>
+            <button class="tv-knopf haupt" onclick={() => meta && openRules(meta)}><i class="fa-solid fa-sliders"></i> Regeln festlegen</button>
+          </div>
+        {:else if !shown.length}
+          <div class="tv-leer">Nichts gefunden.</div>
+        {:else if view === 'kacheln'}
+          <div class="tv-raster">
+            {#each visible as item (item.id)}
+              <VideoCard video={{ ...item, last_position: item.position }} showArchiveBtn={false} onPlay={() => playAt(item)} />
             {/each}
           </div>
+        {:else}
+          <div class="zeilen" role="list">
+            {#each visible as item, i (item.id)}
+              {#if dropAt === i && dragFrom !== null && dragFrom !== i && dragFrom !== i - 1}<div class="einfuegen"></div>{/if}
+              <VideoRow {item} nr={i + 1} note={REASON_LABELS[item.reason] || null}
+                        mode={selecting ? 'auswahl' : canOrder ? 'ordnen' : null}
+                        selected={selected.has(item.id)} lifted={dragFrom === i}
+                        playing={queueActive && $playlistQueue.source === source && $playlistQueue.videos[$playlistQueue.currentIndex]?.id === item.id}
+                        onPlay={playAt} onNext={queueActive ? playAfterCurrent : null} onMenu={itemMenu} onToggle={toggle}
+                        draggable={canOrder}
+                        ondragstart={() => dragFrom = i}
+                        ondragover={(e) => { if (dragFrom !== null) { e.preventDefault(); dropAt = i; } }}
+                        ondrop={() => onDrop(i)}
+                        ondragend={() => { dragFrom = null; dropAt = null; }} />
+            {/each}
+            {#if canOrder && visible.length === shown.length}
+              <div class="ende" role="presentation"
+                   ondragover={(e) => { if (dragFrom !== null) { e.preventDefault(); dropAt = shown.length; } }}
+                   ondrop={() => onDrop(shown.length)}>
+                {#if dropAt === shown.length && dragFrom !== null}<div class="einfuegen"></div>{/if}
+              </div>
+            {/if}
+          </div>
         {/if}
-        {#if debugStats.total_assignments === 0}
-          <div class="debug-hint">
-            <i class="fa-solid fa-lightbulb"></i> Noch keine Videos zugeordnet. Nutze &bdquo;Kanal zuordnen&ldquo; / &bdquo;Stichwort zuordnen&ldquo; um Videos automatisch zuzuweisen, oder ordne einzelne Videos &#252;ber den Bearbeiten-Tab im Player zu.
+        {#if detail && visible.length < shown.length}
+          <div class="nachladen tv-schwach tv-klein" use:infiniteScroll={{ onLoadMore: () => { limit += STEP; }, canLoad: () => visible.length < shown.length }}>
+            <span class="zahl">{visible.length.toLocaleString('de-DE')}</span> von <span class="zahl">{shown.length.toLocaleString('de-DE')}</span>
           </div>
         {/if}
       </div>
-    {/if}
 
-    {#if loading}
-      <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Laden…</div>
-    {:else}
-      <div class="cat-list">
-        {#each categories as cat (cat.id)}
-          {#if editing === cat.id}
-            <div class="cat-item editing">
-              <div class="edit-top">
-                <input type="text" class="edit-input" bind:value={editName} placeholder="Name" />
-                <input type="text" class="edit-input desc" placeholder="Beschreibung" bind:value={editDesc} />
-                <button class="btn-xs save" title="Speichern" onclick={saveEdit}><i class="fa-solid fa-check"></i></button>
-                <button class="btn-xs" title="Abbrechen" onclick={() => editing = null}><i class="fa-solid fa-xmark"></i></button>
+      {#if adding}
+        <div class="tv-rollfeld hinzu" data-scroll-root>
+          <div class="tv-etikett">Von Hand hinzufügen</div>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="tv-eingabe" type="search" bind:value={addQuery} oninput={onAddInput} placeholder="Titel oder Kanal suchen" autofocus />
+          {#each addResults as video (video.id)}
+            <div class="treffer">
+              <img src={api.thumbnailUrl(video.id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+              <div class="text">
+                <div class="t">{video.title}</div>
+                <div class="tv-leise tv-klein">{video.channel_name || ''}{#if video.duration} · <span class="zahl">{formatDuration(video.duration)}</span>{/if}</div>
               </div>
-              <div class="color-palette compact">
-                {#each MD_COLORS as c}
-                  <button class="color-swatch sm" class:selected={editColor === c.hex}
-                          style="background: {c.hex}" title={c.name}
-                          onclick={() => editColor = c.hex}>
-                    {#if editColor === c.hex}<i class="fa-solid fa-check swatch-check"></i>{/if}
-                  </button>
-                {/each}
-              </div>
+              <button class="tv-knopf klein haupt symbol" onclick={() => addVideo(video)} title="In die Kategorie legen (bleibt, auch ohne Regel)"><i class="fa-solid fa-plus"></i></button>
             </div>
           {:else}
-            <div class="cat-item">
-              <button class="cat-body" onclick={() => selectCategory(cat)}>
-                <span class="cat-dot" style="background: {cat.color}"></span>
-                <div class="cat-info">
-                  <span class="cat-name">{cat.name}</span>
-                  {#if cat.description}<span class="cat-desc">{cat.description}</span>{/if}
-                </div>
-                <span class="cat-count">{cat.video_count || 0} Videos</span>
-              </button>
-              <button class="btn-icon-sm" onclick={() => startEdit(cat)} title="Bearbeiten">
-                <i class="fa-solid fa-pen"></i>
-              </button>
-              <button class="btn-icon-sm" onclick={() => deleteCategory(cat.id, cat.name)} title="Löschen">
-                <i class="fa-regular fa-trash-can"></i>
-              </button>
-            </div>
-          {/if}
-        {:else}
-          <div class="empty">
-            <i class="fa-solid fa-folder-open empty-icon"></i>
-            <p>Keine Kategorien vorhanden. Erstelle eine oben.</p>
+            <p class="tv-schwach tv-klein">{addQuery.trim() ? 'Keine weiteren Treffer.' : 'Gefundene Videos lassen sich mit + hineinlegen.'}</p>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+  {:else}
+    <!-- ═══ Übersicht ═══ -->
+    <div class="tv-seitenkopf">
+      <PageHeader title="Kategorien" info={loading ? null : overviewInfo(data)}>
+        {#if data?.ai.topics}
+          <button class="tv-knopf" class:aktiv={showTopics} onclick={toggleTopics}
+                  title="Die lokale KI ordnet die Videos ohne Kategorie nach Themen und schlägt Kategorien vor">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Themen erkennen</button>
+        {/if}
+        <button class="tv-knopf haupt" onclick={() => creating ? creating = null : startCreate()}>
+          <i class="fa-solid fa-plus"></i> Neue Kategorie</button>
+      </PageHeader>
+
+      {#if creating}
+        <form class="tv-filter neu" onsubmit={(e) => { e.preventDefault(); create(); }}>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="tv-eingabe name" bind:value={creating.name} placeholder="Name der Kategorie" maxlength="80" autofocus />
+          <input class="tv-eingabe beschreibung" bind:value={creating.description} placeholder="Beschreibung (optional)" maxlength="300" />
+          <div class="farben" role="group" aria-label="Farbe">
+            {#each freeColors(data?.colors || [], (data?.categories || []).map((c) => c.color)) as c (c)}
+              <button type="button" class="farbe" class:an={creating.color === c} style:background={c}
+                      onclick={() => creating.color = c} aria-label="Farbe {c}"></button>
+            {/each}
           </div>
-        {/each}
-      </div>
-    {/if}
-   </div>
+          <button class="tv-knopf klein haupt" disabled={!creating.name.trim()}>Anlegen und Regeln festlegen</button>
+          <button type="button" class="tv-knopf klein ohne" onclick={() => creating = null}>Abbrechen</button>
+        </form>
+      {:else if data?.categories.length && !showTopics}
+        <CollectionBar bind:search placeholder="Kategorien suchen" sorts={OVERVIEW_SORTS} bind:sort />
+      {/if}
+    </div>
+
+    <div class="tv-rollfeld" data-scroll-root>
+      {#if showTopics}
+        <TopicSuggestions state={topics} onAccept={acceptQuick} onView={viewTopic} onDismiss={dismissTopic} onRestart={startTopics} />
+      {:else if loading}
+        <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+      {:else if data}
+        {#if data.unassigned && data.unsorted_channels.length}
+          <UnsortedChannels unassigned={data.unassigned} channels={data.unsorted_channels} onPick={channelMenu}
+                            onTopics={data.ai.topics ? toggleTopics : null} />
+        {/if}
+        {#if !data.categories.length}
+          <div class="leer-gross">
+            <i class="fa-solid fa-folder"></i>
+            <h2>Noch keine Kategorien</h2>
+            <p>Eine Kategorie sammelt Videos von Hand oder per Regel: nach Kanal, Schlagwort oder Inhalt. Neue Videos ordnen sich dann von selbst ein.</p>
+            {#if !creating}<button class="tv-knopf haupt" onclick={() => startCreate()}><i class="fa-solid fa-plus"></i> Neue Kategorie</button>{/if}
+          </div>
+        {:else if !cards.length}
+          <div class="tv-leer">Nichts gefunden.</div>
+        {:else}
+          <div class="kat-raster">
+            {#each cards as card (card.id)}
+              <CategoryCard {card} onOpen={() => open(card)} onPlay={() => quickPlay(card, 'vorn')} onShuffle={() => quickPlay(card, 'zufall')}
+                            onMenu={(e) => cardMenu(e, card)} onRules={() => openRules(card)} />
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
+  {#if sheet && data}
+    {#key sheet}
+      <RulesSheet title={sheet.title} categoryId={sheet.categoryId} rules={sheet.rules} color={sheet.color}
+                  colors={data.colors} ai={data.ai} name={sheet.categoryId === null ? sheet.name : null}
+                  acceptLabel={sheet.categoryId === null ? 'Übernehmen' : null}
+                  onSave={sheet.categoryId === null ? saveTopic : saveRules} onClose={() => sheet = null} />
+    {/key}
   {/if}
 </div>
 
+<ActionMenu bind:this={menu} />
+<ConfirmDialog bind:this={confirmRef} />
+
 <style>
-  /* Den Abstand zum Rollfeld gibt der Seitenkopf vor, nicht das letzte Element darin */
-  .tv-seitenkopf > :last-child { margin-bottom: 0; }
-  .page-title {
-    font-size: 1.4rem; font-weight: 700; color: var(--text-primary);
-    margin: 0 0 20px; display: flex; align-items: center; gap: 10px;
-  }
-  .page-title i { color: var(--accent-primary); }
+  .kategorien { position: relative; }   /* Bezug für das Seitenblatt */
 
-  /* Add Card */
-  .add-card {
-    background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-radius: 12px; padding: 16px; margin-bottom: 24px;
-  }
-  .add-top { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-  .input {
-    flex: 1; min-width: 140px; padding: 8px 14px; background: var(--bg-tertiary);
-    border: 1px solid var(--border-primary); border-radius: 8px;
-    color: var(--text-primary); font-size: 0.88rem; outline: none;
-  }
-  .input:focus { border-color: var(--accent-primary); }
-  .desc-input { flex: 1.5; }
+  .neu, .bearbeiten { margin-bottom: var(--tv-a3); }
+  .neu .name, .bearbeiten .name { width: 280px; }
+  .neu .beschreibung, .bearbeiten .beschreibung { flex: 1; min-width: 220px; }
+  .farben { display: flex; gap: 6px; flex-wrap: wrap; }
+  .farbe { width: 28px; height: 28px; padding: 0; border: 2px solid transparent; border-radius: var(--tv-ecke-klein); cursor: pointer; }
+  .farbe.an { border-color: var(--tv-text); }
+  .beschreibung { margin: calc(-1 * var(--tv-a3)) 0 var(--tv-a3); color: var(--tv-text-2); font-size: var(--tv-gr-klein); max-width: 820px; }
 
-  /* Color Palette */
-  .color-palette {
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  }
-  .color-palette.compact { margin-top: 10px; }
-  .palette-label { font-size: 0.78rem; color: var(--text-tertiary); margin-right: 4px; }
-  .color-swatch {
-    width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
-    cursor: pointer; transition: all 0.15s; display: flex; align-items: center;
-    justify-content: center; padding: 0;
-  }
-  .color-swatch:hover { transform: scale(1.15); }
-  .color-swatch.selected { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--bg-primary); }
-  .color-swatch.sm { width: 22px; height: 22px; }
-  .swatch-check { color: #fff; font-size: 0.6rem; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+  .regeln { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: calc(-1 * var(--tv-a2)) 0 var(--tv-a3); }
+  .regeln .tv-leise { margin-left: 6px; }
 
-  /* Category List */
-  .cat-list { display: flex; flex-direction: column; gap: 6px; }
-  .cat-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 8px; background: var(--bg-secondary);
-    border: 1px solid var(--border-primary); border-radius: 10px;
-    transition: border-color 0.12s;
-  }
-  .cat-item:hover { border-color: var(--accent-primary); }
-  .cat-item.editing { padding: 12px 14px; flex-direction: column; align-items: stretch; }
-  .edit-top { display: flex; gap: 6px; align-items: center; }
-  .cat-body {
-    display: flex; align-items: center; gap: 12px; flex: 1;
-    padding: 8px; background: none; border: none; cursor: pointer;
-    text-align: left; color: inherit;
-  }
-  .cat-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-  .cat-dot-lg { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
-  .cat-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-  .cat-name { font-weight: 600; color: var(--text-primary); font-size: 0.92rem; }
-  .cat-desc { font-size: 0.76rem; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cat-count { font-size: 0.8rem; color: var(--text-tertiary); white-space: nowrap; }
-  .btn-icon-sm {
-    background: none; border: none; cursor: pointer; font-size: 0.82rem;
-    opacity: 0; transition: opacity 0.12s; padding: 6px; color: var(--text-tertiary);
-  }
-  .cat-item:hover .btn-icon-sm { opacity: 0.7; }
-  .btn-icon-sm:hover { opacity: 1; color: var(--text-primary); }
+  .kat-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--tv-a4); }
 
-  .edit-input {
-    flex: 1; padding: 5px 10px; background: var(--bg-primary);
-    border: 1px solid var(--border-primary); border-radius: 6px;
-    color: var(--text-primary); font-size: 0.85rem; outline: none;
-  }
-  .edit-input.desc { flex: 1.5; }
-  .edit-input:focus { border-color: var(--accent-primary); }
-  .btn-xs {
-    padding: 4px 10px; background: none; border: 1px solid var(--border-primary);
-    border-radius: 6px; cursor: pointer; font-size: 0.82rem; color: var(--text-secondary);
-  }
-  .btn-xs.save { color: var(--status-success); border-color: var(--status-success); }
-  .btn-xs:hover { background: var(--bg-hover); }
+  .inhalt { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .inhalt.tv-spalten { display: grid; }
+  .zeilen { display: flex; flex-direction: column; gap: 2px; }
+  .einfuegen { height: 3px; margin: 0 0 0 30px; background: var(--tv-akzent); border-radius: 1px; }
+  .ende { min-height: 40px; }
+  .nachladen { padding: var(--tv-a4); text-align: center; }
+  .hinzu { display: flex; flex-direction: column; gap: var(--tv-a2); background: var(--tv-flaeche); border-radius: var(--tv-ecke);
+           padding: var(--tv-a3); margin: var(--tv-a2) 0 var(--tv-a4); }
+  .hinzu > * { flex-shrink: 0; }
+  .treffer { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: center; padding: 4px;
+             border-radius: var(--tv-ecke); }
+  .treffer:hover { background: var(--tv-karte); }
+  .treffer img { width: 112px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); background: var(--tv-mulde); }
+  .treffer .t { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-  /* Detail */
-  .detail-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
-  .btn-back {
-    padding: 6px 14px; background: none; border: 1px solid var(--border-primary);
-    border-radius: 8px; color: var(--text-secondary); font-size: 0.82rem; cursor: pointer;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .btn-back:hover { border-color: var(--accent-primary); }
-  .detail-info { flex: 1; }
-  .detail-title-row { display: flex; align-items: center; gap: 10px; }
-  .detail-info h1 { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); margin: 0; }
-  .detail-desc { font-size: 0.85rem; color: var(--text-secondary); margin: 4px 0; }
-  .detail-meta { font-size: 0.78rem; color: var(--text-tertiary); }
-  .auto-assign-bar { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
-  .aa-input { flex: 1; min-width: 150px; padding: 6px 10px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font-size: 0.82rem; }
-  .aa-input:focus { border-color: var(--accent-primary); outline: none; }
-  .unassigned-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 16px; background: var(--accent-muted, rgba(59,130,246,0.1)); border: 1px solid var(--accent-primary); border-radius: 10px; margin-bottom: 16px; font-size: 0.82rem; color: var(--text-secondary); }
-  .unassigned-info > i { color: var(--accent-primary); flex-shrink: 0; }
-  .ua-channels { display: flex; flex-wrap: wrap; gap: 4px; margin-left: 4px; }
-  .ua-channel-btn {
-    display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px;
-    background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-radius: 14px; color: var(--text-primary); font-size: 0.75rem;
-    cursor: pointer; transition: all 0.12s; font-weight: 500;
-  }
-  .ua-channel-btn:hover { border-color: var(--accent-primary); background: var(--accent-primary); color: var(--accent-text); }
-  .ua-channel-btn:hover .ua-ch-count { background: rgba(255,255,255,0.25); color: #fff; }
-  .ua-ch-count { font-size: 0.65rem; background: var(--bg-tertiary); color: var(--text-tertiary); padding: 0 5px; border-radius: 8px; font-weight: 600; }
-  .ua-actions { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
-  .ua-auto { background: var(--accent-primary) !important; color: var(--accent-text) !important; border-color: var(--accent-primary) !important; }
-  .ua-auto:hover { filter: brightness(1.1); }
-  .ua-cleanup { }
-
-  /* Debug Panel */
-  .debug-panel { padding: 12px 14px; background: var(--bg-secondary); border: 1px solid var(--border-secondary); border-radius: 8px; margin-bottom: 16px; font-size: 0.8rem; }
-  .debug-pre { background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 0.72rem; overflow-x: auto; max-height: 200px; white-space: pre-wrap; word-break: break-all; color: var(--text-secondary); margin-top: 6px; }
-  .debug-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .debug-stats { display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-secondary); }
-  .debug-cats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-  .debug-cat-item { padding: 2px 8px; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.72rem; color: var(--text-secondary); }
-  .debug-hint { margin-top: 10px; padding: 8px 10px; background: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; border-radius: 6px; color: var(--text-secondary); font-size: 0.78rem; }
-  .debug-hint i { color: #f59e0b; margin-right: 4px; }
-
-  /* Search/Sort Toolbar in Detail */
-  .cat-toolbar {
-    display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
-  }
-  .cat-search-box {
-    display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px;
-    background: var(--bg-tertiary); border: 1px solid var(--border-primary);
-    border-radius: 8px; padding: 6px 12px; font-size: 0.85rem;
-  }
-  .cat-search-box:focus-within { border-color: var(--accent-primary); }
-  .cat-search-box i { color: var(--text-tertiary); font-size: 0.8rem; flex-shrink: 0; }
-  .cat-search-box input {
-    flex: 1; background: none; border: none; color: var(--text-primary);
-    font-size: 0.85rem; outline: none; min-width: 0;
-  }
-  .cat-search-box input::placeholder { color: var(--text-tertiary); }
-  .cat-search-clear {
-    background: none; border: none; color: var(--text-tertiary);
-    cursor: pointer; padding: 2px; font-size: 0.75rem;
-  }
-  .cat-sort-select {
-    padding: 6px 10px; border: 1px solid var(--border-primary);
-    border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary);
-    font-size: 0.82rem; cursor: pointer;
-  }
-  .cat-sort-dir {
-    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
-    background: var(--bg-secondary); border: 1px solid var(--border-primary);
-    border-radius: 8px; cursor: pointer; color: var(--text-secondary); font-size: 0.85rem;
-  }
-  .cat-sort-dir:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
-
-  .video-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px;
-  }
-  .video-card {
-    display: flex; flex-direction: column; background: var(--bg-secondary);
-    border: 1px solid var(--border-primary); border-radius: 10px;
-    overflow: hidden; transition: all 0.15s; position: relative;
-  }
-  .video-card:hover { border-color: var(--accent-primary); transform: translateY(-1px); }
-  .card-click { display: flex; flex-direction: column; cursor: pointer; text-align: left; color: inherit; background: none; border: none; }
-  .card-remove {
-    position: absolute; top: 6px; right: 6px; width: 26px; height: 26px;
-    border-radius: 50%; background: rgba(0,0,0,0.7); color: #fff; border: none;
-    font-size: 0.7rem; cursor: pointer; opacity: 0; transition: opacity 0.15s;
-    display: flex; align-items: center; justify-content: center; z-index: 2;
-  }
-  .video-card:hover .card-remove { opacity: 1; }
-  .card-remove:hover { background: var(--status-error); }
-  .thumb-wrap { position: relative; aspect-ratio: 16/9; background: var(--bg-tertiary); overflow: hidden; }
-  .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; }
-  .duration {
-    position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.8);
-    color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 0.72rem; font-family: monospace;
-  }
-  .video-info { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
-  .video-title {
-    font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin: 0;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .video-channel { font-size: 0.76rem; color: var(--text-secondary); }
-  .video-meta { display: flex; gap: 4px; font-size: 0.72rem; color: var(--text-tertiary); }
-
-  .loading, .empty { padding: 50px 20px; text-align: center; color: var(--text-tertiary); }
-  .empty-icon { font-size: 2.5rem; color: var(--text-tertiary); margin-bottom: 12px; display: block; }
-  .empty-hint { font-size: 0.8rem; color: var(--text-tertiary); margin-top: 4px; }
+  .leer-gross { padding: 72px var(--tv-a5); text-align: center; color: var(--tv-text-2); }
+  .leer-gross > i { font-size: 44px; color: var(--tv-text-3); margin-bottom: var(--tv-a4); }
+  .leer-gross h2 { margin: 0 0 var(--tv-a2); color: var(--tv-text); }
+  .leer-gross p { margin: 0 auto var(--tv-a4); max-width: 560px; }
 </style>

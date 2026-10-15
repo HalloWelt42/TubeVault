@@ -292,9 +292,11 @@ describe('API Endpoint Vollständigkeit', () => {
     'getFavorites', 'getFavoriteLists', 'addFavorite',
     'removeFavorite', 'checkFavorite',
     // Categories
-    'getCategories', 'getCategoriesFlat', 'createCategory',
-    'updateCategory', 'deleteCategory', 'getCategoryVideos',
-    'assignVideoCategories', 'getVideoCategories',
+    'getCategories', 'getCategoriesFlat', 'getCategoryOverview', 'createCategory',
+    'updateCategory', 'deleteCategory', 'saveCategoryRules', 'previewCategoryRules',
+    'addToCategory', 'removeFromCategory', 'restoreToCategory', 'reorderCategory',
+    'getCategoryChannels', 'getCategoryTopics', 'startCategoryTopics', 'acceptCategoryTopic',
+    'dismissCategoryTopic', 'assignVideoCategories', 'getVideoCategories',
     // Settings
     'getSettings', 'updateSetting',
     // System 'getStats', 'getStatus', 'getStorage',

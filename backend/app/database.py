@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 51
+SCHEMA_VERSION = 52
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1094,6 +1094,14 @@ class Database:
         await transcripts.install_schema(self._connection)   # vor den Vektoren (Trigger)
         await semantic_index.install_schema(self._connection)
 
+        # v52: Kategorien mit Regeln (Kanal, Schlagwort, inhaltlich wie); braucht
+        # die Vektoren (Trigger). Bisherige Zuordnungen bleiben und gelten als von Hand.
+        from app.services import category_rules, category_topics
+        added = await category_rules.install_schema(self._connection)
+        await category_topics.install_schema(self._connection)
+        if added:
+            logger.info(f"Migration v52: Kategorie-Zuordnung um {', '.join(added)} ergänzt, Bestand gilt als von Hand")
+
         # v42: Werbestellen - Abgleich mit dem Dienst, Transkripte ohne Werbung
         from app.services import ad_segments
         await ad_segments.install_schema(self._connection, backfill=current_version < 42)
@@ -1121,6 +1129,8 @@ class Database:
             logger.info(f"Migration v51: {found} Videos als Hörbuch oder Hörspiel erkannt")
         await semantic_items.install_schema(self._connection)
         await deleted_videos.install_schema(self._connection)
+        from app.services import auto_scan
+        await auto_scan.install_schema(self._connection)
         await meta_sidecar.install_schema(self._connection)
         await music_flag.install_schema(self._connection)
         await audio_export.install_schema(self._connection)

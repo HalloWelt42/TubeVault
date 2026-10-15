@@ -206,26 +206,16 @@ class MetadataService:
         category_ids = updates.pop("category_ids", None)
         category_name = updates.pop("category", None)
 
+        # Kategorien von Hand festlegen (category_rules: Abgewähltes gilt als
+        # herausgenommen, Neues als von Hand hinzugefügt)
+        from app.services import category_rules
         if category_ids is not None:
-            # Explizite ID-Liste: alte löschen, neue setzen
-            await db.execute("DELETE FROM video_categories WHERE video_id = ?", (video_id,))
-            for cid in category_ids:
-                await db.execute(
-                    "INSERT OR IGNORE INTO video_categories (video_id, category_id) VALUES (?, ?)",
-                    (video_id, cid)
-                )
+            await category_rules.set_video_categories(video_id, category_ids)
         elif category_name is not None:
             # Legacy: Kategorie per Name
-            await db.execute("DELETE FROM video_categories WHERE video_id = ?", (video_id,))
-            if category_name:
-                cat = await db.fetch_one(
-                    "SELECT id FROM categories WHERE name = ?", (category_name,)
-                )
-                if cat:
-                    await db.execute(
-                        "INSERT OR IGNORE INTO video_categories (video_id, category_id) VALUES (?, ?)",
-                        (video_id, cat["id"])
-                    )
+            cat = await db.fetch_one("SELECT id FROM categories WHERE name = ?", (category_name,)) \
+                if category_name else None
+            await category_rules.set_video_categories(video_id, [cat["id"]] if cat else [])
 
         # suggest_override: Spezialbehandlung für Reset (leerer String = NULL)
         suggest_override_raw = updates.pop("suggest_override", None)

@@ -359,6 +359,45 @@ def score_floor(scores, level: Precision, collection_size: int) -> float:
     return max(level.min_similarity, float(scores.mean()) + z * float(scores.std()))
 
 
+def rule_floor(scores, level: Precision, collection_size: int) -> float:
+    """Schwelle einer dauerhaften Regel ("Inhaltlich wie" einer Kategorie).
+
+    Wie bei der Suche: Mindest-Ähnlichkeit der Stufe und deutlicher Abstand
+    zur Masse. Die Masse wird hier robust gemessen (Median und mittlere
+    Abweichung statt Durchschnitt und Streuung): ein Thema darf einen großen
+    Teil der Sammlung ausmachen, ohne seine eigene Schwelle hochzutreiben.
+    Ohne Obergrenze der Trefferzahl - eine Kategorie darf groß werden."""
+    import numpy as np
+    median = float(np.median(scores))
+    if collection_size < SMALL_COLLECTION:
+        return max(level.min_similarity, median)
+    spread = float(np.median(np.abs(scores - median))) * 1.4826
+    return max(level.min_similarity, median + level.min_z * spread)
+
+
+async def text_vector(text: str):
+    """Vektor eines Textes (normiert) oder None, wenn die KI gerade nicht
+    zur Verfügung steht. Für Regeln, die einen Text mit Videos vergleichen."""
+    cfg = await config()
+    if not cfg or not text.strip() or not await available():
+        return None
+    try:
+        return await query_vector(text, *cfg)
+    except Exception:
+        reset_availability()
+        return None
+
+
+async def all_vectors():
+    """(Kennungen, Matrix) aller Videos mit Vektor des aktuellen Modells,
+    oder None. Die Matrix ist dieselbe, mit der die Suche arbeitet."""
+    cfg = await config()
+    if not cfg:
+        return None
+    ids, matrix, _ = await _load_matrix(cfg[1])
+    return (ids, matrix) if matrix is not None else None
+
+
 async def search_passages(query: str, level: Precision) -> Optional[list[tuple[int, float]]]:
     """Inhaltlich ähnlichste Transkript-Abschnitte als (chunk_id, Ähnlichkeit).
     None, wenn die Bedeutungssuche gerade nicht zur Verfügung steht."""

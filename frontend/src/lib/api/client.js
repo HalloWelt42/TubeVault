@@ -268,31 +268,28 @@ export const api = {
     request('/api/favorites/move', { method: 'PUT', body: JSON.stringify({ video_ids: videoIds, from_list: fromList, to_list: toList }) }),
   checkFavorite: (videoId) => request(`/api/favorites/check/${videoId}`),
 
-  // Categories
+  // Kategorien (Videos einer Kategorie: getCollection('category:<id>'))
   getCategories: () => request('/api/categories'),
   getCategoriesFlat: () => request('/api/categories/flat'),
+  getCategoryOverview: () => request('/api/categories/overview'),
   createCategory: (data) => request('/api/categories', { method: 'POST', body: JSON.stringify(data) }),
   updateCategory: (id, data) => request(`/api/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCategory: (id) => request(`/api/categories/${id}`, { method: 'DELETE' }),
-  getCategoryVideos: (id, params = {}) => {
-    const qs = Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-    return request(`/api/categories/${id}/videos${qs ? '?' + qs : ''}`);
-  },
-  autoAssignCategory: (catId, { channel, keyword } = {}) => {
-    const params = new URLSearchParams();
-    if (channel) params.set('channel', channel);
-    if (keyword) params.set('keyword', keyword);
-    return request(`/api/categories/${catId}/auto-assign?${params}`, { method: 'POST' });
-  },
-  getUnassignedStats: () => request('/api/categories/stats/unassigned'),
-  cleanupCategoryOrphans: () => request('/api/categories/cleanup-orphans', { method: 'POST' }),
-  getCategoryDebugStats: () => request('/api/categories/stats/debug'),
-  quickChannelAssign: (channelName, categoryId = null) => {
-    const params = new URLSearchParams({ channel_name: channelName });
-    if (categoryId) params.set('category_id', categoryId);
-    return request(`/api/categories/quick-channel-assign?${params}`, { method: 'POST' });
-  },
-  quickChannelAssignAll: () => request('/api/categories/quick-channel-assign-all', { method: 'POST' }),
+  saveCategoryRules: (id, rules) => request(`/api/categories/${id}/rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
+  // categoryId leer: Entwurf einer neuen Kategorie
+  previewCategoryRules: (categoryId, rules) =>
+    request('/api/categories/preview', { method: 'POST', body: JSON.stringify({ category_id: categoryId ?? null, rules }) }),
+  addToCategory: (id, videoIds) => request(`/api/categories/${id}/videos`, { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
+  // Antwort: die entfernten Einträge, für restoreToCategory (Rückgängig)
+  removeFromCategory: (id, videoIds) =>
+    request(`/api/categories/${id}/videos/remove`, { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
+  restoreToCategory: (id, entries) => request(`/api/categories/${id}/videos/restore`, { method: 'POST', body: JSON.stringify({ entries }) }),
+  reorderCategory: (id, videoIds) => request(`/api/categories/${id}/order`, { method: 'PUT', body: JSON.stringify({ video_ids: videoIds }) }),
+  getCategoryChannels: (q = '') => request(`/api/categories/channels?q=${encodeURIComponent(q)}`),
+  getCategoryTopics: () => request('/api/categories/topics'),
+  startCategoryTopics: () => request('/api/categories/topics', { method: 'POST' }),
+  acceptCategoryTopic: (id, changes = {}) => request(`/api/categories/topics/${id}/accept`, { method: 'POST', body: JSON.stringify(changes) }),
+  dismissCategoryTopic: (id) => request(`/api/categories/topics/${id}`, { method: 'DELETE' }),
   assignVideoCategories: (videoId, catIds) => request(`/api/categories/videos/${videoId}`, { method: 'POST', body: JSON.stringify(catIds) }),
   getVideoCategories: (videoId) => request(`/api/categories/videos/${videoId}`),
 
@@ -313,9 +310,15 @@ export const api = {
   deleteAudioTrack: (videoId, trackId) => request(`/api/videos/${videoId}/audio-tracks/${trackId}`, { method: 'DELETE' }),
   enqueueDubbing: (order) => request('/api/dubbing/requests', { method: 'POST', body: JSON.stringify(order) }),
   getDubbingVoices: () => request('/api/dubbing/voices'),
-  getDubbingRequests: (status = '') => request(`/api/dubbing/requests${status ? '?status=' + status : ''}`),
+  getDubbingOverview: () => request('/api/dubbing/overview'),
+  // Reiter: all | working | queued | done | error
+  getDubbingRequests: (tab = 'all', offset = 0, limit = 50) =>
+    request(`/api/dubbing/requests?tab=${tab}&offset=${offset}&limit=${limit}`),
   retryDubbing: (id) => request(`/api/dubbing/requests/${id}/retry`, { method: 'POST' }),
-  removeDubbing: (id) => request(`/api/dubbing/requests/${id}`, { method: 'DELETE' }),
+  revoiceDubbing: (id, voice) => request(`/api/dubbing/requests/${id}/revoice`, { method: 'POST', body: JSON.stringify({ voice }) }),
+  // withTrack: die fertige Tonspur mit löschen (sonst bleibt sie am Video)
+  removeDubbing: (id, withTrack = false) =>
+    request(`/api/dubbing/requests/${id}${withTrack ? '?with_track=true' : ''}`, { method: 'DELETE' }),
   cancelDubbing: (id) => request(`/api/dubbing/requests/${id}/cancel`, { method: 'POST' }),
   getSetting: (key) => request(`/api/settings/${encodeURIComponent(key)}`),
   updateSetting: (key, value) => request(`/api/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),

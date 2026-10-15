@@ -10,6 +10,7 @@
   let {
     title,
     icon = null,
+    iconColor = null,      // eigene Farbe des Symbols (z.B. Farbe einer Kategorie)
     count = null,
     bytes = null,          // Gesamtgröße der Treffer, falls bekannt
     unit = 'Video',
@@ -29,7 +30,7 @@
     <button class="tv-knopf ohne symbol zurueck" onclick={onBack} title="Zurück"><i class="fa-solid fa-arrow-left"></i></button>
   {/if}
   <h1 class="page-title">
-    {#if icon}<i class={icon}></i>{/if}
+    {#if icon}<i class={icon} style:color={iconColor}></i>{/if}
     {title}
   </h1>
   {#if info}

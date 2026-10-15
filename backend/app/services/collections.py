@@ -10,13 +10,17 @@ Quellen:
   favorites:<Liste>   eine Favoritenliste
   playlist:<Kennung>  eine Playlist, auch mit noch nicht geladenen Videos
                       (vorgemerkt; loaded=False, Stand "pending", lädt der Drip)
-Ändern (Reihenfolge, Hinzufügen, Entfernen) bleibt bei favorites bzw. playlists.
+  category:<Kennung>  eine Kategorie in eigener Reihenfolge, je Video der
+                      Grund (reason: von Hand oder die Art der Regel)
+Ändern (Reihenfolge, Hinzufügen, Entfernen) bleibt bei favorites, playlists
+bzw. category_rules.
 """
 from typing import Optional
 
 from pydantic import BaseModel
 
 from app.database import db
+from app.models.categories import Reason
 from app.services import watch_state
 
 
@@ -30,22 +34,24 @@ class Item(BaseModel):
     position: int = 0                 # gemerkte Stelle in Sekunden
     progress: float = 0.0             # gesehener Anteil 0..1
     state: watch_state.State = "new"
-    added_at: Optional[str] = None    # nur Favoriten merken sich, wann
+    added_at: Optional[str] = None    # Favoriten und Kategorien merken sich, wann
+    upload_date: Optional[str] = None
     last_played: Optional[str] = None
     play_count: int = 0
     loaded: bool = True               # False: vorgemerkt, noch nicht geladen
+    reason: Optional[Reason] = None   # nur Kategorien: warum das Video drin ist
 
 
 class Collection(BaseModel):
     source: str
-    kind: str                         # favorites | playlist
+    kind: str                         # favorites | playlist | category
     title: str
     items: list[Item]
     duration: int                     # Gesamtdauer in Sekunden
     counts: dict[str, int]            # je Stand: new, started, finished; pending = noch nicht geladen
 
 
-_FIELDS = """v.id, v.title, v.channel_id, v.channel_name, v.duration, v.video_type,
+_FIELDS = """v.id, v.title, v.channel_id, v.channel_name, v.duration, v.video_type, v.upload_date,
              COALESCE(v.last_position, 0) AS position, v.last_played, COALESCE(v.play_count, 0) AS play_count,
              v.status = 'ready' AS loaded"""
 
@@ -62,6 +68,16 @@ async def _rows(kind: str, value: str):
         return name, await db.fetch_all(
             f"""SELECT {_FIELDS}, NULL AS added_at FROM playlist_videos p JOIN videos v ON v.id = p.video_id
                 WHERE p.playlist_id = ? ORDER BY p.position, p.rowid""", (value,))
+    if kind == "category":
+        name = await db.fetch_val("SELECT name FROM categories WHERE id = ?", (value,))
+        if name is None:
+            raise LookupError("Kategorie unbekannt")
+        return name, await db.fetch_all(
+            f"""SELECT {_FIELDS}, c.added_at,
+                       CASE WHEN c.origin = 'hand' THEN 'hand' ELSE r.kind END AS reason
+                FROM video_categories c JOIN videos v ON v.id = c.video_id
+                LEFT JOIN category_rules r ON r.id = c.rule_id
+                WHERE c.category_id = ? AND v.status = 'ready' ORDER BY c.position, c.rowid""", (value,))
     raise ValueError("Unbekannte Sammlung")
 
 

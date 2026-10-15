@@ -3,7 +3,7 @@ TubeVault – Userdata-Export Service v1.0.0
 
 Täglicher JSONL-Export aller NUTZER-Daten – also allem, was sich NICHT aus
 den info.json-Sidecars neben den Videos rekonstruieren lässt:
-favorites, watch_history, categories (+ Zuordnungen), playlists (+ Inhalte),
+favorites, watch_history, categories (+ Zuordnungen und Regeln), playlists (+ Inhalte),
 subscriptions, blocked_channels, ignored_videos sowie die Nutzerfelder aus
 videos (rating, play_count, last_position, notes, suggest_override).
 
@@ -30,6 +30,7 @@ KEEP_EXPORTS = 14
 # Ganze Tabellen, die 1:1 gesichert werden
 TABLES = [
     "favorites", "watch_history", "categories", "video_categories",
+    "category_rules", "category_exclusions",
     "playlists", "playlist_videos", "subscriptions",
     "blocked_channels", "ignored_videos", "deleted_videos",
 ]

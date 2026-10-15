@@ -116,7 +116,9 @@ export function zustaende(liste, zeigen) {
   }
   document.body.append(box);
   // ?zustand=auswahl öffnet einen Zustand direkt (auch für Bilder der Entwürfe)
-  const gewuenscht = new URLSearchParams(location.search).get('zustand');
+  const suche = new URLSearchParams(location.search);
+  const gewuenscht = suche.get('zustand');
+  if (suche.has('bild')) box.style.display = 'none';   // ?bild: Bild ohne Umschalter (README)
   const index = Math.max(0, liste.findIndex(([wert]) => wert === gewuenscht));
   box.querySelectorAll('button')[index].click();
 }

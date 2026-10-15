@@ -92,7 +92,9 @@
 
 @media (max-width: 1023px) {
   .tv-spalten { grid-template-columns: 1fr; align-content: start; overflow-y: auto; }
-  .tv-spalten > .tv-rollfeld { overflow-y: visible; }
+  /* min-height zurück auf auto: mit 0 teilt das Raster die Fensterhöhe auf die
+     Spalten auf, statt sie nach ihrem Inhalt zu bemessen - sie überlappen */
+  .tv-spalten > .tv-rollfeld { overflow-y: visible; min-height: auto; }
 }
 
 /* ═══ Weitere Bausteine aus den Entwürfen ═══ */

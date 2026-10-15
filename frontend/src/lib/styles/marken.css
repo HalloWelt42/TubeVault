@@ -44,6 +44,8 @@
   --tv-art-musik: #c084fc;
   --tv-art-vertont: #58b8f0;
   --tv-art-ki: #f9e80d;
+  /* Bedeutungssuche der lokalen KI ("inhaltlich wie", Themen-Vorschläge) */
+  --tv-bedeutung: #c084fc;   --tv-bedeutung-rgb: 192, 132, 252;
 
   /* Symbolfarben der Seitenleiste (wie bisher, Wunsch des Nutzers) */
   --tv-symbol-gelb: #ffca28;

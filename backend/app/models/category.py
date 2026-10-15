@@ -1,42 +1,11 @@
 """
-TubeVault – Kategorie & Einstellungen Models v1.0.0
+TubeVault – Favoriten, Einstellungen und System Models v1.0.0
+(Die Kategorien stehen in app.models.categories.)
 © HalloWelt42 – Private Nutzung
 """
 
 from pydantic import BaseModel
 from typing import Optional
-
-
-# --- Kategorien ---
-
-class CategoryCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    color: str = "#6366f1"
-    icon: str = "folder"
-    parent_id: Optional[int] = None
-    sort_order: int = 0
-
-
-class CategoryUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    color: Optional[str] = None
-    icon: Optional[str] = None
-    parent_id: Optional[int] = None
-    sort_order: Optional[int] = None
-
-
-class CategoryResponse(BaseModel):
-    id: int
-    name: str
-    description: Optional[str] = None
-    color: str = "#6366f1"
-    icon: str = "folder"
-    parent_id: Optional[int] = None
-    sort_order: int = 0
-    video_count: int = 0
-    children: list["CategoryResponse"] = []
 
 
 # --- Favoriten ---

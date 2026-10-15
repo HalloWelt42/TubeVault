@@ -128,7 +128,7 @@
       <div class="geraet"><i class="fa-solid fa-tablet-screen-button gr"></i>
         <div><div class="t">Tablet Wohnzimmer</div><div class="w">bereit · zuletzt vor <span class="zahl">2 Min.</span></div></div>
         <button class="knopf klein">Dorthin</button></div>
-      <div class="hinweis" style="margin-top:var(--tv-a3)"><i class="fa-solid fa-circle-info"></i><span>Hier stehen alle Geräte, auf denen TubeVault gerade offen ist. Namen lassen sich in den Einstellungen ändern.</span></div>
+      <div class="hinweis" style="margin-top:var(--tv-a3)"><i class="fa-solid fa-circle-info"></i><span>Hier stehen alle Geräte, auf denen TubeVault gerade offen ist. Den Namen dieses Geräts ändert der Stift in der Liste.</span></div>
     </div>
   </div>
 </div>
@@ -163,7 +163,7 @@
   <div class="etikett">Handy als Fernbedienung: Video</div>
   <div class="telefon">
     <div class="fern-band"><i class="fa-solid fa-display gr"></i>
-      <div><div class="t">Läuft auf Rechner Arbeitszimmer</div><div class="w">Vollbild · Deutsch vertont</div></div>
+      <div><div class="t">Läuft auf Rechner Arbeitszimmer</div><div class="w">Video · Deutsch</div></div>
       <button class="knopf-info"><i class="fa-solid fa-mobile-screen"></i> Holen</button></div>
     <div class="koerper" style="gap:var(--tv-a3)">
       <div class="vbild"><img src="http://192.168.178.49:8031/api/player/NxsYhM89B4M/thumbnail" alt=""><div class="auf"><span><i class="fa-solid fa-display"></i><br>Bild läuft am Rechner</span></div></div>
@@ -177,7 +177,8 @@
         <button class="klein-t"><i class="fa-solid fa-forward-step"></i></button>
       </div>
       <div class="wahl"><button>Original</button><button class="an">Deutsch</button></div>
-      <div class="zeile-knoepfe"><button><i class="fa-solid fa-closed-captioning"></i> Untertitel</button><button><i class="fa-solid fa-expand"></i> Vollbild</button><button><i class="fa-solid fa-volume-high"></i> <span class="zahl">64 %</span></button></div>
+      <div class="laut"><i class="fa-solid fa-volume-low"></i><div class="spur"><b style="width:64%"></b></div><i class="fa-solid fa-volume-high"></i></div>
+      <div class="leise klein" style="text-align:center">Lautstärke des Rechners</div>
     </div>
   </div>
 </div>
@@ -185,8 +186,8 @@
 <div class="erklaerung">
   <h3>So geht es</h3>
   <ol>
-    <li><b>Kein Koppeln nötig.</b> Jedes Gerät, auf dem TubeVault offen ist, meldet sich beim Server und bekommt einen Namen (änderbar). Wer spielt, sieht man überall.</li>
-    <li><b>Steuern:</b> Spielt der Rechner, zeigt das Handy oben das blaue Band und wird zur Fernbedienung: Pause, Weiter, Stelle, Lautstärke, bei Videos auch Ton Original oder Deutsch, Untertitel und Vollbild.</li>
+    <li><b>Kein Koppeln nötig.</b> Jedes Gerät, auf dem TubeVault offen ist, meldet sich beim Server und bekommt einen Namen, änderbar in der Geräteliste. Wer spielt, sieht man überall.</li>
+    <li><b>Steuern:</b> Spielt der Rechner, zeigt das Handy oben das blaue Band und wird zur Fernbedienung: Pause, Weiter, Stelle, Lautstärke, bei Videos auch 10-Sekunden-Sprünge und Ton Original oder Deutsch.</li>
     <li><b>Holen:</b> "Holen" übernimmt die Wiedergabe aufs Handy, an derselben Stelle mit derselben Warteschlange. Der Rechner hält an und zeigt kurz, wohin es gewechselt ist.</li>
     <li><b>Hinschicken:</b> Umgekehrt geht es vom Handy über "Abspielen auf" an den Rechner oder ans Tablet, für Musik, Hörbücher und Videos.</li>
     <li><b>Gleichzeitig steuern</b> dürfen alle Geräte; die letzte Eingabe gilt, und das spielende Gerät zeigt, von wo sie kam.</li>
@@ -194,6 +195,7 @@
 </div>
 
 <script type="module">
+  if (new URLSearchParams(location.search).has('bild')) document.querySelector('.erklaerung').remove();   // Bild für die README
   const r = document.getElementById('rechner');
   const KACHELN = [['bilder/cover-abba-gold.jpg', 'ABBA'], ['http://192.168.178.49:8031/api/player/7fqg9-SIWfU/thumbnail', 'OVERWERK'],
     ['http://192.168.178.49:8031/api/player/A96hojkujLc/thumbnail', 'Electro Junkiee'], ['http://192.168.178.49:8031/api/player/eFnMdac-gOU/thumbnail', 'Vini Vici'],

@@ -1,5 +1,5 @@
 """
-TubeVault – Nachvertonung und zusätzliche Tonspuren (Router) v1.0.0
+TubeVault - Nachvertonung und zusätzliche Tonspuren (Router) v1.1.0
 
 Zwei Nutzer dieser Schnittstelle:
   - die Oberfläche: Videos vormerken, Warteliste ansehen, Tonspur umschalten
@@ -55,9 +55,13 @@ async def delete_audio_track(video_id: str, track_id: int):
 
 class EnqueueRequest(BaseModel):
     video_id: str
-    target_language: Optional[str] = None   # leer = Deutsch
-    voice: Optional[str] = None             # leer = Vorauswahl
-    subtitles: dubbing.SubtitleUse = "any"
+    target_language: Optional[str] = None            # leer = Deutsch
+    voice: Optional[str] = None                      # leer = Vorauswahl
+    subtitles: Optional[dubbing.SubtitleUse] = None  # leer = eingestellte Vorauswahl
+
+
+class RevoiceRequest(BaseModel):
+    voice: str
 
 
 class VoiceReport(BaseModel):
@@ -75,6 +79,13 @@ async def dubbing_status():
     return {"enabled": await dubbing.is_enabled(), "counts": await dubbing.counts()}
 
 
+@router.get("/api/dubbing/overview", response_model=dubbing.DubbingOverview)
+async def dubbing_overview():
+    """Für die Seite im Takt: Zählungen je Reiter, Lebenszeichen des
+    Nachvertoners und die laufenden Aufträge mit ihren Schritten."""
+    return await dubbing.overview()
+
+
 @router.post("/api/dubbing/requests")
 async def enqueue_dubbing(request: EnqueueRequest):
     """Ein Video zur Nachvertonung vormerken, mit Stimme und Zielsprache."""
@@ -83,24 +94,25 @@ async def enqueue_dubbing(request: EnqueueRequest):
         request.video_id, request.target_language, request.voice, request.subtitles)
 
 
-@router.get("/api/dubbing/voices")
+@router.get("/api/dubbing/voices", response_model=dubbing.VoiceChoice)
 async def dubbing_voices():
-    """Stimmen, die der Vertonungsdienst zuletzt gemeldet hat, samt Vorauswahl."""
+    """Stimmen, die der Vertonungsdienst zuletzt gemeldet hat, samt Vorauswahl
+    und Hörprobe (aus einer fertigen Tonspur mit dieser Stimme)."""
     return await dubbing.voice_choice()
 
 
-@router.post("/api/dubbing/voices")
+@router.post("/api/dubbing/voices", response_model=dubbing.VoiceChoice)
 async def report_dubbing_voices(report: VoiceReport):
     """Der Nachvertoner meldet die verfügbaren Stimmen."""
     await dubbing.report_voices(report.voices)
     return await dubbing.voice_choice()
 
 
-@router.get("/api/dubbing/requests")
-async def list_dubbing_requests(status: Optional[str] = None, limit: int = 200):
-    """Warteliste. status: open | queued | working | done | error | skipped."""
-    return {"requests": await dubbing.list_requests(status, max(1, min(limit, 500))),
-            "counts": await dubbing.counts()}
+@router.get("/api/dubbing/requests", response_model=dubbing.DubRequestPage)
+async def list_dubbing_requests(tab: dubbing.Tab = "all", offset: int = 0, limit: int = dubbing.PAGE_SIZE):
+    """Aufträge eines Reiters, seitenweise. Laufende stehen unter "all" nicht
+    in der Liste, sondern mit ihren Schritten in der Übersicht."""
+    return await dubbing.list_page(tab, offset, limit)
 
 
 @router.post("/api/dubbing/requests/{request_id}/retry")
@@ -108,6 +120,14 @@ async def retry_dubbing(request_id: int):
     if not await dubbing.retry(request_id):
         raise HTTPException(status_code=409, detail="Nur fehlgeschlagene oder übersprungene Aufträge lassen sich wiederholen")
     return {"queued": True}
+
+
+@router.post("/api/dubbing/requests/{request_id}/revoice", response_model=dubbing.EnqueueOutcome)
+async def revoice_dubbing(request_id: int, request: RevoiceRequest):
+    """Mit anderer Stimme neu vertonen (die vorhandene Tonspur bleibt, bis
+    die neue sie ersetzt)."""
+    await _require_enabled()
+    return await dubbing.revoice(request_id, request.voice)
 
 
 @router.post("/api/dubbing/requests/{request_id}/cancel")
@@ -119,14 +139,14 @@ async def cancel_dubbing(request_id: int):
 
 
 @router.delete("/api/dubbing/requests/{request_id}")
-async def remove_dubbing(request_id: int):
-    """Abgeschlossenen Auftrag aus der Liste nehmen (eine fertige Tonspur bleibt)."""
-    job = await dubbing.get(request_id)
-    if not job:
+async def remove_dubbing(request_id: int, with_track: bool = False):
+    """Abgeschlossenen Auftrag aus der Liste nehmen. Die fertige Tonspur
+    bleibt, außer with_track=true: dann wird sie mit gelöscht."""
+    outcome = await dubbing.remove(request_id, with_track)
+    if outcome == "missing":
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
-    if job.status in dubbing.OPEN_STATUSES:
+    if outcome == "open":
         raise HTTPException(status_code=409, detail="Offene Aufträge erst abbrechen")
-    await dubbing.remove(request_id)
     return {"removed": True}
 
 
@@ -185,10 +205,8 @@ async def dubbing_progress(request_id: int, request: ProgressRequest):
 
 @router.post("/api/dubbing/requests/{request_id}/fail")
 async def dubbing_failed(request_id: int, request: FailRequest):
-    if not await dubbing.get(request_id):
+    if not await dubbing.report_failure(request_id, request.note, request.skipped):
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
-    if (await dubbing.get(request_id)).status == "working":   # abgebrochene bleiben abgebrochen
-        await dubbing.finish(request_id, "skipped" if request.skipped else "error", request.note[:500])
     return {"ok": True}
 
 

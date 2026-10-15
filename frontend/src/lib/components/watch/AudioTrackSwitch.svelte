@@ -7,6 +7,7 @@
 <script>
   import { api } from '../../api/client.js';
   import { followVideo, preferredLanguage, rememberLanguage } from '../../utils/audioTrackSync.js';
+  import { videoSession } from '../../stores/videoSession.svelte.js';
 
   let { videoId, videoEl, originalLanguage = null, mediaKey = 0 } = $props();
 
@@ -37,6 +38,13 @@
 
   // Video oder Datei gewechselt → Spuren neu lesen
   $effect(() => { videoId; mediaKey; load(); });
+
+  // Spuren der Fernsteuerung bekannt machen (stores/videoSession.svelte.js)
+  $effect(() => {
+    videoSession.setTracks(tracks.map((t) => ({ id: t.id, label: t.label, language: t.language })), activeId,
+                           (id) => choose(tracks.find((t) => t.id === id) || null));
+    return () => videoSession.clearTracks();
+  });
 
   // Gleichlauf an- und abkoppeln, sobald Spur, Player und Audio-Element stehen
   $effect(() => {

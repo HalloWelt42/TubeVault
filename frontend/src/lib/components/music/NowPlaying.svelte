@@ -3,33 +3,29 @@
   Liedtext (Klick auf eine Zeile springt dorthin) und Angaben zum Titel.
 -->
 <script>
-  import { api } from '../../api/client.js';
-  import { coverUrl, isFile, loadLyrics } from '../../utils/musicTrack.js';
+  import SegmentList from './SegmentList.svelte';
+  import { untrack } from 'svelte';
+  import { coverUrl, isFile } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../utils/format.js';
-  import { parseLrc, lineAt } from '../../utils/lrc.js';
+  import { TrackLyrics } from '../../utils/trackLyrics.svelte.js';
   import { scrollWithin } from '../../utils/scrollRoot.js';
 
   // schlange | liedtext | infos; Navigation kommt vom Router der jeweiligen Oberfläche
   let { view = 'schlange', onOpenArtist = null, onOpenVideo = null } = $props();
 
   let track = $derived(player.current);
-  let lyrics = $state({ id: null, plain: '', synced: [], offset: 0 });
+  const lyrics = new TrackLyrics();
   let lyricsEl = $state(null);
   let dragFrom = $state(null);
 
-  // Liedtext des laufenden Titels laden
+  // Liedtext des laufenden Titels laden (nur der Titel wird verfolgt)
   $effect(() => {
-    const id = track?.id;
-    if (!id || lyrics.id === id) return;
-    lyrics = { id, plain: '', synced: [], offset: 0 };
-    loadLyrics(track).then((res) => {
-      if (player.current?.id !== id) return;
-      lyrics = { id, plain: res.plain || '', synced: parseLrc(res.synced), offset: res.offset || 0 };
-    }).catch(() => {});
+    const current = track;
+    untrack(() => lyrics.load(current));
   });
 
-  let activeLine = $derived(lineAt(lyrics.synced, player.time, lyrics.offset));
+  let activeLine = $derived(lyrics.lineAt(player.time));
   $effect(() => {
     if (view !== 'liedtext' || activeLine < 0 || !lyricsEl) return;
     const line = lyricsEl.querySelector(`[data-zeile="${activeLine}"]`);
@@ -74,6 +70,7 @@
                 <button class="weg" onclick={() => player.remove(i)} title="Aus der Warteschlange"><i class="fa-solid fa-xmark"></i></button>
               {/if}
             </div>
+            {#if i === player.index}<SegmentList />{/if}
           {/if}
         {/each}
         {#if player.upcoming.length === 0}
@@ -85,7 +82,7 @@
         {#if lyrics.synced.length}
           {#each lyrics.synced as line, i}
             <button class="zeile" class:an={i === activeLine} class:vorbei={i < activeLine} data-zeile={i}
-                    onclick={() => player.seek(line.time + lyrics.offset)}>{line.text || '♪'}</button>
+                    onclick={() => player.seek(lyrics.timeOf(i))}>{line.text || '♪'}</button>
           {/each}
         {:else if lyrics.plain}
           <pre>{lyrics.plain}</pre>

@@ -15,8 +15,12 @@
   import HoldButton from '../parts/HoldButton.svelte';
   import { followVideo, preferredLanguage, rememberLanguage } from '../../lib/utils/audioTrackSync.js';
   import { loadSkipRanges, skipTarget } from '../../lib/utils/adSkip.js';
+  import { untrack } from 'svelte';
+  import { videoSession } from '../../lib/stores/videoSession.svelte.js';
+  import DeviceSheet from '../parts/DeviceSheet.svelte';
 
-  let { id, listId = null, shuffle = false } = $props();
+  /** handoff: von einem anderen Gerät übernommen, an der Stelle startAt sofort weiter */
+  let { id, listId = null, shuffle = false, startAt = 0, handoff = false } = $props();
 
   const SAVE_EVERY_MS = 10000;
   const RESUME_MIN_S = 5;
@@ -45,6 +49,31 @@
   let place = $derived(queue ? queue.videos.findIndex(v => v.id === id) : -1);
   let previous = $derived(place > 0 ? queue.videos[place - 1] : null);
   let next = $derived(place >= 0 && place < queue.videos.length - 1 ? queue.videos[place + 1] : null);
+
+  // ─── Fernsteuerung (lib/stores/remote.svelte.js): von anderen Geräten bedienbar ───
+  let devicesOpen = $state(false);
+  let startUsed = false;
+  const remoteNav = {
+    next: () => playFromQueue(next),
+    prev: () => playFromQueue(previous),
+    hasNext: () => !!next,
+    hasPrev: () => !!previous,
+    queue: () => (listId ? { liste: `playlist:${listId}`, idx: Math.max(0, place) } : {}),
+  };
+  $effect(() => {
+    const el = player;
+    const current = video;
+    if (!el || !current || current.preview_mode) return;
+    untrack(() => videoSession.attach(el, { id: current.id, title: current.title, channel_name: current.channel_name,
+                                            duration: current.duration }, remoteNav));
+    return () => videoSession.detach(el);
+  });
+  $effect(() => {
+    const list = tracks;
+    videoSession.setTracks(list.map((t) => ({ id: t.id, label: t.label, language: t.language })), activeTrackId,
+                           (trackId) => chooseTrack(list.find((t) => t.id === trackId) || null));
+    return () => videoSession.clearTracks();
+  });
 
   function playFromQueue(target) {
     if (!target) return;
@@ -91,6 +120,12 @@
 
   function onLoadedMetadata() {
     keepVolume(player);
+    if (handoff && !startUsed) {
+      startUsed = true;
+      player.currentTime = startAt;
+      player.play().catch(() => {});
+      return;
+    }
     if (continuing) {
       continuing = false;
       player.play().catch(() => {});
@@ -287,6 +322,9 @@
         <button class="m-btn fav" class:on={isFav} onclick={toggleFavorite}>
           <i class="{isFav ? 'fa-solid' : 'fa-regular'} fa-heart"></i> {isFav ? 'Favorit' : 'Zu Favoriten'}
         </button>
+        <button class="m-btn" onclick={() => devicesOpen = true} aria-label="Geräte: abspielen auf ...">
+          <i class="fa-solid fa-tower-broadcast"></i> Geräte
+        </button>
       {/if}
     </section>
 
@@ -311,6 +349,8 @@
     {/if}
   {/if}
 </div>
+
+{#if devicesOpen}<DeviceSheet onClose={() => devicesOpen = false} />{/if}
 
 <style>
   .video-view { background: var(--m-bg); padding-bottom: calc(var(--m-safe-bottom) + 24px); }

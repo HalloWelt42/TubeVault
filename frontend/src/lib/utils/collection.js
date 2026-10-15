@@ -22,6 +22,7 @@ const text = (key) => (a, b) => (a[key] || '').localeCompare(b[key] || '', 'de',
 const SORTERS = {
   eigene: null,                                                        // Reihenfolge der Sammlung
   hinzugefuegt: (a, b) => (b.added_at || '').localeCompare(a.added_at || ''),
+  neueste: (a, b) => (b.upload_date || '').localeCompare(a.upload_date || ''),   // nach Erscheinen
   titel: text('title'),
   dauer: (a, b) => (a.duration || 0) - (b.duration || 0),
   kanal: (a, b) => text('channel_name')(a, b) || text('title')(a, b),

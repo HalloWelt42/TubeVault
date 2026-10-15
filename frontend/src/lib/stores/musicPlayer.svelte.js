@@ -12,15 +12,20 @@ import { api } from '../api/client.js';
 import { audioSrc, coverUrl, isFile, recordPlay, setFavorite } from '../utils/musicTrack.js';
 import { loadSkipRanges, skipTarget } from '../utils/adSkip.js';
 import { emitVideoMutation } from '../utils/videoMutations.js';
+import { insertItem, moveItem, removeItem } from '../utils/queueOps.js';
+import { normalizeRate } from '../utils/playbackRate.js';
+import { afterMinutes, afterTrack, frozen, isDue, remainingMs, running } from '../utils/sleepTimer.js';
+import { nextSegmentStart, previousSegmentStart, segmentIndexAt, toSegments } from '../utils/segments.js';
 
 const BOOK_PREFIX = 'hoerbuch:';
+const RATE_KEY = 'musik.tempo';             // Tempo je Hörbuch: { <Buch>: 1.25 }
 const BOOK_SAVE_MS = 10000;
 const STATE_KEY = 'musik.zustand';          // Weiterhören: Warteschlange dieses Geräts
 const VOLUME_KEY = 'player.lastVolume';     // wie beim Videoplayer
 const COUNT_AFTER_S = 30;                    // ab dann zählt ein Titel als gehört
 const RESTART_AFTER_S = 3;                   // "Zurück" springt danach erst an den Titelanfang
 const REPEAT_MODES = ['off', 'all', 'one'];
-const UNDO_MS = 6000;                        // so lange lässt sich ein Löschen zurücknehmen
+export const UNDO_MS = 6000;                 // so lange lässt sich ein Löschen zurücknehmen
 // Stille, um die Wiedergabe in einer Nutzeraktion freizuschalten (iOS)
 const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
@@ -46,6 +51,11 @@ class MusicPlayer {
   repeat = $state('off');
   pendingDelete = $state(null);  // { track } - wird nach UNDO_MS endgültig gelöscht
   audioInfo = $state(null);      // Format und Bitrate des laufenden Titels
+  rate = $state(1);              // Tempo; nur bei Hörbüchern wählbar, je Buch gemerkt
+  sleep = $state(null);          // Schlaf-Zeitgeber (utils/sleepTimer.js), null = aus
+  sleepLeft = $state(null);      // Millisekunden bis zum Anhalten, wenn nach Minuten
+  segments = $state([]);         // Abschnitte des laufenden Titels (Kapitel eines Mixes, utils/segments.js)
+  segmentIndex = $state(-1);     // laufender Abschnitt; ändert sich nur beim Wechsel, nicht mit jeder Sekunde
 
   #audio = null;
   #counted = null;               // Kennung, deren Wiedergabe schon gezählt ist
@@ -58,6 +68,12 @@ class MusicPlayer {
   get active() { return this.queue.length > 0; }
   get upcoming() { return this.queue.slice(this.index + 1); }
 
+  /** Laufender Abschnitt { index, count, start, end, title } oder null */
+  get segment() {
+    const index = this.segmentIndex;
+    return index < 0 || !this.segments[index] ? null : { index, count: this.segments.length, ...this.segments[index] };
+  }
+
   constructor() {
     if (typeof window === 'undefined') return;
     const saved = readJson(STATE_KEY);
@@ -65,6 +81,7 @@ class MusicPlayer {
       Object.assign(this, { queue: saved.queue, index: saved.index ?? 0, title: saved.title || '',
                             source: saved.source || null, shuffle: !!saved.shuffle, repeat: saved.repeat || 'off',
                             time: saved.time || 0 });
+      this.rate = this.#rateFor(this.source);
     }
     const volume = parseFloat(localStorage.getItem(VOLUME_KEY));
     if (volume >= 0 && volume <= 1) this.volume = volume;
@@ -81,8 +98,8 @@ class MusicPlayer {
     audio.dataset.musik = '1';
     audio.volume = this.volume;
     document.body.appendChild(audio);
-    audio.addEventListener('play', () => { this.playing = true; this.#pauseVideos(); });
-    audio.addEventListener('pause', () => { this.playing = false; this.#save(); });
+    audio.addEventListener('play', () => { this.playing = true; this.#pauseVideos(); this.sleep = running(this.sleep, Date.now()); });
+    audio.addEventListener('pause', () => { this.playing = false; this.sleep = frozen(this.sleep, Date.now()); this.#save(); });
     audio.addEventListener('waiting', () => { this.loading = true; });
     audio.addEventListener('playing', () => { this.loading = false; });
     audio.addEventListener('loadedmetadata', () => { this.duration = audio.duration || this.current?.duration || 0; });
@@ -138,6 +155,7 @@ class MusicPlayer {
     this.queue = tracks;
     this.title = title;
     this.source = source;
+    this.rate = this.#rateFor(source);
     this.#start(startIndex, at);
   }
 
@@ -146,7 +164,7 @@ class MusicPlayer {
     return this.source?.startsWith(BOOK_PREFIX) ? this.source.slice(BOOK_PREFIX.length) : null;
   }
 
-  async #start(index, at = 0) {
+  async #start(index, at = 0, { autoplay = true } = {}) {
     if (index < 0 || index >= this.queue.length) return;
     const audio = this.#element();
     this.index = index;
@@ -156,14 +174,24 @@ class MusicPlayer {
     this.#counted = null;
     audio.src = audioSrc(track);
     audio.currentTime = at;
+    this.#applyRate();
     this.#updateMetadata();
     this.#save();
-    audio.play().catch(() => { this.playing = false; });
+    if (autoplay) audio.play().catch(() => { this.playing = false; });
     this.audioInfo = null;
     api.musicAudioInfo(track.id).then((info) => { if (this.current?.id === track.id) this.audioInfo = info; }).catch(() => {});
     this.#skipRanges = [];
-    // Werbestellen gibt es nur in Videos
-    if (!isFile(track)) loadSkipRanges(track.id).then((ranges) => { if (this.current?.id === track.id) this.#skipRanges = ranges; });
+    this.segments = [];
+    this.segmentIndex = -1;
+    // Werbestellen und Abschnitte (Kapitel, z.B. die Titelliste eines Mixes) gibt es nur in Videos
+    if (!isFile(track)) {
+      loadSkipRanges(track.id).then((ranges) => { if (this.current?.id === track.id) this.#skipRanges = ranges; });
+      api.getChapters(track.id).then((res) => {
+        if (this.current?.id !== track.id) return;
+        this.segments = toSegments(res.chapters, track.duration || this.duration);
+        this.#followSegment();
+      }).catch(() => {});
+    }
   }
 
   /** Weiterhören: gespeicherte Warteschlange an der gemerkten Stelle fortsetzen */
@@ -187,23 +215,93 @@ class MusicPlayer {
 
   pause() { this.#audio?.pause(); }
 
-  next() {
-    if (this.index + 1 < this.queue.length) return this.#start(this.index + 1);
-    if (this.repeat === 'all' && this.queue.length) return this.#start(0);
-    this.pause();
+  /** Wohin "Weiter" führt: der nächste Titel, bei "alle wiederholen" wieder der erste, sonst -1 */
+  #nextIndex() {
+    if (this.index + 1 < this.queue.length) return this.index + 1;
+    return this.repeat === 'all' && this.queue.length ? 0 : -1;
   }
 
+  /** Weiter: erst durch die Abschnitte des Titels, danach der nächste Titel */
+  next() {
+    const segmentStart = nextSegmentStart(this.segments, this.time);
+    if (segmentStart !== null) return this.seek(segmentStart);
+    const index = this.#nextIndex();
+    if (index < 0) return this.pause();
+    this.#start(index);
+  }
+
+  /** Zurück: an den Anfang des Abschnitts bzw. Titels, kurz danach einen weiter zurück */
   prev() {
+    const segmentStart = previousSegmentStart(this.segments, this.time, RESTART_AFTER_S);
+    if (segmentStart !== null) return this.seek(segmentStart);
     if (this.time > RESTART_AFTER_S || this.index === 0) return this.seek(0);
     this.#start(this.index - 1);
   }
 
-  jump(index) { this.#start(index); }
+  /** Direkt zum vorigen Titel bzw. Teil, ohne erst an den Anfang zu springen */
+  previousTrack() {
+    if (this.index > 0) return this.#start(this.index - 1);
+    this.seek(0);
+  }
+
+  jump(index, at = 0) { this.#start(index, at); }
 
   seek(seconds) {
     const audio = this.#element();
     audio.currentTime = Math.max(0, Math.min(seconds, this.duration || seconds));
     this.time = audio.currentTime;
+    this.#followSegment();
+  }
+
+  /** Um so viele Sekunden springen (negativ = zurück), innerhalb des Titels */
+  skipBy(seconds) { this.seek(this.time + seconds); }
+
+  // ─── Tempo (Hörbücher) ───
+  /** Tempo des laufenden Hörbuchs setzen und für dieses Buch merken */
+  setRate(value) {
+    const book = this.audiobook;
+    if (!book) return;
+    this.rate = normalizeRate(value);
+    this.#applyRate();
+    writeJson(RATE_KEY, { ...(readJson(RATE_KEY) || {}), [book]: this.rate });
+  }
+
+  /** Gemerktes Tempo einer Quelle: je Hörbuch, Musik immer 1 */
+  #rateFor(source) {
+    if (!source?.startsWith(BOOK_PREFIX)) return 1;
+    return normalizeRate(readJson(RATE_KEY)?.[source.slice(BOOK_PREFIX.length)] ?? 1);
+  }
+
+  #applyRate() {
+    if (!this.#audio) return;
+    this.#audio.defaultPlaybackRate = this.rate;   // gilt auch nach dem nächsten Laden
+    this.#audio.playbackRate = this.rate;
+  }
+
+  // ─── Schlaf-Zeitgeber ───
+  /** Nach dem laufenden Titel bzw. Teil anhalten */
+  sleepAfterTrack() { this.#setSleep(afterTrack()); }
+
+  /** Nach so vielen Minuten Hörzeit anhalten; Pausen zählen nicht mit */
+  sleepAfterMinutes(minutes) { this.#setSleep(afterMinutes(minutes, Date.now(), this.playing)); }
+
+  cancelSleep() { this.#setSleep(null); }
+
+  #setSleep(timer) {
+    this.sleep = timer;
+    this.sleepLeft = remainingMs(timer, Date.now());
+  }
+
+  /** Bei jedem Zeitschritt: fällig? dann anhalten; sonst die Anzeige je Sekunde nachführen */
+  #tickSleep() {
+    if (this.sleep?.kind !== 'minutes') return;
+    const now = Date.now();
+    if (isDue(this.sleep, now)) {
+      this.#setSleep(null);
+      return this.pause();
+    }
+    const left = remainingMs(this.sleep, now);
+    if (Math.ceil(left / 1000) !== Math.ceil((this.sleepLeft ?? 0) / 1000)) this.sleepLeft = left;
   }
 
   setVolume(value) {
@@ -252,21 +350,22 @@ class MusicPlayer {
 
   remove(position) {
     if (position === this.index) return;
-    this.queue = this.queue.filter((_, i) => i !== position);
-    if (position < this.index) this.index -= 1;
-    this.#save();
+    this.#arrange(removeItem(this.queue, this.index, position));
+  }
+
+  /** Einen Titel an eine Stelle setzen, z.B. Rückgängig nach remove() */
+  insertAt(track, position) {
+    if (!track) return;
+    this.#arrange(insertItem(this.queue, this.index, track, position));
   }
 
   move(from, to) {
     if (from === to) return;
-    const items = [...this.queue];
-    const [item] = items.splice(from, 1);
-    items.splice(to, 0, item);
-    let index = this.index;
-    if (from === index) index = to;
-    else if (from < index && to >= index) index -= 1;
-    else if (from > index && to <= index) index += 1;
-    this.queue = items;
+    this.#arrange(moveItem(this.queue, this.index, from, to));
+  }
+
+  #arrange({ queue, index }) {
+    this.queue = queue;
     this.index = index;
     this.#save();
   }
@@ -278,6 +377,7 @@ class MusicPlayer {
     this.title = '';
     this.source = null;
     if (this.#audio) this.#audio.removeAttribute('src');
+    this.#setSleep(null);
     this.#save();
     if ('mediaSession' in navigator) navigator.mediaSession.metadata = null;
   }
@@ -346,6 +446,35 @@ class MusicPlayer {
     return favorite;
   }
 
+  // ─── Hörbuch ───
+  /** Das laufende Hörbuch von vorn; liefert die bisherige Stelle ({ index, time }) für ein Rückgängig */
+  restartBook() {
+    if (!this.audiobook) return null;
+    const before = { index: this.index, time: this.time };
+    this.#start(0, 0);
+    return before;
+  }
+
+  // ─── Übergabe zwischen Geräten (stores/remote.svelte.js) ───
+  /** Alles, was ein anderes Gerät braucht, um genau hier weiterzuspielen */
+  snapshot() {
+    if (!this.current) return null;
+    return { queue: $state.snapshot(this.queue), index: this.index, title: this.title, source: this.source,
+             time: this.#audio?.currentTime || this.time, shuffle: this.shuffle, repeat: this.repeat };
+  }
+
+  /** Eine übergebene Wiedergabe übernehmen und an derselben Stelle fortsetzen */
+  adopt(state) {
+    if (!state?.queue?.length) return;
+    this.shuffle = !!state.shuffle;
+    this.repeat = REPEAT_MODES.includes(state.repeat) ? state.repeat : 'off';
+    this.#setQueue(state.queue, Math.min(state.index || 0, state.queue.length - 1),
+                   { title: state.title || '', source: state.source || null }, state.time || 0);
+  }
+
+  /** In der Nutzeraktion vor einer erwarteten Übergabe: Ton freigeben (iOS) */
+  prime() { this.#unlock(); }
+
   // ─── Ereignisse ───
   #onTime() {
     const audio = this.#audio;
@@ -356,11 +485,14 @@ class MusicPlayer {
       this.#counted = this.current.id;
       recordPlay(this.current).catch(() => {});
     }
-    clearTimeout(this.#saveTimer);
-    this.#saveTimer = setTimeout(() => this.#save(), 3000);
+    // Stelle höchstens alle 3 s merken (gedrosselt, nicht entprellt: timeupdate kommt
+    // während der Wiedergabe laufend, ein entprellter Merker käme nie zum Zug)
+    this.#saveTimer ??= setTimeout(() => { this.#saveTimer = null; this.#save(); }, 3000);
+    this.#tickSleep();
+    this.#followSegment();
     if ('mediaSession' in navigator && audio.duration && navigator.mediaSession.setPositionState) {
       try {
-        navigator.mediaSession.setPositionState({ duration: audio.duration, position: audio.currentTime, playbackRate: 1 });
+        navigator.mediaSession.setPositionState({ duration: audio.duration, position: audio.currentTime, playbackRate: this.rate });
       } catch { /* manche Geräte kennen das nicht */ }
     }
   }
@@ -370,8 +502,16 @@ class MusicPlayer {
       this.#counted = this.current.id;
       recordPlay(this.current).catch(() => {});
     }
+    if (this.sleep?.kind === 'track') return this.#sleepNow();
     if (this.repeat === 'one') return this.#start(this.index);
     this.next();
+  }
+
+  /** Schlaf-Zeitgeber "nach diesem Titel": den nächsten bereitlegen, aber nicht spielen */
+  #sleepNow() {
+    this.#setSleep(null);
+    const index = this.#nextIndex();
+    if (index >= 0) this.#start(index, 0, { autoplay: false });
   }
 
   // ─── Sperrbildschirm und Medientasten ───
@@ -390,25 +530,39 @@ class MusicPlayer {
     }
   }
 
+  /** Abschnitt nachführen; beim Wechsel zeigt der Sperrbildschirm den neuen */
+  #followSegment() {
+    const index = this.segments.length ? segmentIndexAt(this.segments, this.time) : -1;
+    if (index === this.segmentIndex) return;
+    this.segmentIndex = index;
+    this.#updateMetadata();
+  }
+
   #updateMetadata() {
     const track = this.current;
     if (!track || !('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
     const artwork = new URL(coverUrl(track), location.href).href;
+    // In einem Mix zeigt der Sperrbildschirm den laufenden Abschnitt, darunter den Mix
+    const segment = this.segments[this.segmentIndex];
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: track.title, artist: track.artist, album: track.album || this.title || 'TubeVault',
+      title: segment?.title || track.title, artist: segment ? track.title : track.artist,
+      album: track.album || this.title || 'TubeVault',
       artwork: [{ src: artwork, sizes: '480x360', type: 'image/jpeg' }],
     });
   }
 
   #bookSentAt = 0;
+  #bookSentPart = null;
 
-  /** Stand des Hörbuchs beim Server merken: höchstens alle 10 s, beim Anhalten sofort */
+  /** Stand des Hörbuchs beim Server merken: höchstens alle 10 s, beim Anhalten
+   *  und beim Wechsel des Teils sofort */
   #saveBookProgress() {
     const key = this.audiobook;
     if (!key || !this.current) return;
     const now = Date.now();
-    if (this.playing && now - this.#bookSentAt < BOOK_SAVE_MS) return;
+    if (this.playing && this.#bookSentPart === this.current.id && now - this.#bookSentAt < BOOK_SAVE_MS) return;
     this.#bookSentAt = now;
+    this.#bookSentPart = this.current.id;
     api.musicBookProgress(key, this.current.id, Math.floor(this.time)).catch(() => {});
   }
 

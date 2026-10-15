@@ -31,6 +31,9 @@
   import { getFilter, saveFilters } from '../lib/stores/filterPersist.js';
   import { skipTarget } from '../lib/utils/adSkip.js';
   import { scrollWithin } from '../lib/utils/scrollRoot.js';
+  import { untrack } from 'svelte';
+  import { videoSession } from '../lib/stores/videoSession.svelte.js';
+  import DeviceButton from '../lib/components/remote/DeviceButton.svelte';
 
   marked.setOptions({ breaks: true, gfm: true });
   function renderMarkdown(text) {
@@ -111,6 +114,22 @@
   let videoPlaylists = $state([]);  // Playlists die dieses Video enthalten
   let plStripIdx = $state(0);  // Welche Playlist im Strip angezeigt wird
   let neighbors = $state({ prev: null, next: null });  // Bibliothek-Nachbarn
+
+  // Fernsteuerung (stores/remote.svelte.js): dieses Video ist von anderen Geräten bedienbar
+  const remoteNav = {
+    next: () => skipNext(),
+    prev: () => skipPrev(),
+    hasNext: () => ($playlistQueue.active ? hasNext() : !!neighbors.next),
+    hasPrev: () => ($playlistQueue.active ? hasPrev() : !!neighbors.prev),
+    queue: () => ($playlistQueue.active ? { liste: $playlistQueue.source, idx: $playlistQueue.currentIndex } : {}),
+  };
+  $effect(() => {
+    const el = videoEl;
+    const id = video?.id;
+    if (!el || !id) return;
+    untrack(() => videoSession.attach(el, { id, title: video.title, channel_name: video.channel_name, duration: video.duration }, remoteNav));
+    return () => videoSession.detach(el);
+  });
 
   // Shared state (übergeben an Komponenten)
   let chapters = $state([]);
@@ -339,8 +358,8 @@
       toast.info(`Fortgesetzt bei ${formatDuration(lastPos)}`);
     }
 
-    // In einer laufenden Playlist geht es von selbst weiter
-    if (q.active && videoEl) {
+    // In einer laufenden Playlist geht es von selbst weiter, ebenso nach einer Übergabe von einem anderen Gerät
+    if ((q.active || $route.params?.weiter) && videoEl) {
       videoEl.play().catch(() => {});
     }
 
@@ -865,6 +884,7 @@
               <i class="fa-solid fa-language"></i>
             </button>
           {/if}
+          <DeviceButton framed />
           <button class="action-btn danger" onclick={deleteVideo} title="Löschen">
             <i class="fa-regular fa-trash-can"></i>
           </button>

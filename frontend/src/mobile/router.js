@@ -8,9 +8,12 @@
  *   /m/suche       Suche (?q=)
  *   /m/neu         Neues aus den Abos
  *   /m/listen      Playlists
- *   /m/musik       Musik (Sammlung, Mixe, Interpreten)
- *   /m/jetzt       Musik: läuft gerade (großer Abspieler)
+ *   /m/musik       Musik (Quelle, Weiterhören, Mixe, Interpreten ...; ?quelle= öffnet
+ *                  eine Gruppe wie artist:abba, ?suche=1 die Suche in der Musik)
+ *   /m/jetzt       Musik: läuft gerade (großer Abspieler, bei Hörbüchern deren Ansicht;
+ *                  ?ansicht=liedtext | schlange für Liedtext und Warteschlange bzw. Teile)
  *   /m/liste/:id   eine Playlist
+ *   /m/fern        Fernbedienung für ein anderes Gerät (?id=)
  *   /m/video/:id   Wiedergabe (?liste= spielt die Playlist am Stück, &zufall=1 gemischt)
  */
 import { writable } from 'svelte/store';
@@ -24,6 +27,7 @@ function parse() {
   if (rest[0] === 'video' && rest[1]) return { view: 'video', id: rest[1], params };
   if (rest[0] === 'liste' && rest[1]) return { view: 'liste', id: rest[1], params };
   if (rest[0] === 'jetzt') return { view: 'jetzt', id: null, params };
+  if (rest[0] === 'fern') return { view: 'fern', id: null, params };
   if (TABS.includes(rest[0])) return { view: rest[0], id: null, params };
   return { view: 'start', id: null, params };
 }

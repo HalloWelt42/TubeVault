@@ -1,5 +1,5 @@
 <script>
-  import { route } from './lib/router/router.js';
+  import { route, navigate } from './lib/router/router.js';
   import { routeDefinitions } from './lib/router/routes.js';
   import { loadSettings } from './lib/stores/settings.js';
   import { playlistQueue, stopQueue } from './lib/stores/playlistQueue.js';
@@ -13,6 +13,11 @@
   import LogTerminal from './lib/components/common/LogTerminal.svelte';
   import VersionBar from './lib/components/common/VersionBar.svelte';
   import MusicPlayerBar from './lib/components/music/MusicPlayerBar.svelte';
+  import RemoteBar from './lib/components/remote/RemoteBar.svelte';
+  import { remote } from './lib/stores/remote.svelte.js';
+  import { musicPlayer } from './lib/stores/musicPlayer.svelte.js';
+  import { videoSession } from './lib/stores/videoSession.svelte.js';
+  import { toast } from './lib/stores/notifications.js';
   import { startVersionWatch } from './lib/utils/versionWatch.js';
   import './lib/styles/global.css';
 
@@ -97,6 +102,14 @@
     prevPage = page;
   });
 
+  // Fernsteuerung: dieses Fenster ist ein Gerät, andere Geräte können es steuern
+  remote.start({
+    notify: (text) => toast.info(text),
+    openVideo: (v) => navigate(`/watch/${v.id}`, { t: Math.floor(v.stelle) || null, pl: v.liste, idx: v.liste ? v.idx : null, weiter: 1 }),
+  });
+  // Spielt ein anderes Gerät und hier nichts, steuert die Leiste unten jenes Gerät
+  let remoteDevice = $derived(!musicPlayer.playing && !videoSession.playing ? remote.elsewhere : null);
+
   onConnectionChange(ok => { offline = !ok; });
   // Nach einem Update selbst neu laden (spätestens beim nächsten Seitenwechsel)
   startVersionWatch(route);
@@ -132,7 +145,11 @@
             {/key}
           {/if}
         </main>
-        <MusicPlayerBar />
+        {#if remoteDevice}
+          <RemoteBar device={remoteDevice} />
+        {:else}
+          <MusicPlayerBar />
+        {/if}
         <ActivityPanel />
       </div>
     </div>

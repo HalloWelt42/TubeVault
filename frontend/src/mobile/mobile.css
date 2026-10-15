@@ -74,3 +74,37 @@ button { background: none; border: none; cursor: pointer; touch-action: manipula
   overscroll-behavior: contain;
   padding-left: var(--m-safe-left); padding-right: var(--m-safe-right);
 }
+
+/* ─── Musik: großer Spieler, Hörbuch, Liedtext (views/jetzt) ───
+   Kein Rollen: der Spieler passt in jede Höhe, das Cover gibt nach.
+   --m-farbton ist der Farbton des Covers (views/Jetzt.svelte). */
+.m-spieler {
+  position: relative; height: 100%; display: flex; flex-direction: column; overflow: hidden;
+  padding: var(--m-safe-top) calc(var(--m-safe-right) + 24px) calc(var(--m-safe-bottom) + 12px) calc(var(--m-safe-left) + 24px);
+  background: linear-gradient(180deg, var(--m-farbton, var(--tv-karte)) 0%, var(--m-bg) 62%);
+}
+.m-rund {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center;
+  border-radius: var(--m-radius); color: var(--m-dim); font-size: 20px;
+}
+.m-rund:active { background: rgba(255, 255, 255, 0.08); }
+/* Quadratisches Cover: so breit wie der Spieler, kleiner, wenn die Höhe fehlt */
+.m-cover-feld {
+  flex: 0 1 calc(100vw - 48px - var(--m-safe-left) - var(--m-safe-right)); min-height: 0;
+  container-type: size; display: grid; place-items: center;
+}
+.m-cover-feld img {
+  width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); object-fit: cover; display: block;
+  border-radius: var(--m-radius); box-shadow: var(--tv-schatten); background: var(--m-surface);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+.m-titelzeile { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-top: 16px; flex: none; }
+.m-titelzeile .t { font-size: 24px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-titelzeile .w { font-size: 17px; color: var(--m-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-tasten { display: grid; grid-template-columns: 1fr 1fr 80px 1fr 1fr; align-items: center; justify-items: center; margin-top: 8px; flex: none; }
+.m-tasten button { position: relative; width: 52px; height: 52px; display: grid; place-items: center; color: var(--m-text); font-size: 24px; }
+.m-tasten button.klein { color: var(--m-faint); font-size: 19px; }
+.m-tasten button.an { color: var(--m-accent); }
+.m-tasten button:disabled { opacity: 0.35; cursor: default; }
+.m-tasten button.mitte { width: 76px; height: 76px; border-radius: 50%; background: var(--m-text); color: var(--m-bg); font-size: 30px; }
+.m-tasten button.mitte:active { transform: scale(0.96); }

@@ -6,7 +6,9 @@
 -->
 <script>
   import { loadSettings } from '../lib/stores/settings.js';
-  import { route } from './router.js';
+  import { go, route } from './router.js';
+  import { say } from './notice.js';
+  import { remote } from '../lib/stores/remote.svelte.js';
   import VersionBar from '../lib/components/common/VersionBar.svelte';
   import { startVersionWatch } from '../lib/utils/versionWatch.js';
   import { notice } from './notice.js';
@@ -21,6 +23,8 @@
   import Musik from './views/Musik.svelte';
   import Jetzt from './views/Jetzt.svelte';
   import MusicMiniBar from './parts/MusicMiniBar.svelte';
+  import Meldungen from './parts/Meldungen.svelte';
+  import Fern from './views/Fern.svelte';
 
   const tabViews = { start: Start, videos: Videos, musik: Musik, listen: Listen, suche: Suche, neu: Neu };
 
@@ -30,6 +34,14 @@
 
   loadSettings().finally(() => { ready = true; });
   startVersionWatch(route);   // nach einem Update selbst neu laden
+
+  // Fernsteuerung: dieses Handy ist ein Gerät; übernommene Wiedergaben öffnen sich hier
+  remote.start({
+    notify: (text) => say(text),
+    openVideo: (v) => go(`/video/${v.id}`, { liste: v.liste?.startsWith('playlist:') ? v.liste.slice(9) : null,
+                                              t: Math.floor(v.stelle) || null, weiter: 1 }),
+    openPlayer: () => go('/jetzt'),
+  });
 
   $effect(() => {
     const view = $route.view;
@@ -62,21 +74,28 @@
       {#if $route.view === 'jetzt'}
         <div class="pane over"><Jetzt /></div>
       {/if}
+      {#if $route.view === 'fern'}
+        <div class="pane over"><Fern id={$route.params.id || null} /></div>
+      {/if}
       {#if $route.view === 'video'}
         <!-- Innerhalb einer Playlist bleibt der Player derselbe: nur so darf
              das Telefon das nächste Stück ohne erneuten Tipp starten. -->
         {#key $route.params.liste ? `liste-${$route.params.liste}` : $route.id}
           <div class="pane over">
-            <Video id={$route.id} listId={$route.params.liste || null} shuffle={$route.params.zufall === '1'} />
+            <Video id={$route.id} listId={$route.params.liste || null} shuffle={$route.params.zufall === '1'}
+                   startAt={Number($route.params.t) || 0} handoff={$route.params.weiter === '1'} />
           </div>
         {/key}
       {/if}
     {/if}
-    {#if $notice}
-      <div class="notice {$notice.kind}" role="status">{$notice.text}</div>
-    {/if}
+    <div class="meldungen">
+      {#if $notice}
+        <div class="notice {$notice.kind}" role="status">{$notice.text}</div>
+      {/if}
+      <Meldungen />
+    </div>
   </main>
-  {#if $route.view !== 'video' && $route.view !== 'jetzt'}
+  {#if $route.view !== 'video' && $route.view !== 'jetzt' && $route.view !== 'fern'}
     <MusicMiniBar />
     <TabBar />
   {/if}
@@ -88,8 +107,13 @@
   .pane { position: absolute; inset: 0; }
   .pane[hidden] { display: none; }
   .pane.over { z-index: 2; background: var(--m-bg); }
-  .notice {
+  /* Kurze Hinweise und Meldungen (mit Rückgängig) unten über allen Ansichten */
+  .meldungen {
     position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 5;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  }
+  .meldungen > :global(*) { pointer-events: auto; }
+  .notice {
     padding: 12px 16px; border-radius: var(--m-radius);
     background: var(--m-surface-2); border: 1px solid var(--m-line);
     font-weight: 600; text-align: center;

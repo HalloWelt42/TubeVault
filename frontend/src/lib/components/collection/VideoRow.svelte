@@ -12,7 +12,8 @@
     item,                  // { id, title, channel_name, duration, position, progress, state }
     nr = null,
     time = null,           // statt der Nummer, z.B. Uhrzeit im Verlauf
-    meta = null,           // weitere Angabe neben dem Kanal
+    meta = null,           // weitere Angabe neben dem Kanal (Zahlenschrift, z.B. Datum)
+    note = null,           // Hinweis neben dem Kanal in Textschrift, z.B. warum ein Video in einer Kategorie ist
     mode = null,           // 'ordnen' | 'auswahl' | null
     selected = false,
     lifted = false,        // wird gerade gezogen
@@ -54,7 +55,7 @@
 
   <div class="text">
     <button class="titel" onclick={() => mode === 'auswahl' ? onToggle?.(item) : onPlay(item)}>{item.title}</button>
-    <div class="meta"><span>{item.channel_name || ''}</span>{#if meta}<span class="zahl">{meta}</span>{/if}</div>
+    <div class="meta"><span>{item.channel_name || ''}</span>{#if meta}<span class="zahl">{meta}</span>{/if}{#if note}<span class="hinweis">{note}</span>{/if}</div>
   </div>
 
   <div class="stand">
@@ -121,7 +122,7 @@
            background: none; color: var(--tv-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
   .titel:hover { color: var(--tv-akzent); }
   .meta { display: flex; gap: var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-2); white-space: nowrap; overflow: hidden; }
-  .meta .zahl { color: var(--tv-text-3); }
+  .meta .zahl, .meta .hinweis { color: var(--tv-text-3); }
   .stand { font-size: var(--tv-gr-klein); color: var(--tv-text-2); text-align: right; }
   .tun { display: flex; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity var(--tv-schnell); }
   .zeile:hover .tun, .zeile:focus-within .tun { opacity: 1; }

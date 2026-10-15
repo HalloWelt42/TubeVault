@@ -32,6 +32,7 @@ async def client(async_client_factory, monkeypatch, tmp_path):
 @pytest.fixture
 async def videos(test_db, set_setting):
     await set_setting("dub.enabled", "true")
+    await set_setting("dub.processing_enabled", "true")   # Vertonen läuft (Standard: angehalten)
     for vid, lang, status in (("en1", "en", "ready"), ("en2", None, "ready"),
                               ("de1", "de", "ready"), ("stub", "en", "metadata")):
         await test_db.execute(
@@ -111,11 +112,11 @@ async def test_lebenszeichen_und_abbruch(client, videos):
 
     # Er bleibt sichtbar, mit dem Stand beim Abbruch
     listed = (await client.get("/api/dubbing/requests")).json()
-    assert listed["counts"]["cancelled"] == 1
-    assert listed["requests"][0]["status"] == "cancelled" and "40 %" in listed["requests"][0]["note"]
+    assert (await client.get("/api/dubbing/overview")).json()["counts"]["cancelled"] == 1
+    assert listed["items"][0]["status"] == "cancelled" and "40 %" in listed["items"][0]["note"]
     # Eine späte Fehlermeldung des Nachvertoners ändert daran nichts
     await client.post(f"/api/dubbing/requests/{job['id']}/fail", json={"note": "abgebrochen"})
-    assert (await client.get("/api/dubbing/requests")).json()["requests"][0]["status"] == "cancelled"
+    assert (await client.get("/api/dubbing/requests")).json()["items"][0]["status"] == "cancelled"
     # Erneut vormerken oder aus der Liste nehmen
     assert (await client.post(f"/api/dubbing/requests/{job['id']}/retry")).status_code == 200
     assert (await client.post(f"/api/dubbing/requests/{job['id']}/cancel")).status_code == 200
@@ -142,8 +143,8 @@ async def test_fehlschlag_und_wiederholen(client, videos):
     await client.post("/api/dubbing/requests", json={"video_id": "en1"})
     job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
     await client.post(f"/api/dubbing/requests/{job['id']}/fail", json={"note": "Worker nicht erreichbar"})
-    listed = (await client.get("/api/dubbing/requests?status=error")).json()
-    assert listed["requests"][0]["note"] == "Worker nicht erreichbar" and listed["counts"]["error"] == 1
+    listed = (await client.get("/api/dubbing/requests?tab=error")).json()
+    assert listed["items"][0]["note"] == "Worker nicht erreichbar" and listed["total"] == 1
     assert (await client.post(f"/api/dubbing/requests/{job['id']}/retry")).status_code == 200
     assert (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]["id"] == job["id"]
 
@@ -168,7 +169,7 @@ async def test_tonspur_abliefern_und_abspielen(client, videos, tmp_path):
     part = await client.get(f"/api/player/en2/track/{track['id']}", headers={"Range": "bytes=0-99"})
     assert part.status_code == 206 and len(part.content) == 100
 
-    done = (await client.get("/api/dubbing/requests?status=done")).json()["requests"][0]
+    done = (await client.get("/api/dubbing/requests?tab=done")).json()["items"][0]
     assert done["progress"] == 1 and done["source_language"] == "en", "unbekannte Quellsprache wird nachgetragen"
 
     again = (await client.post("/api/dubbing/requests", json={"video_id": "en2"})).json()

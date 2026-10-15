@@ -30,7 +30,7 @@ from app.routers import (
     jobs, subscriptions, playlists, chapters, search, exports, imports,
     ad_markers, own_collection, music, video_repair, backup, api_endpoints, admin_cleanup, transcripts as transcripts_router,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
-    cookies, admin, dubbing, collections as collections_router,
+    cookies, admin, dubbing, collections as collections_router, remote,
 )
 
 # Logging
@@ -226,6 +226,9 @@ async def lifespan(app: FastAPI):
                           _rss_cron_loop, auto_restart=True, essential=True)
     task_manager.register("drip_cron", "Drip-Feed Cron (15 Min)",
                           _drip_cron_loop, auto_restart=True, essential=True)
+    from app.services import auto_scan
+    task_manager.register("auto_scan", "Ungescannte Kanäle erfassen (alle 2 Std.)",
+                          auto_scan.loop, auto_restart=True, essential=False)
     task_manager.register("thumbnail_backfill", "Thumbnail-Backfill",
                           rss_service.backfill_missing_thumbnails, auto_restart=False, essential=False)
     task_manager.register("banner_backfill", "Banner-Backfill",
@@ -238,6 +241,9 @@ async def lifespan(app: FastAPI):
     from app.services import semantic_index
     task_manager.register("semantic_index", "Bedeutungssuche: Videos einbetten",
                           semantic_index.background_index, auto_restart=True, essential=False)
+    from app.services import category_rules
+    task_manager.register("category_rules", "Kategorien: neue Videos nach Regeln einordnen",
+                          category_rules.worker, auto_restart=True, essential=False)
     # Externe Archive: Erreichbarkeit überwachen, bei Rückkehr wahlweise
     # scannen (archive.mount_check_interval) - wurde früher nie gestartet
     from app.services.archive_service import archive_service
@@ -390,6 +396,7 @@ app.include_router(ignored_videos.router)
 app.include_router(cookies.router)
 app.include_router(admin.router)
 app.include_router(dubbing.router)
+app.include_router(remote.router)
 
 
 # --- Root Endpoint ---
@@ -477,12 +484,15 @@ async def api_overview():
                 "check": "GET /api/favorites/check/{video_id}",
             },
             "categories": {
-                "tree": "GET /api/categories",
-                "flat": "GET /api/categories/flat",
+                "list": "GET /api/categories",
+                "overview": "GET /api/categories/overview",
                 "create": "POST /api/categories",
                 "update": "PUT /api/categories/{id}",
                 "delete": "DELETE /api/categories/{id}",
-                "videos": "GET /api/categories/{id}/videos",
+                "rules": "PUT /api/categories/{id}/rules",
+                "preview": "POST /api/categories/preview",
+                "videos": "GET /api/collections?source=category:{id}",
+                "topics": "GET|POST /api/categories/topics",
             },
             "subscriptions": {
                 "list": "GET /api/subscriptions",

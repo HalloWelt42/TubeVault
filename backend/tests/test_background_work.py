@@ -30,7 +30,9 @@ async def test_typ_pruefung_mit_fortschritt(test_db):
     assert (second.done, second.total, second.progress) == (1, 4, 0.25)
 
 
-async def test_nachvertonung_in_arbeit(test_db):
+async def test_nachvertonung_in_arbeit(test_db, set_setting):
+    await set_setting("dub.enabled", "true")
+    await set_setting("dub.processing_enabled", "true")
     await test_db.execute(
         "INSERT INTO videos (id, title, status, type_verified) VALUES ('abcdefghijk', 'Ein Film', 'ready', 1)")
     await test_db.execute(

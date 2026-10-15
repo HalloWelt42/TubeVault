@@ -1,13 +1,22 @@
 <!--
-  Musik (Mobil): Mixe, Interpreten, Musikkanäle und Neues. Jede Gruppe
-  spielt der Reihe nach oder zufällig; ein Tipp auf einen Titel spielt ihn
-  sofort. Derselbe Musikspieler wie am Rechner (auch auf dem Sperrbildschirm).
+  Musik (Mobil) nach mockups/mobil-musik.html: Quelle (Alle, Sammlung,
+  Videos; gilt überall, auch für die Mixe), Weiterhören des zuletzt
+  gehörten Hörbuchs, Mixe und die Bereiche Interpreten, Alben, Kanäle und
+  Hörbücher als Raster. Eine Kachel öffnet ihre Titel (?quelle=), die Lupe
+  sucht in der Musik (?suche=1); beides liegt über der Übersicht, die so
+  ihre Stelle behält. Gespielt wird über den Musikspieler.
 -->
 <script>
+  import { untrack } from 'svelte';
   import { api } from '../../lib/api/client.js';
   import { coverUrl } from '../../lib/utils/musicTrack.js';
   import { musicPlayer as player } from '../../lib/stores/musicPlayer.svelte.js';
-  import { formatDuration } from '../../lib/utils/format.js';
+  import { toast } from '../../lib/stores/notifications.js';
+  import { formatDuration, formatDurationLong } from '../../lib/utils/format.js';
+  import { bookToResume } from '../../lib/utils/bookProgress.js';
+  import { createListLoader } from '../../lib/utils/listLoader.svelte.js';
+  import { route, go, back } from '../router.js';
+  import { nearEnd } from '../parts/nearEnd.js';
 
   const MIXES = [
     { key: 'all', name: 'Alles zufällig', icon: 'fa-shuffle', shuffle: true },
@@ -15,91 +24,326 @@
     { key: 'forgotten', name: 'Lange nicht gehört', icon: 'fa-hourglass-half', shuffle: true },
     { key: 'often', name: 'Oft gehört', icon: 'fa-fire', shuffle: false },
   ];
+  // Quelle der Musik: die globale Einstellung music.source
+  const SOURCES = [
+    { key: 'alle', label: 'Alle' },
+    { key: 'sammlung', label: 'Sammlung', count: 'sammlung' },
+    { key: 'videos', label: 'Videos', count: 'videos' },
+  ];
+  const AREAS = [
+    { id: 'interpreten', label: 'Interpreten', count: 'artists', load: () => api.musicArtists() },
+    { id: 'alben', label: 'Alben', count: 'albums', load: () => api.musicAlbums() },
+    { id: 'kanaele', label: 'Kanäle', count: 'channels', load: () => api.musicChannels() },
+    { id: 'hoerbuecher', label: 'Hörbücher', count: 'books', load: () => api.musicBooks() },
+  ];
+  const KIND_LABELS = { datei: 'Sammlung', video: 'Videos' };
+  const AREA_KEY = 'musik.bereich';
+  const STEP = 30;               // Kacheln bzw. Titel je Nachladen beim Rollen
+  const SEARCH_PAGE = 50;
+  const SEARCH_MIN = 2;
+  const DEBOUNCE_MS = 280;
 
   let overview = $state(null);
-  let artists = $state([]);
-  let opened = $state(null);      // { key, title, tracks }
+  let books = $state([]);
   let failed = $state(false);
 
-  async function load() {
+  // ─── Übersicht ───
+  let area = $state(readArea());
+  let items = $state([]);        // Gruppen bzw. Hörbücher des Bereichs
+  let areaLoading = $state(false);
+  let shown = $state(STEP);
+  let areaRun = 0;
+
+  let counts = $derived(overview?.counts || {});
+  let areas = $derived(AREAS.filter((a) => counts[a.count] > 0));
+  let activeArea = $derived(areas.find((a) => a.id === area) || areas[0] || null);
+  let resume = $derived(bookToResume(books));
+  let showSources = $derived(!!overview && ((overview.sources.sammlung > 0 && overview.sources.videos > 0) || overview.source !== 'alle'));
+  let empty = $derived(!!overview && !counts.tracks && !counts.books);
+
+  function readArea() {
+    try { return localStorage.getItem(AREA_KEY) || 'interpreten'; } catch { return 'interpreten'; }
+  }
+
+  function chooseArea(id) {
+    area = id;
+    try { localStorage.setItem(AREA_KEY, id); } catch { /* Speicher gesperrt */ }
+  }
+
+  async function loadOverview() {
     failed = false;
+    try { overview = await api.musicOverview(); } catch { failed = true; }
+  }
+
+  async function loadBooks() {
+    try { books = await api.musicBooks(); } catch { /* Weiterhören fehlt dann nur */ }
+  }
+
+  async function loadArea(id) {
+    const run = ++areaRun;
+    const def = AREAS.find((a) => a.id === id);
+    items = [];
+    shown = STEP;
+    if (!def) return;
+    areaLoading = true;
     try {
-      [overview, artists] = await Promise.all([api.musicOverview(), api.musicArtists()]);
-    } catch { failed = true; }
+      const result = await def.load();
+      if (run === areaRun) items = result;
+    } catch (e) {
+      if (run === areaRun) toast.error(e.message);
+    } finally {
+      if (run === areaRun) areaLoading = false;
+    }
   }
 
-  async function open(key) {
-    try { opened = await api.musicPlay(key); } catch { failed = true; }
+  // Bereich gewechselt (oder erst nach dem Laden der Übersicht bekannt): seine Kacheln laden
+  $effect(() => {
+    const id = activeArea?.id;
+    untrack(() => loadArea(id));
+  });
+
+  async function chooseSource(key) {
+    if (!overview || overview.source === key) return;
+    overview = { ...overview, source: key };
+    try {
+      await api.updateSetting('music.source', key);
+      await loadOverview();
+      await loadArea(activeArea?.id);
+    } catch (e) {
+      toast.error(e.message);
+      loadOverview();
+    }
   }
 
-  const play = (key, shuffle = false, start = null) => player.playSource(key, { shuffle, start }).catch(() => {});
+  async function play(source, { shuffle = false, start = null } = {}) {
+    try {
+      if (!await player.playSource(source, { shuffle, start })) toast.info('Dort gibt es noch keine Titel');
+    } catch (e) { toast.error(e.message); }
+  }
 
-  load();
+  function playResume() {
+    if (player.audiobook === resume.key) player.toggle();
+    else play(`hoerbuch:${resume.key}`);
+  }
+
+  function groupLine(group) {
+    if (activeArea?.id === 'alben' && group.subtitle) return group.subtitle;
+    if (activeArea?.id === 'interpreten' && overview?.source === 'alle' && group.kinds?.length)
+      return group.kinds.map((kind) => KIND_LABELS[kind] || kind).join(', ');
+    return `${group.count} Titel`;
+  }
+
+  function bookLine(book) {
+    if (book.finished) return 'Zu Ende gehört';
+    if (book.current_part) return `Teil ${book.current_part} von ${book.parts}`;
+    return book.author || `${book.parts} Teile`;
+  }
+
+  const bookShare = (book) => (book.duration ? (book.duration - book.remaining) / book.duration : 0);
+
+  // ─── Geöffnete Gruppe und Suche: die Adresse ist die Wahrheit ───
+  let openKey = $state(null);    // Gruppe laut Adresse (wird nur in untrack verglichen)
+  let opened = $state(null);     // { source, title, tracks }
+  let openedShown = $state(STEP);
+  let searching = $state(false);
+
+  async function openGroup(key) {
+    openKey = key;
+    opened = null;
+    openedShown = STEP;
+    if (!key) return;
+    try {
+      const list = await api.musicPlay(key);
+      if (openKey === key) opened = list;
+    } catch (e) {
+      if (openKey === key) toast.error(e.message);
+    }
+  }
+
+  $effect(() => {
+    const current = $route;
+    if (current.view !== 'musik') return;
+    const key = current.params.quelle || null;
+    const search = current.params.suche === '1';
+    untrack(() => {
+      searching = search;
+      if (key !== openKey) openGroup(key);
+      if (!key && !search) loadBooks();   // zurück in der Übersicht: Weiterhören auffrischen
+    });
+  });
+
+  // ─── Suche in der Musik ───
+  let query = $state('');
+  let searched = $state('');
+  let searchTimer = null;
+  const results = createListLoader(async (page) => {
+    const r = await api.musicTracks({ q: searched, offset: (page - 1) * SEARCH_PAGE, limit: SEARCH_PAGE });
+    return { items: r.items, total: r.total };
+  });
+
+  function onSearchInput() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, DEBOUNCE_MS);
+  }
+
+  async function runSearch() {
+    const q = query.trim();
+    searched = q.length >= SEARCH_MIN ? q : '';
+    if (!searched) { results.items = []; results.total = 0; return; }
+    try { await results.load(true); } catch (e) { toast.error(e.message); }
+  }
+
+  const focus = (node) => { node.focus(); };
+
+  loadOverview();
 </script>
 
-<div class="m-view">
-  {#if opened}
-    <header class="top">
-      <button class="zurueck" onclick={() => opened = null} aria-label="Zurück"><i class="fa-solid fa-chevron-left"></i></button>
-      <h1 class="m-h1 titel">{opened.title}</h1>
-    </header>
-    <div class="knoepfe">
-      <button class="m-btn primary" onclick={() => play(opened.source)}><i class="fa-solid fa-play"></i> Abspielen</button>
-      <button class="m-btn" onclick={() => play(opened.source, true)}><i class="fa-solid fa-shuffle"></i> Zufällig</button>
-    </div>
-    {#each opened.tracks as track (track.id)}
-      {@render titelZeile(track, () => play(opened.source, false, track.id))}
-    {/each}
-  {:else}
-    <header class="top">
-      <h1 class="m-h1">Musik</h1>
-      {#if overview}<span class="zahl leise">{overview.counts.tracks} Titel</span>{/if}
-    </header>
-
-    {#if failed}
-      <div class="m-note"><p>Der Server ist gerade nicht erreichbar.</p>
-        <button class="m-btn" onclick={load}><i class="fa-solid fa-rotate"></i> Erneut versuchen</button></div>
-    {:else if !overview}
-      <div class="m-spin"><i class="fa-solid fa-spinner fa-spin"></i></div>
-    {:else if !overview.counts.tracks}
-      <div class="m-note"><p>Noch keine Musik. Am Rechner auf der Kanalseite "Musikkanal" wählen oder Videos in der
-        Bibliothek als Musik festlegen.</p></div>
-    {:else}
-      <div class="mixe">
-        {#each MIXES as mix (mix.key)}
-          <button class="mix" onclick={() => play(mix.key, mix.shuffle)}><i class="fa-solid {mix.icon}"></i> {mix.name}</button>
-        {/each}
-      </div>
-
-      <h2 class="m-h2">Interpreten</h2>
-      {#each artists as group (group.key)}
-        <div class="gruppe">
-          <button class="oeffnen" onclick={() => open(group.key)}>
-            <img src={coverUrl(group.covers[0])} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-            <span class="text"><span class="t">{group.name}</span><span class="w zahl">{group.count} Titel</span></span>
-          </button>
-          <button class="taste" onclick={() => play(group.key, true)} aria-label="Zufällig"><i class="fa-solid fa-shuffle"></i></button>
-        </div>
-      {/each}
-
-      {#if overview.channels.length}
-        <h2 class="m-h2">Musikkanäle</h2>
-        {#each overview.channels as group (group.key)}
-          <div class="gruppe">
-            <button class="oeffnen" onclick={() => open(group.key)}>
-              <img src={coverUrl(group.covers[0])} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-              <span class="text"><span class="t">{group.name}</span><span class="w zahl">{group.count} Titel</span></span>
-            </button>
-            <button class="taste" onclick={() => play(group.key, true)} aria-label="Zufällig"><i class="fa-solid fa-shuffle"></i></button>
-          </div>
-        {/each}
-      {/if}
-
-      <h2 class="m-h2">Neu in der Sammlung</h2>
-      {#each overview.new as track (track.id)}
-        {@render titelZeile(track, () => play('new', false, track.id))}
-      {/each}
+<div class="musik">
+  <header class="kopf">
+    <h1 class="m-h1">Musik</h1>
+    {#if overview && !empty}
+      <button class="m-rund" onclick={() => go('/musik', { suche: '1' })} aria-label="In der Musik suchen"><i class="fa-solid fa-magnifying-glass"></i></button>
     {/if}
+  </header>
+
+  <div class="rollfeld" use:nearEnd={{ onNearEnd: () => { shown += STEP; }, canLoad: () => shown < items.length }}>
+    <div class="inhalt">
+      {#if failed}
+        <div class="m-note"><p>Der Server ist gerade nicht erreichbar.</p>
+          <button class="m-btn" onclick={loadOverview}><i class="fa-solid fa-rotate"></i> Erneut versuchen</button></div>
+      {:else if !overview}
+        <div class="m-spin"><i class="fa-solid fa-spinner fa-spin"></i></div>
+      {:else if empty}
+        <div class="m-note"><p>Noch keine Musik. Am Rechner auf der Kanalseite "Musikkanal" wählen, Videos in der
+          Bibliothek als Musik festlegen oder einen Musikordner einhängen.</p></div>
+      {:else}
+        {#if showSources}
+          <div class="quelle" role="radiogroup" aria-label="Quelle der Musik">
+            {#each SOURCES as s (s.key)}
+              <button role="radio" aria-checked={overview.source === s.key} class:an={overview.source === s.key} onclick={() => chooseSource(s.key)}>
+                {s.label}{#if s.count}<span class="zahl anzahl">{overview.sources[s.count].toLocaleString('de-DE')}</span>{/if}</button>
+            {/each}
+          </div>
+        {/if}
+
+        {#if resume}
+          <div class="weiter">
+            <button class="weiter-text" onclick={playResume}>
+              <span class="bild">{#if resume.cover_id}<img src={coverUrl(resume.cover_id)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />{/if}
+                <i class="fa-solid fa-book-open"></i></span>
+              <span class="text">
+                <span class="art"><i class="fa-solid fa-book-open"></i> Weiterhören</span>
+                <span class="t">{resume.title}</span>
+                <span class="w">Teil <span class="zahl">{resume.current_part}</span> von <span class="zahl">{resume.parts}</span>
+                  · noch <span class="zahl">{formatDurationLong(Math.max(60, resume.remaining))}</span></span>
+                <span class="balken"><b style:width="{bookShare(resume) * 100}%"></b></span>
+              </span>
+            </button>
+            <button class="spiel" onclick={playResume} aria-label={player.audiobook === resume.key && player.playing ? 'Pause' : 'Weiterhören'}>
+              <i class="fa-solid {player.audiobook === resume.key && player.playing ? 'fa-pause' : 'fa-play'}"></i></button>
+          </div>
+        {/if}
+
+        {#if counts.tracks}
+          <div class="mixe">
+            {#each MIXES as mix (mix.key)}
+              <button class="mix" onclick={() => play(mix.key, { shuffle: mix.shuffle })}><i class="fa-solid {mix.icon}"></i><span>{mix.name}</span></button>
+            {/each}
+          </div>
+        {/if}
+
+        {#if areas.length}
+          <div class="bereiche" role="tablist" style:--anzahl={areas.length}>
+            {#each areas as a (a.id)}
+              <button role="tab" aria-selected={activeArea?.id === a.id} class:an={activeArea?.id === a.id} onclick={() => chooseArea(a.id)}>{a.label}</button>
+            {/each}
+          </div>
+
+          {#if areaLoading}
+            <div class="m-spin"><i class="fa-solid fa-spinner fa-spin"></i></div>
+          {:else}
+            <div class="raster">
+              {#each items.slice(0, shown) as item (item.key)}
+                {#if activeArea?.id === 'hoerbuecher'}
+                  <button class="kachel" class:laeuft={player.audiobook === item.key} onclick={() => play(`hoerbuch:${item.key}`)}>
+                    <span class="bild"><i class="fa-solid fa-book-open"></i>
+                      {#if item.cover_id}<img src={coverUrl(item.cover_id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />{/if}
+                      {#if item.current_part && !item.finished}<span class="stand"><b style:width="{bookShare(item) * 100}%"></b></span>{/if}
+                    </span>
+                    <span class="t">{item.title}</span>
+                    <span class="w">{bookLine(item)}</span>
+                  </button>
+                {:else}
+                  <button class="kachel" onclick={() => go('/musik', { quelle: item.key })}>
+                    <span class="bild"><i class="fa-solid fa-music"></i>
+                      {#if item.covers?.[0]}<img src={coverUrl(item.covers[0])} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />{/if}
+                    </span>
+                    <span class="t">{item.name}</span>
+                    <span class="w">{groupLine(item)}</span>
+                  </button>
+                {/if}
+              {/each}
+            </div>
+            {#if items.length > shown}
+              <p class="mehr"><span class="zahl">{shown}</span> von <span class="zahl">{items.length}</span>, weitere beim Rollen</p>
+            {/if}
+          {/if}
+        {/if}
+      {/if}
+    </div>
+  </div>
+
+  {#if searching}
+    <div class="ebene">
+      <header class="kopf suche">
+        <button class="m-rund" onclick={back} aria-label="Suche schließen"><i class="fa-solid fa-chevron-left"></i></button>
+        <input type="search" placeholder="Titel, Interpret, Album" bind:value={query} oninput={onSearchInput}
+               enterkeyhint="search" autocomplete="off" use:focus />
+      </header>
+      <div class="rollfeld" use:nearEnd={{ onNearEnd: results.loadMore, canLoad: results.canLoad }}>
+        <div class="liste">
+          {#if !searched}
+            <p class="m-note">Mindestens <span class="zahl">{SEARCH_MIN}</span> Zeichen eingeben.</p>
+          {:else if results.loading}
+            <div class="m-spin"><i class="fa-solid fa-spinner fa-spin"></i></div>
+          {:else}
+            {#each results.items as track, i (track.id)}
+              {@render titelZeile(track, () => player.playTracks(results.items, i, `Suche: ${searched}`))}
+            {:else}
+              <p class="m-note">Nichts gefunden.</p>
+            {/each}
+            {#if results.total > results.items.length}
+              <p class="mehr"><span class="zahl">{results.items.length}</span> von <span class="zahl">{results.total}</span>, weitere beim Rollen</p>
+            {/if}
+          {/if}
+        </div>
+      </div>
+    </div>
+  {:else if opened || openKey}
+    <div class="ebene">
+      <header class="kopf">
+        <button class="m-rund" onclick={back} aria-label="Zurück"><i class="fa-solid fa-chevron-left"></i></button>
+        <h1 class="m-h1 titel">{opened?.title || ''}</h1>
+      </header>
+      <div class="rollfeld" use:nearEnd={{ onNearEnd: () => { openedShown += STEP; }, canLoad: () => !!opened && openedShown < opened.tracks.length }}>
+        {#if !opened}
+          <div class="m-spin"><i class="fa-solid fa-spinner fa-spin"></i></div>
+        {:else}
+          <div class="knoepfe">
+            <button class="m-btn primary" onclick={() => play(opened.source)}><i class="fa-solid fa-play"></i> Abspielen</button>
+            <button class="m-btn" onclick={() => play(opened.source, { shuffle: true })}><i class="fa-solid fa-shuffle"></i> Zufällig</button>
+          </div>
+          <div class="liste">
+            {#each opened.tracks.slice(0, openedShown) as track (track.id)}
+              {@render titelZeile(track, () => play(opened.source, { start: track.id }))}
+            {/each}
+            <p class="mehr">
+              {#if opened.tracks.length > openedShown}<span class="zahl">{openedShown}</span> von {/if}<span class="zahl">{opened.tracks.length}</span> Titel
+            </p>
+          </div>
+        {/if}
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -107,30 +351,76 @@
   <button class="zeile" class:laeuft={player.current?.id === track.id} onclick={onplay}>
     <img src={coverUrl(track)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
     <span class="text"><span class="t">{track.title}</span><span class="w">{track.artist}</span></span>
-    <span class="zahl w">{formatDuration(track.duration || 0)}</span>
+    <span class="zahl dauer">{formatDuration(track.duration || 0)}</span>
   </button>
 {/snippet}
 
 <style>
-  .top { display: flex; align-items: baseline; gap: 10px; padding: calc(var(--m-safe-top) + 18px) 16px 8px; }
+  .musik { position: relative; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--m-bg); }
+  .kopf { display: flex; align-items: center; gap: 12px; flex: none; height: calc(var(--m-safe-top) + 60px);
+          padding: var(--m-safe-top) calc(var(--m-safe-right) + 12px) 0 calc(var(--m-safe-left) + 16px); background: var(--tv-leiste); }
+  .kopf .m-h1 { flex: 1; min-width: 0; font-size: 22px; font-weight: 700; }
   .titel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .zurueck { width: var(--m-touch); height: var(--m-touch); margin-left: -12px; font-size: 1.2rem; align-self: center; }
-  .leise { color: var(--m-dim); }
-  .knoepfe { display: flex; gap: 10px; padding: 4px 16px 12px; }
+  .rollfeld { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+  .inhalt { display: flex; flex-direction: column; gap: 16px; padding: 16px calc(var(--m-safe-right) + 16px) 24px calc(var(--m-safe-left) + 16px); }
+
+  /* Quelle: global, gilt auch für Mixe */
+  .quelle { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; background: var(--tv-mulde); border-radius: var(--m-radius); }
+  .quelle button { min-height: 44px; padding: 0 4px; border-radius: var(--tv-ecke-klein); color: var(--m-dim); font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .quelle button.an { background: var(--tv-karte-3); color: var(--m-accent); }
+  .anzahl { margin-left: 4px; font-size: 13px; color: var(--m-faint); }
+
+  .weiter { display: grid; grid-template-columns: minmax(0, 1fr) 52px; gap: 12px; align-items: center; padding: 12px;
+            background: var(--tv-karte); border-radius: var(--m-radius); }
+  .weiter-text { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; align-items: center; min-width: 0; text-align: left; }
+  .weiter-text .bild { width: 76px; height: 76px; }
+  .weiter-text .text { display: flex; flex-direction: column; min-width: 0; }
+  .art { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tv-art-vertont); }
+  .weiter-text .t { font-size: 17px; font-weight: 700; }
+  .weiter-text .w { font-size: 15px; color: var(--m-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .balken { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--tv-mulde); overflow: hidden; }
+  .balken b, .stand b { display: block; height: 100%; background: var(--m-accent); }
+  .spiel { width: 52px; height: 52px; border-radius: var(--m-radius); background: var(--m-accent); color: var(--m-accent-ink); font-size: 20px; }
+
+  .mixe { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mix { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 12px; border-radius: var(--m-radius);
+         background: var(--tv-karte); font-size: 16px; font-weight: 600; text-align: left; line-height: 1.2; }
+  .mix i { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: var(--tv-ecke-klein);
+           background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--m-accent); font-size: 15px; }
+  .mix:active { background: var(--tv-karte-2); }
+
+  .bereiche { display: grid; grid-template-columns: repeat(var(--anzahl), 1fr); gap: 4px; }
+  .bereiche button { min-height: 44px; padding: 0 2px; border-radius: var(--tv-ecke-klein); background: var(--m-surface);
+                     color: var(--m-dim); font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bereiche button.an { background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--m-accent); }
+
+  .raster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 12px; }
+  .kachel { display: flex; flex-direction: column; min-width: 0; text-align: left; }
+  .bild { position: relative; display: grid; place-items: center; overflow: hidden; border-radius: var(--tv-ecke-klein);
+          background: var(--m-surface); color: var(--m-faint); font-size: 24px; flex: none; }
+  .kachel .bild { width: 100%; aspect-ratio: 1; }
+  .bild img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .stand { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.5); }
+  .kachel .t { margin-top: 6px; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kachel .w { font-size: 13px; color: var(--m-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kachel.laeuft .t { color: var(--m-accent); }
+  .mehr { padding: 8px 0; font-size: 15px; color: var(--m-faint); text-align: center; }
+
+  /* Gruppe oder Suche: über der Übersicht, die so ihre Stelle behält */
+  .ebene { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; background: var(--m-bg); }
+  .suche input { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 0; border-radius: var(--m-radius);
+                 background: var(--tv-mulde); color: var(--m-text); font-size: 17px; }
+  .suche input:focus { outline: 2px solid rgba(var(--tv-akzent-rgb), 0.5); outline-offset: 0; }
+  .knoepfe { display: flex; gap: 10px; padding: 16px calc(var(--m-safe-right) + 16px) 8px calc(var(--m-safe-left) + 16px); }
   .knoepfe .m-btn { flex: 1; }
-  .mixe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 4px 16px 8px; }
-  .mix { min-height: 64px; padding: 10px 12px; border-radius: var(--m-radius); text-align: left; font-weight: 700;
-         display: flex; align-items: center; gap: 10px;
-         background: linear-gradient(135deg, rgba(192, 132, 252, 0.35), rgba(var(--tv-akzent-rgb), 0.15)); }
-  .mix i { color: var(--tv-art-musik); font-size: 1.2rem; }
-  .m-h2 { padding: 18px 16px 6px; }
-  .gruppe { display: flex; align-items: center; padding: 0 8px 0 16px; }
-  .oeffnen, .zeile { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px 0; text-align: left; }
-  .zeile { width: 100%; padding: 6px 16px; }
+  .liste { padding: 4px 0 24px; }
+  .zeile { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 64px;
+           padding: 6px calc(var(--m-safe-right) + 16px) 6px calc(var(--m-safe-left) + 16px); text-align: left; }
+  .zeile:active { background: var(--m-surface); }
+  .zeile img { width: 52px; height: 52px; flex: none; object-fit: cover; border-radius: var(--tv-ecke-klein); background: var(--m-surface); }
+  .zeile .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .zeile .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .zeile .w { font-size: 15px; color: var(--m-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .zeile.laeuft .t { color: var(--m-accent); }
-  img { width: 52px; height: 52px; flex: none; object-fit: cover; border-radius: 3px; background: var(--m-surface); }
-  .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .w { font-size: 0.85rem; color: var(--m-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .taste { width: var(--m-touch); height: var(--m-touch); flex: none; display: grid; place-items: center; color: var(--m-dim); font-size: 1.1rem; }
+  .dauer { font-size: 15px; color: var(--m-dim); }
 </style>

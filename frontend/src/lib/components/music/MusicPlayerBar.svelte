@@ -10,51 +10,23 @@
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../utils/format.js';
+  import { audioQuality } from '../../utils/audioTech.js';
+  import { dragValue, playerBarHeight } from '../../utils/playerBar.js';
+  import { remote } from '../../stores/remote.svelte.js';
+  import DeviceButton from '../remote/DeviceButton.svelte';
 
   let track = $derived(player.current);
-  let barEl = $state(null);
-
-  // Höhe der Leiste als --tv-spielerleiste auf :root (0px, wenn sie fehlt):
-  // fest oder haftend platzierte Bereiche ziehen sie ab und verschwinden nie darunter
-  $effect(() => {
-    const root = document.documentElement.style;
-    if (!barEl) { root.setProperty('--tv-spielerleiste', '0px'); return; }
-    const observer = new ResizeObserver(() => root.setProperty('--tv-spielerleiste', `${Math.round(barEl.offsetHeight)}px`));
-    observer.observe(barEl);
-    return () => { observer.disconnect(); root.setProperty('--tv-spielerleiste', '0px'); };
-  });
   let progress = $derived(player.duration ? player.time / player.duration : 0);
   const REPEAT_TITLES = { off: 'Wiederholen aus', all: 'Alle wiederholen', one: 'Diesen Titel wiederholen' };
 
-  // "OPUS · 160 kbit/s · 48 kHz" - was die Datei hergibt
-  let quality = $derived.by(() => {
-    const info = player.audioInfo;
-    if (!info?.codec) return '';
-    return [info.codec.toUpperCase(), info.bitrate ? `${Math.round(info.bitrate / 1000)} kbit/s` : null,
-            info.sample_rate ? `${(info.sample_rate / 1000).toLocaleString('de-DE')} kHz` : null].filter(Boolean).join(' · ');
-  });
+  // "OPUS · 160 kbit/s · 48 kHz" oder "FLAC · 16 Bit · 44,1 kHz" - was die Datei hergibt
+  let quality = $derived(audioQuality(player.audioInfo));
 
   async function removeFromList() {
     try {
       await player.removeFromList();
       toast.info(player.playlistId ? 'Aus der Wiedergabeliste genommen' : 'Aus der Warteschlange genommen');
     } catch (e) { toast.error(e.message); }
-  }
-
-  // Zeitleiste und Lautstärke: Klick oder Ziehen setzt den Wert
-  function drag(node, onValue) {
-    function at(e) {
-      const box = node.getBoundingClientRect();
-      return Math.max(0, Math.min(1, (e.clientX - box.left) / box.width));
-    }
-    function down(e) {
-      node.setPointerCapture(e.pointerId);
-      onValue(at(e));
-      node.onpointermove = (m) => onValue(at(m));
-      node.onpointerup = () => { node.onpointermove = null; node.onpointerup = null; };
-    }
-    node.addEventListener('pointerdown', down);
-    return { destroy: () => node.removeEventListener('pointerdown', down) };
   }
 
   async function favorite() {
@@ -66,7 +38,7 @@
 </script>
 
 {#if track}
-  <div class="spieler" bind:this={barEl}>
+  <div class="spieler" use:playerBarHeight>
     <div class="links">
       <button class="cover" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Läuft gerade">
         <img src={coverUrl(track)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
@@ -102,9 +74,12 @@
       </div>
       <div class="zeitleiste">
         <span class="zahl">{formatDuration(Math.floor(player.time))}</span>
-        <div class="spur" use:drag={(v) => player.seek(v * player.duration)} role="slider" tabindex="0"
+        <div class="spur" use:dragValue={(v) => player.seek(v * player.duration)} role="slider" tabindex="0"
              aria-label="Stelle im Titel" aria-valuemin="0" aria-valuemax={Math.round(player.duration)} aria-valuenow={Math.round(player.time)}>
           <b style:width="{progress * 100}%"></b>
+          {#each player.segments.slice(1).filter((segment) => segment.start < player.duration) as segment (segment.start)}
+            <i class="marke" style:left="{(segment.start / (player.duration || 1)) * 100}%" title={segment.title}></i>
+          {/each}
         </div>
         <span class="zahl">{formatDuration(Math.floor(player.duration))}</span>
       </div>
@@ -116,6 +91,11 @@
             <span class="was" title={player.pendingDelete.track.title}>Gelöscht: {player.pendingDelete.track.title}</span>
             <button onclick={() => player.undoDelete()}>Rückgängig</button>
           </div>
+        {:else if player.segment}
+          <div class="abschnitt-zeile" title={player.segment.title}>
+            <span class="zahl">{player.segment.index + 1}/{player.segment.count}</span> {player.segment.title}</div>
+        {:else if remote.steering}
+          <div class="gesteuert"><i class="fa-solid fa-tower-broadcast"></i> {remote.steering} steuert mit</div>
         {:else if quality}
           <div class="qualitaet zahl" title="Tonspur der Datei">{quality}</div>
         {/if}
@@ -133,10 +113,11 @@
         <i class="fa-solid fa-display"></i></button>
       <button class="taste" onclick={() => player.toggleMute()} title={player.muted ? 'Ton an' : 'Stumm'}>
         <i class="fa-solid {player.muted || player.volume === 0 ? 'fa-volume-xmark' : 'fa-volume-high'}"></i></button>
-      <div class="lautstaerke" use:drag={(v) => player.setVolume(v)} role="slider" tabindex="0" aria-label="Lautstärke"
+      <div class="lautstaerke" use:dragValue={(v) => player.setVolume(v)} role="slider" tabindex="0" aria-label="Lautstärke"
            aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(player.volume * 100)}>
         <b style:width="{player.volume * 100}%"></b>
       </div>
+      <DeviceButton up />
       <button class="taste" onclick={() => player.stop()} title="Musik beenden"><i class="fa-solid fa-xmark"></i></button>
     </div>
   </div>
@@ -164,6 +145,11 @@
   .taste.weg:hover { color: var(--tv-gefahr); }
   .info { height: 20px; line-height: 20px; max-width: 100%; min-width: 0; }
   .qualitaet { font-size: 13px; color: var(--tv-text-3); letter-spacing: 0.03em; }
+  .gesteuert { font-size: var(--tv-gr-klein); color: var(--tv-info); white-space: nowrap; }
+  .abschnitt-zeile { font-size: var(--tv-gr-klein); color: var(--tv-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .abschnitt-zeile .zahl { color: var(--tv-akzent); margin-right: 4px; }
+  .spur .marke { position: absolute; top: 3px; width: 2px; height: 9px; margin-left: -1px; background: var(--tv-text-2);
+                 border-radius: 1px; pointer-events: none; }
   .rueckgaengig { display: flex; align-items: center; gap: var(--tv-a2); font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
   .rueckgaengig i { color: var(--tv-gefahr); }
   .rueckgaengig .was { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -100,6 +100,16 @@ SETTINGS: list[SettingDef] = [
                description="Einzelne Videos in der Wiedergabe zum Nachvertonen vormerken (Stimme und "
                            "Sprache wählst du dort). Die Arbeit erledigt der Nachvertoner auf einem "
                            "leistungsfähigen Rechner; die fertige Tonspur ist in der Wiedergabe umschaltbar."),
+    # Vorauswahl beim Vormerken, gewählt auf der Seite Nachvertonung (Stern, Untertitel)
+    SettingDef(key="dub.default_voice", default="", kind="text", category="dub",
+               label="Vorauswahl-Stimme",
+               description="Stimme, die beim Vormerken vorgewählt ist. Leer: die erste gemeldete Stimme, "
+                           "deren Name mit Zeit beginnt."),
+    SettingDef(key="dub.default_subtitles", default="any", kind="select", category="dub",
+               options=["manual", "any"], option_labels={"manual": "vom Autor", "any": "auch automatische"},
+               label="Untertitel als Transkript",
+               description="Vorauswahl beim Vormerken: welche Untertitel der Quelle das Transkribieren "
+                           "ersparen dürfen. Je Video änderbar."),
     SettingDef(key="ai.enabled", default="false", kind="toggle", category="ai",
                section="extensions", label="Bedeutungssuche mit lokaler KI",
                description="Die Suche findet zusätzlich inhaltlich Verwandtes, auch ohne Wortgleichheit. "
@@ -124,6 +134,14 @@ SETTINGS: list[SettingDef] = [
                label="KI-Transkripte erstellen",
                description="Der Rechner mit der Spracherkennung holt sich laufend das nächste Video. "
                            "Angehalten wird nach dem Video, das gerade bearbeitet wird."),
+    SettingDef(key="scan.auto_enabled", default="false", kind="toggle", category="scan",
+               label="Ungescannte Kanäle erfassen",
+               description="Liest Kanäle, die noch nie vollständig gelesen wurden, von selbst: höchstens "
+                           "einen alle 2 Stunden, bis alle erfasst sind. Standard: angehalten."),
+    SettingDef(key="dub.processing_enabled", default="false", kind="toggle", category="dub",
+               label="Vertonen",
+               description="Nur solange das an ist, bekommt der Nachvertoner neue Aufträge. Angehalten wird "
+                           "nach dem Auftrag, der gerade läuft. Standard: angehalten."),
     SettingDef(key="music.source", default="alle", kind="select", category="music",
                options=["alle", "sammlung", "videos"],
                option_labels={"alle": "Alles", "sammlung": "Eigene Sammlung", "videos": "Musikvideos"},

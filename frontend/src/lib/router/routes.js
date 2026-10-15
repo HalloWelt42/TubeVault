@@ -119,8 +119,8 @@ export const routeDefinitions = {
     group: 'main',
     hasId: false,
     badge: 'categories',
-    queryParams: [],
-    description: 'Kategorie-Verwaltung',
+    queryParams: ['open'],
+    description: 'Kategorien: Übersicht, Regeln, Themen erkennen',
   },
   'archives': {
     path: '/archives',
@@ -214,8 +214,8 @@ export const routeDefinitions = {
     group: 'hidden',
     hasId: true,
     idParam: 'categoryId',
-    queryParams: ['sort', 'page'],
-    description: 'Videos einer Kategorie',
+    queryParams: [],
+    description: 'Ältere Adresse einer Kategorie (führt zu /categories?open=<id>)',
   },
   'search': {
     path: '/search',

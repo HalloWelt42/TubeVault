@@ -80,17 +80,56 @@ async def _type_check() -> Optional[WorkItem]:
 
 
 async def _dubbing() -> Optional[WorkItem]:
+    """Der Auftrag, den der Nachvertoner gerade spricht. Angehalten bleibt das
+    Vertonen immer sichtbar, damit es sich hier fortsetzen lässt."""
+    from app.services import dubbing, setting_values
+    if not await setting_values.is_on("dub.enabled"):
+        return None
+    paused = not await setting_values.is_on(dubbing.PROCESSING_SWITCH)
     row = await db.fetch_one(
         """SELECT d.progress, d.note, d.claimed_at, d.worker, v.title
            FROM dub_requests d LEFT JOIN videos v ON v.id = d.video_id
            WHERE d.status = 'working' ORDER BY d.claimed_at LIMIT 1""")
     waiting = await db.fetch_val("SELECT COUNT(*) FROM dub_requests WHERE status = 'queued'") or 0
-    if not row:
+    if not row and not paused:
         return None   # wartende Aufträge ohne Nachvertoner zeigt die Seite Nachvertonung
-    title = (row["title"] or "Video")[:60]
-    return WorkItem(key="dubbing", label=f"Nachvertonung: {title}",
-                    detail=" · ".join(filter(None, [row["note"], row["worker"]])) or None,
-                    progress=row["progress"] or 0, since=row["claimed_at"], waiting=waiting)
+    if row:
+        label = f"Nachvertonung: {(row['title'] or 'Video')[:60]}"
+        detail = " · ".join(filter(None, [row["note"], row["worker"]])) or None
+        if paused:
+            detail = "Hält nach diesem Auftrag an." + (f" {detail}" if detail else "")
+    else:
+        label = "Vertonen"
+        detail = (f"Angehalten - {waiting} Aufträge warten, der Nachvertoner bekommt keinen neuen." if waiting
+                  else "Angehalten - neue Aufträge bleiben liegen, bis du fortsetzt.")
+    return WorkItem(key="dubbing", label=label, detail=detail,
+                    progress=(row["progress"] or 0) if row else None, since=row["claimed_at"] if row else None,
+                    waiting=waiting, switch_key=dubbing.PROCESSING_SWITCH, paused=paused)
+
+
+async def _channel_scan() -> Optional[WorkItem]:
+    """Ungescannte Kanäle von selbst erfassen: einer alle 2 Stunden (auto_scan)."""
+    from app.services import auto_scan, setting_values
+    remaining = await auto_scan.pending()
+    if remaining == 0:
+        return None
+    total = await auto_scan.total()
+    paused = not await setting_values.is_on(auto_scan.SWITCH)
+    running = auto_scan.running()
+    if paused:
+        detail = "Angehalten - Fortsetzen liest alle 2 Stunden einen Kanal, bis alle erfasst sind."
+    elif running:
+        detail = f"Liest gerade: {running}"
+    else:
+        wait = await auto_scan.seconds_until_due()
+        channel = await auto_scan.next_channel()
+        name = (channel or {}).get("channel_name") or ""
+        detail = (f"Nächster Kanal in {wait // 60 + 1} Min: {name}" if wait else f"Als Nächstes: {name}").strip()
+    done = max(0, total - remaining)
+    return WorkItem(key="channel_scan", label="Kanalscan: ungescannte Kanäle", detail=detail,
+                    done=done, total=total, progress=done / total if total else None,
+                    eta_seconds=None if paused else remaining * auto_scan.INTERVAL_S,
+                    switch_key=auto_scan.SWITCH, paused=paused)
 
 
 async def _semantic_index() -> Optional[WorkItem]:
@@ -182,7 +221,8 @@ async def _own_videos() -> Optional[WorkItem]:
 
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _ai_transcripts, _own_videos, _search_index, _semantic_index, _passage_index, _type_check]
+    _dubbing, _ai_transcripts, _channel_scan, _own_videos, _search_index, _semantic_index, _passage_index,
+    _type_check]
 
 
 async def overview() -> list[WorkItem]:

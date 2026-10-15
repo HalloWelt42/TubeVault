@@ -54,6 +54,7 @@ class Track(BaseModel):
     favorite: bool = False
     has_lyrics: bool = False
     kind: str = VIDEO                # video | datei (music_files)
+    codec: Optional[str] = None      # Format der Datei (FLAC, MP3 ...); Videos ohne
 
 
 class Group(BaseModel):
@@ -64,6 +65,7 @@ class Group(BaseModel):
     count: int
     duration: int
     covers: list[str]                # bis zu vier Titel-Kennungen für die Collage (Bild über /api/music/cover)
+    kinds: list[str] = []            # woher die Titel kommen: datei, video
 
 
 class PlayList(BaseModel):
@@ -120,7 +122,8 @@ def file_track(f: music_files.FileInfo) -> Track:
     artist = (f.artist or f.album_artist or "Unbekannt").strip()
     return Track(id=f.id, title=f.title, artist=artist, artist_source=f"artist:{group_key(artist)}",
                  album=f.album, duration=int(f.duration) if f.duration else None, play_count=f.play_count,
-                 last_played=f.last_played, added=f.added_at, favorite=f.favorite, has_lyrics=f.has_lyrics, kind=FILE)
+                 last_played=f.last_played, added=f.added_at, favorite=f.favorite, has_lyrics=f.has_lyrics, kind=FILE,
+                 codec=f.codec)
 
 
 async def video_tracks() -> list[Track]:
@@ -177,7 +180,7 @@ def _groups(items: list[Track], kind: str, key_of, name_of, subtitle_of=None) ->
         groups.append(Group(key=f"{kind}:{key}", name=name,
                             subtitle=subtitle_of(members) if subtitle_of else None,
                             count=len(members), duration=sum(t.duration or 0 for t in members),
-                            covers=[t.id for t in members[:4]]))
+                            covers=[t.id for t in members[:4]], kinds=sorted({t.kind for t in members})))
     return sorted(groups, key=lambda g: g.name.casefold())
 
 
