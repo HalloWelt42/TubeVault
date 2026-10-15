@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Eigene Videos: Einordnen</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<style>
+  .ordner { display: flex; gap: var(--tv-a2); align-items: center; margin-top: var(--tv-a4); }
+  .ordner .eingabe { flex: 1; max-width: 520px; }
+  /* Was der Abgleich gefunden hat - zugleich Filter der Liste */
+  .befunde { display: flex; gap: var(--tv-a2); flex-wrap: wrap; margin-top: var(--tv-a4); align-items: center; }
+  .befund { display: inline-flex; align-items: center; gap: var(--tv-a2); height: 40px; padding: 0 var(--tv-a3);
+    background: var(--tv-flaeche); border: 1px solid var(--tv-rand); border-radius: var(--tv-ecke); cursor: pointer; font-weight: 600; font-size: var(--tv-gr-klein); }
+  .befund.aktiv { border-color: rgba(var(--tv-akzent-rgb), 0.6); background: var(--tv-karte); }
+  .befund .farbe { width: 10px; height: 10px; border-radius: 2px; }
+  .f-doppelt { background: var(--tv-gefahr); } .f-sicher { background: var(--tv-erfolg); }
+  .f-vermutlich { background: var(--tv-warnung); } .f-unbekannt { background: var(--tv-text-3); }
+  .befunde .aktionen { margin-left: auto; display: flex; gap: var(--tv-a2); }
+
+  .datei { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: center;
+    padding: var(--tv-a3); border-radius: var(--tv-ecke); cursor: pointer; }
+  .datei:hover { background: var(--tv-flaeche); }
+  .datei.gewaehlt { background: var(--tv-karte); outline: 1px solid rgba(var(--tv-akzent-rgb), 0.5); }
+  .datei .farbe { width: 10px; height: 36px; border-radius: 2px; }
+  .datei .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .datei .unter { font-size: var(--tv-gr-klein); color: var(--tv-text-2); display: flex; gap: var(--tv-a3); margin-top: 2px; }
+  .tastatur { display: flex; gap: var(--tv-a3); font-size: var(--tv-gr-klein); color: var(--tv-text-3); padding: var(--tv-a3) 0; flex-wrap: wrap; }
+  kbd { font-family: var(--tv-schrift-zahl); background: var(--tv-karte-2); border-radius: var(--tv-ecke-klein); padding: 1px 6px; color: var(--tv-text); }
+
+  .karte { background: var(--tv-flaeche); border-radius: var(--tv-ecke); padding: var(--tv-a4); }
+  .karte + .karte { margin-top: var(--tv-a3); }
+  .karte h3 { display: flex; align-items: center; gap: var(--tv-a2); margin-bottom: var(--tv-a3); }
+  .vergleich { display: grid; grid-template-columns: 1fr 1fr; gap: var(--tv-a3); }
+  .vergleich .seitenhaelfte { display: flex; flex-direction: column; gap: 6px; font-size: var(--tv-gr-klein); }
+  .vergleich .bild { border-radius: var(--tv-ecke-klein); }
+  .gleich { color: var(--tv-erfolg); } .anders { color: var(--tv-warnung); }
+  .wahl { display: flex; flex-direction: column; gap: var(--tv-a2); }
+  .wahl .knopf { justify-content: flex-start; width: 100%; height: 48px; }
+  .wahl .knopf .taste { margin-left: auto; }
+  .kanalwahl { display: flex; gap: var(--tv-a2); margin-top: var(--tv-a2); }
+  .kanalwahl .eingabe { flex: 1; }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt rahmen">
+    <div class="rahmen-kopf">
+      <div class="seitenkopf">
+        <h1>Eigene Videos</h1>
+        <span class="zahl">alte Dateien einordnen</span>
+      </div>
+      <div class="reiter" style="margin:0">
+        <button class="aktiv"><i class="fa-solid fa-wand-magic-sparkles"></i> Einordnen <span class="zaehler">56</span></button>
+        <button onclick="location.href='eigene-videos-bestand.html'"><i class="fa-solid fa-folder-tree"></i> Eingeordnet <span class="zaehler">14</span></button>
+      </div>
+      <div class="ordner">
+        <select class="eingabe"><option>Altbestand / youtube (56 Dateien, eingelesen heute 02:50)</option><option>Anderen Ordner einlesen ...</option></select>
+        <button class="knopf"><i class="fa-solid fa-rotate"></i> Neu einlesen</button>
+      </div>
+      <div class="befunde">
+        <span class="befund aktiv"><span class="farbe f-doppelt"></span> Schon vorhanden <span class="zaehler">12</span></span>
+        <span class="befund"><span class="farbe f-sicher"></span> Sicher erkannt <span class="zaehler">31</span></span>
+        <span class="befund"><span class="farbe f-vermutlich"></span> Vermutlich <span class="zaehler">9</span></span>
+        <span class="befund"><span class="farbe f-unbekannt"></span> Unbekannt <span class="zaehler">4</span></span>
+        <div class="aktionen">
+          <button class="knopf gefahr"><i class="fa-solid fa-trash"></i> 12 Doppelte löschen</button>
+          <button class="knopf"><i class="fa-solid fa-check-double"></i> 31 sichere übernehmen</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="spalten">
+      <div class="rollfeld">
+        <div class="datei gewaehlt">
+          <span class="farbe f-doppelt"></span>
+          <div><div class="name">500 Euro für eine Tastatur _ Was bringen Custom-Tastaturen_.mp4</div>
+            <div class="unter"><span class="zahl">15:14 · 186,1 MB</span><span>gleich: c't 3003</span></div></div>
+          <span class="zustand fehler">doppelt</span>
+        </div>
+        <div class="datei">
+          <span class="farbe f-sicher"></span>
+          <div><div class="name">(fast) Die ganze Wahrheit über Andy Warhol _ ARTE (720p_30fps_H264-192kbit_AAC).mp4</div>
+            <div class="unter"><span class="zahl">3:17 · 14,4 MB</span><span>ARTE, Treffer bei der Quelle</span></div></div>
+          <span class="zustand fertig">sicher</span>
+        </div>
+        <div class="datei">
+          <span class="farbe f-sicher"></span>
+          <div><div class="name">(fast) Die ganze Wahrheit über Amy Winehouse _ ARTE (720p_30fps_H264-192kbit_AAC).mp4</div>
+            <div class="unter"><span class="zahl">2:46 · 12,6 MB</span><span>ARTE, Treffer bei der Quelle</span></div></div>
+          <span class="zustand fertig">sicher</span>
+        </div>
+        <div class="datei">
+          <span class="farbe f-unbekannt"></span>
+          <div><div class="name">Complete 66 Mac vs PC ads + Mac &amp; PC WWDC Intro + Siri Intro.mp4</div>
+            <div class="unter"><span class="zahl">38:50 · 93,8 MB</span><span>kein Treffer</span></div></div>
+          <span class="zustand">unbekannt</span>
+        </div>
+        <div class="tastatur"><span><kbd>1</kbd> löschen</span><span><kbd>2</kbd> zuordnen</span><span><kbd>3</kbd> eigenem Kanal zuordnen</span><span><kbd>4</kbd> überspringen</span><span><kbd>↑</kbd><kbd>↓</kbd> nächste Datei</span></div>
+      </div>
+
+      <div class="rollfeld">
+        <div class="karte">
+          <h3><i class="fa-solid fa-copy" style="color:var(--tv-gefahr)"></i> Schon in der Bibliothek</h3>
+          <div class="vergleich">
+            <div class="seitenhaelfte">
+              <span class="etikett">Alte Datei</span>
+              <div class="bild" style="display:grid;place-items:center;color:var(--tv-text-3)"><i class="fa-solid fa-film fa-2x"></i></div>
+              <span>500 Euro für eine Tastatur _ Was bringen Custom-Tastaturen_.mp4</span>
+              <span class="zahl gleich">15:14 · 186,1 MB</span>
+            </div>
+            <div class="seitenhaelfte">
+              <span class="etikett">In der Bibliothek</span>
+              <div class="bild"><img src="http://192.168.178.49:8031/api/player/nP7N1_34lh8/thumbnail" alt=""></div>
+              <span>500 Euro für eine Tastatur | Was bringen Custom-Tastaturen? · c't 3003</span>
+              <span class="zahl gleich">15:14 · 186,1 MB</span>
+            </div>
+          </div>
+          <p class="leise klein" style="margin-top: var(--tv-a3)">Gleiche Dauer und gleiche Größe: die alte Datei wird nicht gebraucht.</p>
+        </div>
+        <div class="karte">
+          <h3><i class="fa-solid fa-hand-pointer" style="color:var(--tv-akzent)"></i> Was tun?</h3>
+          <div class="wahl">
+            <button class="knopf haupt"><i class="fa-solid fa-trash"></i> Alte Datei löschen <kbd class="taste">1</kbd></button>
+            <button class="knopf"><i class="fa-solid fa-right-left"></i> Datei in der Bibliothek ersetzen</button>
+            <button class="knopf"><i class="fa-solid fa-link"></i> Anderem Video zuordnen <kbd class="taste">2</kbd></button>
+            <button class="knopf"><i class="fa-solid fa-user-plus"></i> Eigenem Kanal zuordnen <kbd class="taste">3</kbd></button>
+            <div class="kanalwahl"><input class="eingabe" placeholder="Kanal wählen oder neu anlegen, z.B. Werbespots"></div>
+            <button class="knopf ohne"><i class="fa-solid fa-forward"></i> Überspringen <kbd class="taste">4</kbd></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite } from './gemeinsam.js';
+  seite('eigene');
+</script>
+</body>
+</html>

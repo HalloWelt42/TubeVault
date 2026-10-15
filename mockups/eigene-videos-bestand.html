@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entwurf - Eigene Videos: Eingeordnet</title>
+<link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="stil.css">
+<style>
+  .kanalgruppe { margin-bottom: var(--tv-a5); }
+  .kanalgruppe h2 { display: flex; align-items: center; gap: var(--tv-a3); font-size: var(--tv-gr-titel); margin-bottom: var(--tv-a3); }
+  .kanalgruppe h2 .art { background: var(--tv-karte-2); }
+  .kanalgruppe .raster { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .warnung { display: flex; gap: var(--tv-a3); align-items: center; padding: var(--tv-a3) var(--tv-a4); margin-bottom: var(--tv-a3);
+    background: rgba(var(--tv-warnung-rgb), 0.1); border: 1px solid rgba(var(--tv-warnung-rgb), 0.35); border-radius: var(--tv-ecke); font-size: var(--tv-gr-klein); }
+  .warnung i { color: var(--tv-warnung); }
+  .warnung .knopf { margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="schale">
+  <div data-block="kopf"></div>
+  <div data-block="seite"></div>
+
+  <main class="haupt rahmen">
+    <div class="rahmen-kopf">
+      <div class="seitenkopf">
+        <h1>Eigene Videos</h1>
+        <span class="zahl">14 Videos · 1,4 GB</span>
+      </div>
+      <div class="reiter" style="margin:0">
+        <button onclick="location.href='eigene-videos.html'"><i class="fa-solid fa-wand-magic-sparkles"></i> Einordnen <span class="zaehler">56</span></button>
+        <button class="aktiv"><i class="fa-solid fa-folder-tree"></i> Eingeordnet <span class="zaehler">14</span></button>
+      </div>
+    </div>
+
+    <div class="rollfeld">
+      <div class="warnung">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>3 Videos tragen einen Ordnerpfad als Kanal (z.B. "youtube/ARTE/(fast) Die ganze Wahrheit über Andy Warhol _ ARTE"). Vorschlag: Kanal ARTE.</span>
+        <button class="knopf klein">Prüfen</button>
+      </div>
+      <div class="warnung">
+        <i class="fa-solid fa-copy"></i>
+        <span>"500 Euro für eine Tastatur" liegt doppelt vor (eigene Datei und Video von c't 3003, gleiche Größe).</span>
+        <button class="knopf klein gefahr">Eigene Datei löschen</button>
+      </div>
+
+      <section class="kanalgruppe">
+        <h2>c't 3003 <span class="zaehler">5</span></h2>
+        <div class="raster" id="ct"></div>
+      </section>
+      <section class="kanalgruppe">
+        <h2>ARTEde <span class="zaehler">2</span></h2>
+        <div class="raster" id="arte"></div>
+      </section>
+      <section class="kanalgruppe">
+        <h2>Ohne Kanal <span class="art">eigener Kanal fehlt</span> <span class="zaehler">2</span></h2>
+        <div class="raster" id="ohne"></div>
+      </section>
+    </div>
+  </main>
+
+  <div data-block="fuss"></div>
+</div>
+
+<script type="module">
+  import { seite, kachel } from './gemeinsam.js';
+  seite('eigene');
+  const v = (id, titel, kanal, dauer, groesse) => ({ id, titel, kanal, dauer, groesse, aufrufe: 0, hochgeladen: '2026-02-27', arten: [] });
+  document.getElementById('ct').innerHTML = [
+    v('52_suJg2xVM', 'AUSPROBIERT: PS5-Headset Playstation VR2 | Horizon Call of the Mountain', "c't 3003", 1372),
+    v('cpTGG6BIJUY', '12 Jahre altes Notebook: VIEL schneller dank Linux (aber welchem?!)', "c't 3003", 773),
+    v('jCYfbjJTeZM', '5 KOSTENLOSE KI-Tools, die ihr sofort nutzen könnt', "c't 3003", 818),
+    v('nRjdgiUkhRc', '40.000-Euro-PC: Was macht man mit den ganzen Kernen?!', "c't 3003", 938),
+    v('nP7N1_34lh8', '500 Euro für eine Tastatur | Was bringen Custom-Tastaturen?', "c't 3003", 914),
+  ].map(kachel).join('');
+  document.getElementById('arte').innerHTML = [
+    v('1Dl-frx-G1Y', '#MeToo in China? Kann man vergessen | Alle Internetze | ARTE', 'ARTEde', 159),
+    v('DwzM8ISDkgA', '#JusticiaYa: Weg mit den korrupten Politikern! - Alle Internetze - ARTE', 'ARTEde', 144),
+  ].map(kachel).join('');
+  document.getElementById('ohne').innerHTML = [
+    v('own_f82ad927d4f9', 'Complete 66 Mac vs PC ads + Mac & PC WWDC Intro + Siri Intro', 'ohne Kanal', 2330),
+    v('local_07187284ca98', '500 Euro für eine Tastatur _ Was bringen Custom-Tastaturen_', 'ohne Kanal', 914),
+  ].map(kachel).join('');
+  // Aufrufe gibt es bei eigenen Dateien nicht
+  document.querySelectorAll('.kachel-meta span.zahl:first-of-type').forEach(el => { if (el.textContent.startsWith('0 ')) el.remove(); });
+</script>
+</body>
+</html>
