@@ -20,6 +20,7 @@
   }
 
   let subs = $state([]);
+  let loaded = $state(false);   // bis zur ersten Antwort "Lädt", nie "Noch keine Kanäle"
   let total = $state(0);
   let rssStats = $state(null);
   let showImport = $state(false);
@@ -130,6 +131,7 @@
       const result = await api.getSubscriptions({ page: 1, per_page: 1000 });
       subs = result.subscriptions || [];
       total = result.total || 0;
+      loaded = true;
       rssStats = await api.getRSSStats();
       scheduler = await api.getSchedulerStatus();
     } catch (e) { toast.error(e.message); }
@@ -689,7 +691,10 @@
   </div>
   {:else}
   <div class="empty">
-    {#if subs.length > 0}
+    {#if !loaded}
+      <i class="fa-solid fa-spinner fa-spin" style="font-size:2rem; color:var(--text-tertiary)"></i>
+      <h3>Lädt ...</h3>
+    {:else if subs.length > 0}
       <i class="fa-solid fa-filter" style="font-size:3.5rem; color:var(--text-tertiary)"></i>
       <h3>Kein Kanal passt zu dieser Auswahl</h3>
       <button class="btn-primary" onclick={()=>{filterMode='all';searchQuery='';}}>Alle Kanäle zeigen</button>
