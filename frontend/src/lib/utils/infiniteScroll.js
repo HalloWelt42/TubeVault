@@ -3,8 +3,9 @@
  *
  * Zentrale IntersectionObserver-Logik für alle Media-Listen (ersetzt die
  * bisher lokal duplizierten Observer). Robust gegen die typischen Fallen:
- *   - beobachtet gegen den ECHTEN Scroll-Container (.main-content), nicht
- *     das Fenster – sonst misst der Observer in dieser App falsch
+ *   - beobachtet gegen das ECHTE Rollfeld der Liste (scrollRootOf: das
+ *     Rollfeld der Seite oder .main-content), nicht das Fenster - sonst
+ *     greift der Vorlauf (rootMargin) nicht
  *   - interner busy-Guard verhindert Doppel-/Überlappungs-Requests, auch
  *     wenn der Consumer-State (loading) minimal verzögert kippt
  *   - Nachlade-Recheck: bleibt der Sentinel nach dem Laden sichtbar (kurze
@@ -18,14 +19,15 @@
  *                                     () => hasMore && !loading && !loadingMore
  *   rootMargin  string              – Vorlauf (Default '300px')
  */
+import { scrollRootOf } from './scrollRoot.js';
+
 export function infiniteScroll(node, params = {}) {
   let opts = params;
   let visible = false;
   let busy = false;
 
   function scrollRoot() {
-    // Der Scroll-Container dieser App ist .main-content (overflow-y:auto).
-    return document.querySelector('.main-content') || null;
+    return scrollRootOf(node) || null;
   }
 
   async function fire() {

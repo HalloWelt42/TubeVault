@@ -74,3 +74,22 @@
 
 /* Leer- und Ladehinweis einer Liste */
 .tv-leer { padding: 64px var(--tv-a5); text-align: center; color: var(--tv-text-3); }
+
+/* ═══ Seitenrahmen: fester Kopf, darunter ein eigenes Rollfeld ═══
+ *   <div class="tv-seite">
+ *     <div class="tv-seitenkopf"> Titel, Filter, Reiter </div>
+ *     <div class="tv-rollfeld" data-scroll-root> lange Liste </div>
+ *   </div>
+ * Zwei Spalten, die jede für sich rollen: .tv-spalten mit zwei .tv-rollfeld.
+ * Bei schmalem oder niedrigem Fenster rollt die Seite wieder als Ganzes. */
+.tv-seite { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.tv-seitenkopf { flex: none; padding: var(--tv-a5) var(--tv-a6) var(--tv-a3); }
+.tv-rollfeld { flex: 1; min-height: 0; overflow-y: auto; padding: var(--tv-a2) var(--tv-a6) var(--tv-a6); }
+.tv-spalten { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--tv-a4); padding: 0 var(--tv-a6); }
+.tv-spalten > .tv-rollfeld { padding: var(--tv-a2) var(--tv-a1) var(--tv-a6); }
+
+@media (max-width: 1023px), (max-height: 620px) {
+  .tv-seite { height: auto; }
+  .tv-rollfeld { overflow-y: visible; }
+  .tv-spalten { grid-template-columns: 1fr; }
+}

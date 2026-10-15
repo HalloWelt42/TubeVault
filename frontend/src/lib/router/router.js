@@ -5,6 +5,7 @@
  * © HalloWelt42 – Private Nutzung
  */
 
+import { activeScrollRoot } from '../utils/scrollRoot.js';
 import { writable, derived, get } from 'svelte/store';
 import { routeDefinitions, resolveRouteKey } from './routes.js';
 
@@ -108,7 +109,7 @@ const _scrollPositions = new Map();
 const _MAX_SCROLL_ENTRIES = 30;
 
 function _scroller() {
-  return document.querySelector('.main-content');
+  return activeScrollRoot();
 }
 
 function _saveScroll(fullUrl) {
@@ -123,19 +124,17 @@ function _saveScroll(fullUrl) {
 }
 
 function _restoreScroll(fullUrl) {
-  const saved = _scrollPositions.get(fullUrl);
-  const el = _scroller();
-  if (!el) return;
-  const target = saved || 0;
-  // Listen rendern async nach → mehrere Frames versuchen bis genug Höhe da ist
-  let tries = 0;
+  const target = _scrollPositions.get(fullUrl) || 0;
+  // Die Seite rendert erst nach dem Wechsel, ihre Liste lädt danach: das
+  // Rollfeld bei jedem Versuch neu suchen und es bis zu RESTORE_MS lang
+  // probieren, bis genug Inhalt da ist
+  const RESTORE_MS = 3000;
+  const started = performance.now();
   const tick = () => {
-    el.scrollTop = target;
-    tries++;
-    // weiter versuchen solange Ziel noch nicht erreichbar (Content wächst) und < ~1s
-    if (tries < 40 && el.scrollTop < target - 2 && el.scrollHeight > el.clientHeight) {
-      requestAnimationFrame(tick);
-    }
+    const el = _scroller();
+    if (el) el.scrollTop = target;
+    const reached = el && el.scrollTop >= target - 2;
+    if (!reached && performance.now() - started < RESTORE_MS) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
@@ -181,8 +180,8 @@ export function navigate(path, params = {}, replace = false) {
 
   // Scroll nach oben bei Seitenwechsel (nicht bei replace/Filter)
   if (!replace && prev.page !== parsed.page) {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) mainContent.scrollTop = 0;
+    const scroller = activeScrollRoot();
+    if (scroller) scroller.scrollTop = 0;
   }
 }
 

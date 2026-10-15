@@ -93,7 +93,8 @@
   });
 </script>
 
-<div class="library">
+<div class="tv-seite">
+ <div class="tv-seitenkopf">
   <PageHeader title="Bibliothek" count={list.loading && !list.total ? null : list.total} bytes={totalBytes}
               hasFilter={filters.hasActive} onClearFilter={clearFilters}>
     <button class="tv-knopf" class:aktiv={selectMode} onclick={() => { selectMode = !selectMode; selected = new Set(); }}>
@@ -129,6 +130,11 @@
     {/each}
   </div>
 
+ </div>
+
+ <!-- Nur die Liste rollt; Schlagwörter stehen am Anfang der Liste, weil sie
+      sehr viele werden können und den festen Kopf sonst zu hoch machten -->
+ <div class="tv-rollfeld" data-scroll-root>
   <TagFilterBar {allTags} activeTags={filters.activeTags} onToggle={filters.toggleTag} />
 
   {#if list.loading}
@@ -163,6 +169,7 @@
       {/if}
     </div>
   {/if}
+ </div>
 </div>
 
 <ConfirmDialog bind:this={confirmRef} />
@@ -170,8 +177,7 @@
 
 <style>
   /* Gestaltung nach mockups/bibliothek.html */
-  .library { padding: var(--tv-a5) var(--tv-a6) var(--tv-a6); }
-  .tv-raster { margin-top: var(--tv-a5); }
+  .tv-raster { margin-top: var(--tv-a3); }
   .scroll-sentinel { height: 1px; }
 
   /* Auswahl: Haken oben rechts auf dem Bild, gewählte Kachel umrandet */
