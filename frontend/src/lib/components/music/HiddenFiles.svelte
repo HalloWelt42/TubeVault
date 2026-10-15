@@ -8,6 +8,7 @@
   import { api } from '../../api/client.js';
   import { coverUrl } from '../../utils/musicTrack.js';
   import { formatDuration } from '../../utils/format.js';
+  import { clickedInside } from '../../utils/clickOutside.js';
   import { toast } from '../../stores/notifications.js';
 
   let { onRestored = () => {} } = $props();
@@ -40,7 +41,7 @@
   }
 
   function outside(e) {
-    if (open && box && !box.contains(e.target)) open = false;
+    if (open && !clickedInside(e, box)) open = false;
   }
 
   onMount(loadCount);

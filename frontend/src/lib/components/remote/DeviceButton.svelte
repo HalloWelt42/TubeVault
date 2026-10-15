@@ -4,6 +4,7 @@
 -->
 <script>
   import { remote } from '../../stores/remote.svelte.js';
+  import { clickedInside } from '../../utils/clickOutside.js';
   import DeviceList from './DeviceList.svelte';
 
   /** up: Feld öffnet nach oben (Leisten unten); framed: Knopf mit Fläche wie in Aktionsreihen */
@@ -14,7 +15,7 @@
   let others = $derived(Math.max(0, remote.visible.length - 1));
 
   function outside(e) {
-    if (open && box && !box.contains(e.target)) open = false;
+    if (open && !clickedInside(e, box)) open = false;
   }
 </script>
 

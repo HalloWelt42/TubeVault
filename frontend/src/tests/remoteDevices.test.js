@@ -63,10 +63,10 @@ describe('Fernsteuerung: gemeldeter Stand', () => {
   it('meldet ein Video mit Tonspuren', () => {
     const session = { el: { currentTime: 324, duration: 853, paused: false, volume: 0.64 },
                       video: { id: 'NxsYhM89B4M', title: 'Why F-35B', channel_name: 'Not What You Think', duration: 853 },
-                      tracks: [{ id: 't1', label: 'Deutsch', language: 'de' }], trackId: 't1', canNext: true, canPrev: false };
+                      tracks: [{ id: 7, label: 'Deutsch', language: 'de' }], trackId: 7, canNext: true, canPrev: false };
     expect(videoState(session, true)).toMatchObject({
-      art: 'video', kennung: 'NxsYhM89B4M', stelle: 324, laeuft: true, tonspur: 't1',
-      tonspuren: [{ id: 't1', label: 'Deutsch' }], kann: ['sprung', 'weiter'],
+      art: 'video', kennung: 'NxsYhM89B4M', stelle: 324, laeuft: true, tonspur: 7,
+      tonspuren: [{ id: 7, label: 'Deutsch' }], kann: ['sprung', 'weiter'],
     });
     expect(videoState({ el: null }, true)).toBeNull();
   });

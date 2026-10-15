@@ -34,7 +34,7 @@ Action = Literal[
 
 
 class TrackChoice(BaseModel):
-    id: str
+    id: int                                  # Kennung der Tonspur (audio_tracks)
     label: str
 
 
@@ -55,7 +55,7 @@ class PlayerState(BaseModel):
     wiederholen: Optional[str] = None
     liebling: Optional[bool] = None
     tonspuren: list[TrackChoice] = Field(default_factory=list)
-    tonspur: Optional[str] = None            # None: Original
+    tonspur: Optional[int] = None            # None: Original
     kann: list[str] = Field(default_factory=list)   # z.B. weiter, zurueck, sprung
 
 

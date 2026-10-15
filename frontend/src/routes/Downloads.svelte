@@ -16,6 +16,7 @@
   import ResolvedResult from '../lib/components/downloads/ResolvedResult.svelte';
   import DownloadSettings from '../lib/components/downloads/DownloadSettings.svelte';
   import { TABS, GROUPS, matchesTab, nextPriority, PRIORITY_LABELS } from '../lib/components/downloads/jobStatus.js';
+  import { clickedInside } from '../lib/utils/clickOutside.js';
 
   let confirmRef;
 
@@ -269,7 +270,7 @@
   $effect(() => {
     if (selectedId == null) return;
     const onKey = (e) => { if (e.key === 'Escape') selectedId = null; };
-    const onClick = (e) => { if (!e.target.closest?.('.auftrag, .detail-panel')) selectedId = null; };
+    const onClick = (e) => { if (!clickedInside(e, '.auftrag', '.detail-panel')) selectedId = null; };
     document.addEventListener('keydown', onKey);
     document.addEventListener('click', onClick);
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('click', onClick); };

@@ -17,8 +17,10 @@
   let progress = $derived(live?.progress ?? item.progress ?? 0);
   // Fertig geladen (oder als Reupload übersprungen): hier liegt das Video
   let target = $derived(item.status === 'done' ? (item.same_as?.id || item.video_id) : null);
-  let playing = $state(false);
-  $effect(() => { item.id; playing = false; });
+  // Spielt hier gerade; die Liste lädt alle paar Sekunden neu und liefert
+  // dabei jedes Mal einen neuen Auftrag, das darf den Spieler nicht schließen
+  let playingId = $state(null);
+  let playing = $derived(target != null && playingId === target);
 </script>
 
 <section class="tv-karte detail-panel">
@@ -26,11 +28,11 @@
     <button class="tv-knopf ohne symbol klein schliessen" onclick={onClose} title="Schließen (Esc)"><i class="fa-solid fa-xmark"></i></button>
   </h3>
   <div class="vorschau">
-    {#if playing && target}
+    {#if playing}
       <!-- svelte-ignore a11y_media_has_caption -->
       <video src={api.streamUrl(target)} controls autoplay></video>
     {:else if target}
-      <button class="abspielen" onclick={() => playing = true} title="Hier abspielen">
+      <button class="abspielen" onclick={() => playingId = target} title="Hier abspielen">
         <img src={api.thumbnailUrl(target)} alt="" onerror={(e) => e.target.style.visibility = 'hidden'} />
         <i class="fa-solid fa-play spielen"></i>
       </button>

@@ -61,6 +61,18 @@ async def test_zustand_geht_an_die_anderen():
     assert handy.of("zustand")[-1]["zustand"] is None and hub.devices()[0].zustand is None
 
 
+async def test_video_mit_tonspuren():
+    # Tonspuren tragen ihre Kennung aus der Datenbank (Zahl), so meldet sie der Player
+    hub = Hub()
+    rechner, handy = await _two(hub)
+    await hub.handle("fenster-rechner", {"typ": "zustand", "zustand": {
+        "art": "video", "kennung": "NxsYhM89B4M", "titel": "Werkstatt", "stelle": 7, "dauer": 853,
+        "laeuft": True, "tonspuren": [{"id": 12, "label": "Deutsch"}], "tonspur": 12}})
+    assert not rechner.of("fehler")
+    [meldung] = handy.of("zustand")
+    assert meldung["zustand"]["tonspuren"] == [{"id": 12, "label": "Deutsch"}] and meldung["zustand"]["tonspur"] == 12
+
+
 async def test_befehl_nur_ans_ziel_mit_absender():
     hub = Hub()
     rechner, handy = await _two(hub)

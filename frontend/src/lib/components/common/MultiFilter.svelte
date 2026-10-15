@@ -8,6 +8,7 @@
   import { api } from '../../api/client.js';
   import { settings } from '../../stores/settings.js';
   import { languageCatalog, languageChoices, languageInfo, loadLanguages, parseLanguageList } from '../../utils/language.js';
+  import { clickedInside } from '../../utils/clickOutside.js';
 
   // Props
   let {
@@ -240,10 +241,10 @@
   }
 
   function onClickOutside(e) {
-    if (showChannelDD && !e.target.closest('.filter-dropdown-wrap.channel')) showChannelDD = false;
-    if (showCategoryDD && !e.target.closest('.filter-dropdown-wrap.category')) showCategoryDD = false;
-    if (showTagDD && !e.target.closest('.filter-dropdown-wrap.tag')) showTagDD = false;
-    if (showLanguageDD && !e.target.closest('.filter-dropdown-wrap.language')) showLanguageDD = false;
+    if (showChannelDD && !clickedInside(e, '.filter-dropdown-wrap.channel')) showChannelDD = false;
+    if (showCategoryDD && !clickedInside(e, '.filter-dropdown-wrap.category')) showCategoryDD = false;
+    if (showTagDD && !clickedInside(e, '.filter-dropdown-wrap.tag')) showTagDD = false;
+    if (showLanguageDD && !clickedInside(e, '.filter-dropdown-wrap.language')) showLanguageDD = false;
   }
 
   let hasActive = $derived(

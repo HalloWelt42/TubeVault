@@ -20,6 +20,7 @@
   import { formatDuration } from '../../utils/format.js';
   import { coverUrl } from '../../utils/musicTrack.js';
   import { addressParams, filtersFromSaved } from '../../utils/searchState.js';
+  import { clickedInside } from '../../utils/clickOutside.js';
   import Marked from '../search/Marked.svelte';
 
   const DEBOUNCE_MS = 220;
@@ -204,7 +205,7 @@
   }
 
   function outside(event) {
-    if (open && box && !box.contains(event.target)) close();
+    if (open && !clickedInside(event, box)) close();
   }
 </script>
 
