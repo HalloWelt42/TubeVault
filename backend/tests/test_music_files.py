@@ -137,3 +137,58 @@ async def test_abspielen_wiedergaben_lieblingssong_export(test_db, sammlung, asy
     out.mkdir()
     copied = await audio_export.export(rm.id, audio_export.ORIGINAL, out)
     assert copied.name == "Robert Miles - Children.flac" and copied.stat().st_size == (sammlung / "01. Robert Miles - Children.flac").stat().st_size
+
+
+async def test_hoerbuch_reihenfolge_und_weiterhoeren(test_db, sammlung):
+    """Hörbuch: eigene Liste, feste Reihenfolge (Teil 2 vor Teil 10), nie in
+    der Musik, Weiterhören beim gemerkten Teil an der gemerkten Stelle."""
+    from app.services import audiobooks
+    ordner = sammlung / "Jules Verne - Die geheimnisvolle Insel (Hörspiel)"
+    for name in ("10. Teil 10.flac", "02. Teil 2.flac"):
+        _flac(ordner / name)
+    await music_files.scan()
+
+    [buch] = await audiobooks.books()
+    assert (buch.title, buch.parts, buch.current_part) == ("Jules Verne - Die geheimnisvolle Insel (Hörspiel)", 3, None)
+    liste = await music_library.play_list(f"hoerbuch:{buch.key}", shuffle=True)
+    assert [t.title for t in liste.tracks] == ["Teil 1", "Teil 2", "Teil 10"] and liste.start_index == 0
+    assert all(t.title not in ("Teil 1", "Teil 2", "Teil 10") for t in await music_library.tracks())
+
+    zweiter = liste.tracks[1]
+    await audiobooks.save_progress(buch.key, zweiter.id, 0.4)
+    weiter = await music_library.play_list(f"hoerbuch:{buch.key}")
+    assert (weiter.start_index, weiter.start_at) == (1, 0.4)
+    [buch] = await audiobooks.books()
+    assert buch.current_part == 2 and not buch.finished
+
+    await audiobooks.reset(buch.key)
+    assert (await music_library.play_list(f"hoerbuch:{buch.key}")).start_index == 0
+
+
+async def test_hoerbuecher_als_videos(test_db):
+    """Videos mit Hörbuch/Hörspiel im Titel: erkannt, nie Musik; nummerierte
+    Teile ergeben ein Buch in Folgenreihenfolge, ein Einzelvideo ist ein Buch."""
+    from app.services import audiobook_flag, audiobooks
+    for vid, title, upload in [
+            ("hspteil00002", "Die drei Fragezeichen Hörspiel - Teil 2", "2026-01-02"),
+            ("hspteil00001", "Die drei Fragezeichen Hörspiel - Teil 1", "2026-01-03"),
+            ("hspteil00003", "Die drei Fragezeichen Hörspiel - Teil 3", "2026-01-01"),
+            ("hbeinzel001", "Der Hobbit - Hörbuch komplett", "2026-01-04"),
+            ("musikvideo1", "ABBA - Waterloo", "2026-01-05")]:
+        await test_db.execute(
+            """INSERT INTO videos (id, title, channel_id, channel_name, is_music, status, upload_date, download_date, duration)
+               VALUES (?, ?, 'UCh', 'Hörkanal', 1, 'ready', ?, ?, 600)""", (vid, title, upload, upload))
+        await audiobook_flag.apply_auto(vid, title, "[]")
+    assert {t.id for t in await music_library.video_tracks()} == {"musikvideo1"}
+
+    by_title = {b.title: b for b in await audiobooks.books()}
+    reihe = next(b for t, b in by_title.items() if "Fragezeichen" in t)
+    assert (reihe.kind, reihe.parts) == ("video", 3)
+    assert [t.id for t in (await music_library.play_list(f"hoerbuch:{reihe.key}")).tracks] == [
+        "hspteil00001", "hspteil00002", "hspteil00003"]
+    assert by_title["Der Hobbit - Hörbuch komplett"].parts == 1
+
+    # Nutzerwahl gilt, die Automatik ändert sie nie
+    await audiobook_flag.set_by_user(["hbeinzel001"], False)
+    await audiobook_flag.apply_auto("hbeinzel001", "Der Hobbit - Hörbuch komplett", "[]")
+    assert "Der Hobbit - Hörbuch komplett" not in {b.title for b in await audiobooks.books()}

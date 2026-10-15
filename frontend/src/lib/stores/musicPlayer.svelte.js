@@ -13,6 +13,8 @@ import { audioSrc, coverUrl, isFile, recordPlay, setFavorite } from '../utils/mu
 import { loadSkipRanges, skipTarget } from '../utils/adSkip.js';
 import { emitVideoMutation } from '../utils/videoMutations.js';
 
+const BOOK_PREFIX = 'hoerbuch:';
+const BOOK_SAVE_MS = 10000;
 const STATE_KEY = 'musik.zustand';          // Weiterhören: Warteschlange dieses Geräts
 const VOLUME_KEY = 'player.lastVolume';     // wie beim Videoplayer
 const COUNT_AFTER_S = 30;                    // ab dann zählt ein Titel als gehört
@@ -118,8 +120,9 @@ class MusicPlayer {
     this.#unlock();
     const list = await api.musicPlay(source, { shuffle, start });
     if (!list.tracks.length) return false;
-    this.shuffle = shuffle;
-    this.#setQueue(list.tracks, 0, { title: list.title, source });
+    // Hörbücher laufen nie zufällig; sie beginnen beim gemerkten Teil an der gemerkten Stelle
+    this.shuffle = shuffle && !source.startsWith(BOOK_PREFIX);
+    this.#setQueue(list.tracks, list.start_index || 0, { title: list.title, source }, list.start_at || 0);
     return true;
   }
 
@@ -131,11 +134,16 @@ class MusicPlayer {
     this.#setQueue(tracks, startIndex, { title, source: null });
   }
 
-  #setQueue(tracks, startIndex, { title, source }) {
+  #setQueue(tracks, startIndex, { title, source }, at = 0) {
     this.queue = tracks;
     this.title = title;
     this.source = source;
-    this.#start(startIndex, 0);
+    this.#start(startIndex, at);
+  }
+
+  /** Schlüssel des laufenden Hörbuchs, sonst null */
+  get audiobook() {
+    return this.source?.startsWith(BOOK_PREFIX) ? this.source.slice(BOOK_PREFIX.length) : null;
   }
 
   async #start(index, at = 0) {
@@ -211,6 +219,7 @@ class MusicPlayer {
 
   /** Zufall: der Rest der Warteschlange wird gemischt (der laufende Titel bleibt) */
   toggleShuffle() {
+    if (this.audiobook) return;   // Hörbücher bleiben in ihrer Reihenfolge
     this.shuffle = !this.shuffle;
     if (this.shuffle && this.upcoming.length > 1) {
       const rest = [...this.upcoming];
@@ -391,7 +400,20 @@ class MusicPlayer {
     });
   }
 
+  #bookSentAt = 0;
+
+  /** Stand des Hörbuchs beim Server merken: höchstens alle 10 s, beim Anhalten sofort */
+  #saveBookProgress() {
+    const key = this.audiobook;
+    if (!key || !this.current) return;
+    const now = Date.now();
+    if (this.playing && now - this.#bookSentAt < BOOK_SAVE_MS) return;
+    this.#bookSentAt = now;
+    api.musicBookProgress(key, this.current.id, Math.floor(this.time)).catch(() => {});
+  }
+
   #save() {
+    this.#saveBookProgress();
     if (!this.queue.length) return writeJson(STATE_KEY, null);
     writeJson(STATE_KEY, { queue: this.queue.slice(0, 500), index: this.index, title: this.title,
                            source: this.source, shuffle: this.shuffle, repeat: this.repeat, time: this.time });

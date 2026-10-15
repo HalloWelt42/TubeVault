@@ -107,6 +107,9 @@ export const api = {
   cleanupDelete: (videoIds) => request('/api/admin/cleanup/delete', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
   setTypeBatch: (videoIds, videoType) => request('/api/videos/type/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, video_type: videoType }) }),
   setMusicBatch: (videoIds, isMusic) => request('/api/videos/music/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, is_music: isMusic }) }),
+  // Hörbuch/Hörspiel von Hand festlegen (die Automatik ändert das nie mehr)
+  setAudiobookBatch: (videoIds, isAudiobook) =>
+    request('/api/videos/audiobook/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, is_audiobook: isAudiobook }) }),
 
   // Downloads
   addDownload: (data) => request('/api/downloads', { method: 'POST', body: JSON.stringify(data) }),
@@ -535,6 +538,11 @@ export const api = {
   musicFileFavorite: (id, favorite) =>
     request(`/api/music/files/${id}/favorite`, { method: 'PUT', body: JSON.stringify({ favorite }) }),
   musicFilesStatus: () => request('/api/music/files/status'),
+  // Hörbücher: feste Reihenfolge, Stand je Buch (Teil und Stelle)
+  musicBooks: () => request('/api/music/books'),
+  musicBookProgress: (key, fileId, position) =>
+    request(`/api/music/books/${key}/progress`, { method: 'PUT', body: JSON.stringify({ file_id: fileId, position }) }),
+  musicBookRestart: (key) => request(`/api/music/books/${key}/progress`, { method: 'DELETE' }),
   musicFilesScan: () => request('/api/music/files/scan', { method: 'POST' }),
   musicZipUrl: (source, format = 'original') => `${API_BASE}/api/music/export.zip?source=${encodeURIComponent(source)}&format=${format}`,
   musicPlay: (source, { shuffle = false, start = null } = {}) => {

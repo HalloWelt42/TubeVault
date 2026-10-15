@@ -10,7 +10,8 @@
 -->
 <script>
   // onDone: Auswahl-Modus mit "Fertig"; die Leiste steht dann auch ohne Auswahl
-  let { selectedCount = 0, totalCount = 0, onSelectAll = null, onDone = null, children } = $props();
+  let { selectedCount = 0, totalCount = 0, onSelectAll = null, onDone = null,
+        hint = 'Videos antippen, um sie auszuwählen', children } = $props();
 </script>
 
 {#if selectedCount > 0 || onDone}
@@ -18,7 +19,7 @@
     {#if selectedCount > 0}
       <span class="bulk-count zahl">{selectedCount.toLocaleString('de-DE')} ausgewählt</span>
     {:else}
-      <span class="bulk-hinweis">Videos antippen, um sie auszuwählen</span>
+      <span class="bulk-hinweis">{hint}</span>
     {/if}
     {#if onSelectAll}
       <button class="tv-knopf klein" onclick={onSelectAll}>

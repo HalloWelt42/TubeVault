@@ -474,6 +474,19 @@ async def set_music_batch(req: MusicBatchRequest):
     return {"updated": count, "is_music": req.is_music}
 
 
+class AudiobookBatchRequest(BaseModel):
+    video_ids: list[str]
+    is_audiobook: bool
+
+
+@router.post("/audiobook/batch")
+async def set_audiobook_batch(req: AudiobookBatchRequest):
+    """Batch: als Hörbuch/Hörspiel festlegen oder nicht (die Automatik ändert das nie mehr)."""
+    from app.services import audiobook_flag
+    count = await audiobook_flag.set_by_user(req.video_ids[:500], req.is_audiobook)
+    return {"updated": count, "is_audiobook": req.is_audiobook}
+
+
 @router.delete("/{video_id}")
 async def delete_video(video_id: str):
     """Video komplett löschen (Dateien + DB)."""

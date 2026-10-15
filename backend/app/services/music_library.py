@@ -70,6 +70,8 @@ class PlayList(BaseModel):
     source: str
     title: str
     tracks: list[Track]
+    start_index: int = 0             # hier beginnen (Hörbücher: der gemerkte Teil)
+    start_at: float = 0              # an dieser Stelle in Sekunden
 
 
 def clean_channel(name: Optional[str]) -> str:
@@ -92,14 +94,14 @@ def group_key(name: str) -> str:
     return re.sub(r"\s+", " ", name.casefold()).strip()
 
 
-_TRACK_SQL = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name,
+TRACK_SQL = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name, v.upload_date,
                          v.duration, COALESCE(v.play_count, 0) AS play_count, v.last_played, v.download_date,
                          COALESCE(v.has_lyrics, 0) AS has_lyrics, COALESCE(v.is_music, 0) AS is_music,
                          EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id) AS favorite
                   FROM videos v WHERE v.status = 'ready'"""
 
 
-def _track(row) -> Track:
+def video_track(row) -> Track:
     """Ein Video als Titel. Musik heißt "Interpret - Song", alles andere
     behält seinen Videotitel, der Kanal steht als Interpret."""
     if row["is_music"]:
@@ -114,7 +116,7 @@ def _track(row) -> Track:
                  has_lyrics=bool(row["has_lyrics"]))
 
 
-def _file_track(f: music_files.FileInfo) -> Track:
+def file_track(f: music_files.FileInfo) -> Track:
     artist = (f.artist or f.album_artist or "Unbekannt").strip()
     return Track(id=f.id, title=f.title, artist=artist, artist_source=f"artist:{group_key(artist)}",
                  album=f.album, duration=int(f.duration) if f.duration else None, play_count=f.play_count,
@@ -122,12 +124,14 @@ def _file_track(f: music_files.FileInfo) -> Track:
 
 
 async def video_tracks() -> list[Track]:
-    rows = await db.fetch_all(f"{_TRACK_SQL} AND v.is_music = 1 ORDER BY v.download_date DESC, v.id")
-    return [_track(row) for row in rows]
+    # Hörbücher und Hörspiele sind keine Musik, auch wenn sie so gekennzeichnet sind
+    rows = await db.fetch_all(
+        f"{TRACK_SQL} AND v.is_music = 1 AND COALESCE(v.is_audiobook, 0) = 0 ORDER BY v.download_date DESC, v.id")
+    return [video_track(row) for row in rows]
 
 
 async def file_tracks() -> list[Track]:
-    return [_file_track(f) for f in await music_files.all_files()]
+    return [file_track(f) for f in await music_files.all_files()]
 
 
 async def source_setting() -> str:
@@ -153,7 +157,7 @@ async def tracks_of(video_ids: list[str]) -> list[Track]:
     if not video_ids:
         return []
     marks = ",".join("?" * len(video_ids))
-    by_id = {r["id"]: _track(r) for r in await db.fetch_all(f"{_TRACK_SQL} AND v.id IN ({marks})", video_ids)}
+    by_id = {r["id"]: video_track(r) for r in await db.fetch_all(f"{TRACK_SQL} AND v.id IN ({marks})", video_ids)}
     return [by_id[i] for i in video_ids if i in by_id]
 
 
@@ -220,6 +224,8 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     auch Videos, die keine Musik sind (collections)."""
     kind, _, value = source.partition(":")
     title = SOURCE_TITLES.get(kind, "Musik")
+    if kind == "hoerbuch":
+        return await _audiobook(source, value, start)
     if kind == "sammlung":
         from app.services import collections
         collection = await collections.load(value)
@@ -261,6 +267,19 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     else:
         raise ValueError("Unbekannte Quelle")
     return _arranged(source, title, chosen, shuffle, start)
+
+
+async def _audiobook(source: str, key: str, start: Optional[str]) -> PlayList:
+    """Ein Hörbuch in fester Reihenfolge (nie zufällig), ab dem gemerkten Teil
+    und der gemerkten Stelle - oder ab einem gewählten Teil von vorn."""
+    from app.services import audiobooks
+    title, items = await audiobooks.parts(key)
+    file_id, position = await audiobooks.resume_point(key)
+    if start:
+        file_id, position = start, 0
+    index = next((i for i, t in enumerate(items) if t.id == file_id), 0)
+    return PlayList(source=source, title=title, tracks=items, start_index=index,
+                    start_at=position)
 
 
 def _arranged(source: str, title: str, chosen: list[Track], shuffle: bool, start: Optional[str]) -> PlayList:

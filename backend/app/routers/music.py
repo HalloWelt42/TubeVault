@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from app.database import db
-from app.services import ad_free_export, audio_export, music_files, music_library
+from app.services import ad_free_export, audio_export, audiobooks, music_files, music_library
 from app.utils.range_file import range_response
 from app.services.music_library import Group, PlayList, Track
 
@@ -27,6 +27,7 @@ class Counts(BaseModel):
     channels: int
     favorites: int
     duration: int
+    books: int = 0                   # Hörbücher (eigener Bereich, nie in der Musik)
 
 
 class SourceCounts(BaseModel):
@@ -62,7 +63,8 @@ async def overview():
                              sammlung=await db.fetch_val(
                                  "SELECT COUNT(*) FROM music_files WHERE COALESCE(category, 'musik') = 'musik'") or 0),
         counts=Counts(tracks=len(items), artists=len(artists), albums=len(albums), channels=len(channels),
-                      favorites=sum(1 for t in items if t.favorite), duration=sum(t.duration or 0 for t in items)),
+                      favorites=sum(1 for t in items if t.favorite), duration=sum(t.duration or 0 for t in items),
+                      books=len(await audiobooks.books())),
         artists=sorted(artists, key=lambda g: g.count, reverse=True)[:12],
         new=items[:12],
         often=sorted((t for t in items if t.play_count), key=lambda t: t.play_count, reverse=True)[:10],
@@ -120,6 +122,34 @@ async def cover(item_id: str):
     if not path:
         raise HTTPException(status_code=404, detail="Kein Cover")
     return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.get("/books", response_model=list[audiobooks.Book])
+async def book_list():
+    """Hörbücher und Hörspiele, zuletzt gehörte zuerst."""
+    return await audiobooks.books()
+
+
+class BookProgress(BaseModel):
+    file_id: str
+    position: float
+
+
+@router.put("/books/{key}/progress")
+async def book_progress(key: str, req: BookProgress):
+    """Stand merken: welcher Teil, welche Stelle."""
+    try:
+        await audiobooks.save_progress(key, req.file_id, req.position)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"saved": True}
+
+
+@router.delete("/books/{key}/progress")
+async def book_restart(key: str):
+    """Von vorn: gemerkten Stand vergessen."""
+    await audiobooks.reset(key)
+    return {"reset": True}
 
 
 @router.get("/files/status")

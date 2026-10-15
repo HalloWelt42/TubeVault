@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 50
+SCHEMA_VERSION = 51
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1110,8 +1110,15 @@ class Database:
 
         # v47: Musik nur noch eindeutig automatisch, sonst von Hand (music_flag).
         # Nutzerentscheidung 15.10.2026: Bestand zurück auf "keine Musik".
-        from app.services import audio_export, deleted_videos, meta_sidecar, music_files, music_flag, semantic_items
+        from app.services import (audio_export, audiobook_flag, audiobooks, deleted_videos, meta_sidecar, music_files,
+                                  music_flag, semantic_items)
         await music_files.install_schema(self._connection)
+        await audiobooks.install_schema(self._connection)
+        await audiobook_flag.install_schema(self._connection)
+        # v51: Hörbücher und Hörspiele unter den Videos einmal erkennen (Titel, Schlagwörter)
+        if current_version < 51:
+            found = await audiobook_flag.backfill(self._connection)
+            logger.info(f"Migration v51: {found} Videos als Hörbuch oder Hörspiel erkannt")
         await semantic_items.install_schema(self._connection)
         await deleted_videos.install_schema(self._connection)
         await meta_sidecar.install_schema(self._connection)

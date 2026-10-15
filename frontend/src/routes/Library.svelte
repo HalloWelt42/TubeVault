@@ -89,7 +89,16 @@
     } catch (e) { toast.error(e.message); }
   }
 
-  // Auf globale Video-Mutationen (Archive/Delete aus Watch-View) reagieren —
+  async function setAudiobookBulk(isAudiobook) {
+    if (selected.size === 0) return;
+    try {
+      const res = await api.setAudiobookBatch([...selected], isAudiobook);
+      toast.success(`${res.updated} Video(s) ${isAudiobook ? 'als Hörbuch' : 'als kein Hörbuch'} festgelegt`);
+      selected = new Set(); selectMode = false; list.load(true);
+    } catch (e) { toast.error(e.message); }
+  }
+
+  // Auf globale Video-Mutationen (Archive/Delete aus Watch-View) reagieren -
   // Liste neu laden, damit beim Zurück-Navigieren der neue Stand zu sehen ist.
   $effect(() => onVideoMutation(() => { list.load(true); loadTags(); }));
 
@@ -122,6 +131,10 @@
         <i class="fa-solid fa-music"></i> Musik</button>
       <button class="tv-knopf klein" onclick={() => setMusicBulk(false)} title="Von Hand als keine Musik festlegen">
         <i class="fa-solid fa-microphone-slash"></i> Keine Musik</button>
+      <button class="tv-knopf klein" onclick={() => setAudiobookBulk(true)} title="Hörbuch oder Hörspiel: nie in der Musik, eigener Bereich in fester Reihenfolge">
+        <i class="fa-solid fa-book-open"></i> Hörbuch</button>
+      <button class="tv-knopf klein" onclick={() => setAudiobookBulk(false)} title="Kein Hörbuch">
+        <i class="fa-solid fa-book"></i> Kein Hörbuch</button>
       <span class="tv-trenner"></span>
       <button class="tv-knopf klein" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Archivieren</button>
       <button class="tv-knopf klein gefahr" onclick={deleteSelected}><i class="fa-regular fa-trash-can"></i> Löschen</button>

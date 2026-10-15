@@ -89,7 +89,8 @@
 
     <div class="mitte">
       <div class="tasten">
-        <button class="taste" class:an={player.shuffle} onclick={() => player.toggleShuffle()} title="Zufällige Reihenfolge">
+        <button class="taste" class:an={player.shuffle} onclick={() => player.toggleShuffle()} disabled={!!player.audiobook}
+                title={player.audiobook ? 'Hörbücher laufen in ihrer Reihenfolge' : 'Zufällige Reihenfolge'}>
           <i class="fa-solid fa-shuffle"></i></button>
         <button class="taste" onclick={() => player.prev()} title="Zurück"><i class="fa-solid fa-backward-step"></i></button>
         <button class="taste gross" onclick={() => player.toggle()} title={player.playing ? 'Pause' : 'Abspielen'}>

@@ -41,6 +41,7 @@
     { cls: 'sp-merkmale', label: 'Merkmale' },
     { cls: 'sp-mehr', label: '' },
   ];
+  const plural = (count, one, many) => (count === 1 ? one : many);
 
   // ── Daten ──
   let subs = $state([]);
@@ -105,13 +106,18 @@
       return { icon: 'fa-triangle-exclamation', warn: true, parts: [
         { before: 'Quelle gestört: die Prüfung pausiert noch', count: minutes, after: `Min. (${scheduler.disturbance.reason})` }] };
     }
-    const parts = scheduler.polling ? [{ before: 'Eine Prüfung läuft gerade' }] : [{ count: scheduler.feeds_pending, after: 'Kanäle sind fällig' }];
+    const pending = scheduler.feeds_pending;
+    const parts = scheduler.polling ? [{ before: 'Eine Prüfung läuft gerade' }]
+      : [{ count: pending, after: plural(pending, 'Kanal ist fällig', 'Kanäle sind fällig') }];
     if (scheduler.last_tick?.status === 'skipped') parts.push({ before: `letzter Anstoß ausgesetzt: ${scheduler.last_tick.message}` });
     if (scheduler.auto_download?.pending > 0) {
-      parts.push({ count: scheduler.auto_download.pending, after: 'Videos für Auto-Download vorgemerkt' });
+      const marked = scheduler.auto_download.pending;
+      parts.push({ count: marked, after: `${plural(marked, 'Video', 'Videos')} für Auto-Download vorgemerkt` });
       if (scheduler.auto_download.daily_limit) parts.push({ before: 'Tageslimit', count: scheduler.auto_download.daily_limit });
     }
-    if (counts.ungeprueft) parts.push({ count: counts.ungeprueft, after: 'Kanäle warten auf ihre erste Prüfung' });
+    if (counts.ungeprueft) {
+      parts.push({ count: counts.ungeprueft, after: plural(counts.ungeprueft, 'Kanal wartet auf seine', 'Kanäle warten auf ihre') + ' erste Prüfung' });
+    }
     return { icon: scheduler.polling ? 'fa-rotate fa-spin' : 'fa-circle-check', parts };
   });
 
@@ -119,7 +125,8 @@
   let prognosisState = $derived.by(() => {
     const p = prognosis;
     if (!(p?.drip_channels > 0)) return null;
-    const parts = [{ before: 'Drip:', count: p.drip_channels, after: 'Kanäle' }, { count: p.total_missing, after: 'Videos fehlen' }];
+    const parts = [{ before: 'Drip:', count: p.drip_channels, after: plural(p.drip_channels, 'Kanal', 'Kanäle') },
+                   { count: p.total_missing, after: plural(p.total_missing, 'Video fehlt', 'Videos fehlen') }];
     if (p.avg_video_size > 0) {
       parts.push({ before: 'etwa', count: formatSize(p.estimated_bytes) }, { before: 'noch etwa', count: remainingText(p.days_remaining) });
     }
@@ -127,7 +134,7 @@
       parts.push({ count: formatSize(p.disk_free), after: p.disk_total > 0 ? `frei von ${formatSize(p.disk_total)}` : 'frei',
                    warn: p.disk_free < DISK_LOW_BYTES });
     }
-    if (p.unscanned_channels > 0) parts.push({ count: p.unscanned_channels, after: 'Kanäle ohne Scan' });
+    if (p.unscanned_channels > 0) parts.push({ count: p.unscanned_channels, after: `${plural(p.unscanned_channels, 'Kanal', 'Kanäle')} ohne Scan` });
     return { icon: 'fa-droplet', parts };
   });
 
@@ -308,7 +315,7 @@
 
   function removalMessage(list, removed, deleteVideos, videos) {
     if (list.length === 1) return deleteVideos ? `"${channelName(list[0])}" und ${num(videos)} Videos gelöscht` : `"${channelName(list[0])}" entfernt`;
-    return deleteVideos ? `${num(removed)} Kanäle und ${num(videos)} Videos gelöscht` : `${num(removed)} Kanäle entfernt`;
+    return deleteVideos ? `${channelCount(removed)} und ${num(videos)} Videos gelöscht` : `${channelCount(removed)} entfernt`;
   }
 
   // ── Alle Kanäle ──
@@ -547,7 +554,7 @@
     {/if}
 
     {#if selecting}
-      <BatchToolbar selectedCount={selectedSubs.length} totalCount={shown.length}
+      <BatchToolbar hint="Kanäle antippen, um sie auszuwählen" selectedCount={selectedSubs.length} totalCount={shown.length}
                     onSelectAll={() => selected = new Set(shown.map((s) => s.id))} onDone={stopSelecting}>
         <button class="tv-knopf klein" disabled={batchBusy} onclick={() => batchSave({ auto_download: !batchAll.auto }, `Auto-Download ${onOff(!batchAll.auto)}`)}>
           <i class="fa-solid fa-bolt"></i> Auto-Download {onOff(!batchAll.auto)}</button>

@@ -33,6 +33,7 @@
     { id: 'wiedergabelisten', label: 'Wiedergabelisten', icon: 'fa-list-ul' },
     { id: 'verlauf', label: 'Verlauf', icon: 'fa-clock-rotate-left' },
     { id: 'kanaele', label: 'Musikkanäle', icon: 'fa-tv', count: 'channels' },
+    { id: 'hoerbuecher', label: 'Hörbücher', icon: 'fa-book-open', count: 'books', onlyWithCount: true },
     { id: 'jetzt', label: 'Läuft gerade', icon: 'fa-headphones', narrowOnly: true },
   ];
   const SORTS = [['added', 'Neu'], ['title', 'Titel'], ['artist', 'Interpret'], ['plays', 'Oft gehört'], ['duration', 'Dauer'], ['last_played', 'Zuletzt gehört']];
@@ -53,6 +54,7 @@
   let overview = $state(null);
   let groups = $state([]);                             // Interpreten, Alben, Kanäle, Wiedergabelisten
   let groupTracks = $state(null);                      // Titel der geöffneten Gruppe oder des Verlaufs
+  let books = $state([]);                              // Hörbücher (eigener Bereich)
   let loading = $state(false);
   let menu;
 
@@ -128,6 +130,8 @@
           key: `playlist:${p.id}`, name: p.name, count: p.video_count || 0, duration: 0, covers: [] }));
       } else if (tab === 'verlauf') {
         groupTracks = await api.musicPlay('recent');
+      } else if (tab === 'hoerbuecher') {
+        books = await api.musicBooks();
       }
     } catch (e) { toast.error(e.message); }
     loading = false;
@@ -222,7 +226,7 @@
       </div>
     </div>
     <div class="tv-reiter">
-      {#each TABS as t (t.id)}
+      {#each TABS.filter(t => !t.onlyWithCount || counts[t.count]) as t (t.id)}
         <button class:aktiv={tab === t.id && !source} class:schmal={t.narrowOnly} onclick={() => chooseTab(t.id)}>
           <i class="fa-solid {t.icon}"></i> {t.label}{#if t.count && counts[t.count]}<span class="tv-zaehler">{counts[t.count]}</span>{/if}
         </button>
@@ -369,6 +373,44 @@
       {:else if tab === 'jetzt'}
         <div class="jetzt-schmal"><NowPlaying view={nowView} {onOpenArtist} {onOpenVideo} /></div>
 
+      {:else if tab === 'hoerbuecher'}
+        <!-- Hörbücher: nie zufällig, immer in ihrer Reihenfolge, Weiterhören an der gemerkten Stelle -->
+        {#if loading}
+          <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+        {:else}
+          <div class="buecher">
+            {#each books as book (book.key)}
+              <div class="buch" class:laeuft={player.audiobook === book.key}>
+                <div class="buch-bild">
+                  {#if book.cover_id}<img src={coverUrl(book.cover_id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+                  {:else}<i class="fa-solid fa-book-open"></i>{/if}
+                </div>
+                <div class="buch-text">
+                  <div class="buch-titel">{book.title}</div>
+                  {#if book.author}<div class="tv-leise tv-klein">{book.author}</div>{/if}
+                  <div class="tv-schwach tv-klein">
+                    {#if book.finished}Zu Ende gehört
+                    {:else if book.current_part}Teil <span class="zahl">{book.current_part}</span> von <span class="zahl">{book.parts}</span> · noch <span class="zahl">{formatDurationLong(book.remaining)}</span>
+                    {:else}<span class="zahl">{book.parts}</span> Teile · <span class="zahl">{formatDurationLong(book.duration)}</span>{/if}
+                  </div>
+                  <div class="buch-fort"><b style:width="{book.duration ? Math.round((book.duration - book.remaining) / book.duration * 100) : 0}%"></b></div>
+                  <div class="buch-tasten">
+                    <button class="tv-knopf klein haupt" onclick={() => player.playSource(`hoerbuch:${book.key}`)}>
+                      <i class="fa-solid fa-{book.current_part && !book.finished ? 'rotate-left' : 'play'}"></i>
+                      {book.current_part && !book.finished ? 'Weiterhören' : 'Anhören'}</button>
+                    {#if book.current_part}
+                      <button class="tv-knopf klein" onclick={async () => { await api.musicBookRestart(book.key); await player.playSource(`hoerbuch:${book.key}`); }}>
+                        <i class="fa-solid fa-backward-step"></i> Von vorn</button>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            {:else}
+              <div class="tv-leer">Keine Hörbücher in der Sammlung.</div>
+            {/each}
+          </div>
+        {/if}
+
       {:else}
         {#if loading}
           <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
@@ -409,6 +451,18 @@
   .aktionen { margin-left: auto; display: flex; gap: var(--tv-a2); align-items: center; flex-wrap: wrap; }
   .suche { width: 240px; }
   .tv-reiter .schmal { display: none; }
+  .buecher { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--tv-a4); }
+  .buch { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--tv-a3); padding: var(--tv-a3);
+          background: var(--tv-karte); border-radius: var(--tv-ecke); }
+  .buch.laeuft { outline: 1px solid rgba(var(--tv-akzent-rgb), 0.6); }
+  .buch-bild { width: 112px; aspect-ratio: 1; border-radius: var(--tv-ecke-klein); overflow: hidden; background: var(--tv-mulde);
+               display: grid; place-items: center; color: var(--tv-text-3); font-size: 32px; }
+  .buch-bild img { width: 100%; height: 100%; object-fit: cover; }
+  .buch-text { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .buch-titel { font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .buch-fort { height: 4px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; margin-top: 2px; }
+  .buch-fort b { display: block; height: 100%; background: var(--tv-akzent); }
+  .buch-tasten { display: flex; gap: var(--tv-a2); margin-top: auto; padding-top: var(--tv-a2); }
 
   .musik { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
   /* Eigene Höhe als Maß für "Läuft gerade" (Bildgröße), nichts ragt heraus */
