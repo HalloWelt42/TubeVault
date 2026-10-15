@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 47
+SCHEMA_VERSION = 48
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1116,9 +1116,10 @@ class Database:
             await self._connection.execute("ALTER TABLE videos ADD COLUMN music_source TEXT")
         except Exception:
             pass  # Spalte existiert bereits
-        if current_version < 47:
+        # v48: Wiederholung - v47 übersah Videos ohne Beschreibung (NULL in der Regel)
+        if current_version < 48:
             reset = await music_flag.reset_to_certain(self._connection)
-            logger.info(f"Migration v47: {reset} Videos nicht mehr als Musik, nur Eindeutiges bleibt")
+            logger.info(f"Migration v47/v48: {reset} Videos nicht mehr als Musik, nur Eindeutiges bleibt")
 
         # v43: Prüftakt nach dem Alter des neuesten Videos (rss_service.interval_for).
         # Nutzerentscheidung 15.10.2026: Grundtakt 2x täglich, höchstens 30 Tage.

@@ -21,7 +21,7 @@ def test_titel_vorschlag_entscheidet_nicht_ueber_musik():
         {"artist": None, "song_title": None}
 
 
-async def _video(db, vid, is_music=None, source=None, channel="Kanal", description=""):
+async def _video(db, vid, is_music=None, source=None, channel="Kanal", description=None):
     await db.execute(
         """INSERT INTO videos (id, title, status, channel_name, description, is_music, music_source)
            VALUES (?, 'T', 'ready', ?, ?, ?, ?)""", (vid, channel, description, is_music, source))
@@ -49,14 +49,16 @@ async def test_von_hand_festlegen(test_db):
 
 
 async def test_bestand_zuruecksetzen(test_db):
-    await _video(test_db, "geraten0001", is_music=1)                       # alte Vermutung
+    await _video(test_db, "geraten0001", is_music=1)                       # alte Vermutung, ohne Beschreibung
+    await _video(test_db, "geraten0002", is_music=1, channel=None, description="Ein Vlog")
     await _video(test_db, "vonhand0001", is_music=1, source="user")       # bleibt
     await _video(test_db, "topic000001", is_music=0, channel="Adele - Topic")
     await _video(test_db, "offen000001")
-    assert await music_flag.reset_to_certain(test_db.conn) == 1
+    assert await music_flag.reset_to_certain(test_db.conn) == 2
     assert await _flag(test_db, "geraten0001") == (0, None)
+    assert await _flag(test_db, "geraten0002") == (0, None)
     assert await _flag(test_db, "vonhand0001") == (1, "user")
     assert await _flag(test_db, "topic000001") == (1, "auto")
     assert await _flag(test_db, "offen000001") == (None, None)
     stale = {r["video_id"] for r in await test_db.fetch_all("SELECT video_id FROM sidecar_stale")}
-    assert stale == {"geraten0001", "topic000001"}
+    assert stale == {"geraten0001", "geraten0002", "topic000001"}

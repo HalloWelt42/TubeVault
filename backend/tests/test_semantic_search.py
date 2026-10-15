@@ -45,8 +45,9 @@ async def ai(test_db, set_setting, monkeypatch):
     semantic_index._query_cache.clear()
     await set_setting("ai.enabled", "true")
     await set_setting("ai.url", "http://ki.test/v1")
-    # die Attrappe kennt nur grobe Themenachsen
-    monkeypatch.setattr(semantic_index, "MIN_SIMILARITY", 0.25)
+    # die Attrappe kennt nur grobe Themenachsen: mildere Schwelle für "ausgewogen"
+    monkeypatch.setitem(semantic_index.PRECISIONS, "ausgewogen",
+                        semantic_index.Precision("Ausgewogen", 0.25, 2.5, 80))
     yield calls
     semantic_index.reset_availability()
     semantic_index._matrix = None
@@ -144,3 +145,17 @@ async def test_unveraenderter_text_wird_nicht_neu_gerechnet(test_db, ai):
 def test_rangfolgen_verschmelzen():
     assert search_index.fuse_rankings(["a", "b", "c"], ["c", "a", "d"])[:2] == ["a", "c"]
     assert search_index.fuse_rankings(["a"], []) == ["a"]
+
+
+async def test_genauigkeit_ist_je_suche_waehlbar(test_db, ai, set_setting):
+    """Wunsch 15.10.2026: Genauigkeit selbst einstellen, mit Standard. "aus"
+    sucht nur nach Wörtern; die Stufe kommt sonst aus den Einstellungen."""
+    await _add(test_db, "teig", "Sauerteig ansetzen")
+    await _index()
+    hits, result = await _search("Brot backen")
+    assert result["semantic"] and hits == [("teig", "bedeutung")]
+    hits, result = await _search("Brot backen", precision="aus")
+    assert not result["semantic"] and hits == []
+    await set_setting("ai.precision", "sehr_genau")
+    assert (await semantic_index.precision()).label == "Sehr genau"
+    assert (await semantic_index.precision("weit")).label == "Weit"

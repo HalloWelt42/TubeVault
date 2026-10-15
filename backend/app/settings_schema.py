@@ -108,6 +108,13 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="ai.url", default="", kind="text", category="ai", section="extensions",
                label="Adresse des KI-Dienstes",
                description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.178.20:1234/v1"),
+    SettingDef(key="ai.precision", default="ausgewogen", kind="select", category="ai", section="extensions",
+               options=["weit", "ausgewogen", "genau", "sehr_genau"],
+               option_labels={"weit": "Weit", "ausgewogen": "Ausgewogen", "genau": "Genau",
+                              "sehr_genau": "Sehr genau"},
+               label="Genauigkeit der Bedeutungssuche",
+               description="Standard für jede Suche: Weit findet auch lose Verwandtes (mehr Treffer), "
+                           "Sehr genau nur eng Passendes. Auf der Suchseite je Suche umstellbar."),
     # ── Hintergrundarbeiten (geschaltet in deren Liste, nicht auf der Einstellungsseite) ──
     SettingDef(key="types.check_enabled", default="true", kind="toggle", category="types",
                label="Video-Typen bei der Quelle prüfen",

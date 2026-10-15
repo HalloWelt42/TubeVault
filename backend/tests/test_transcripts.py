@@ -56,7 +56,7 @@ async def test_bedeutung_im_transkript(stock, set_setting, monkeypatch):
         pass
     assert await semantic_index.pending_chunks(cfg[1]) == 0
 
-    hits = await semantic_index.search_passages("Lot auftragen")
+    hits = await semantic_index.search_passages("Lot auftragen", await semantic_index.precision())
     by_id = await transcripts.passages_by_id([chunk_id for chunk_id, _ in hits])
     assert len(hits) == 1 and "Zinn" in by_id[hits[0][0]].text
 

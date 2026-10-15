@@ -212,7 +212,7 @@ export const routeDefinitions = {
     icon: 'fa-solid fa-magnifying-glass',
     group: 'main',
     hasId: false,
-    queryParams: ['q', 'scope'],
+    queryParams: ['q', 'scope', 'genau'],
     description: 'Globale Suche (Bibliothek + YouTube)',
   },
 

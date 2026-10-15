@@ -260,8 +260,10 @@ async def search_videos(
     archived: bool | None = None,
     source: str | None = None,
     scope: str | None = None,
+    precision: str | None = None,
 ) -> dict:
     """Videos suchen. archived: None = Bibliothek UND Archiv, True/False = nur eines.
+    precision: Stufe der Bedeutungssuche (leer = Standard, "aus" = nur Wörter).
     Sortierung: Volltext-Treffer nach Relevanz, danach Teilwort-Treffer."""
     await refresh_before_query()
 
@@ -313,13 +315,14 @@ async def search_videos(
 
     # Bedeutungssuche (optionale Erweiterung): None = steht nicht zur Verfügung
     from app.services import semantic_index, transcripts
-    semantic = await semantic_index.search(query)
+    level = await semantic_index.precision(precision)
+    semantic = await semantic_index.search(query, level) if level else None
     match_kind: dict[str, str] = {}
 
     # Textstellen aus Transkripten: Wörter (Volltext) und Bedeutung (Vektoren).
     # Je Video zählt die beste Stelle; sie wird am Treffer gezeigt.
     word_passages = await transcripts.keyword_passages(match) if match else []
-    meaning_hits = await semantic_index.search_passages(query) or []
+    meaning_hits = (await semantic_index.search_passages(query, level) or []) if level else []
     meaning_by_id = await transcripts.passages_by_id([chunk_id for chunk_id, _ in meaning_hits])
     meaning_passages = [meaning_by_id[chunk_id] for chunk_id, _ in meaning_hits if chunk_id in meaning_by_id]
     best_passage: dict[str, transcripts.Passage] = {}

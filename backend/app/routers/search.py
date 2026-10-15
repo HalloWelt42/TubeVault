@@ -416,8 +416,10 @@ async def search_local(
     source: Optional[str] = None,
     scope: Optional[str] = None,
     archived: Optional[bool] = None,
+    precision: Optional[str] = Query(None, pattern="^(aus|weit|ausgewogen|genau|sehr_genau)$"),
 ):
     """Lokale Suche über Bibliothek UND Archiv (archived=true/false grenzt ein).
+    precision: Stufe der Bedeutungssuche für diese Suche (leer = Standard).
 
     Regeln und Rangfolge liegen in search_index: Wortanfänge im Volltext
     (Titel, Kanal, Beschreibung, Tags, Notizen) plus Teilwörter in Titel und
@@ -426,5 +428,5 @@ async def search_local(
     from app.services import search_index
     return await search_index.search_videos(
         q, page=page, per_page=per_page,
-        archived=archived, source=source, scope=scope,
+        archived=archived, source=source, scope=scope, precision=precision,
     )

@@ -17,10 +17,23 @@
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
+  import { settings } from '../lib/stores/settings.js';
   let confirmRef;
 
   let query = $state($route.params.q || '');
   let scope = $state($route.params.scope || 'both'); // 'both' | 'local' | 'youtube'
+
+  // Genauigkeit der Bedeutungssuche: je Suche wählbar, Standard aus den Einstellungen
+  const PRECISIONS = [
+    { id: 'aus', label: 'Aus', hint: 'Nur nach Wörtern suchen' },
+    { id: 'weit', label: 'Weit', hint: 'Auch lose Verwandtes - mehr Treffer' },
+    { id: 'ausgewogen', label: 'Ausgewogen', hint: 'Verwandtes, ohne Beliebiges' },
+    { id: 'genau', label: 'Genau', hint: 'Nur eng Verwandtes' },
+    { id: 'sehr_genau', label: 'Sehr genau', hint: 'Nur sehr eng Passendes - wenige Treffer' },
+  ];
+  let precision = $state($route.params.genau || '');
+  let effectivePrecision = $derived(precision || $settings['ai.precision'] || 'ausgewogen');
+  let meaningAvailable = $derived($settings['ai.enabled'] === 'true');
   let loading = $state(false);
   const perPage = 20;
   let ytShorts = $state([]);
@@ -59,7 +72,7 @@
   let localSemantic = $state(false);   // Bedeutungssuche war an dieser Trefferliste beteiligt
   const local = createListLoader(async (page) => {
     if (scope === 'youtube' || !query.trim()) return { items: [], total: 0 };
-    const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE });
+    const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE, ...(precision ? { precision } : {}) });
     if (page === 1) localSemantic = !!r.semantic;
     return { items: r.videos || [], total: r.total || 0 };
   });
@@ -78,6 +91,12 @@
   }
 
   function onSubmit(e) { e.preventDefault(); runSearch(true); }
+
+  function choosePrecision(id) {
+    precision = id === ($settings['ai.precision'] || 'ausgewogen') ? '' : id;
+    updateParams({ genau: precision || null });
+    if (query.trim() && scope !== 'youtube') local.load(true);
+  }
 
   // ─── Lokale Treffer als Playlist speichern ───
   const PLAYLIST_MAX = 1000;
@@ -217,10 +236,19 @@
     </button>
   </form>
 
+  {#if meaningAvailable && scope !== 'youtube'}
+    <div class="genauigkeit" title="Wie eng die Bedeutungssuche Verwandtes fasst">
+      <span class="tv-etikett">Bedeutungssuche</span>
+      {#each PRECISIONS as p (p.id)}
+        <button class="tv-chip" class:aktiv={effectivePrecision === p.id} onclick={() => choosePrecision(p.id)} title={p.hint}>{p.label}</button>
+      {/each}
+    </div>
+  {/if}
+
   {#if loading && yt.items.length === 0 && local.items.length === 0}
     <div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Suche läuft…</div>
   {:else if query && yt.items.length === 0 && local.items.length === 0 && !loading && !local.loading}
-    <div class="empty"><i class="fa-solid fa-magnifying-glass"></i><h3>Keine Treffer für „{query}"</h3></div>
+    <div class="empty"><i class="fa-solid fa-magnifying-glass"></i><h3>Keine Treffer für "{query}"</h3></div>
   {/if}
 
   <!-- Lokale Ergebnisse -->
@@ -429,6 +457,7 @@
                 background: color-mix(in srgb, var(--status-warning) 18%, transparent); color: var(--status-warning); }
   .passage-time { flex-shrink: 0; font-weight: 600; color: var(--accent-primary); white-space: nowrap; }
   .passage-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .genauigkeit { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; margin: 0 0 var(--tv-a4); }
   .semantic-note { margin-left: 10px; font-size: 0.74rem; font-weight: 600; color: var(--accent-primary); }
   .pl-form { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; }
   .pl-form input { padding: 5px 10px; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font: inherit; font-size: 0.8rem; font-weight: 400; }

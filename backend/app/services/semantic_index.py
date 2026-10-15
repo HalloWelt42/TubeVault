@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import time
+from dataclasses import dataclass
 from typing import Optional
 
 import httpx
@@ -79,16 +80,30 @@ _QUERY_TIMEOUT_S = 4            # die Suche wartet nicht lange auf die KI
 _AVAILABILITY_TTL_S = 60
 _IDLE_PAUSE_S = 300
 # Welche Videos gelten als inhaltlich verwandt? Zwei Bedingungen, beide nötig:
-#   1. Mindest-Ähnlichkeit MIN_SIMILARITY. An echten Titeln gemessen (bge-m3):
-#      passende Treffer ab etwa 0,50, Zufallstreffer bei sinnlosen Anfragen
-#      bis etwa 0,48.
-#   2. Das Video ragt aus der Masse heraus: mindestens MIN_Z
-#      Standardabweichungen über dem Durchschnitt aller Videos. Das fängt
-#      Anfragen ab, zu denen alles ein wenig passt.
-# Höchstens TOP_K Treffer.
-TOP_K = 80
-MIN_SIMILARITY = 0.5
-MIN_Z = 2.5
+#   1. Mindest-Ähnlichkeit. An echten Titeln gemessen (bge-m3): passende
+#      Treffer ab etwa 0,50, Zufallstreffer bei sinnlosen Anfragen bis etwa 0,48.
+#   2. Das Video ragt aus der Masse heraus: mindestens z Standardabweichungen
+#      über dem Durchschnitt aller Videos. Das fängt Anfragen ab, zu denen
+#      alles ein wenig passt.
+# Wie streng, wählt der Nutzer in Stufen (Einstellung ai.precision als
+# Standard, je Suche umstellbar; Wunsch 15.10.2026). "Ausgewogen" sind die
+# früher fest eingebauten Werte.
+@dataclass(frozen=True)
+class Precision:
+    label: str
+    min_similarity: float
+    min_z: float
+    top_k: int            # höchstens so viele Videos und Textstellen
+
+
+PRECISIONS: dict[str, Precision] = {
+    "weit": Precision("Weit", 0.45, 1.5, 150),
+    "ausgewogen": Precision("Ausgewogen", 0.50, 2.5, 80),
+    "genau": Precision("Genau", 0.55, 3.0, 50),
+    "sehr_genau": Precision("Sehr genau", 0.60, 3.5, 30),
+}
+DEFAULT_PRECISION = "ausgewogen"
+OFF = "aus"           # nur für eine einzelne Suche: reine Wortsuche
 # Modell des KI-Dienstes für die Einbettungen (mehrsprachig)
 EMBEDDING_MODEL = "text-embedding-bge-m3"
 SMALL_COLLECTION = 200   # darunter sagt die Streuung wenig
@@ -308,7 +323,6 @@ class _ChunkVectors:
 
 
 _chunk_vectors = _ChunkVectors()
-PASSAGE_TOP_K = 60
 
 
 async def _query_vector(query: str, url: str, model: str):
@@ -325,7 +339,23 @@ async def _query_vector(query: str, url: str, model: str):
     return q / (np.linalg.norm(q) or 1.0)
 
 
-async def search_passages(query: str) -> Optional[list[tuple[int, float]]]:
+async def precision(choice: Optional[str] = None) -> Optional[Precision]:
+    """Stufe einer Suche: gewählt, sonst der Standard aus den Einstellungen;
+    None = Bedeutungssuche für diese Suche aus."""
+    if choice == OFF:
+        return None
+    if choice not in PRECISIONS:
+        choice = await setting_values.get("ai.precision")
+    return PRECISIONS.get(choice) or PRECISIONS[DEFAULT_PRECISION]
+
+
+def _floor(scores, level: Precision, collection_size: int) -> float:
+    # In kleinen Beständen sagt die Streuung wenig; dort genügt "über dem Durchschnitt".
+    z = level.min_z if collection_size >= SMALL_COLLECTION else 0.0
+    return max(level.min_similarity, float(scores.mean()) + z * float(scores.std()))
+
+
+async def search_passages(query: str, level: Precision) -> Optional[list[tuple[int, float]]]:
     """Inhaltlich ähnlichste Transkript-Abschnitte als (chunk_id, Ähnlichkeit).
     None, wenn die Bedeutungssuche gerade nicht zur Verfügung steht."""
     cfg = await config()
@@ -342,9 +372,8 @@ async def search_passages(query: str) -> Optional[list[tuple[int, float]]]:
     scores = _chunk_vectors.scores(q)
     if scores is None or q.shape[0] != _chunk_vectors.blocks[0].shape[1]:
         return []
-    z = MIN_Z if len(scores) >= SMALL_COLLECTION else 0.0
-    floor = max(MIN_SIMILARITY, float(scores.mean()) + z * float(scores.std()))
-    top = np.argsort(-scores)[:PASSAGE_TOP_K]
+    floor = _floor(scores, level, len(scores))
+    top = np.argsort(-scores)[:level.top_k]
     return [(_chunk_vectors.ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 
 
@@ -368,7 +397,7 @@ async def _load_matrix(model: str):
     return _matrix
 
 
-async def search(query: str) -> Optional[list[tuple[str, float]]]:
+async def search(query: str, level: Precision) -> Optional[list[tuple[str, float]]]:
     """Inhaltlich ähnlichste Videos als (video_id, Ähnlichkeit), beste zuerst.
     None, wenn die Bedeutungssuche gerade nicht zur Verfügung steht."""
     cfg = await config()
@@ -388,10 +417,8 @@ async def search(query: str) -> Optional[list[tuple[str, float]]]:
     if q.shape[0] != matrix.shape[1]:
         return None   # Modell gewechselt, Vektoren werden gerade neu gerechnet
     scores = matrix @ q
-    # In kleinen Beständen sagt die Streuung wenig; dort genügt "über dem Durchschnitt".
-    z = MIN_Z if len(ids) >= SMALL_COLLECTION else 0.0
-    floor = max(MIN_SIMILARITY, float(scores.mean()) + z * float(scores.std()))
-    top = np.argsort(-scores)[:TOP_K]
+    floor = _floor(scores, level, len(ids))
+    top = np.argsort(-scores)[:level.top_k]
     return [(ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 
 
