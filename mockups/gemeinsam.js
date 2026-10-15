@@ -2,6 +2,7 @@
 // und echte Beispieldaten aus dem Archiv. Jede Seite hat dieselbe Schale -
 // geändert wird sie nur hier, damit die Entwürfe nicht auseinanderlaufen.
 // Vorschaubilder kommen direkt vom TubeVault im Heimnetz (nicht im Repo).
+import './neutral.js';   // ?neutral: erzeugte Flächen statt Vorschaubilder vom Pi
 
 const QUELLE = 'http://192.168.178.49:8031';
 export const vorschau = (id) => `${QUELLE}/api/player/${id}/thumbnail`;

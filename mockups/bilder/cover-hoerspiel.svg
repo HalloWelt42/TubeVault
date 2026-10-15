@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <!-- Neutrales Cover für Entwürfe (Hörspiel): Insel im Meer, ohne Schrift -->
+  <defs>
+    <linearGradient id="himmel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2b866"/>
+      <stop offset="0.55" stop-color="#e2855a"/>
+      <stop offset="0.56" stop-color="#1d5a6b"/>
+      <stop offset="1" stop-color="#0c2c38"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#himmel)"/>
+  <circle cx="420" cy="200" r="58" fill="#fff3d6" opacity="0.85"/>
+  <path d="M110 336 Q210 230 330 336 Z" fill="#20323a"/>
+  <path d="M250 336 Q330 268 420 336 Z" fill="#2b434d"/>
+  <g stroke="#bfe6ee" stroke-opacity="0.45" stroke-width="4" stroke-linecap="round">
+    <line x1="80" y1="390" x2="190" y2="390"/>
+    <line x1="260" y1="420" x2="420" y2="420"/>
+    <line x1="140" y1="470" x2="300" y2="470"/>
+    <line x1="380" y1="500" x2="520" y2="500"/>
+  </g>
+  <path d="M300 520 L380 520 L360 545 L318 545 Z" fill="#7a4b2e"/>
+  <line x1="340" y1="520" x2="340" y2="455" stroke="#7a4b2e" stroke-width="5"/>
+  <path d="M342 460 L380 510 L342 510 Z" fill="#f4ecd8"/>
+</svg>

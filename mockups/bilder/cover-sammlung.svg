@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <!-- Neutrales Cover für Entwürfe (Musik): Schallplatte, ohne Schrift -->
+  <defs>
+    <radialGradient id="glanz" cx="0.35" cy="0.3" r="0.9">
+      <stop offset="0" stop-color="#1f3a4d"/>
+      <stop offset="1" stop-color="#0b1620"/>
+    </radialGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#glanz)"/>
+  <g fill="none" stroke="#d9b36a" stroke-opacity="0.55">
+    <circle cx="300" cy="300" r="230" stroke-width="3"/>
+    <circle cx="300" cy="300" r="200" stroke-width="1.5" stroke-opacity="0.35"/>
+    <circle cx="300" cy="300" r="172" stroke-width="1.5" stroke-opacity="0.3"/>
+    <circle cx="300" cy="300" r="144" stroke-width="1.5" stroke-opacity="0.25"/>
+  </g>
+  <circle cx="300" cy="300" r="78" fill="#d9b36a"/>
+  <circle cx="300" cy="300" r="10" fill="#0b1620"/>
+  <path d="M120 470 Q300 380 480 470" fill="none" stroke="#4dffd2" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6"/>
+</svg>

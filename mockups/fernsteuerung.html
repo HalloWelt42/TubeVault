@@ -6,6 +6,7 @@
 <title>Entwurf - Fernsteuerung und Übergabe</title>
 <link rel="stylesheet" href="../frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
 <link rel="stylesheet" href="stil.css">
+<script type="module" src="neutral.js"></script>
 <style>
   body { padding: var(--tv-a5); display: flex; gap: var(--tv-a5); flex-wrap: wrap; align-items: flex-start; }
   .spalte > .etikett { margin-bottom: var(--tv-a2); }
@@ -111,7 +112,7 @@
   <div class="etikett">Handy: Abspielen auf ...</div>
   <div class="telefon">
     <div class="koerper" style="opacity:0.5">
-      <img class="cover" src="bilder/cover-abba-gold.jpg" alt="">
+      <img class="cover" src="bilder/cover-sammlung.svg" alt="">
       <div class="titel-gross">Dancing Queen</div>
     </div>
     <div class="schleier"></div>
@@ -141,7 +142,7 @@
       <div><div class="t">Läuft auf Rechner Arbeitszimmer</div><div class="w">Du steuerst von hier</div></div>
       <button class="knopf-info"><i class="fa-solid fa-mobile-screen"></i> Holen</button></div>
     <div class="koerper">
-      <img class="cover" src="bilder/cover-abba-gold.jpg" alt="">
+      <img class="cover" src="bilder/cover-sammlung.svg" alt="">
       <div style="display:grid;grid-template-columns:1fr 44px;align-items:center"><div><div class="titel-gross">Dancing Queen</div><div class="leise">ABBA · ABBA Gold</div></div>
         <button class="rund" style="color:#EF5350"><i class="fa-solid fa-heart"></i></button></div>
       <div><div class="spur"><b style="width:31%"></b></div><div class="zeiten"><span class="zahl">1:12</span><span class="zahl">3:51</span></div></div>
@@ -197,7 +198,7 @@
 <script type="module">
   if (new URLSearchParams(location.search).has('bild')) document.querySelector('.erklaerung').remove();   // Bild für die README
   const r = document.getElementById('rechner');
-  const KACHELN = [['bilder/cover-abba-gold.jpg', 'ABBA'], ['http://192.168.178.49:8031/api/player/7fqg9-SIWfU/thumbnail', 'OVERWERK'],
+  const KACHELN = [['bilder/cover-sammlung.svg', 'ABBA'], ['http://192.168.178.49:8031/api/player/7fqg9-SIWfU/thumbnail', 'OVERWERK'],
     ['http://192.168.178.49:8031/api/player/A96hojkujLc/thumbnail', 'Electro Junkiee'], ['http://192.168.178.49:8031/api/player/eFnMdac-gOU/thumbnail', 'Vini Vici'],
     ['http://192.168.178.49:8031/api/player/7-_friA1NLE/thumbnail', 'Romulus'], ['http://192.168.178.49:8031/api/player/Xa6WZkfKlxA/thumbnail', 'France Gall']];
   r.innerHTML = `
@@ -212,7 +213,7 @@
     </div>
     <div class="toast"><i class="fa-solid fa-mobile-screen" style="color:var(--tv-info)"></i>Handy hat auf Pause gedrückt</div>
     <div class="leiste">
-      <div class="wer"><img src="bilder/cover-abba-gold.jpg" alt=""><div style="min-width:0"><div style="font-weight:700">Dancing Queen</div><div class="leise">ABBA · FLAC</div></div></div>
+      <div class="wer"><img src="bilder/cover-sammlung.svg" alt=""><div style="min-width:0"><div style="font-weight:700">Dancing Queen</div><div class="leise">ABBA · FLAC</div></div></div>
       <div class="mitte-l"><div class="mini-tasten"><button><i class="fa-solid fa-backward-step"></i></button><button class="p"><i class="fa-solid fa-play"></i></button><button><i class="fa-solid fa-forward-step"></i></button></div>
         <div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center"><span class="zahl leise klein">1:12</span><div class="spur" style="height:4px"><b style="width:31%"></b></div><span class="zahl leise klein">3:51</span></div></div>
       <div class="rechts"><span class="gesteuert"><i class="fa-solid fa-mobile-screen"></i> Handy steuert mit</span>
