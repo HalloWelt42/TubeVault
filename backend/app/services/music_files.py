@@ -26,7 +26,7 @@ import os
 import re
 import time
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from pydantic import BaseModel
@@ -131,8 +131,9 @@ async def install_schema(connection) -> None:
 
 
 def category_of(relpath: str, genre: Optional[str]) -> str:
-    """Hörbuch, wenn Genre oder ein Ordner im Pfad es so nennt, sonst Musik."""
-    text = f"{genre or ''} {relpath}".casefold()
+    """Hörbuch, wenn Genre oder ein Ordner im Pfad es so nennt, sonst Musik.
+    Der Dateiname zählt nicht: "Sendeschluss (Hörspiel Version)" ist ein Lied."""
+    text = f"{genre or ''} {PurePosixPath(relpath).parent}".casefold()
     return AUDIOBOOK if any(word in text for word in _AUDIOBOOK_WORDS) else MUSIC
 
 

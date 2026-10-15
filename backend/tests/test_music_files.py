@@ -59,6 +59,9 @@ def sammlung(tmp_path, monkeypatch):
     hoerspiel = root / "Jules Verne - Die geheimnisvolle Insel (Hörspiel)" / "01. Teil 1.flac"
     _flac(hoerspiel)
 
+    lied_mit_hoerspiel_im_namen = root / "Welle Erdball - Der Kalte Krieg" / "15. Welle Erdball - Sendeschluss (Hörspiel Version).flac"
+    _flac(lied_mit_hoerspiel_im_namen)
+
     mit_ordnerbild = root / "Sammler" / "Secret Garden - Nocturne.flac"
     _flac(mit_ordnerbild)
     (root / "Sammler" / "folder.jpg").write_bytes(_jpeg((30, 30, 200)))
@@ -67,10 +70,10 @@ def sammlung(tmp_path, monkeypatch):
 
 async def test_einlesen_tags_dateiname_cover_liedtext(test_db, sammlung):
     result = await music_files.scan()
-    assert (result.files, result.read, result.removed) == (4, 4, 0)
-    # Hörspiel ist keine Musik
+    assert (result.files, result.read, result.removed) == (5, 5, 0)
+    # Hörspiel ist keine Musik; ein Lied mit "Hörspiel" nur im Dateinamen schon
     assert [f.title for f in await music_files.all_files(music_files.AUDIOBOOK)] == ["Teil 1"]
-    assert len(await music_files.all_files()) == 3
+    assert len(await music_files.all_files()) == 4
     by_title = {f.title: f for f in await music_files.all_files()}
 
     dm = by_title["Enjoy the Silence"]
@@ -99,7 +102,7 @@ async def test_nur_geaendertes_wird_neu_gelesen(test_db, sammlung):
     later = sammlung / "01. Robert Miles - Children.flac"
     os.utime(later, (later.stat().st_atime, later.stat().st_mtime + 10))
     third = await music_files.scan()
-    assert (third.files, third.read, third.removed) == (3, 1, 1)
+    assert (third.files, third.read, third.removed) == (4, 1, 1)
 
 
 async def test_quelle_und_doppelte_songs(test_db, sammlung, set_setting):
@@ -116,7 +119,7 @@ async def test_quelle_und_doppelte_songs(test_db, sammlung, set_setting):
     await set_setting("music.source", "videos")
     assert {t.id for t in await music_library.tracks()} == {"dmvideo0001", "dmvideo0002"}
     overview = await music.overview()
-    assert (overview.source, overview.sources.videos, overview.sources.sammlung) == ("videos", 2, 3)
+    assert (overview.source, overview.sources.videos, overview.sources.sammlung) == ("videos", 2, 4)
 
 
 async def test_abspielen_wiedergaben_lieblingssong_export(test_db, sammlung, async_client_factory, tmp_path):
