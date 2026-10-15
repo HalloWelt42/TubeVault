@@ -39,7 +39,7 @@ async def ai(test_db, set_setting, monkeypatch):
         calls["n"] += 1
         return [_fake_vector(t) for t in texts]
 
-    monkeypatch.setattr(semantic_index, "_embed", fake_embed)
+    monkeypatch.setattr(semantic_index, "embed_texts", fake_embed)
     semantic_index.reset_availability()
     semantic_index._matrix = None
     semantic_index._query_cache.clear()
@@ -159,3 +159,36 @@ async def test_genauigkeit_ist_je_suche_waehlbar(test_db, ai, set_setting):
     await set_setting("ai.precision", "sehr_genau")
     assert (await semantic_index.precision()).label == "Sehr genau"
     assert (await semantic_index.precision("weit")).label == "Weit"
+
+
+async def test_bedeutung_findet_kanaele_playlists_feed_und_liedtexte(ai, test_db, monkeypatch):
+    """Kanalbeschreibungen, Playlists, noch nicht geladene Feed-Einträge und
+    Liedtexte haben eigene Vektoren (semantic_items) und kommen in die Suche."""
+    from app.services import lyrics_service, semantic_items
+    semantic_items._matrices.clear()
+    await test_db.execute(
+        "INSERT INTO subscriptions (channel_id, channel_name, channel_description) VALUES "
+        "('UCback', 'Backstube', 'Hier geht es um Sauerteig und Hefe'), ('UCtech', 'Werkbank', 'Löten und Platinen')")
+    await test_db.execute("INSERT INTO playlists (name, description) VALUES ('Sterne schauen', 'Teleskop und Mond')")
+    await test_db.execute(
+        "INSERT INTO rss_entries (video_id, channel_id, title, description) VALUES "
+        "('feedbrot001', 'UCback', 'Brot ohne Kneten', 'Teig über Nacht'), ('feedgeladen', 'UCback', 'Ofenbrot', 'Brot')")
+    await _add(test_db, "feedgeladen", "Ofenbrot")
+    await test_db.execute("INSERT INTO videos (id, title, status, has_lyrics, music_artist, music_title) "
+                          "VALUES ('liedmond001', 'Ein Lied', 'ready', 1, 'Band', 'Nachtlied')")
+    monkeypatch.setattr(lyrics_service, "load_lyrics",
+                        lambda vid: {"plain": "Der Mond und die Sterne leuchten" if vid == "liedmond001" else ""})
+
+    url, model = await semantic_index.config()
+    while await semantic_items.index_batch(url, model):
+        pass
+    assert (await semantic_items.overview(model)) == {"channel": 2, "playlist": 1, "lyrics": 1, "feed": 1}
+
+    level = await semantic_index.precision("ausgewogen")
+    related = await semantic_items.related("Sauerteig backen", level)
+    assert [c.channel_name for c in related.channels][:1] == ["Backstube"]
+    assert [f.video_id for f in related.feed] == ["feedbrot001"]     # geladene fallen heraus
+
+    sterne = await search_index.search_videos("Teleskop", precision="ausgewogen")
+    assert "liedmond001" in [v["id"] for v in sterne["videos"]]
+    assert [p["name"] for p in sterne["related"]["playlists"]] == ["Sterne schauen"]

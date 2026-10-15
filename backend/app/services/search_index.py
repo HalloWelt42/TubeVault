@@ -314,9 +314,16 @@ async def search_videos(
     offset = (page - 1) * per_page
 
     # Bedeutungssuche (optionale Erweiterung): None = steht nicht zur Verfügung
-    from app.services import semantic_index, transcripts
+    from app.services import semantic_index, semantic_items, transcripts
     level = await semantic_index.precision(precision)
     semantic = await semantic_index.search(query, level) if level else None
+    # Liedtexte gelten als Bedeutungstreffer am Video
+    lyric_hits = await semantic_items.search(query, "lyrics", level, 30) if level else []
+    if lyric_hits:
+        best = {}
+        for video_id, score in [*(semantic or []), *lyric_hits]:
+            best[video_id] = max(score, best.get(video_id, score))
+        semantic = sorted(best.items(), key=lambda hit: -hit[1])
     match_kind: dict[str, str] = {}
 
     # Textstellen aus Transkripten: Wörter (Volltext) und Bedeutung (Vektoren).
@@ -391,9 +398,11 @@ async def search_videos(
                                 "kind": passage.kind}
         videos.append(video)
 
+    related = (await semantic_items.related(query, level)).model_dump() if level and page == 1 else None
     return {
         "query": query, "videos": videos, "total": total,
         "semantic": semantic is not None,
+        "related": related,   # Kanäle, Playlists, noch nicht geladene Feed-Einträge
         "page": page, "per_page": per_page,
         "total_pages": max(1, (total + per_page - 1) // per_page),
     }

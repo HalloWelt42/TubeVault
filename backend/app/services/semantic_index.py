@@ -129,7 +129,7 @@ async def config() -> Optional[tuple[str, str]]:
     return (url, EMBEDDING_MODEL) if url else None
 
 
-async def _embed(texts: list[str], url: str, model: str, timeout: float) -> list[list[float]]:
+async def embed_texts(texts: list[str], url: str, model: str, timeout: float) -> list[list[float]]:
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(f"{url}/embeddings", json={"model": model, "input": texts})
         response.raise_for_status()
@@ -147,7 +147,7 @@ async def available() -> bool:
     ok = False
     if cfg:
         try:
-            await _embed(["bereit"], cfg[0], cfg[1], timeout=_QUERY_TIMEOUT_S)
+            await embed_texts(["bereit"], cfg[0], cfg[1], timeout=_QUERY_TIMEOUT_S)
             ok = True
         except Exception as e:
             logger.debug(f"[BEDEUTUNG] KI-Dienst nicht erreichbar: {e.__class__.__name__}")
@@ -177,7 +177,7 @@ def document_text(title: str, channel: str | None, tags, description: str | None
     return "\n".join(p for p in parts if p).strip()
 
 
-def _pack(vector: list[float]) -> bytes:
+def pack_vector(vector: list[float]) -> bytes:
     import numpy as np
     array = np.asarray(vector, dtype=np.float32)
     norm = float(np.linalg.norm(array))
@@ -211,7 +211,7 @@ async def index_batch(url: str, model: str) -> int:
             todo.append((video_id, text, text_hash))
 
     if todo:
-        vectors = await _embed([text for _, text, _ in todo], url, model, timeout=_REQUEST_TIMEOUT_S)
+        vectors = await embed_texts([text for _, text, _ in todo], url, model, timeout=_REQUEST_TIMEOUT_S)
         for (video_id, _text, text_hash), vector in zip(todo, vectors):
             await db.conn.execute(
                 """INSERT INTO video_embeddings (video_id, model, text_hash, vector)
@@ -219,7 +219,7 @@ async def index_batch(url: str, model: str) -> int:
                    ON CONFLICT(video_id) DO UPDATE SET model = excluded.model,
                        text_hash = excluded.text_hash, vector = excluded.vector,
                        updated_at = datetime('now')""",
-                (video_id, model, text_hash, _pack(vector)))
+                (video_id, model, text_hash, pack_vector(vector)))
     placeholders = ",".join("?" * len(ids))
     await db.conn.execute(f"DELETE FROM semantic_dirty WHERE video_id IN ({placeholders})", ids)
     await db.conn.commit()
@@ -250,6 +250,10 @@ async def background_index() -> None:
                     await asyncio.sleep(0.05)
                 while await index_chunk_batch(*cfg):
                     await asyncio.sleep(0.05)
+                # Kanäle, Playlists, Liedtexte, Feed-Einträge (semantic_items)
+                from app.services import semantic_items
+                while await semantic_items.index_batch(*cfg):
+                    await asyncio.sleep(0.05)
         except Exception as e:
             reset_availability()
             logger.info(f"[BEDEUTUNG] Einbetten unterbrochen: {e.__class__.__name__}: {e}")
@@ -278,12 +282,12 @@ async def index_chunk_batch(url: str, model: str) -> int:
         f"SELECT c.id, c.text {_CHUNK_WAITING_SQL} ORDER BY c.id LIMIT ?", (model, _BATCH))
     if not rows:
         return 0
-    vectors = await _embed([row["text"] for row in rows], url, model, timeout=_REQUEST_TIMEOUT_S)
+    vectors = await embed_texts([row["text"] for row in rows], url, model, timeout=_REQUEST_TIMEOUT_S)
     for row, vector in zip(rows, vectors):
         await db.conn.execute(
             """INSERT INTO chunk_embeddings (chunk_id, model, vector) VALUES (?, ?, ?)
                ON CONFLICT(chunk_id) DO UPDATE SET model = excluded.model, vector = excluded.vector""",
-            (row["id"], model, _pack(vector)))
+            (row["id"], model, pack_vector(vector)))
     await db.conn.commit()
     return len(rows)
 
@@ -325,13 +329,13 @@ class _ChunkVectors:
 _chunk_vectors = _ChunkVectors()
 
 
-async def _query_vector(query: str, url: str, model: str):
+async def query_vector(query: str, url: str, model: str):
     """Vektor der Suchanfrage (normiert), aus dem Zwischenspeicher oder vom KI-Dienst."""
     import numpy as np
     key = (model, query.strip().casefold())
     vector = _query_cache.get(key)
     if vector is None:
-        vector = (await _embed([query.strip()], url, model, timeout=_QUERY_TIMEOUT_S))[0]
+        vector = (await embed_texts([query.strip()], url, model, timeout=_QUERY_TIMEOUT_S))[0]
         if len(_query_cache) > 200:
             _query_cache.clear()
         _query_cache[key] = vector
@@ -349,7 +353,7 @@ async def precision(choice: Optional[str] = None) -> Optional[Precision]:
     return PRECISIONS.get(choice) or PRECISIONS[DEFAULT_PRECISION]
 
 
-def _floor(scores, level: Precision, collection_size: int) -> float:
+def score_floor(scores, level: Precision, collection_size: int) -> float:
     # In kleinen Beständen sagt die Streuung wenig; dort genügt "über dem Durchschnitt".
     z = level.min_z if collection_size >= SMALL_COLLECTION else 0.0
     return max(level.min_similarity, float(scores.mean()) + z * float(scores.std()))
@@ -365,14 +369,14 @@ async def search_passages(query: str, level: Precision) -> Optional[list[tuple[i
     import numpy as np
     await _chunk_vectors.refresh(model)
     try:
-        q = await _query_vector(query, url, model)
+        q = await query_vector(query, url, model)
     except Exception:
         reset_availability()
         return None
     scores = _chunk_vectors.scores(q)
     if scores is None or q.shape[0] != _chunk_vectors.blocks[0].shape[1]:
         return []
-    floor = _floor(scores, level, len(scores))
+    floor = score_floor(scores, level, len(scores))
     top = np.argsort(-scores)[:level.top_k]
     return [(_chunk_vectors.ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 
@@ -410,14 +414,14 @@ async def search(query: str, level: Precision) -> Optional[list[tuple[str, float
     if matrix is None:
         return None
     try:
-        q = await _query_vector(query, url, model)
+        q = await query_vector(query, url, model)
     except Exception:
         reset_availability()
         return None
     if q.shape[0] != matrix.shape[1]:
         return None   # Modell gewechselt, Vektoren werden gerade neu gerechnet
     scores = matrix @ q
-    floor = _floor(scores, level, len(ids))
+    floor = score_floor(scores, level, len(ids))
     top = np.argsort(-scores)[:level.top_k]
     return [(ids[i], float(scores[i])) for i in top if scores[i] >= floor]
 
@@ -453,4 +457,10 @@ async def overview() -> dict:
         "pending": await pending(),
         "passages_indexed": await db.fetch_val("SELECT COUNT(*) FROM chunk_embeddings") or 0,
         "passages_pending": await pending_chunks(cfg[1]) if cfg else 0,
+        "items_indexed": await _items_overview(cfg[1] if cfg else None),
     }
+
+
+async def _items_overview(model: Optional[str]) -> dict:
+    from app.services import semantic_items
+    return await semantic_items.overview(model)

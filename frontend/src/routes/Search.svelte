@@ -70,10 +70,12 @@
   // Lokale Treffer (Bibliothek UND Archiv) über denselben Loader, mit Gesamtzahl
   const LOCAL_PER_PAGE = 12;
   let localSemantic = $state(false);   // Bedeutungssuche war an dieser Trefferliste beteiligt
+  // Was die Bedeutungssuche außer Videos findet: Kanäle, Playlists, noch nicht geladene Feed-Einträge
+  let related = $state(null);
   const local = createListLoader(async (page) => {
     if (scope === 'youtube' || !query.trim()) return { items: [], total: 0 };
     const r = await api.searchLocal(query, { page, per_page: LOCAL_PER_PAGE, ...(precision ? { precision } : {}) });
-    if (page === 1) localSemantic = !!r.semantic;
+    if (page === 1) { localSemantic = !!r.semantic; related = r.related || null; }
     return { items: r.videos || [], total: r.total || 0 };
   });
 
@@ -325,6 +327,52 @@
     </section>
   {/if}
 
+  <!-- Bedeutungssuche: passende Kanäle, Playlists und noch nicht geladene Videos -->
+  {#if scope !== 'youtube' && related && (related.channels.length || related.playlists.length || related.feed.length)}
+    <section class="section">
+      <h2 class="section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Passt außerdem</h2>
+      {#if related.channels.length}
+        <div class="tv-etikett verwandt-etikett">Kanäle aus deinen Abos</div>
+        <div class="verwandt-reihe">
+          {#each related.channels as c (c.channel_id)}
+            <button class="verwandt-kanal" onclick={() => navigate(`/channel/${c.channel_id}`)}>
+              <img src={api.channelAvatarUrl(c.channel_id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+              <span>{c.channel_name}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if related.playlists.length}
+        <div class="tv-etikett verwandt-etikett">Playlists</div>
+        <div class="verwandt-reihe">
+          {#each related.playlists as p (p.id)}
+            <button class="verwandt-kanal" onclick={() => navigate('/playlists', { open: p.id })}>
+              <i class="fa-solid fa-list-ul"></i><span>{p.name} <span class="zahl tv-schwach">{p.video_count}</span></span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if related.feed.length}
+        <div class="tv-etikett verwandt-etikett">Noch nicht geladen, aus deinen Abos</div>
+        <div class="verwandt-feed">
+          {#each related.feed as f (f.video_id)}
+            <div class="verwandt-eintrag">
+              <img src={api.thumbnailUrl(f.video_id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+              <div class="verwandt-text">
+                <button class="verwandt-titel" onclick={() => openVideo(f.video_id)}>{f.title}</button>
+                <span class="channel">{f.channel_name || ''}</span>
+              </div>
+              <button class="tv-knopf klein" title="Herunterladen"
+                      onclick={() => api.addDownload({ url: `https://www.youtube.com/watch?v=${f.video_id}` })
+                        .then(() => toast.success('In die Warteschlange')).catch((e) => toast.error(e.message))}>
+                <i class="fa-solid fa-download"></i></button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </section>
+  {/if}
+
   <!-- YouTube-Kanäle -->
   {#if scope !== 'local' && ytChannels.length > 0}
     <section class="section">
@@ -464,6 +512,20 @@
   .passage-time { flex-shrink: 0; font-weight: 600; color: var(--accent-primary); white-space: nowrap; }
   .passage-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .genauigkeit { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; margin: 0 0 var(--tv-a4); }
+  .verwandt-etikett { margin: var(--tv-a3) 0 var(--tv-a2); }
+  .verwandt-reihe { display: flex; flex-wrap: wrap; gap: var(--tv-a2); }
+  .verwandt-kanal { display: inline-flex; align-items: center; gap: var(--tv-a2); padding: 6px 12px 6px 6px; border: 1px solid var(--tv-rand);
+                    border-radius: var(--tv-ecke); background: var(--tv-karte); color: var(--tv-text); font: inherit; cursor: pointer; }
+  .verwandt-kanal:hover { border-color: var(--tv-rand-stark); background: var(--tv-karte-2); }
+  .verwandt-kanal img { width: 32px; height: 32px; border-radius: var(--tv-ecke-klein); object-fit: cover; background: var(--tv-mulde); }
+  .verwandt-kanal > i { width: 32px; text-align: center; color: var(--tv-akzent); }
+  .verwandt-feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--tv-a2) var(--tv-a4); }
+  .verwandt-eintrag { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: var(--tv-a3); align-items: center; }
+  .verwandt-eintrag img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--tv-ecke-klein); background: var(--tv-mulde); }
+  .verwandt-text { min-width: 0; display: flex; flex-direction: column; }
+  .verwandt-titel { padding: 0; border: 0; background: none; color: var(--tv-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer;
+                    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .verwandt-titel:hover { color: var(--tv-akzent); }
   .semantic-note { margin-left: 10px; font-size: 0.74rem; font-weight: 600; color: var(--accent-primary); }
   .pl-form { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; }
   .pl-form input { padding: 5px 10px; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font: inherit; font-size: 0.8rem; font-weight: 400; }

@@ -1110,7 +1110,8 @@ class Database:
 
         # v47: Musik nur noch eindeutig automatisch, sonst von Hand (music_flag).
         # Nutzerentscheidung 15.10.2026: Bestand zurück auf "keine Musik".
-        from app.services import audio_export, deleted_videos, meta_sidecar, music_flag
+        from app.services import audio_export, deleted_videos, meta_sidecar, music_flag, semantic_items
+        await semantic_items.install_schema(self._connection)
         await deleted_videos.install_schema(self._connection)
         await meta_sidecar.install_schema(self._connection)
         await music_flag.install_schema(self._connection)
