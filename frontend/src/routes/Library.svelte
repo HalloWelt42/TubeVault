@@ -80,6 +80,15 @@
     try { const res = await api.setTypeBatch([...selected], videoType); toast.success(`${res.updated} Video(s) → ${labels[videoType]}`); selected = new Set(); selectMode = false; list.load(true); } catch (e) { toast.error(e.message); }
   }
 
+  async function setMusicBulk(isMusic) {
+    if (selected.size === 0) return;
+    try {
+      const res = await api.setMusicBatch([...selected], isMusic);
+      toast.success(`${res.updated} Video(s) ${isMusic ? 'als Musik' : 'als keine Musik'} festgelegt`);
+      selected = new Set(); selectMode = false; list.load(true);
+    } catch (e) { toast.error(e.message); }
+  }
+
   // Auf globale Video-Mutationen (Archive/Delete aus Watch-View) reagieren —
   // Liste neu laden, damit beim Zurück-Navigieren der neue Stand zu sehen ist.
   $effect(() => onVideoMutation(() => { list.load(true); loadTags(); }));
@@ -108,6 +117,11 @@
       <button class="tv-knopf klein" onclick={() => setTypeBulk('video')}><i class="fa-solid fa-play"></i> Als Video</button>
       <button class="tv-knopf klein" onclick={() => setTypeBulk('short')}><i class="fa-solid fa-mobile-screen"></i> Als Short</button>
       <button class="tv-knopf klein" onclick={() => setTypeBulk('live')}><i class="fa-solid fa-tower-broadcast"></i> Als Live</button>
+      <span class="tv-trenner"></span>
+      <button class="tv-knopf klein" onclick={() => setMusicBulk(true)} title="Von Hand als Musik festlegen - keine Automatik ändert das">
+        <i class="fa-solid fa-music"></i> Musik</button>
+      <button class="tv-knopf klein" onclick={() => setMusicBulk(false)} title="Von Hand als keine Musik festlegen">
+        <i class="fa-solid fa-microphone-slash"></i> Keine Musik</button>
       <span class="tv-trenner"></span>
       <button class="tv-knopf klein" onclick={archiveSelected}><i class="fa-solid fa-box-archive"></i> Archivieren</button>
       <button class="tv-knopf klein gefahr" onclick={deleteSelected}><i class="fa-regular fa-trash-can"></i> Löschen</button>

@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 46
+SCHEMA_VERSION = 47
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS videos (
     updated_at TEXT DEFAULT (datetime('now')),
     is_archived INTEGER DEFAULT 0,
     is_music INTEGER,
+    music_source TEXT,                -- 'user' (von Hand) | 'auto' (eindeutig erkannt), siehe music_flag
     music_artist TEXT,
     music_title TEXT,
     music_album TEXT,
@@ -1106,6 +1107,18 @@ class Database:
                 "DROP TABLE IF EXISTS scan_staging; DROP TABLE IF EXISTS scan_sessions;")
             await self._connection.commit()
             logger.info("Migration v46: alter Einlese-Assistent entfernt")
+
+        # v47: Musik nur noch eindeutig automatisch, sonst von Hand (music_flag).
+        # Nutzerentscheidung 15.10.2026: Bestand zurück auf "keine Musik".
+        from app.services import meta_sidecar, music_flag
+        await meta_sidecar.install_schema(self._connection)
+        try:
+            await self._connection.execute("ALTER TABLE videos ADD COLUMN music_source TEXT")
+        except Exception:
+            pass  # Spalte existiert bereits
+        if current_version < 47:
+            reset = await music_flag.reset_to_certain(self._connection)
+            logger.info(f"Migration v47: {reset} Videos nicht mehr als Musik, nur Eindeutiges bleibt")
 
         # v43: Prüftakt nach dem Alter des neuesten Videos (rss_service.interval_for).
         # Nutzerentscheidung 15.10.2026: Grundtakt 2x täglich, höchstens 30 Tage.

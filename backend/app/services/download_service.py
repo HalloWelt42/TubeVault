@@ -36,7 +36,7 @@ from app.config import (
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.services.job_service import job_service
-from app.services import download_options, reupload_guard, video_classifier
+from app.services import download_options, music_flag, reupload_guard, video_classifier
 from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
 from app.utils.tag_utils import sanitize_tags
@@ -1033,17 +1033,15 @@ class DownloadService:
             # Geprüften Typ festhalten (auch am Feed-Eintrag); Nutzerwahl bleibt
             await video_classifier.apply(vid, typed)
 
-            # Musik: die Kategorie der Quelle entscheidet (nicht ein Bindestrich
-            # im Titel). Eine frühere Festlegung - auch von Hand - bleibt.
+            # Musik: nur Eindeutiges automatisch (music_flag), sonst legt der
+            # Nutzer fest. Interpret/Titel der Quelle helfen der Liedtext-Suche.
             music = meta.get("music_info") or {}
             await db.execute(
-                """UPDATE videos SET is_music = ?,
-                       music_artist = COALESCE(music_artist, ?),
-                       music_title = COALESCE(music_title, ?),
-                       music_album = COALESCE(music_album, ?)
-                   WHERE id = ? AND is_music IS NULL""",
-                (1 if meta.get("is_music") else 0, music.get("artist"), music.get("title"),
-                 music.get("album"), vid))
+                """UPDATE videos SET music_artist = COALESCE(music_artist, ?),
+                       music_title = COALESCE(music_title, ?), music_album = COALESCE(music_album, ?)
+                   WHERE id = ?""",
+                (music.get("artist"), music.get("title"), music.get("album"), vid))
+            await music_flag.apply_auto(vid, meta.get("channel_name"), meta.get("description"))
 
             # Sprache der geladenen (Original-)Tonspur festhalten
             if meta.get("language"):
@@ -1446,7 +1444,6 @@ class DownloadService:
                 "view_count": yt.views, "tags": sanitize_tags(yt.keywords or []),
                 "thumbnail_url": yt.thumbnail_url, "stream_count": len(yt.streams),
                 "chapters": chapters, "is_live": is_live,
-                "is_music": bool(getattr(yt, "is_music", False)),
                 "music_info": getattr(yt, "music_info", None) or {},
                 "language": getattr(yt, "language", None),
             }

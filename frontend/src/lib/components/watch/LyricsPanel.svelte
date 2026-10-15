@@ -103,32 +103,27 @@
     loading = false;
     loadSubtitleList();
 
-    // Auto-Detect + Suche wenn fixiert und noch keine Lyrics
-    if (autoSearch && !plain && !synced) {
-      if (!info.is_music) {
-        await detectMusic();
-      }
-      if (info.is_music && info.artist && info.title) {
-        await searchLyrics();
-      }
+    // Fixiert und noch keine Liedtexte: nur für Videos suchen, die als Musik
+    // festgelegt sind - ob ein Video Musik ist, wird hier nie vermutet
+    if (autoSearch && !plain && !synced && info.is_music && info.artist && info.title) {
+      await searchLyrics();
     }
   }
 
-  async function detectMusic() {
+  /** Interpret und Songtitel aus dem Videotitel vorschlagen (ändert nicht, ob es Musik ist) */
+  async function suggestNames() {
     loading = true;
     try {
-      const res = await api.detectMusic(videoId);
-      if (res.is_music) {
-        toast.success(`Erkannt: ${res.artist} – ${res.song_title}`);
-        info.is_music = true;
-        info.artist = res.artist || '';
-        info.title = res.song_title || '';
+      const res = await api.suggestMusicNames(videoId);
+      if (res.artist && res.song_title) {
+        info.artist = res.artist;
+        info.title = res.song_title;
+        await saveMusicInfo();
       } else {
-        toast.info('Kein Musik-Muster im Titel erkannt');
-        info.is_music = false;
+        toast.info('Im Titel steht kein "Interpret - Titel"');
       }
     } catch (e) {
-      toast.error('Erkennung fehlgeschlagen');
+      toast.error('Vorschlag fehlgeschlagen');
     }
     loading = false;
   }
@@ -429,8 +424,9 @@
             <input type="checkbox" bind:checked={info.is_music} onchange={saveMusicInfo} />
             <span>Ist Musik</span>
           </label>
-          <button class="btn-detect" onclick={detectMusic} disabled={loading}>
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Erkennen
+          <button class="btn-detect" onclick={suggestNames} disabled={loading || !info.is_music}
+                  title="Interpret und Songtitel aus dem Videotitel übernehmen">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Aus dem Titel
           </button>
         </div>
 

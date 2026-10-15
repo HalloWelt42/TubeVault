@@ -33,7 +33,7 @@ _FIELDS = [
     "upload_date", "download_date", "duration",
     "view_count", "like_count", "dislike_count",
     "source", "source_url", "video_type",
-    "is_music", "music_artist", "music_title", "music_album",
+    "is_music", "music_source", "music_artist", "music_title", "music_album",
     "is_archived", "file_size",
 ]
 
@@ -180,3 +180,30 @@ async def sidecar_status() -> dict:
         "sidecars_missing": len(ids) - present,
         "backfill": dict(backfill_state),
     }
+
+
+# ═══════════════════════════════════════════════════════════════
+# Vorgemerkte Begleitdateien nachschreiben (nach Änderungen am Bestand,
+# z.B. einer Migration, die viele Videos auf einmal ändert)
+# ═══════════════════════════════════════════════════════════════
+
+STALE_SQL = "CREATE TABLE IF NOT EXISTS sidecar_stale (video_id TEXT PRIMARY KEY);"
+
+
+async def install_schema(connection) -> None:
+    await connection.executescript(STALE_SQL)
+    await connection.commit()
+
+
+async def refresh_stale(throttle_every: int = 50, throttle_sleep: float = 0.1) -> int:
+    """Hintergrundlauf: vorgemerkte Begleitdateien schreiben, dann Ende."""
+    rows = await db.fetch_all("SELECT video_id FROM sidecar_stale")
+    for i, row in enumerate(rows):
+        await write_sidecar(row["video_id"])
+        await db.execute("DELETE FROM sidecar_stale WHERE video_id = ?", (row["video_id"],))
+        if throttle_every and (i + 1) % throttle_every == 0:
+            await asyncio.sleep(throttle_sleep)
+    if rows:
+        logger.info(f"[sidecar] {len(rows)} vorgemerkte Begleitdateien nachgeschrieben")
+    return len(rows)
+

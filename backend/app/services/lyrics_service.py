@@ -181,27 +181,14 @@ async def search_ytmusic_by_name(artist: str, title: str) -> Optional[dict]:
         logger.warning(f"YTMusic Name-Suche Fehler: {e}")
         return None
 
-# ─── Musik-Erkennung ────────────────────────────────────────
+# ─── Interpret und Titel aus dem Videotitel (nur Vorschlag) ────────
 
-# Muster die auf Musik hindeuten
-MUSIC_PATTERNS = [
-    r"(?:official\s+)?(?:music\s+)?video",
-    r"official\s+audio",
-    r"lyric(?:s)?\s+video",
-    r"audio\s+(?:only|oficial)",
-    r"(?:feat|ft)\.?\s+",
-    r"\((?:prod|remix|cover|acoustic|live|unplugged)\b",
-    r"(?:m[/\\]v|mv)\b",
-    r"lyrics?\b",
-]
-MUSIC_RE = re.compile("|".join(MUSIC_PATTERNS), re.IGNORECASE)
-
-# Typische YouTube-Trennzeichen: "Artist - Title", "Artist – Title", "Artist | Title"
+# Typische Trennzeichen: "Interpret - Titel", "Interpret | Titel"
 ARTIST_TITLE_RE = re.compile(
-    r"^(.+?)\s*[-–—|]\s*(.+?)(?:\s*[\(\[].*)?$"
+    r"^(.+?)\s+[-–—|]\s+(.+?)(?:\s*[\(\[].*)?$"
 )
 
-# Zusätzliche Fragmente die wir aus dem Titel entfernen
+# Zusätze, die nicht zum Songtitel gehören
 CLEAN_FRAGMENTS = re.compile(
     r"\s*[\(\[]\s*(?:official|music|lyric|audio|video|hd|4k|hq|remaster|"
     r"visualizer|clip|explicit|clean|radio\s+edit|extended|remix|"
@@ -210,50 +197,19 @@ CLEAN_FRAGMENTS = re.compile(
 )
 
 
-def detect_music(title: str, tags: str = "[]") -> dict:
-    """Erkennt ob ein Video Musik ist und extrahiert Artist/Title.
+def suggest_artist_title(title: str) -> dict:
+    """Interpret und Songtitel aus "Interpret - Titel" vorschlagen, für die
+    Liedtext-Suche. Entscheidet NICHT, ob ein Video Musik ist (das legt der
+    Nutzer fest, siehe music_flag) - früher setzte diese Vermutung die
+    Kennzeichnung und lag meist daneben.
 
-    Returns: { is_music: bool, artist: str|None, song_title: str|None }
+    Returns: { artist: str|None, song_title: str|None }
     """
-    if not title:
-        return {"is_music": False, "artist": None, "song_title": None}
-
-    # Tags prüfen
-    try:
-        tag_list = json.loads(tags) if isinstance(tags, str) else (tags or [])
-    except (json.JSONDecodeError, TypeError):
-        tag_list = []
-
-    music_tags = {"music", "musik", "song", "hip hop", "rap", "pop", "rock",
-                  "electronic", "edm", "r&b", "rnb", "jazz", "classical",
-                  "reggae", "metal", "punk", "indie", "folk", "country",
-                  "soundtrack", "ost"}
-    has_music_tag = any(t.lower().strip() in music_tags for t in tag_list)
-
-    # Muster im Titel prüfen
-    has_pattern = bool(MUSIC_RE.search(title))
-
-    # Artist - Title Muster prüfen
-    m = ARTIST_TITLE_RE.match(title)
-    has_separator = m is not None
-
-    # Entscheidung: die Form "Interpret - Titel" UND ein weiteres Signal
-    # (Musik-Tag oder Musik-Muster im Titel). Der Bindestrich allein genügt
-    # nicht - sonst gilt jedes "Thema - Untertitel"-Video als Musik.
-    is_music = has_separator and (has_music_tag or has_pattern)
-
-    artist = None
-    song_title = None
-
-    if is_music and m:
-        artist = m.group(1).strip()
-        raw_title = m.group(2).strip()
-        # Fragmente entfernen
-        song_title = CLEAN_FRAGMENTS.sub("", raw_title).strip()
-        # Falls Artist auch Fragmente hat
-        artist = CLEAN_FRAGMENTS.sub("", artist).strip()
-
-    return {"is_music": is_music, "artist": artist, "song_title": song_title}
+    match = ARTIST_TITLE_RE.match(title or "")
+    if not match:
+        return {"artist": None, "song_title": None}
+    return {"artist": CLEAN_FRAGMENTS.sub("", match.group(1)).strip() or None,
+            "song_title": CLEAN_FRAGMENTS.sub("", match.group(2)).strip() or None}
 
 
 # ─── LRCLIB API ──────────────────────────────────────────────
@@ -501,20 +457,14 @@ async def get_music_info(video_id: str) -> dict:
     }
 
 
-async def set_music_info(
-    video_id: str,
-    is_music: bool,
-    artist: str = "",
-    title: str = "",
-    album: str = "",
-):
-    """Setzt Musik-Metadaten."""
+async def set_music_details(video_id: str, artist: str = "", title: str = "", album: str = ""):
+    """Interpret, Songtitel und Album setzen. Ob das Video Musik ist, regelt
+    allein music_flag (Wahl des Nutzers oder eindeutige Erkennung)."""
     await db.execute(
-        """UPDATE videos SET
-             is_music = ?, music_artist = ?, music_title = ?, music_album = ?,
-             updated_at = datetime('now')
+        """UPDATE videos SET music_artist = ?, music_title = ?, music_album = ?,
+                             updated_at = datetime('now')
            WHERE id = ?""",
-        (int(is_music), artist, title, album, video_id),
+        (artist, title, album, video_id),
     )
 
 
@@ -589,11 +539,7 @@ async def fetch_and_save(video_id: str, provider: str = "auto") -> dict:
 
     # Artist/Title ggf. korrigieren (LRCLIB kann bessere Schreibweise haben)
     if result.get("artist") and result.get("title"):
-        await set_music_info(
-            video_id, True,
-            result["artist"], result["title"],
-            result.get("album", album),
-        )
+        await set_music_details(video_id, result["artist"], result["title"], result.get("album", album))
 
     has_synced = bool(result.get("synced"))
     logger.info(f"Lyrics gespeichert: {artist} - {title} (synced={has_synced}, source={result['source']})")

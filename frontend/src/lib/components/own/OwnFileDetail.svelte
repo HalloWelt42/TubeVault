@@ -35,7 +35,8 @@
   let query = $state('');
   let results = $state([]);
   let searching = $state(false);
-  let playing = $state(false);
+  let playing = $state(false);         // alte Datei läuft
+  let playingMatch = $state(false);    // Bibliotheksvideo läuft (zum Vergleich daneben)
 
   $effect(() => {
     // Nur eine andere Datei setzt die Formulare zurück - nicht das Nachladen
@@ -44,6 +45,7 @@
     untrack(() => {
       mode = null;
       playing = false;
+      playingMatch = false;
       results = [];
       query = '';
       title = file.title || '';
@@ -118,8 +120,19 @@
     <div class="haelfte">
       <span class="tv-etikett">{inLibrary ? 'In der Bibliothek' : sourceKnown ? 'Bei der Quelle bekannt' : 'Treffer'}</span>
       {#if m}
-        <div class="bild"><img src={inLibrary ? api.thumbnailUrl(m.video_id) : api.rssThumbUrl(m.video_id)} alt=""
-                               onerror={(e) => e.target.style.visibility = 'hidden'} /></div>
+        <div class="bild">
+          {#if playingMatch}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video src={api.streamUrl(m.video_id)} controls autoplay></video>
+          {:else if inLibrary}
+            <button class="abspielen" onclick={() => playingMatch = true} title="Bibliotheksvideo zum Vergleich ansehen">
+              <img src={api.thumbnailUrl(m.video_id)} alt="" onerror={(e) => e.target.style.visibility = 'hidden'} />
+              <i class="fa-solid fa-play spielen"></i>
+            </button>
+          {:else}
+            <img src={api.rssThumbUrl(m.video_id)} alt="" onerror={(e) => e.target.style.visibility = 'hidden'} />
+          {/if}
+        </div>
         <span class="titel">{m.title || m.video_id}</span>
         <span class="tv-schwach tv-klein">{m.channel_name || ''}</span>
         <span class="zahl tv-klein" class:gleich={sameDuration}>{facts(m.duration, m.size)}{#if sameSize}{' · '}gleiche Größe{/if}</span>
@@ -207,7 +220,7 @@
   .bild video { object-fit: contain; background: #000; }
   .abspielen { position: relative; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer;
                display: grid; place-items: center; color: var(--tv-text-3); }
-  .abspielen .spielen { position: absolute; opacity: 0; color: var(--tv-text); font-size: 26px; transition: opacity var(--tv-schnell); }
+  .abspielen .spielen { position: absolute; opacity: 0.55; color: var(--tv-text); font-size: 26px; transition: opacity var(--tv-schnell); }
   .abspielen:hover .spielen { opacity: 0.9; }
   .titel { font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
   .ort { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

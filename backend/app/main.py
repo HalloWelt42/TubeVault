@@ -324,6 +324,9 @@ async def lifespan(app: FastAPI):
     from app.services import ad_segments
     task_manager.register("ad_transcript_rebuild", "Transkripte ohne Werbestellen neu bilden",
                           ad_segments.background_rebuild, auto_restart=False, essential=False)
+    from app.services import meta_sidecar
+    task_manager.register("sidecar_refresh", "Vorgemerkte Begleitdateien nachschreiben",
+                          meta_sidecar.refresh_stale, auto_restart=False, essential=False)
     from app.services import own_scan
     task_manager.register("own_scan", "Eigene Videos einlesen",
                           own_scan.worker, auto_restart=True, essential=False)

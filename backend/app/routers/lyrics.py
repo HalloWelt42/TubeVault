@@ -23,28 +23,13 @@ async def get_lyrics(video_id: str):
     return {**info, **texts}
 
 
-@router.post("/{video_id}/detect")
-async def detect_music(video_id: str):
-    """Automatisch erkennen ob Video Musik ist + Artist/Title extrahieren."""
-    row = await db.fetch_one(
-        "SELECT title, tags FROM videos WHERE id = ?", (video_id,)
-    )
-    if not row:
+@router.get("/{video_id}/suggest")
+async def suggest_names(video_id: str):
+    """Interpret und Songtitel aus dem Videotitel vorschlagen (ändert nichts)."""
+    title = await db.fetch_val("SELECT title FROM videos WHERE id = ?", (video_id,))
+    if title is None:
         return {"status": "error", "message": "Video nicht gefunden"}
-
-    result = lyrics_service.detect_music(row["title"], row["tags"] or "[]")
-
-    if result["is_music"]:
-        await lyrics_service.set_music_info(
-            video_id, True,
-            result["artist"] or "",
-            result["song_title"] or "",
-        )
-
-    return {
-        "status": "ok",
-        **result,
-    }
+    return {"status": "ok", **lyrics_service.suggest_artist_title(title)}
 
 
 @router.post("/{video_id}/search")
@@ -78,7 +63,7 @@ async def pick_lyrics(
     lyrics_service.save_lyrics(video_id, plain, synced)
     await lyrics_service.set_lyrics_status(video_id, True, "lrclib", lrclib_id)
     if artist and title:
-        await lyrics_service.set_music_info(video_id, True, artist, title, album)
+        await lyrics_service.set_music_details(video_id, artist, title, album)
     return {"status": "ok"}
 
 
@@ -90,8 +75,10 @@ async def update_music_info(
     title: str = Body(""),
     album: str = Body(""),
 ):
-    """Musik-Metadaten manuell setzen."""
-    await lyrics_service.set_music_info(video_id, is_music, artist, title, album)
+    """Musik von Hand festlegen (bleibt gegen jede Automatik) samt Angaben."""
+    from app.services import music_flag
+    await lyrics_service.set_music_details(video_id, artist, title, album)
+    await music_flag.set_by_user([video_id], is_music)
     return {"status": "ok"}
 
 

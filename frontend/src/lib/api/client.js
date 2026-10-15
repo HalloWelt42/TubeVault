@@ -104,6 +104,7 @@ export const api = {
     request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/short-exempt`, { method: 'PUT', body: JSON.stringify({ exempt }) }),
   cleanupDelete: (videoIds) => request('/api/admin/cleanup/delete', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
   setTypeBatch: (videoIds, videoType) => request('/api/videos/type/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, video_type: videoType }) }),
+  setMusicBatch: (videoIds, isMusic) => request('/api/videos/music/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, is_music: isMusic }) }),
 
   // Downloads
   addDownload: (data) => request('/api/downloads', { method: 'POST', body: JSON.stringify(data) }),
@@ -187,7 +188,7 @@ export const api = {
 
   // Lyrics
   getLyrics: (videoId) => request(`/api/lyrics/${videoId}`),
-  detectMusic: (videoId) => request(`/api/lyrics/${videoId}/detect`, { method: 'POST' }),
+  suggestMusicNames: (videoId) => request(`/api/lyrics/${videoId}/suggest`),
   searchLyrics: (videoId, provider = 'auto') => request(`/api/lyrics/${videoId}/search`, { method: 'POST', body: JSON.stringify({ provider }) }),
   searchLyricsAll: (videoId) => request(`/api/lyrics/${videoId}/search-all`, { method: 'POST' }),
   pickLyrics: (videoId, data) => request(`/api/lyrics/${videoId}/pick`, { method: 'POST', body: JSON.stringify(data) }),

@@ -437,6 +437,19 @@ async def set_type_batch(req: TypeBatchRequest):
     return {"updated": count, "video_type": req.video_type}
 
 
+class MusicBatchRequest(BaseModel):
+    video_ids: list[str]
+    is_music: bool
+
+
+@router.post("/music/batch")
+async def set_music_batch(req: MusicBatchRequest):
+    """Batch: Musik von Hand festlegen (die Automatik ändert das nie mehr)."""
+    from app.services import music_flag
+    count = await music_flag.set_by_user(req.video_ids[:500], req.is_music)
+    return {"updated": count, "is_music": req.is_music}
+
+
 @router.delete("/{video_id}")
 async def delete_video(video_id: str):
     """Video komplett löschen (Dateien + DB)."""
