@@ -1039,7 +1039,10 @@
 <ConfirmDialog bind:this={confirmRef} />
 
 <style>
-  .page { padding: 20px 24px 72px; max-width: none; }
+  /* Seite füllt die Höhe; Warteschlange und rechte Spalte rollen je für sich
+     (Übergang bis zum Neubau nach mockups/downloads.html) */
+  .page { padding: 20px 24px 16px; max-width: none; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  .page > :global(*) { flex: none; }
 
   /* Command-Bar */
   .dtop { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding-bottom:16px; margin-bottom:18px; border-bottom:1px solid var(--border-primary); }
@@ -1099,8 +1102,16 @@
   /* Goldener Schnitt: Warteschlange (Haupt) : Seitenpanel ≈ 1.618 : 1.
      Seitenpanel min 280px (Innenelemente brechen sonst); wird's insgesamt zu
      eng, klappt das Seitenpanel über die Warteschlange (order:-1). */
-  .dgrid { display:grid; grid-template-columns: minmax(0,1.618fr) minmax(280px,1fr); gap:24px; align-items:start; margin-top:2px; }
-  @media (max-width: 1024px) { .dgrid { grid-template-columns:1fr; } .daside { order:-1; } }
+  .page > .dgrid { flex: 1; min-height: 0; }
+  .dgrid { display:grid; grid-template-columns: minmax(0,1.618fr) minmax(320px,1fr); gap:24px; align-items:stretch; margin-top:2px; }
+  .dmain { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  .dmain .jobs { flex:1; min-height:0; overflow-y:auto; }
+  .daside { min-height:0; overflow-y:auto; }
+  @media (max-width: 1024px), (max-height: 620px) {
+    .page { height: auto; }
+    .dgrid { grid-template-columns:1fr; } .daside { order:-1; overflow:visible; }
+    .dmain { overflow:visible; } .dmain .jobs { overflow:visible; }
+  }
   /* Sehr schmal: Job-Aktionen klappen unter den Inhalt statt zu überlaufen */
   @media (max-width: 560px) {
     .job { grid-template-columns:72px minmax(0,1fr); padding-left:14px; }

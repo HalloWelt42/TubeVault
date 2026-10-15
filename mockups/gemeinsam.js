@@ -22,6 +22,9 @@ export const VIDEOS = [
   { id: 'WPcxhRC8y7U', titel: 'fett geil.', kanal: 'coldmirror', dauer: 19, groesse: 5197227, aufrufe: 445078, hochgeladen: '2012-12-18', arten: ['short'] },
 ];
 
+// Entwurfsseiten je Eintrag der Seitenleiste
+const SEITEN = { bibliothek: 'bibliothek.html', downloads: 'downloads.html', eigene: 'eigene-videos.html', einstellungen: 'einstellungen.html' };
+
 // Wie in der App (Sidebar.svelte): Symbolfarben einzelner Einträge bleiben
 const NAVI = [
   ['Übersicht', 'fa-house', 'start', null],
@@ -73,7 +76,7 @@ export function kachel(v) {
 
 function schale(aktiv) {
   const navi = ([name, symbol, schluessel, zahl, farbe]) =>
-    `<a class="navi${schluessel === aktiv ? ' aktiv' : ''}" href="${schluessel === 'bibliothek' ? 'bibliothek.html' : '#'}">
+    `<a class="navi${schluessel === aktiv ? ' aktiv' : ''}" href="${SEITEN[schluessel] || '#'}">
       <i class="fa-solid ${symbol}"${farbe ? ` style="--symbolfarbe: ${farbe}"` : ''}></i>${name}${zahl ? `<span class="zaehler">${zahl}</span>` : ''}</a>`;
   document.querySelector('[data-block="kopf"]').outerHTML = `
     <header class="kopf">

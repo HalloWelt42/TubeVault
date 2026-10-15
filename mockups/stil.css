@@ -304,6 +304,57 @@ h3 { font-size: var(--tv-gr-text); font-weight: 600; }
 }
 .meldung i { color: var(--tv-akzent); }
 
+/* ═══ Seitenrahmen: fester Kopf, eigenes Rollfeld (App: .tv-seite) ═════ */
+
+.haupt.rahmen { overflow: hidden; padding: 0; display: flex; flex-direction: column; }
+.rahmen-kopf { flex: none; padding: var(--tv-a5) var(--tv-a6) var(--tv-a3); }
+.rahmen-kopf .seitenkopf { margin-bottom: var(--tv-a4); }
+.rollfeld { flex: 1; min-height: 0; overflow-y: auto; padding: var(--tv-a2) var(--tv-a6) var(--tv-a6); }
+.spalten { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--tv-a4); padding: 0 var(--tv-a6); }
+.spalten > .rollfeld { padding: var(--tv-a2) var(--tv-a1) var(--tv-a6); }
+
+/* Kennzahlen im Kopf */
+.kennzahlen { display: flex; gap: var(--tv-a3); flex-wrap: wrap; }
+.kennzahl { min-width: 128px; padding: var(--tv-a2) var(--tv-a4); background: var(--tv-flaeche); border-radius: var(--tv-ecke); }
+.kennzahl b { display: block; font-family: var(--tv-schrift-zahl); font-size: 26px; font-weight: 600; line-height: 1.2; }
+.kennzahl span { font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--tv-text-3); }
+.kennzahl.laeuft b { color: var(--tv-akzent); }
+.kennzahl.fehler b { color: var(--tv-gefahr); }
+
+/* Fortschritt */
+.balken { height: 6px; background: var(--tv-mulde); border-radius: 1px; overflow: hidden; }
+.balken b { display: block; height: 100%; background: var(--tv-akzent); }
+.balken.fertig b { background: var(--tv-erfolg); }
+.balken.fehler b { background: var(--tv-gefahr); }
+
+/* Zustandsmarke */
+.zustand {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; white-space: nowrap;
+  font-size: var(--tv-gr-marke); font-weight: 700; border-radius: var(--tv-ecke-klein);
+  background: var(--tv-karte-2); color: var(--tv-text-2);
+}
+.zustand.laeuft { background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--tv-akzent); }
+.zustand.fertig { background: rgba(var(--tv-erfolg-rgb), 0.14); color: var(--tv-erfolg); }
+.zustand.fehler { background: rgba(var(--tv-gefahr-rgb), 0.14); color: var(--tv-gefahr); }
+.zustand.wartet { background: rgba(var(--tv-info-rgb), 0.12); color: var(--tv-info); }
+
+/* Einstellungszeilen: Bezeichnung links, Bedienelement in fester Spalte rechts */
+.einstellung {
+  display: grid; grid-template-columns: minmax(0, 1fr) 260px; align-items: center; gap: var(--tv-a4);
+  padding: var(--tv-a3) var(--tv-a4); border-top: 1px solid var(--tv-rand);
+}
+.einstellung:first-of-type { border-top: 0; }
+.einstellung .name { font-weight: 600; }
+.einstellung .erklaerung { font-size: var(--tv-gr-klein); color: var(--tv-text-3); margin-top: 2px; }
+.einstellung .wert { display: flex; gap: var(--tv-a2); justify-content: flex-end; align-items: center; }
+.einstellung .wert .eingabe { width: 120px; text-align: right; font-family: var(--tv-schrift-zahl); }
+.einstellung .wert select.eingabe { width: 120px; text-align: left; font-family: var(--tv-schrift); }
+
+.schalter { width: 46px; height: 26px; border-radius: var(--tv-ecke); background: var(--tv-karte-3); position: relative; border: 0; cursor: pointer; flex: none; }
+.schalter::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: var(--tv-ecke-klein); background: var(--tv-text-2); transition: left var(--tv-schnell); }
+.schalter.an { background: var(--tv-akzent); }
+.schalter.an::after { left: 23px; background: var(--tv-akzent-text); }
+
 /* ═══ Entwurfs-Werkzeug (nicht Teil der App) ══════════════════════════ */
 
 .entwurf-schalter {
