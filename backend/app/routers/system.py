@@ -5,14 +5,19 @@ System-Status, Rate-Limiter Stats, Health, Live-Logs
 """
 
 import asyncio
+import itertools
 import logging
 import time
+import uuid
 from collections import deque
 from datetime import datetime
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Body, WebSocket, WebSocketDisconnect, Query
 from app.config import VERSION, APP_NAME, DATA_DIR, DB_PATH, DB_DIR, VIDEOS_DIR, THUMBNAILS_DIR
 from app.database import db
 from app.utils.file_utils import get_disk_usage, get_directory_size, human_size
@@ -25,7 +30,9 @@ router = APIRouter(prefix="/api/system", tags=["System"])
 
 # ─── Live-Log Ring-Buffer + WebSocket ─────────────────────
 
-LOG_BUFFER_SIZE = 3000
+LOG_BUFFER_SIZE = 10_000      # etwa 1 bis 3 Stunden; die Abfragen der Oberfläche sind der Großteil
+LOG_FRAME_LIMIT = 500        # Einträge je WebSocket-Rahmen
+LOG_HISTORY = 500            # so viel Verlauf bekommt ein frisch geöffnetes Terminal
 
 # Logger-Name → Kategorie Mapping
 _LOGGER_CAT_MAP = {
@@ -49,29 +56,29 @@ _LOGGER_CAT_MAP = {
 
 
 class LogBuffer(logging.Handler):
-    """Ring-Buffer + gebatchter WebSocket-Stream.
-    _push() ist synchron und schnell (nur deque.append).
-    WS-Broadcast alle 250ms gebatcht – blockiert nie den Haupt-Thread.
+    """Ring-Puffer aller Meldungen; jedes offene Live-Log liest ihn mit
+    eigenem Lesezeiger (logs_websocket). _push() ist synchron und schnell
+    (nur deque.append), gesendet wird in den Verbindungen selbst.
 
-    Jeder Eintrag trägt zusätzlich:
-      epoch  – numerischer Zeitstempel (Statistik zählt darüber, nicht über
-               den HH:MM:SS-String → kein Mitternachts-Bug)
-      seq    – monoton steigende Nummer (Terminal dedupliziert damit den
-               History-Replay nach WS-Reconnect und erkennt Lücken)
-      trace  – optional: Traceback/Folgezeilen getrennt von der 1. Zeile
-               (Terminal zeigt sie aufklappbar statt zerhackt)
+    Jeder Eintrag trägt:
+      epoch  - numerischer Zeitstempel (Statistik zählt darüber, nicht über
+               den HH:MM:SS-String: kein Mitternachtsfehler)
+      seq    - lückenlos steigende Nummer je Prozess; boot kennzeichnet den
+               Prozess, damit ein Terminal nach einem Neustart neu beginnt
+               statt alles mit kleinerer Nummer zu verwerfen
+      trace  - optional: Traceback/Folgezeilen getrennt von der 1. Zeile
     """
 
     def __init__(self, maxlen: int = LOG_BUFFER_SIZE):
         super().__init__()
         self.buffer: deque[dict] = deque(maxlen=maxlen)
-        self.connections: list[WebSocket] = []
-        self._loop = None
-        self._pending: deque[dict] = deque(maxlen=2000)  # WS-Sende-Puffer
-        self._flush_task = None
+        self.boot = uuid.uuid4().hex[:12]
         self._rate_cache: dict[str, float] = {}
         self._seq = 0
-        self._dropped = 0  # bei Sende-Puffer-Überlauf verworfene Einträge
+
+    @property
+    def last_seq(self) -> int:
+        return self._seq
 
     def emit(self, record: logging.LogRecord):
         short_name = record.name.split(".")[-1]
@@ -96,7 +103,14 @@ class LogBuffer(logging.Handler):
 
     def push_api(self, method: str, path: str, status: int, duration_ms: float,
                  client: str = ""):
-        level = "INFO" if status < 400 else ("WARNING" if status < 500 else "ERROR")
+        # Lesende Abfragen, die gelingen, sind Rauschen (die Oberfläche fragt
+        # laufend nach): Stufe DEBUG. Änderungen und Fehler sind Ereignisse.
+        if status >= 500:
+            level = "ERROR"
+        elif status >= 400:
+            level = "WARNING"
+        else:
+            level = "DEBUG" if method in ("GET", "HEAD") else "INFO"
         now = time.time()
         entry = {
             "ts": datetime.fromtimestamp(now).strftime("%H:%M:%S"),
@@ -112,18 +126,18 @@ class LogBuffer(logging.Handler):
         }
         self._push(entry)
 
-    def push_frontend(self, entries: list[dict]):
+    def push_frontend(self, entries: list["FrontendLogEntry"]):
         for e in entries:
             now = time.time()
-            entry = {
-                "ts": e.get("ts", datetime.fromtimestamp(now).strftime("%H:%M:%S")),
+            self._push({
+                "ts": datetime.fromtimestamp(now).strftime("%H:%M:%S"),
                 "epoch": round(now, 3),
-                "level": e.get("level", "INFO").upper(),
-                "name": e.get("source", "ui"),
-                "msg": e.get("msg", ""),
+                "level": e.level,
+                "name": e.source,
+                "msg": e.msg,
                 "cat": "frontend",
-            }
-            self._push(entry)
+                **({"trace": e.trace} if e.trace else {}),
+            })
 
     def push_event(self, cat: str, level: str, name: str, msg: str,
                    rate_key: str = None, rate_seconds: float = 0):
@@ -147,71 +161,26 @@ class LogBuffer(logging.Handler):
         self._push(entry)
 
     def _push(self, entry: dict):
-        """Schnell & synchron – nur deque-Append, kein I/O."""
+        """Schnell und synchron - nur deque-Append, kein I/O."""
         self._seq += 1
         entry["seq"] = self._seq
         self.buffer.append(entry)
-        if self.connections:
-            if len(self._pending) == self._pending.maxlen:
-                self._dropped += 1  # deque verwirft links – zählen statt schweigen
-            self._pending.append(entry)
 
-    def _drain_batch(self, limit: int = 100) -> list[dict]:
-        """Nächsten Sende-Batch entnehmen. Gab es Überlauf, wird ein
-        Warn-Marker vorangestellt („N Einträge übersprungen") statt die
-        Lücke zu verschweigen."""
-        batch: list[dict] = []
-        if self._dropped:
-            n, self._dropped = self._dropped, 0
-            self._seq += 1
-            marker = {
-                "ts": datetime.now().strftime("%H:%M:%S"),
-                "epoch": round(time.time(), 3),
-                "level": "WARNING",
-                "name": "logbuffer",
-                "msg": f"{n} Log-Einträge übersprungen (Sende-Puffer voll)",
-                "cat": "system",
-                "seq": self._seq,
-            }
-            self.buffer.append(marker)
-            batch.append(marker)
-        while self._pending and len(batch) < limit:
-            batch.append(self._pending.popleft())
-        return batch
-
-    async def _flush_loop(self):
-        """Alle 250ms ausstehende Einträge gebatcht per WS senden."""
-        import asyncio
-        while True:
-            await asyncio.sleep(0.25)
-            if not self.connections or (not self._pending and not self._dropped):
-                continue
-            batch = self._drain_batch(limit=100)
-            if not batch:
-                continue
-            dead = []
-            for ws in self.connections:
-                try:
-                    for entry in batch:
-                        await ws.send_json(entry)
-                except Exception:
-                    dead.append(ws)
-            for ws in dead:
-                if ws in self.connections:
-                    self.connections.remove(ws)
+    def entries_after(self, after: int, limit: int) -> tuple[list[dict], int]:
+        """Höchstens limit Einträge mit seq > after, dazu die Anzahl, die
+        dazwischen schon aus dem Ring gefallen ist (Lücke)."""
+        if not self.buffer:
+            return [], 0
+        first = self.buffer[0]["seq"]
+        gap = max(0, first - after - 1)
+        start = max(0, after + 1 - first)          # seq ist im Ring lückenlos
+        return list(itertools.islice(self.buffer, start, start + limit)), gap
 
     def get_history(self, n: int = 200, cat: str = None) -> list[dict]:
         items = list(self.buffer)
         if cat:
             items = [e for e in items if e.get("cat") == cat]
         return items[-n:]
-
-    def set_loop(self, loop):
-        self._loop = loop
-        # Flush-Loop starten
-        if self._flush_task is None or self._flush_task.done():
-            import asyncio
-            self._flush_task = asyncio.ensure_future(self._flush_loop())
 
 
 log_buffer = LogBuffer()
@@ -238,32 +207,6 @@ for _noisy in ("uvicorn", "uvicorn.access", "uvicorn.error",
 async def get_logs(n: int = Query(500, ge=1, le=5000), cat: str = Query(None)):
     """Letzte N Log-Einträge aus dem Ring-Buffer. Optional nach Kategorie filtern."""
     return {"logs": log_buffer.get_history(n, cat)}
-
-
-@router.get("/logs/docker")
-async def get_docker_logs(service: str = Query("backend"), n: int = Query(200, ge=1, le=2000)):
-    """Echte Docker-Container-Logs lesen (stdout/stderr vom aktuellen Prozess)."""
-    import subprocess
-    logs = []
-    try:
-        # Im Container: /proc/1/fd/1 = stdout, /proc/1/fd/2 = stderr
-        # Alternativ: einfach aus dem Python-Logging-Buffer
-        if service == "backend":
-            # Backend-Logs aus Ring-Buffer (enthält alle Python-Logs)
-            items = log_buffer.get_history(n, "backend")
-            logs = items
-        elif service == "api":
-            items = log_buffer.get_history(n, "api")
-            logs = items
-        elif service == "frontend":
-            items = log_buffer.get_history(n, "frontend")
-            logs = items
-        else:
-            # Alle Logs
-            logs = log_buffer.get_history(n)
-    except Exception as e:
-        return {"logs": [], "error": str(e)}
-    return {"logs": logs, "total": len(logs)}
 
 
 def compute_log_stats(entries: list[dict], now: float = None) -> dict:
@@ -299,34 +242,66 @@ async def get_log_stats():
     return compute_log_stats(list(log_buffer.buffer))
 
 
+class FrontendLogEntry(BaseModel):
+    """Eine Meldung aus dem Browser (lib/utils/frontendLog.js); Zeit setzt der Server."""
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    source: str = Field("ui", max_length=40)
+    msg: str = Field(..., max_length=2000)
+    trace: Optional[str] = Field(None, max_length=8000)
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def _level(cls, value):
+        value = str(value or "INFO").upper()
+        return {"WARN": "WARNING", "LOG": "INFO", "CRITICAL": "ERROR"}.get(value, value)
+
+
 @router.post("/logs/frontend")
-async def push_frontend_logs(entries: list[dict]):
-    """Frontend-Console-Logs empfangen und in den Buffer einfügen."""
-    log_buffer.push_frontend(entries[:50])  # Max 50 pro Batch
-    return {"received": len(entries)}
+async def push_frontend_logs(entries: list[FrontendLogEntry] = Body(..., max_length=50)):
+    """Meldungen aus dem Browser in den Ring übernehmen (höchstens 50 je Aufruf)."""
+    log_buffer.push_frontend(entries)
+    return {"accepted": len(entries)}
 
 
 @router.websocket("/ws/logs")
-async def logs_websocket(websocket: WebSocket):
-    """WebSocket: Live-Log-Stream."""
-    import asyncio
+async def logs_websocket(websocket: WebSocket, boot: str = "", after: int = 0):
+    """Live-Log-Stream mit eigenem Lesezeiger je Verbindung. Der Client meldet
+    beim Verbinden, was er schon hat (boot, after); gesendet werden Rahmen
+    {boot, entries, gap, restarted}: gap zählt Einträge, die inzwischen aus
+    dem Ring gefallen sind, restarted heißt: neuer Prozess, von vorn beginnen."""
     await websocket.accept()
-    log_buffer.set_loop(asyncio.get_event_loop())
-    log_buffer.connections.append(websocket)
+    same_process = boot == log_buffer.boot
+    cursor = after if same_process else max(0, log_buffer.last_seq - LOG_HISTORY)
+    if not same_process and log_buffer.buffer:
+        cursor = max(cursor, log_buffer.buffer[0]["seq"] - 1)   # Verlauf ist kein Verlust
+    sender = asyncio.create_task(_stream_logs(websocket, cursor, restarted=bool(boot) and not same_process))
     try:
-        # History senden
-        for entry in log_buffer.get_history(100):
-            await websocket.send_json(entry)
-        # Keepalive
         while True:
-            msg = await websocket.receive_text()
-            if msg == "ping":
+            if await websocket.receive_text() == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         pass
     finally:
-        if websocket in log_buffer.connections:
-            log_buffer.connections.remove(websocket)
+        sender.cancel()
+
+
+async def _stream_logs(websocket: WebSocket, cursor: int, restarted: bool) -> None:
+    first = True
+    try:
+        while True:
+            entries, gap = log_buffer.entries_after(cursor, LOG_FRAME_LIMIT)
+            if entries or gap or first:
+                frame = {"boot": log_buffer.boot, "entries": entries, "gap": gap}
+                if first and restarted:
+                    frame["restarted"] = True
+                await websocket.send_json(frame)
+                first = False
+                if entries:
+                    cursor = entries[-1]["seq"]
+            if len(entries) < LOG_FRAME_LIMIT:
+                await asyncio.sleep(0.25)
+    except (WebSocketDisconnect, RuntimeError):
+        pass     # Verbindung zu; der Empfänger beendet sich selbst
 
 
 @router.get("/health")

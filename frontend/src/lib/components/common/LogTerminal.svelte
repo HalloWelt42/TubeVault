@@ -1,58 +1,28 @@
 <!--
-  TubeVault – LogTerminal v2.0.0
+  TubeVault – LogTerminal v3.0.0
   Live-Log + Job-Monitor. Jobs-Tab zeigt aktive Jobs mit Kill-Button.
-  v2: seq-Dedup nach Reconnect, aufklappbare Tracebacks, Tageswechsel-Marker,
-  Pause-Puffer mit Überlauf-Meldung statt stillem Verwerfen.
+  Verbindung, Lesezeiger, Pause und Neustart-Erkennung: stores/liveLog.svelte.js;
+  Meldungen des Browsers kommen über lib/utils/frontendLog.js (immer aktiv).
+  Aufklappbare Tracebacks, Tageswechsel-Marker.
   © HalloWelt42 – Private Nutzung
 -->
 <script>
-  import { api, wsBaseUrl } from '../../api/client.js';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
+  import { liveLog } from '../../stores/liveLog.svelte.js';
 
   let { visible = $bindable(false) } = $props();
 
-  let logs = $state([]);
-  let ws = null;
-  let reconnectTimer = null;
   let autoScroll = $state(true);
   let logContainer = $state(null);
-  let filterLevel = $state('ALL');
+  let filterLevel = $state('INFO');      // gelingende Abfragen (DEBUG) erst auf Wunsch
   let activeTab = $state('tasks');
   let searchQuery = $state('');
-  let wsConnected = $state(false);
   let useRegex = $state(false);
-  let paused = $state(false);
-  let pauseBuffer = [];
-  let pauseSkipped = 0;          // bei vollem Pause-Puffer verworfene Einträge
-  let lastSeq = 0;               // höchste gesehene Backend-seq (Reconnect-Dedup)
-  let localSeq = 0;              // Zähler für lokal erzeugte Einträge
-  let expanded = $state(new Set()); // aufgeklappte Tracebacks (per seq)
+  let expanded = $state(new Set()); // aufgeklappte Tracebacks (per key)
 
-  const MAX_LOGS = 2500;
-  const MAX_PAUSE = 2000;
-
-  // Ein Eintrag, der im Browser entsteht (Console, Fehler, Marker).
-  // seq bekommt ein 'L'-Präfix, damit er nie mit Backend-seq kollidiert.
-  function makeLocalEntry(level, name, msg) {
-    return {
-      ts: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      epoch: Date.now() / 1000,
-      seq: 'L' + (++localSeq),
-      level, name, msg, cat: 'frontend',
-    };
-  }
-
-  // Zentraler Anfüge-Pfad für ALLE Einträge (WS, Console, Fehler):
-  // respektiert Pause (mit gezählter Überlauf-Verwerfung) und Auto-Scroll.
-  function pushEntry(entry) {
-    if (paused) {
-      pauseBuffer.push(entry);
-      if (pauseBuffer.length > MAX_PAUSE) { pauseBuffer.shift(); pauseSkipped++; }
-      return;
-    }
-    logs = [...logs.slice(-(MAX_LOGS - 1)), entry];
-    scrollIfNeeded();
-  }
+  let logs = $derived(liveLog.entries);
+  let wsConnected = $derived(liveLog.connected);
+  let paused = $derived(liveLog.paused);
 
   // Window Position & Size
   let winX = $state(60);
@@ -72,11 +42,6 @@
   let resizeStartY = 0;
   let resizeStartW = 0;
   let resizeStartH = 0;
-
-  // Frontend Console-Capture
-  let origConsole = {};
-  let frontendBuffer = [];
-  let flushTimer = null;
 
   // Jobs & Cron-Tasks
   let tasks = $state([]);
@@ -196,49 +161,6 @@
     return p != null ? `${Math.round(p * 100)}%` : '';
   }
 
-  // ─── WebSocket ───
-  function connect() {
-    if (ws) return;
-    ws = new WebSocket(`${wsBaseUrl()}/api/system/ws/logs`);
-
-    ws.onopen = () => { wsConnected = true; };
-    ws.onmessage = (e) => {
-      if (e.data === 'pong') return;
-      try {
-        const entry = JSON.parse(e.data);
-        if (!entry.cat) entry.cat = 'backend';
-        if (typeof entry.seq === 'number') {
-          // Backend spielt beim (Re-)Connect die letzten Einträge erneut ein –
-          // ohne Dedup standen sie doppelt im Terminal („zeigt immer dasselbe").
-          if (entry.seq <= lastSeq) return;
-          if (lastSeq > 0 && entry.seq > lastSeq + 1) {
-            const missed = entry.seq - lastSeq - 1;
-            pushEntry(makeLocalEntry('WARNING', 'terminal',
-              `${missed} Einträge verpasst (Verbindung war getrennt)`));
-          }
-          lastSeq = entry.seq;
-        }
-        // Eigene Console-Einträge kommen als WS-Echo zurück (POST /logs/frontend
-        // → Buffer → Broadcast). Lokal sind sie schon angezeigt → Echo skippen,
-        // sonst steht jede Console-Zeile doppelt da.
-        if (entry.cat === 'frontend' && entry.name === 'console') return;
-        pushEntry(entry);
-      } catch {}
-    };
-    ws.onclose = () => {
-      ws = null;
-      wsConnected = false;
-      if (visible) reconnectTimer = setTimeout(connect, 3000);
-    };
-    ws.onerror = () => ws?.close();
-  }
-
-  function disconnect() {
-    clearTimeout(reconnectTimer);
-    if (ws) { ws.close(); ws = null; }
-    wsConnected = false;
-  }
-
   function scrollIfNeeded() {
     if (autoScroll && logContainer) {
       requestAnimationFrame(() => {
@@ -248,75 +170,8 @@
   }
 
   function togglePause() {
-    paused = !paused;
-    if (!paused && (pauseBuffer.length > 0 || pauseSkipped > 0)) {
-      // Überlauf sichtbar machen statt still zu verschlucken
-      const marker = pauseSkipped > 0
-        ? [makeLocalEntry('WARNING', 'terminal', `${pauseSkipped} Einträge übersprungen (Pause-Puffer voll)`)]
-        : [];
-      logs = [...logs, ...marker, ...pauseBuffer].slice(-MAX_LOGS);
-      pauseBuffer = [];
-      pauseSkipped = 0;
-      scrollIfNeeded();
-    }
-  }
-
-  // ─── Frontend Console Capture ───
-  function startConsoleCapture() {
-    if (origConsole.log) return;
-    ['log', 'warn', 'error', 'info'].forEach(method => {
-      origConsole[method] = console[method];
-      console[method] = (...args) => {
-        origConsole[method]?.apply(console, args);
-        const msg = args.map(a =>
-          typeof a === 'object' ? JSON.stringify(a) : String(a)
-        ).join(' ');
-        if (msg.includes('[LogTerminal]')) return;
-        const levelMap = { log: 'INFO', info: 'INFO', warn: 'WARNING', error: 'ERROR' };
-        const entry = makeLocalEntry(levelMap[method] || 'INFO', 'console', msg.substring(0, 500));
-        pushEntry(entry);
-        frontendBuffer.push({ ts: entry.ts, level: entry.level, source: 'console', msg: entry.msg });
-        scheduleFlush();
-      };
-    });
-    window.addEventListener('error', onWindowError);
-    window.addEventListener('unhandledrejection', onUnhandledRejection);
-  }
-
-  function stopConsoleCapture() {
-    Object.entries(origConsole).forEach(([method, fn]) => {
-      if (fn) console[method] = fn;
-    });
-    origConsole = {};
-    window.removeEventListener('error', onWindowError);
-    window.removeEventListener('unhandledrejection', onUnhandledRejection);
-    clearTimeout(flushTimer);
-  }
-
-  function onWindowError(e) {
-    pushEntry(makeLocalEntry('ERROR', 'window', `${e.message} (${e.filename}:${e.lineno})`));
-  }
-
-  function onUnhandledRejection(e) {
-    pushEntry(makeLocalEntry('ERROR', 'promise', `Unhandled: ${e.reason?.message || e.reason || 'unknown'}`));
-  }
-
-  function scheduleFlush() {
-    if (flushTimer) return;
-    flushTimer = setTimeout(flushFrontendLogs, 2000);
-  }
-
-  async function flushFrontendLogs() {
-    flushTimer = null;
-    if (frontendBuffer.length === 0) return;
-    const batch = frontendBuffer.splice(0, 50);
-    try {
-      await fetch(`${api.baseUrl}/api/system/logs/frontend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(batch),
-      });
-    } catch { /* silent */ }
+    liveLog.togglePause();
+    scrollIfNeeded();
   }
 
   // ─── Drag/Resize ───
@@ -362,7 +217,7 @@
     if (scrollHeight - scrollTop - clientHeight > 50) autoScroll = false;
   }
 
-  function clearLogs() { logs = []; expanded = new Set(); }
+  function clearLogs() { liveLog.clear(); expanded = new Set(); }
 
   // ─── Traceback auf/zu ───
   function toggleTrace(key) {
@@ -373,8 +228,7 @@
 
   // ─── Datum (Anzeige bleibt HH:MM:SS, Datum nur bei Tageswechsel/Tooltip) ───
   function dayChanged(a, b) {
-    if (!a?.epoch || !b?.epoch) return false;
-    return new Date(a.epoch * 1000).toDateString() !== new Date(b.epoch * 1000).toDateString();
+    return !!a?.day && !!b?.day && a.day !== b.day;
   }
   function dayLabel(e) {
     return new Date(e.epoch * 1000).toLocaleDateString('de-DE',
@@ -400,13 +254,17 @@
   // ─── Effects ───
   $effect(() => {
     if (visible) {
-      connect();
-      startConsoleCapture();
+      liveLog.open();
       fetch('/api/jobs/active').then(r => r.ok ? r.json() : []).then(j => jobs = j).catch(() => {});
     } else {
-      disconnect();
-      stopConsoleCapture();
+      liveLog.close();
     }
+  });
+
+  // Neue Einträge: ans Ende rollen, wenn Auto-Scroll an ist
+  $effect(() => {
+    liveLog.entries;
+    untrack(scrollIfNeeded);
   });
 
   $effect(() => {
@@ -425,8 +283,7 @@
   });
 
   onDestroy(() => {
-    disconnect();
-    stopConsoleCapture();
+    liveLog.close();
     document.removeEventListener('mousemove', onDragMove);
     document.removeEventListener('mouseup', onDragEnd);
   });
@@ -445,7 +302,7 @@
       <span>TubeVault</span>
       <span class="lt-ws-dot" class:connected={wsConnected} title={wsConnected ? 'Verbunden' : 'Getrennt'}></span>
       {#if paused}
-        <span class="lt-paused-badge">PAUSED ({pauseBuffer.length})</span>
+        <span class="lt-paused-badge">Angehalten ({liveLog.held})</span>
       {/if}
     </div>
     <div class="lt-controls">
@@ -593,7 +450,7 @@
     {:else}
     <!-- ═══ LOG CONTENT ═══ -->
     <div class="lt-body" bind:this={logContainer} onscroll={handleScroll}>
-      {#each displayLogs as entry, i (entry.seq ?? i)}
+      {#each displayLogs as entry, i (entry.key)}
         {#if i > 0 && dayChanged(displayLogs[i - 1], entry)}
           <div class="lt-day-marker">{dayLabel(entry)}</div>
         {/if}
@@ -603,7 +460,7 @@
              class:is-warn={entry.level === 'WARNING'}
              class:is-debug={entry.level === 'DEBUG'}
              class:has-trace={!!entry.trace}
-             onclick={entry.trace ? () => toggleTrace(entry.seq ?? i) : undefined}>
+             onclick={entry.trace ? () => toggleTrace(entry.key) : undefined}>
           <span class="lt-ts" title={fullDate(entry)}>{entry.ts}</span>
           <span class="lt-cat" style="color: {catColors[entry.cat] || '#8b949e'}"
                 title="{entry.cat}">{catLabels[entry.cat] || entry.cat?.substring(0,3).toUpperCase()}</span>
@@ -611,10 +468,10 @@
           <span class="lt-name">{entry.name}</span>
           <span class="lt-msg">{entry.msg}</span>
           {#if entry.trace}
-            <i class="fa-solid fa-chevron-{expanded.has(entry.seq ?? i) ? 'up' : 'down'} lt-trace-chev"></i>
+            <i class="fa-solid fa-chevron-{expanded.has(entry.key) ? 'up' : 'down'} lt-trace-chev"></i>
           {/if}
         </div>
-        {#if entry.trace && expanded.has(entry.seq ?? i)}
+        {#if entry.trace && expanded.has(entry.key)}
           <pre class="lt-trace">{entry.trace}</pre>
         {/if}
       {/each}

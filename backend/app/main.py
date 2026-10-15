@@ -320,7 +320,7 @@ from starlette.requests import Request as StarletteRequest
 _LOG_SKIP = {"/api/system/health", "/api/system/badges", "/api/system/ws/logs",
              "/api/system/ws/progress", "/api/downloads/ws/progress",
              "/api/system/tasks", "/api/jobs/active", "/api/jobs/stats",
-             "/api/jobs/ws"}
+             "/api/jobs/ws", "/api/system/logs/frontend"}
 _LOG_SKIP_PREFIXES = ("/thumbnails/", "/avatars/", "/subtitles/", "/api/player/")
 
 
@@ -330,12 +330,20 @@ class APIAccessLogMiddleware(BaseHTTPMiddleware):
         # Skip noise
         if path in _LOG_SKIP or any(path.startswith(p) for p in _LOG_SKIP_PREFIXES):
             return await call_next(request)
+        from app.routers.system import log_buffer
         start = _time.time()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Unbehandelter Fehler: sonst sähe ihn nur die Konsole des Servers
+            # (uvicorn protokolliert an der Wurzel vorbei), nie das Live-Log
+            logging.getLogger("api").exception(f"Unbehandelter Fehler bei {request.method} {path}")
+            log_buffer.push_api(request.method, path, 500, (_time.time() - start) * 1000,
+                                client=request.client.host if request.client else "")
+            raise
         duration_ms = (_time.time() - start) * 1000
         # Nur /api/ Pfade loggen
         if path.startswith("/api/"):
-            from app.routers.system import log_buffer
             log_buffer.push_api(
                 method=request.method,
                 path=path,
@@ -349,12 +357,6 @@ class APIAccessLogMiddleware(BaseHTTPMiddleware):
                     cat="api", level="WARNING", name="slow-req",
                     msg=f"SLOW {request.method} {path} → {duration_ms:.0f}ms",
                     rate_key=f"slow:{path}", rate_seconds=10,
-                )
-            # Timeout/Error Warnung (5xx)
-            if response.status_code >= 500:
-                log_buffer.push_event(
-                    cat="api", level="ERROR", name="api-error",
-                    msg=f"{response.status_code} {request.method} {path} ({duration_ms:.0f}ms)",
                 )
         return response
 

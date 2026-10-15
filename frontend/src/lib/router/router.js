@@ -8,6 +8,7 @@
 import { activeScrollRoot } from '../utils/scrollRoot.js';
 import { writable, derived, get } from 'svelte/store';
 import { routeDefinitions, resolveRouteKey } from './routes.js';
+import { log } from '../utils/frontendLog.js';
 
 // ─── State ───────────────────────────────────────────────
 
@@ -17,8 +18,6 @@ const MAX_HISTORY = 50;
 
 /** Log-Buffer — wird periodisch ans Backend gesendet. Muss vor dem ersten
  *  Parsen stehen: eine unbekannte Adresse beim Start schreibt schon hinein. */
-const _logBuffer = [];
-let _logTimer = null;
 
 /** Kompletter Router-State: { page, id, params, path, fullUrl } */
 export const route = writable(parseCurrentUrl());
@@ -273,17 +272,7 @@ window.addEventListener('popstate', () => {
  * Route-Fehler loggen (Frontend-Log + Konsole).
  */
 function _logRouteError(type, url, message) {
-  const entry = {
-    ts: new Date().toISOString(),
-    level: 'warn',
-    cat: 'router',
-    type,
-    url,
-    msg: message,
-  };
-  console.warn(`[Router] ${message} → ${url}`);
-  _logBuffer.push(entry);
-  _scheduleLogFlush();
+  log.warn('router', `${message} → ${url}`);
 }
 
 /**
@@ -300,27 +289,6 @@ function _pushHistory(from, to, replace, trigger = 'navigate') {
   if (_history.length > MAX_HISTORY) _history.shift();
 }
 
-/**
- * Log-Buffer ans Backend senden (gebündelt alle 5s).
- */
-function _scheduleLogFlush() {
-  if (_logTimer) return;
-  _logTimer = setTimeout(async () => {
-    _logTimer = null;
-    if (_logBuffer.length === 0) return;
-    const entries = _logBuffer.splice(0, _logBuffer.length);
-    try {
-      await fetch('/api/system/logs/frontend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entries),
-      });
-    } catch {
-      // Silently fail — nicht blockieren
-    }
-  }, 5000);
-}
-
 // ─── Debug / Konsole ─────────────────────────────────────
 
 /**
@@ -333,7 +301,6 @@ export function debugRouter() {
   console.log('Aktuelle Route:', current);
   console.log('Navigations-Verlauf (letzte 50):');
   console.table(_history.slice(-20));
-  console.log('Ausstehende Log-Einträge:', _logBuffer.length);
   console.groupEnd();
   return { current, history: [..._history] };
 }

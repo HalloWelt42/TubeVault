@@ -14,5 +14,7 @@ import '../lib/styles/marken.css';
 import '../lib/styles/bausteine.css';
 import './mobile.css';
 import MobileApp from './MobileApp.svelte';
+import { startFrontendLog } from '../lib/utils/frontendLog.js';
 
+startFrontendLog();   // Warnungen und Fehler des Browsers ins Live-Log
 mount(MobileApp, { target: document.getElementById('app') });

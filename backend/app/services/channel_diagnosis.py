@@ -13,7 +13,7 @@ frei bleibt. Ersetzt die alte Dateiprüfung, die nur die ersten 100 Videos
 ansah und Vorschaubilder am falschen Ort suchte.
 """
 import asyncio
-from pathlib import Path
+import os
 from typing import Optional
 
 from pydantic import BaseModel
@@ -60,8 +60,16 @@ class ChannelDiagnosis(BaseModel):
 
 def _exists(path) -> bool:
     try:
-        return bool(path) and Path(path).exists()
+        return bool(path) and os.path.exists(path)
     except (OSError, ValueError):
+        return False
+
+
+def _has_subtitles(folder: str) -> bool:
+    """Ein Verzeichnis lesen statt glob: bei tausenden Videos spürbar schneller."""
+    try:
+        return any(name.endswith(".vtt") for name in os.listdir(folder))
+    except OSError:
         return False
 
 
@@ -82,8 +90,7 @@ def _count_files(rows: list) -> dict:
         if row["has_chapters"]:
             counts["chapters"].total += 1
             counts["chapters"].present += _exists(storage.text_file(video_id, "chapters"))
-        folder = SUBTITLES_DIR / video_id
-        subtitles += folder.is_dir() and any(folder.glob("*.vtt"))
+        subtitles += _has_subtitles(os.path.join(SUBTITLES_DIR, video_id))
     return {**counts, "subtitles": subtitles}
 
 
