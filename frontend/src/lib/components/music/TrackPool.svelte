@@ -1,6 +1,7 @@
 <!--
-  Titelquelle des Listen-Baukastens: alle Titel der gewählten Quelle (Videos
-  und Sammlung), durchsuchbar und seitenweise. Schnell in die Liste rechts:
+  Titelquelle des Listen-Baukastens: alle Titel aus Musikvideos und eigener
+  Sammlung (eigene Wahl, unabhängig von der Quelle der Musikseite),
+  durchsuchbar und seitenweise. Schnell in die Liste rechts:
   ziehen, doppelt klicken oder +. Klick wählt aus (Umschalt: von bis), dann
   wandert die ganze Auswahl auf einmal. Was schon in der Liste steht, ist
   markiert.
@@ -21,16 +22,18 @@
 
   const PAGE = 100;
   const SORTS = [['artist', 'Interpret'], ['title', 'Titel'], ['added', 'Neu']];
+  const SOURCES = [['alle', 'Alles'], ['videos', 'Musikvideos'], ['sammlung', 'Sammlung']];
   const DEBOUNCE_MS = 300;
 
   let query = $state('');
   let sort = $state('artist');
+  let source = $state('alle');
   let chosen = $state(new Set());
   let anchor = -1;                 // letzter Klick, für Umschalt-Klick
   let timer;
 
   const list = createListLoader(async (page) => {
-    const r = await api.musicTracks({ sort, q: query.trim(), offset: (page - 1) * PAGE, limit: PAGE });
+    const r = await api.musicTracks({ sort, source, q: query.trim(), offset: (page - 1) * PAGE, limit: PAGE });
     return { items: r.items, total: r.total };
   });
 
@@ -49,6 +52,11 @@
 
   function chooseSort(value) {
     sort = value;
+    reload();
+  }
+
+  function chooseSource(value) {
+    source = value;
     reload();
   }
 
@@ -89,10 +97,15 @@
     <h2>Alle Titel <span class="zahl tv-schwach">{list.total.toLocaleString('de-DE')}</span></h2>
     <input class="tv-eingabe" bind:value={query} oninput={onSearch} placeholder="Titel, Interpret, Album" />
     <div class="leiste">
+      {#each SOURCES as [value, label]}
+        <button class="tv-chip" class:aktiv={source === value} onclick={() => chooseSource(value)}>{label}</button>
+      {/each}
+      <span class="tv-trenner"></span>
       {#each SORTS as [value, label]}
         <button class="tv-chip" class:aktiv={sort === value} onclick={() => chooseSort(value)}>{label}</button>
       {/each}
-      <span class="tv-trenner"></span>
+    </div>
+    <div class="leiste">
       {#if chosen.size}
         <button class="tv-knopf haupt klein" onclick={() => add(picked)} disabled={!canAdd}>
           <i class="fa-solid fa-plus"></i> <span class="zahl">{chosen.size}</span> hinzufügen</button>

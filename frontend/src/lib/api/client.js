@@ -495,9 +495,11 @@ export const api = {
 
   // ── Musik ──
   musicOverview: () => request('/api/music/overview'),
-  musicTracks: ({ sort = 'added', q = '', favorites = false, offset = 0, limit = 100 } = {}) => {
+  // source: statt der gewählten Quelle (alle | sammlung | videos)
+  musicTracks: ({ sort = 'added', q = '', favorites = false, offset = 0, limit = 100, source = null } = {}) => {
     const params = new URLSearchParams({ sort, offset, limit });
     if (q) params.set('q', q);
+    if (source) params.set('source', source);
     if (favorites) params.set('favorites', 'true');
     return request(`/api/music/tracks?${params}`);
   },

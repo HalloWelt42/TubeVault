@@ -147,9 +147,10 @@ async def source_setting() -> str:
     return await setting_values.get(MUSIC_SOURCE)
 
 
-async def tracks() -> list[Track]:
-    """Alle Musiktitel der gewählten Quellen (neueste zuerst)."""
-    source = await source_setting()
+async def tracks(source: Optional[str] = None) -> list[Track]:
+    """Alle Musiktitel einer Quelle (alle, sammlung, videos), neueste zuerst;
+    ohne Angabe die gewählte (music.source)."""
+    source = source or await source_setting()
     videos = await video_tracks() if source != "sammlung" else []
     every_file = await music_files.all_files(visible_only=False) if source != "videos" else []
     files = [file_track(f) for f in every_file if not f.hidden]
@@ -238,6 +239,11 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     title = SOURCE_TITLES.get(kind, "Musik")
     if kind == "hoerbuch":
         return await _audiobook(source, value, start)
+    if kind == "playlist":
+        ids = await playlist_items.entries(_list_id(value))
+        by_id = await _list_tracks(ids)
+        title = await db.fetch_val("SELECT name FROM playlists WHERE id = ?", (value,)) or "Wiedergabeliste"
+        return _arranged(source, title, [by_id[i] for i in ids if i in by_id], shuffle, start)
     if kind == "sammlung":
         from app.services import collections
         collection = await collections.load(value)
@@ -266,11 +272,6 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
         chosen = sorted((t for t in items if t.last_played), key=SORTS["last_played"], reverse=True)[:200]
     elif kind == "forgotten":
         chosen = sorted(items, key=lambda t: t.last_played or "")[:200]
-    elif kind == "playlist":
-        ids = await playlist_items.entries(_list_id(value))
-        by_id = {t.id: t for t in items}
-        chosen = [by_id[i] for i in ids if i in by_id]
-        title = await db.fetch_val("SELECT name FROM playlists WHERE id = ?", (value,)) or "Wiedergabeliste"
     elif kind == "similar":
         chosen = await _similar(items, value)
         seed = next((t for t in items if t.id == value), None)
@@ -289,25 +290,35 @@ def _list_id(value: str) -> int:
 
 # ─── Wiedergabelisten der Musik ───────────────────────────────────────
 
+async def _list_tracks(ids: list[str]) -> dict[str, Track]:
+    """Titel einer Wiedergabeliste, gleich welche Quelle gewählt ist: eine Liste
+    spielt, was in ihr steht - geladene Videos (auch ohne Musik-Kennzeichen)
+    und sichtbare Dateien. Ausgeschlossene Alben bleiben auch hier draußen."""
+    wanted = set(ids)
+    found = {t.id: t for t in await tracks_of([i for i in ids if not music_files.is_file_id(i)])}
+    found.update({f.id: file_track(f) for f in await music_files.all_files() if f.id in wanted})
+    excluded = await music_exclusions.sources()
+    return {i: t for i, t in found.items() if t.album_source not in excluded}
+
+
 async def music_playlists() -> list[Group]:
     """Listen für die Musik: in der Musik angelegte (auch leere) und alle
     übrigen mit mindestens einem Musiktitel; zuletzt angelegte zuerst. Gezählt
-    wird, was davon in der Musik spielbar ist."""
-    by_id = {t.id: t for t in await tracks()}
-    members: dict[int, list[Track]] = defaultdict(list)
-    for row in await db.fetch_all(
-            """SELECT playlist_id, video_id AS id, position FROM playlist_videos
-               UNION ALL SELECT playlist_id, file_id AS id, position FROM playlist_files
-               ORDER BY playlist_id, position, id"""):
-        if row["id"] in by_id:
-            members[row["playlist_id"]].append(by_id[row["id"]])
+    wird alles, was die Liste spielt (_list_tracks)."""
+    with_music = {row["playlist_id"] for row in await db.fetch_all(
+        """SELECT DISTINCT p.playlist_id FROM playlist_videos p JOIN videos v ON v.id = p.video_id
+           WHERE v.is_music = 1 AND v.status = 'ready'
+           UNION SELECT DISTINCT playlist_id FROM playlist_files""")}
+    shown = [row for row in await db.fetch_all("SELECT id, name, source FROM playlists ORDER BY created_at DESC, id DESC")
+             if row["id"] in with_music or row["source"] == MUSIC_LIST]
+    entries = {row["id"]: await playlist_items.entries(row["id"]) for row in shown}
+    by_id = await _list_tracks([i for ids in entries.values() for i in ids])
     groups = []
-    for row in await db.fetch_all("SELECT id, name, source FROM playlists ORDER BY created_at DESC, id DESC"):
-        found = members.get(row["id"], [])
-        if found or row["source"] == MUSIC_LIST:
-            groups.append(Group(key=f"playlist:{row['id']}", name=row["name"], count=len(found),
-                                duration=sum(t.duration or 0 for t in found), covers=[t.id for t in found[:4]],
-                                kinds=sorted({t.kind for t in found})))
+    for row in shown:
+        found = [by_id[i] for i in entries[row["id"]] if i in by_id]
+        groups.append(Group(key=f"playlist:{row['id']}", name=row["name"], count=len(found),
+                            duration=sum(t.duration or 0 for t in found), covers=[t.id for t in found[:4]],
+                            kinds=sorted({t.kind for t in found})))
     return groups
 
 

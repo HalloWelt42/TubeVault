@@ -78,8 +78,10 @@ async def overview():
 @router.get("/tracks", response_model=TrackPage)
 async def track_list(sort: str = Query("added", pattern="^(added|title|artist|plays|duration|last_played)$"),
                      q: Optional[str] = None, favorites: bool = False,
-                     offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):
-    items = await music_library.tracks()
+                     offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
+                     source: Optional[str] = Query(None, pattern="^(alle|sammlung|videos)$")):
+    """source: statt der gewählten Quelle (z.B. der Listen-Baukasten: aus allem)."""
+    items = await music_library.tracks(source)
     if favorites:
         items = [t for t in items if t.favorite]
     if q:

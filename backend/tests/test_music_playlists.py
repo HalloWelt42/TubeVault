@@ -8,6 +8,8 @@ Kontrakt:
 - In der Musik angelegte Listen erscheinen sofort, auch leer; andere Listen
   nur, wenn Musik darin ist.
 - Abspielen, ZIP-Ausgabe und Kopieren nehmen Dateien mit.
+- Eine Liste spielt alles, was in ihr steht, gleich welche Quelle (Sammlung,
+  Videos) gewählt ist; der Baukasten holt seine Titel aus allen Quellen.
 """
 import pytest
 
@@ -77,3 +79,20 @@ async def test_zip_und_kopie_nehmen_dateien_mit(test_db, bestand, async_client_f
         assert added["video_count"] == 3
         assert (await client.post(f"/api/playlists/{list_id}/videos", json={"video_id": FILE_B})).status_code == 409
         assert (await client.delete(f"/api/playlists/{list_id}/videos/{FILE_A}")).json()["video_count"] == 2
+
+
+async def test_liste_spielt_unabhaengig_von_der_quelle(test_db, bestand, set_setting, async_client_factory):
+    """Auf dem Pi war "Eigene Sammlung" gewählt: Listen mit Musikvideos wirkten leer."""
+    list_id = await music_library.create_music_playlist("Gemischt")
+    await playlist_items.add(list_id, ["musikvideo1", FILE_A])
+    await set_setting("music.source", "sammlung")
+    assert [t.id for t in (await music_library.play_list(f"playlist:{list_id}")).tracks] == ["musikvideo1", FILE_A]
+    cursor = await test_db.execute("INSERT INTO playlists (name, source) VALUES ('Alt', 'manual')")
+    await playlist_items.add(cursor.lastrowid, ["musikvideo1"])
+    assert [(g.name, g.count) for g in await music_library.music_playlists()] == [("Alt", 1), ("Gemischt", 2)]
+
+    async with await async_client_factory(music.router) as client:
+        only_files = (await client.get("/api/music/tracks")).json()
+        everything = (await client.get("/api/music/tracks", params={"source": "alle"})).json()
+        assert (only_files["total"], everything["total"]) == (2, 3)
+        assert (await client.get("/api/music/tracks", params={"source": "quatsch"})).status_code == 422
