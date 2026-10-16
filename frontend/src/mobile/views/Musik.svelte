@@ -1,7 +1,9 @@
 <!--
   Musik (Mobil) nach mockups/mobil-musik.html: Quelle (Alle, Sammlung,
   Videos; gilt überall, auch für die Mixe), Weiterhören des zuletzt
-  gehörten Hörbuchs, Mixe und die Bereiche Interpreten, Alben, Kanäle und
+  gehörten Hörbuchs, Mixe und die Bereiche Interpreten, Playlisten (die
+  Wiedergabelisten der Musik, am Rechner im Listen-Baukasten gebaut; der
+  Reiter "Listen" unten spielt Playlists als Videos), Alben, Kanäle und
   Hörbücher als Raster. Eine Kachel öffnet ihre Titel (?quelle=), die Lupe
   sucht in der Musik (?suche=1), Ausgeblendetes holt ?ausgeblendet=1 zurück;
   alles liegt über der Übersicht, die so ihre Stelle behält. Ein geöffnetes
@@ -37,6 +39,7 @@
   ];
   const AREAS = [
     { id: 'interpreten', label: 'Interpreten', count: 'artists', load: () => api.musicArtists() },
+    { id: 'playlisten', label: 'Playlisten', count: 'playlists', load: () => api.musicPlaylists() },
     { id: 'alben', label: 'Alben', count: 'albums', load: () => api.musicAlbums() },
     { id: 'kanaele', label: 'Kanäle', count: 'channels', load: () => api.musicChannels() },
     { id: 'hoerbuecher', label: 'Hörbücher', count: 'books', load: () => api.musicBooks() },
@@ -441,7 +444,8 @@
            background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--m-accent); font-size: 15px; }
   .mix:active { background: var(--tv-karte-2); }
 
-  .bereiche { display: grid; grid-template-columns: repeat(var(--anzahl), 1fr); gap: 4px; }
+  /* Bis zu drei je Zeile, sonst eine zweite: Namen bleiben lesbar, nichts rollt seitlich */
+  .bereiche { display: grid; grid-template-columns: repeat(min(var(--anzahl), 3), 1fr); gap: 4px; }
   .bereiche button { min-height: 44px; padding: 0 2px; border-radius: var(--tv-ecke-klein); background: var(--m-surface);
                      color: var(--m-dim); font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bereiche button.an { background: rgba(var(--tv-akzent-rgb), 0.14); color: var(--m-accent); }

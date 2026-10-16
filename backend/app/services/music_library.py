@@ -301,16 +301,25 @@ async def _list_tracks(ids: list[str]) -> dict[str, Track]:
     return {i: t for i, t in found.items() if t.album_source not in excluded}
 
 
-async def music_playlists() -> list[Group]:
+async def _music_list_rows() -> list:
     """Listen für die Musik: in der Musik angelegte (auch leere) und alle
-    übrigen mit mindestens einem Musiktitel; zuletzt angelegte zuerst. Gezählt
-    wird alles, was die Liste spielt (_list_tracks)."""
+    übrigen mit mindestens einem Musiktitel; zuletzt angelegte zuerst."""
     with_music = {row["playlist_id"] for row in await db.fetch_all(
         """SELECT DISTINCT p.playlist_id FROM playlist_videos p JOIN videos v ON v.id = p.video_id
            WHERE v.is_music = 1 AND v.status = 'ready'
            UNION SELECT DISTINCT playlist_id FROM playlist_files""")}
-    shown = [row for row in await db.fetch_all("SELECT id, name, source FROM playlists ORDER BY created_at DESC, id DESC")
-             if row["id"] in with_music or row["source"] == MUSIC_LIST]
+    return [row for row in await db.fetch_all("SELECT id, name, source FROM playlists ORDER BY created_at DESC, id DESC")
+            if row["id"] in with_music or row["source"] == MUSIC_LIST]
+
+
+async def music_playlist_count() -> int:
+    return len(await _music_list_rows())
+
+
+async def music_playlists() -> list[Group]:
+    """Die Listen der Musik (_music_list_rows) als Gruppen. Gezählt wird alles,
+    was die Liste spielt (_list_tracks)."""
+    shown = await _music_list_rows()
     entries = {row["id"]: await playlist_items.entries(row["id"]) for row in shown}
     by_id = await _list_tracks([i for ids in entries.values() for i in ids])
     groups = []

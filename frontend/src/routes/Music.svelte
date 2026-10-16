@@ -39,7 +39,7 @@
     { id: 'interpreten', label: 'Interpreten', icon: 'fa-microphone', count: 'artists' },
     { id: 'alben', label: 'Alben', icon: 'fa-compact-disc', count: 'albums' },
     { id: 'lieblingssongs', label: 'Lieblingssongs', icon: 'fa-heart', count: 'favorites' },
-    { id: 'wiedergabelisten', label: 'Wiedergabelisten', icon: 'fa-list-ul' },
+    { id: 'wiedergabelisten', label: 'Wiedergabelisten', icon: 'fa-list-ul', count: 'playlists' },
     { id: 'verlauf', label: 'Verlauf', icon: 'fa-clock-rotate-left' },
     { id: 'kanaele', label: 'Musikkanäle', icon: 'fa-tv', count: 'channels' },
     { id: 'hoerbuecher', label: 'Hörbücher', icon: 'fa-book-open', count: 'books', onlyWithCount: true },

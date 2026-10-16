@@ -32,6 +32,7 @@ class Counts(BaseModel):
     duration: int
     books: int = 0                   # Hörbücher (eigener Bereich, nie in der Musik)
     hidden: int = 0                  # ausgeblendete Dateien und ausgeschlossene Alben
+    playlists: int = 0               # Wiedergabelisten der Musik
 
 
 class SourceCounts(BaseModel):
@@ -68,7 +69,8 @@ async def overview():
         counts=Counts(tracks=len(items), artists=len(artists), albums=len(albums), channels=len(channels),
                       favorites=sum(1 for t in items if t.favorite), duration=sum(t.duration or 0 for t in items),
                       books=len(await audiobooks.books()),
-                      hidden=await music_files.hidden_count() + await music_exclusions.total()),
+                      hidden=await music_files.hidden_count() + await music_exclusions.total(),
+                      playlists=await music_library.music_playlist_count()),
         artists=sorted(artists, key=lambda g: g.count, reverse=True)[:12],
         new=items[:12],
         often=sorted((t for t in items if t.play_count), key=lambda t: t.play_count, reverse=True)[:10],

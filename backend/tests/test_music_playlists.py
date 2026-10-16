@@ -90,6 +90,7 @@ async def test_liste_spielt_unabhaengig_von_der_quelle(test_db, bestand, set_set
     cursor = await test_db.execute("INSERT INTO playlists (name, source) VALUES ('Alt', 'manual')")
     await playlist_items.add(cursor.lastrowid, ["musikvideo1"])
     assert [(g.name, g.count) for g in await music_library.music_playlists()] == [("Alt", 1), ("Gemischt", 2)]
+    assert (await music.overview()).counts.playlists == 2
 
     async with await async_client_factory(music.router) as client:
         only_files = (await client.get("/api/music/tracks")).json()
