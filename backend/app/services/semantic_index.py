@@ -263,6 +263,11 @@ async def index_batch(url: str, model: str) -> int:
     return len(ids)
 
 
+async def mark_dirty(video_id: str) -> None:
+    """Ein Video neu einbetten (z.B. nach geänderter Beschreibungsdatei)."""
+    await db.execute("INSERT OR IGNORE INTO semantic_dirty (video_id) VALUES (?)", (video_id,))
+
+
 async def mark_missing() -> None:
     """Videos ohne Vektor (oder mit Vektor eines anderen Modells) vormerken."""
     cfg = await config()

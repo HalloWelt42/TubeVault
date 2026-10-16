@@ -105,5 +105,9 @@ async def metadata_from_source(video_id: str) -> dict:
     await db.execute(
         f"UPDATE videos SET {', '.join(f'{key} = ?' for key in updates)} WHERE id = ?",
         (*updates.values(), video_id))
+    # Inhalte als Datei mitziehen: sonst zeigte die (zuerst gelesene) alte
+    # Beschreibungsdatei weiter den alten Text, und info.json bliebe veraltet
+    from app.services import content_files
+    await content_files.write_for(video_id)
     logger.info(f"Angaben von der Quelle übernommen für {video_id}: {list(updates)}")
     return {"status": "ok", "updated_fields": list(updates), "title": updates.get("title")}

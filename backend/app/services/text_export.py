@@ -99,12 +99,14 @@ async def _write_text_file(video_id: str, kind: str, content: str) -> dict:
 
 
 async def _note_search_change(video_id: str, kind: str) -> None:
-    """Die Beschreibungsdatei ist die Wahrheit für den Suchindex: nach jeder
-    Änderung das Video zum Nachziehen vormerken."""
+    """Die Beschreibungsdatei ist die Wahrheit für Suchindex und Bedeutungssuche:
+    nach jeder Änderung das Video für beide zum Nachziehen vormerken (die
+    Auslöser auf der Spalte greifen nicht, wenn nur die Datei sich ändert)."""
     if kind != "description":
         return
-    from app.services import search_index
+    from app.services import search_index, semantic_index
     await search_index.mark_dirty(video_id)
+    await semantic_index.mark_dirty(video_id)
 
 
 async def _delete_text_file(video_id: str, kind: str) -> bool:
