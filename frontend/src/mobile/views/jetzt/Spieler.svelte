@@ -10,6 +10,7 @@
   import { coverUrl, downloadUrl, isFile } from '../../../lib/utils/musicTrack.js';
   import { audioDetails, codecName, trackOrigin } from '../../../lib/utils/audioTech.js';
   import { toast } from '../../../lib/stores/notifications.js';
+  import { excludeAlbum, restoreHidden } from '../../../lib/utils/musicHiding.js';
   import { back, go } from '../../router.js';
   import Spur from '../../parts/Spur.svelte';
   import Lautstaerke from '../../parts/Lautstaerke.svelte';
@@ -65,6 +66,16 @@
     try {
       await player.removeFromList();
       toast.info(fromPlaylist ? 'Aus der Wiedergabeliste genommen' : 'Aus der Warteschlange genommen');
+    } catch (e) { toast.error(e.message); }
+  }
+
+  // Das ganze Album aus der Musik nehmen; es geht mit dem nächsten übrigen Titel weiter
+  async function excludeTrackAlbum() {
+    menu = false;
+    const album = track.album_source;
+    try {
+      const entry = await excludeAlbum(album);
+      toast.undo(`Album "${entry.name}" ausgeschlossen`, () => restoreHidden({ albums: [album] }).catch((e) => toast.error(e.message)));
     } catch (e) { toast.error(e.message); }
   }
 
@@ -151,6 +162,9 @@
         <button role="menuitem" onclick={asVideo}><i class="fa-solid fa-display"></i> Als Video ansehen</button>
       {/if}
       <a role="menuitem" href={downloadUrl(track)} download onclick={() => menu = false}><i class="fa-solid fa-download"></i> Ton herunterladen</a>
+      {#if track.album_source}
+        <button role="menuitem" onclick={excludeTrackAlbum}><i class="fa-solid fa-compact-disc"></i> Album ausschließen</button>
+      {/if}
       {#if isFile(track)}
         <button role="menuitem" class="gefahr" onclick={discardTrack}><i class="fa-solid fa-eye-slash"></i> Gefällt nicht: ausblenden</button>
       {:else}

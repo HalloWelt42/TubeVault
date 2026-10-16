@@ -3,7 +3,8 @@ TubeVault – Musik
 
 Übersicht, Titel, Interpreten, Alben, Musikkanäle und dynamische
 Wiedergabelisten für die Musikseite und den Musikspieler; dazu die eigenen
-Musikdateien (Abspielen, Cover, Liedtext, Wiedergaben, Lieblingssongs).
+Musikdateien (Abspielen, Cover, Liedtext, Wiedergaben, Lieblingssongs) und
+der Bereich "Ausgeblendet" (ausgeblendete Dateien, ausgeschlossene Alben).
 """
 from typing import Optional
 
@@ -12,7 +13,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from app.services import ad_free_export, audio_export, audiobooks, music_files, music_library
+from app.services import ad_free_export, audio_export, audiobooks, music_exclusions, music_files, music_library
 from app.utils.range_file import range_response
 from app.services.music_library import Group, PlayList, Track
 
@@ -27,6 +28,7 @@ class Counts(BaseModel):
     favorites: int
     duration: int
     books: int = 0                   # Hörbücher (eigener Bereich, nie in der Musik)
+    hidden: int = 0                  # ausgeblendete Dateien und ausgeschlossene Alben
 
 
 class SourceCounts(BaseModel):
@@ -62,7 +64,8 @@ async def overview():
                              sammlung=await music_files.count()),
         counts=Counts(tracks=len(items), artists=len(artists), albums=len(albums), channels=len(channels),
                       favorites=sum(1 for t in items if t.favorite), duration=sum(t.duration or 0 for t in items),
-                      books=len(await audiobooks.books())),
+                      books=len(await audiobooks.books()),
+                      hidden=await music_files.hidden_count() + await music_exclusions.total()),
         artists=sorted(artists, key=lambda g: g.count, reverse=True)[:12],
         new=items[:12],
         often=sorted((t for t in items if t.play_count), key=lambda t: t.play_count, reverse=True)[:10],
@@ -171,12 +174,6 @@ async def _file_or_404(item_id: str) -> music_files.FileInfo:
     return found
 
 
-@router.get("/files/hidden", response_model=list[music_files.FileInfo])
-async def files_hidden():
-    """Ausgeblendete Titel der eigenen Sammlung (zum Wieder-Einblenden)."""
-    return await music_files.hidden_files()
-
-
 @router.get("/files/{item_id}", response_model=music_files.FileInfo)
 async def file_info(item_id: str):
     return await _file_or_404(item_id)
@@ -237,6 +234,49 @@ async def file_hidden(item_id: str, req: HiddenRequest):
     await _file_or_404(item_id)
     await music_files.set_hidden(item_id, req.hidden)
     return {"hidden": req.hidden}
+
+
+# ─── Ausgeblendet: zurückholen, einzeln oder mehrere ───
+
+class HiddenArea(BaseModel):
+    tracks: list[Track]                          # ausgeblendete Dateien der Sammlung
+    albums: list[music_exclusions.Exclusion]     # ausgeschlossene Alben
+
+
+class ExcludeRequest(BaseModel):
+    source: str                                  # Gruppe, z.B. album:<schlüssel>
+
+
+class RestoreRequest(BaseModel):
+    tracks: list[str] = []
+    albums: list[str] = []
+
+
+@router.get("/hidden", response_model=HiddenArea)
+async def hidden_area():
+    """Was aus der Musik herausgenommen ist, zuletzt Herausgenommenes zuerst."""
+    files = await music_files.hidden_files()
+    return HiddenArea(tracks=[music_library.file_track(f) for f in files], albums=await music_exclusions.listing())
+
+
+@router.post("/exclusions", response_model=music_exclusions.Exclusion)
+async def exclude_group(req: ExcludeRequest):
+    """Ein ganzes Album aus der Musik ausschließen (auch was später dazukommt)."""
+    if not music_exclusions.allowed(req.source):
+        raise HTTPException(status_code=400, detail="Nur Alben lassen sich ausschließen")
+    album = await music_library.play_list(req.source)
+    if not album.tracks:
+        raise HTTPException(status_code=404, detail="Album nicht gefunden")
+    entry = music_exclusions.Exclusion(source=req.source, name=album.title, subtitle=album.tracks[0].artist,
+                                       count=len(album.tracks))
+    await music_exclusions.exclude(entry.source, entry.name, entry.subtitle, entry.count)
+    return entry
+
+
+@router.post("/hidden/restore")
+async def restore_hidden(req: RestoreRequest):
+    """Ausgeblendete Titel und ausgeschlossene Alben zurückholen."""
+    return {"tracks": await music_files.show_again(req.tracks), "albums": await music_exclusions.restore(req.albums)}
 
 
 @router.get("/audio-info/{video_id}", response_model=audio_export.AudioInfo)

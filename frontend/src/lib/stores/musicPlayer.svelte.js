@@ -12,6 +12,7 @@ import { api } from '../api/client.js';
 import { audioSrc, coverUrl, discard, isFile, recordPlay, setFavorite } from '../utils/musicTrack.js';
 import { loadSkipRanges, skipTarget } from '../utils/adSkip.js';
 import { emitVideoMutation } from '../utils/videoMutations.js';
+import { emitMusicChange } from '../utils/musicChanges.js';
 import { insertItem, moveItem, removeItem } from '../utils/queueOps.js';
 import { normalizeRate } from '../utils/playbackRate.js';
 import { afterMinutes, afterTrack, frozen, isDue, remainingMs, running } from '../utils/sleepTimer.js';
@@ -405,19 +406,21 @@ class MusicPlayer {
   }
 
   // ─── Bei Nichtgefallen: ein Klick ───
-  /** Aus der Warteschlange nehmen; ist es der laufende Titel, geht es weiter */
-  #drop(track) {
-    const position = this.queue.findIndex(t => t.id === track.id);
-    if (position < 0) return;
-    const wasCurrent = position === this.index;
-    this.queue = this.queue.filter((_, i) => i !== position);
-    if (position < this.index) this.index -= 1;
-    if (wasCurrent) {
-      if (this.index < this.queue.length) this.#start(this.index);
-      else { this.index = this.queue.length - 1; this.pause(); }
-    }
+  /** Alle passenden Titel aus der Warteschlange nehmen (ein Titel, ein
+   *  ausgeschlossenes Album); läuft gerade einer davon, geht es mit dem
+   *  nächsten übrigen weiter */
+  dropWhere(matches) {
+    if (!this.queue.some(matches)) return;
+    const currentGone = !!this.current && matches(this.current);
+    const before = this.queue.slice(0, this.index).filter((t) => !matches(t)).length;
+    this.queue = this.queue.filter((t) => !matches(t));
+    if (!currentGone) this.index = before;
+    else if (before < this.queue.length) return this.#start(before);
+    else { this.index = this.queue.length - 1; this.pause(); }
     this.#save();
   }
+
+  #drop(track) { this.dropWhere((t) => t.id === track.id); }
 
   /** Läuft gerade eine Wiedergabeliste? Dann deren Nummer */
   get playlistId() {
@@ -438,6 +441,7 @@ class MusicPlayer {
     this.#drop(track);
     this.pendingDelete = { track, at: this.index };
     this.#deleteTimer = setTimeout(() => this.#commitDelete(), UNDO_MS);
+    emitMusicChange({ removed: [track.id] });
   }
 
   undoDelete() {
@@ -447,6 +451,7 @@ class MusicPlayer {
     this.pendingDelete = null;
     this.queue = [...this.queue.slice(0, this.index + 1), track, ...this.queue.slice(this.index + 1)];
     this.#save();
+    emitMusicChange({ restored: true, reload: true });
   }
 
   #commitDelete() {
@@ -455,7 +460,10 @@ class MusicPlayer {
     this.pendingDelete = null;
     if (!pending) return;
     discard(pending.track)
-      .then(() => { if (!isFile(pending.track)) emitVideoMutation(pending.track.id, 'deleted'); })
+      .then(() => {
+        if (!isFile(pending.track)) emitVideoMutation(pending.track.id, 'deleted');
+        emitMusicChange({ reload: true });
+      })
       .catch(() => {});
   }
 

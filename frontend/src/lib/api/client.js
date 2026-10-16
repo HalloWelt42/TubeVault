@@ -516,8 +516,11 @@ export const api = {
   // Sammlung liegt nur lesend vor: ausblenden statt löschen
   musicFileHidden: (id, hidden) =>
     request(`/api/music/files/${id}/hidden`, { method: 'PUT', body: JSON.stringify({ hidden }) }),
-  musicHiddenFiles: () => request('/api/music/files/hidden'),
-  musicFilesStatus: () => request('/api/music/files/status'),
+  // Bereich "Ausgeblendet": ausgeblendete Dateien und ausgeschlossene Alben, zurückholen einzeln oder mehrere
+  musicHidden: () => request('/api/music/hidden'),
+  musicExclude: (source) => request('/api/music/exclusions', { method: 'POST', body: JSON.stringify({ source }) }),
+  musicRestoreHidden: ({ tracks = [], albums = [] }) =>
+    request('/api/music/hidden/restore', { method: 'POST', body: JSON.stringify({ tracks, albums }) }),
   // Hörbücher: feste Reihenfolge, Stand je Buch (Teil und Stelle)
   musicBooks: () => request('/api/music/books'),
   musicBookProgress: (key, fileId, position) =>

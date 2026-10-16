@@ -8,6 +8,9 @@ Kontrakt:
 - Musikbibliothek: Quelle alle / sammlung / videos; ein Song als Datei und
   als Video gilt bei "alle" einmal, als Datei.
 - Abspielen mit Range, Cover, Liedtext, Wiedergaben, Lieblingssong, Ton-Export.
+- Ausgeblendet (Wünsche 16.10.2026): ausgeblendete Dateien und ausgeschlossene
+  Alben fallen überall heraus, ein leeres Album verschwindet, ihr Video-Doppel
+  rückt nicht nach; zurückholen einzeln oder mehrere.
 """
 import os
 import shutil
@@ -221,7 +224,7 @@ async def test_ausblenden_statt_loeschen(test_db, sammlung, async_client_factory
     datei = sammlung / "01. Robert Miles - Children.flac"
     async with await async_client_factory(music.router) as client:
         assert (await client.put(f"/api/music/files/{children.id}/hidden", json={"hidden": True})).json() == {"hidden": True}
-        assert [f["title"] for f in (await client.get("/api/music/files/hidden")).json()] == ["Children"]
+        assert [t["title"] for t in (await client.get("/api/music/hidden")).json()["tracks"]] == ["Children"]
         assert (await client.get("/api/music/files/status")).json()["hidden"] == 1
     assert datei.exists()
     assert "Children" not in {t.title for t in await music_library.tracks()}
@@ -234,3 +237,53 @@ async def test_ausblenden_statt_loeschen(test_db, sammlung, async_client_factory
     await music_files.set_hidden(children.id, False)
     assert "Children" in {t.title for t in await music_library.tracks()}
     assert await music_files.hidden_files() == []
+
+
+async def test_ausgeblendet_rueckt_kein_video_nach(test_db, sammlung):
+    await music_files.scan()
+    await test_db.execute(
+        """INSERT INTO videos (id, title, channel_id, channel_name, is_music, status, download_date)
+           VALUES ('dmvideo0001', 'Depeche Mode - Enjoy the Silence (Official Video)', 'UCdm', 'Depeche Mode', 1, 'ready', '2026-10-01')""")
+    enjoy = next(f for f in await music_files.all_files() if f.title == "Enjoy the Silence")
+    await music_files.set_hidden(enjoy.id, True)
+    items = await music_library.tracks()
+    assert "Enjoy the Silence" not in {t.title for t in items}
+    assert "Violator" not in {g.name for g in music_library.albums(items)}     # nichts mehr drin: kein Album
+
+
+async def test_album_ausschliessen_und_zurueckholen(test_db, sammlung, async_client_factory):
+    await music_files.scan()
+    await test_db.execute(
+        """INSERT INTO videos (id, title, music_artist, music_title, music_album, channel_id, channel_name, is_music, status,
+                               download_date)
+           VALUES ('dmvideo0003', 'Depeche Mode - Halo', 'Depeche Mode', 'Halo', 'Violator', 'UCdm', 'Depeche Mode', 1,
+                   'ready', '2026-10-01')""")
+    album = next(g for g in music_library.albums(await music_library.tracks()) if g.name == "Violator")
+    assert album.count == 2 and album.kinds == ["datei", "video"]
+    async with await async_client_factory(music.router) as client:
+        assert (await client.post("/api/music/exclusions", json={"source": "artist:depeche mode"})).status_code == 400
+        entry = (await client.post("/api/music/exclusions", json={"source": album.key})).json()
+        assert (entry["name"], entry["subtitle"], entry["count"]) == ("Violator", "Depeche Mode", 2)
+
+        items = await music_library.tracks()
+        assert not {"Enjoy the Silence", "Halo"} & {t.title for t in items}
+        assert "Violator" not in {g.name for g in music_library.albums(items)}
+        assert (await music.overview()).counts.hidden == 1
+        assert [a["name"] for a in (await client.get("/api/music/hidden")).json()["albums"]] == ["Violator"]
+
+        restored = (await client.post("/api/music/hidden/restore", json={"albums": [album.key]})).json()
+        assert restored == {"tracks": 0, "albums": 1}
+    assert {"Enjoy the Silence", "Halo"} <= {t.title for t in await music_library.tracks()}
+
+
+async def test_mehrere_auf_einmal_zurueckholen(test_db, sammlung, async_client_factory):
+    await music_files.scan()
+    files = await music_files.all_files()
+    for f in files[:2]:
+        await music_files.set_hidden(f.id, True)
+    async with await async_client_factory(music.router) as client:
+        hidden = (await client.get("/api/music/hidden")).json()["tracks"]
+        assert len(hidden) == 2
+        restored = (await client.post("/api/music/hidden/restore", json={"tracks": [t["id"] for t in hidden]})).json()
+    assert restored == {"tracks": 2, "albums": 0}
+    assert await music_files.hidden_count() == 0

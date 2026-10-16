@@ -32,7 +32,7 @@ TABLES = [
     "favorites", "watch_history", "categories", "video_categories",
     "category_rules", "category_exclusions",
     "playlists", "playlist_videos", "subscriptions",
-    "blocked_channels", "ignored_videos", "deleted_videos",
+    "blocked_channels", "ignored_videos", "deleted_videos", "music_exclusions",
 ]
 
 # Nutzerfelder aus videos (nur Zeilen, in denen tatsächlich etwas steht).

@@ -1123,9 +1123,10 @@ class Database:
 
         # v47: Musik nur noch eindeutig automatisch, sonst von Hand (music_flag).
         # Nutzerentscheidung 15.10.2026: Bestand zurück auf "keine Musik".
-        from app.services import (audio_export, audiobook_flag, audiobooks, deleted_videos, meta_sidecar, music_files,
-                                  music_flag, semantic_items)
+        from app.services import (audio_export, audiobook_flag, audiobooks, deleted_videos, meta_sidecar, music_exclusions,
+                                  music_files, music_flag, semantic_items)
         await music_files.install_schema(self._connection)
+        await music_exclusions.install_schema(self._connection)    # ausgeschlossene Alben (16.10.2026)
         await audiobooks.install_schema(self._connection)
         await audiobook_flag.install_schema(self._connection)
         # v51: Hörbücher und Hörspiele unter den Videos einmal erkennen (Titel, Schlagwörter)

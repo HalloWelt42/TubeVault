@@ -3,11 +3,13 @@
   Videos; gilt überall, auch für die Mixe), Weiterhören des zuletzt
   gehörten Hörbuchs, Mixe und die Bereiche Interpreten, Alben, Kanäle und
   Hörbücher als Raster. Eine Kachel öffnet ihre Titel (?quelle=), die Lupe
-  sucht in der Musik (?suche=1); beides liegt über der Übersicht, die so
-  ihre Stelle behält. Gespielt wird über den Musikspieler.
+  sucht in der Musik (?suche=1), Ausgeblendetes holt ?ausgeblendet=1 zurück;
+  alles liegt über der Übersicht, die so ihre Stelle behält. Ein geöffnetes
+  Album lässt sich ganz ausschließen. Gespielt wird über den Musikspieler;
+  Änderungen von überall kommen über utils/musicChanges.js.
 -->
 <script>
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { api } from '../../lib/api/client.js';
   import { coverUrl } from '../../lib/utils/musicTrack.js';
   import { musicPlayer as player } from '../../lib/stores/musicPlayer.svelte.js';
@@ -17,6 +19,9 @@
   import { createListLoader } from '../../lib/utils/listLoader.svelte.js';
   import { route, go, back } from '../router.js';
   import { nearEnd } from '../parts/nearEnd.js';
+  import Ausgeblendet from '../parts/Ausgeblendet.svelte';
+  import { excludeAlbum, restoreHidden } from '../../lib/utils/musicHiding.js';
+  import { isRemoved, onMusicChange } from '../../lib/utils/musicChanges.js';
 
   const MIXES = [
     { key: 'all', name: 'Alles zufällig', icon: 'fa-shuffle', shuffle: true },
@@ -146,6 +151,7 @@
   let opened = $state(null);     // { source, title, tracks }
   let openedShown = $state(STEP);
   let searching = $state(false);
+  let hiddenOpen = $state(false);
 
   async function openGroup(key) {
     openKey = key;
@@ -165,10 +171,12 @@
     if (current.view !== 'musik') return;
     const key = current.params.quelle || null;
     const search = current.params.suche === '1';
+    const hidden = current.params.ausgeblendet === '1';
     untrack(() => {
       searching = search;
+      hiddenOpen = hidden;
       if (key !== openKey) openGroup(key);
-      if (!key && !search) loadBooks();   // zurück in der Übersicht: Weiterhören auffrischen
+      if (!key && !search && !hidden) loadBooks();   // zurück in der Übersicht: Weiterhören auffrischen
     });
   });
 
@@ -194,6 +202,34 @@
   }
 
   const focus = (node) => { node.focus(); };
+
+  // ─── Herausnehmen und Zurückholen, gleich wo (Spieler, Ausgeblendet, Album) ───
+  async function excludeOpened() {
+    const album = opened.source;
+    try {
+      const entry = await excludeAlbum(album);
+      toast.undo(`Album "${entry.name}" ausgeschlossen`, () => restoreHidden({ albums: [album] }).catch((e) => toast.error(e.message)));
+    } catch (e) { toast.error(e.message); }
+  }
+
+  // Herausgenommenes verschwindet sofort; Zahlen, Kacheln und die offene Gruppe kommen leise neu
+  async function onChange(change) {
+    const gone = isRemoved(change);
+    if (opened) opened = { ...opened, tracks: opened.tracks.filter((t) => !gone(t)) };
+    results.items = results.items.filter((t) => !gone(t));
+    if (!change.reload) return;
+    loadOverview();
+    const def = activeArea;
+    try {
+      if (def) { const fresh = await def.load(); if (activeArea?.id === def.id) items = fresh; }
+      if (openKey) {
+        const fresh = await api.musicPlay(openKey);
+        if (fresh.tracks.length) opened = fresh;
+        else back();                     // Gruppe leer: es gibt sie nicht mehr
+      }
+    } catch { /* bleibt beim bisherigen Stand */ }
+  }
+  onMount(() => onMusicChange(onChange));
 
   loadOverview();
 </script>
@@ -289,6 +325,11 @@
             {/if}
           {/if}
         {/if}
+        {#if counts.hidden}
+          <button class="ausgeblendet" onclick={() => go('/musik', { ausgeblendet: '1' })}>
+            <i class="fa-solid fa-eye-slash"></i><span>Ausgeblendet</span><span class="zahl">{counts.hidden}</span>
+            <i class="fa-solid fa-chevron-right"></i></button>
+        {/if}
       {/if}
     </div>
   </div>
@@ -319,11 +360,22 @@
         </div>
       </div>
     </div>
+  {:else if hiddenOpen}
+    <div class="ebene">
+      <header class="kopf">
+        <button class="m-rund" onclick={back} aria-label="Zurück"><i class="fa-solid fa-chevron-left"></i></button>
+        <h1 class="m-h1 titel">Ausgeblendet</h1>
+      </header>
+      <div class="rollfeld"><Ausgeblendet /></div>
+    </div>
   {:else if opened || openKey}
     <div class="ebene">
       <header class="kopf">
         <button class="m-rund" onclick={back} aria-label="Zurück"><i class="fa-solid fa-chevron-left"></i></button>
         <h1 class="m-h1 titel">{opened?.title || ''}</h1>
+        {#if opened?.source?.startsWith('album:')}
+          <button class="m-rund" onclick={excludeOpened} aria-label="Album ausschließen"><i class="fa-solid fa-ban"></i></button>
+        {/if}
       </header>
       <div class="rollfeld" use:nearEnd={{ onNearEnd: () => { openedShown += STEP; }, canLoad: () => !!opened && openedShown < opened.tracks.length }}>
         {#if !opened}
@@ -405,6 +457,10 @@
   .kachel .w { font-size: 13px; color: var(--m-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .kachel.laeuft .t { color: var(--m-accent); }
   .mehr { padding: 8px 0; font-size: 15px; color: var(--m-faint); text-align: center; }
+  .ausgeblendet { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto 16px; gap: 10px; align-items: center; min-height: 52px;
+                  padding: 0 14px; border-radius: var(--m-radius); background: var(--tv-karte); color: var(--m-dim);
+                  font-weight: 600; text-align: left; }
+  .ausgeblendet .zahl { color: var(--m-faint); }
 
   /* Gruppe oder Suche: über der Übersicht, die so ihre Stelle behält */
   .ebene { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; background: var(--m-bg); }

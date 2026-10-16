@@ -4,12 +4,15 @@
   Interpreten, Alben, Lieblingssongs, Wiedergabelisten, Verlauf und
   Musikkanäle. Jede Gruppe ist eine dynamische Wiedergabeliste und lässt sich
   der Reihe nach oder zufällig abspielen; ein Klick auf eine Kachel spielt
-  sofort. Rechts "Läuft gerade" mit Warteschlange und Liedtext.
+  sofort. Rechts "Läuft gerade" mit Warteschlange und Liedtext. Ganze Alben
+  lassen sich ausschließen; Ausgeblendetes hat einen eigenen Bereich zum
+  Zurückholen. Änderungen von überall (Spieler, Menü) kommen über
+  utils/musicChanges.js und frischen Listen und Zahlen auf.
   © HalloWelt42 – Private Nutzung
 -->
 <script>
-  import HiddenFiles from '../lib/components/music/HiddenFiles.svelte';
-  import { untrack } from 'svelte';
+  import HiddenArea from '../lib/components/music/HiddenArea.svelte';
+  import { onMount, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { api } from '../lib/api/client.js';
   import { coverUrl } from '../lib/utils/musicTrack.js';
@@ -25,6 +28,8 @@
   import TrackMenu from '../lib/components/music/TrackMenu.svelte';
   import NowPlaying from '../lib/components/music/NowPlaying.svelte';
   import ArtistLink from '../lib/components/music/ArtistLink.svelte';
+  import { excludeAlbum, restoreHidden } from '../lib/utils/musicHiding.js';
+  import { isRemoved, onMusicChange } from '../lib/utils/musicChanges.js';
 
   const TABS = [
     { id: 'start', label: 'Start', icon: 'fa-house' },
@@ -36,6 +41,7 @@
     { id: 'verlauf', label: 'Verlauf', icon: 'fa-clock-rotate-left' },
     { id: 'kanaele', label: 'Musikkanäle', icon: 'fa-tv', count: 'channels' },
     { id: 'hoerbuecher', label: 'Hörbücher', icon: 'fa-book-open', count: 'books', onlyWithCount: true },
+    { id: 'ausgeblendet', label: 'Ausgeblendet', icon: 'fa-eye-slash', count: 'hidden', onlyWithCount: true },
     { id: 'jetzt', label: 'Läuft gerade', icon: 'fa-headphones', narrowOnly: true },
   ];
   const SORTS = [['added', 'Neu'], ['title', 'Titel'], ['artist', 'Interpret'], ['plays', 'Oft gehört'], ['duration', 'Dauer'], ['last_played', 'Zuletzt gehört']];
@@ -181,15 +187,46 @@
     else player.playTracks(tracks, index, title);
   }
 
-  // Änderungen aus dem Menü in die sichtbaren Listen übernehmen
-  function changed(track, change) {
-    if (change.restored) { loadOverview(); loadTab(); return; }
-    const update = (items) => change.removed ? items.filter(t => t.id !== track.id)
-                                             : items.map(t => t.id === track.id ? { ...t, ...change } : t);
+  // Eine Änderung an Titeln in alle sichtbaren Listen übernehmen
+  function patchLists(update) {
     list.items = update(list.items);
     if (groupTracks) groupTracks = { ...groupTracks, tracks: update(groupTracks.tracks) };
     if (overview) overview = { ...overview, new: update(overview.new), often: update(overview.often) };
-    if (change.removed) loadOverview();
+  }
+
+  // Lieblingssong aus dem Menü
+  function changed(track, change) {
+    patchLists((items) => items.map(t => t.id === track.id ? { ...t, ...change } : t));
+  }
+
+  // Herausgenommen oder zurückgeholt, gleich wo (Spieler, Menü, Bereich Ausgeblendet):
+  // Herausgenommenes verschwindet sofort, Zahlen und Gruppen kommen leise neu vom Server
+  async function onChange(change) {
+    const gone = isRemoved(change);
+    if (change.removed || change.removedAlbums) patchLists((items) => items.filter((t) => !gone(t)));
+    if (!change.reload) return;
+    loadOverview();
+    try {
+      if (source) {
+        const fresh = await api.musicPlay(source);
+        if (fresh.tracks.length) groupTracks = fresh;
+        else { source = null; updateParams({ quelle: null }); }     // Gruppe leer: es gibt sie nicht mehr
+      } else if (tab === 'interpreten') groups = await api.musicArtists();
+      else if (tab === 'alben') groups = await api.musicAlbums();
+      else if (tab === 'kanaele') groups = await api.musicChannels();
+      else if (tab === 'verlauf') groupTracks = await api.musicPlay('recent');
+      else if (change.restored && (tab === 'titel' || tab === 'lieblingssongs')) await list.load(true);
+    } catch { /* bleibt beim bisherigen Stand */ }
+  }
+  onMount(() => onMusicChange(onChange));
+
+  // Ein ganzes Album ausschließen: verschwindet überall, Zurückholen im Bereich Ausgeblendet
+  async function excludeOpenAlbum() {
+    const album = source;
+    try {
+      const entry = await excludeAlbum(album);
+      toast.undo(`Album "${entry.name}" ausgeschlossen`, () => restoreHidden({ albums: [album] }).catch((e) => toast.error(e.message)));
+    } catch (e) { toast.error(e.message); }
   }
 
   async function favorite(track) {
@@ -217,7 +254,6 @@
           {/each}
           <button class="einlesen" onclick={scanCollection} disabled={scanning} title="Eigene Sammlung neu einlesen (nur Neues und Geändertes)">
             <i class="fa-solid fa-rotate" class:fa-spin={scanning}></i></button>
-          <HiddenFiles onRestored={() => { loadOverview(); loadTab(); }} />
         </div>
       {/if}
       <div class="aktionen">
@@ -258,6 +294,11 @@
               <a class="tv-knopf" href={api.musicZipUrl(source)} download
                  title="Alle Titel nur als Ton in einem ZIP (wie geladen, ohne Neukodierung, ohne Werbestellen)">
                 <i class="fa-solid fa-file-zipper"></i> Als ZIP</a>
+              {#if source.startsWith('album:')}
+                <button class="tv-knopf" onclick={excludeOpenAlbum}
+                        title="Alle Titel des Albums aus der Musik nehmen, auch was später dazukommt. Zurückholen im Bereich Ausgeblendet">
+                  <i class="fa-solid fa-ban"></i> Album ausschließen</button>
+              {/if}
             </div>
           {/if}
         </div>
@@ -373,6 +414,9 @@
         {:else if !loading}
           <div class="tv-leer">Noch nichts gehört.</div>
         {/if}
+
+      {:else if tab === 'ausgeblendet'}
+        <HiddenArea />
 
       {:else if tab === 'jetzt'}
         <div class="jetzt-schmal"><NowPlaying view={nowView} {onOpenVideo} /></div>

@@ -1,6 +1,8 @@
 <!--
   Menü eines Musiktitels: als Nächstes, hinten anstellen, ähnliche Titel,
-  Interpret, Video, Lieblingssong, keine Musik, bei Dateien der Sammlung ausblenden. Erscheint an der Klickstelle.
+  Interpret, Video, Lieblingssong, keine Musik, bei Dateien der Sammlung ausblenden,
+  das ganze Album ausschließen. Erscheint an der Klickstelle. Herausnehmen meldet
+  sich über utils/musicChanges.js; onChanged bekommt nur den Lieblingssong.
   Nutzung: <TrackMenu bind:this={menu} onChanged={...} />, menu.open(event, track)
 -->
 <script>
@@ -9,8 +11,10 @@
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
+  import { excludeAlbum, hideTrack, restoreHidden } from '../../utils/musicHiding.js';
+  import { emitMusicChange } from '../../utils/musicChanges.js';
 
-  // onChanged(track, change): change = { favorite }, { removed: true } oder { restored: true }
+  // onChanged(track, { favorite })
   let { onChanged = () => {} } = $props();
 
   let track = $state(null);
@@ -54,16 +58,17 @@
       } },
     { icon: 'fa-display', label: 'Als Video ansehen', video: true, run: (t) => { player.pause(); navigate(`/watch/${t.id}`); } },
     { icon: 'fa-eye-slash', label: 'Ausblenden', file: true, run: async (t) => {
-        await api.musicFileHidden(t.id, true);
-        onChanged(t, { removed: true });
-        toast.undo(`Ausgeblendet: ${t.title}`, async () => {
-          await api.musicFileHidden(t.id, false);
-          onChanged(t, { restored: true });
-        });
+        await hideTrack(t);
+        toast.undo(`Ausgeblendet: ${t.title}`, () => restoreHidden({ tracks: [t.id] }).catch((e) => toast.error(e.message)));
+      } },
+    { icon: 'fa-compact-disc', label: 'Album ausschließen', album: true, run: async (t) => {
+        const entry = await excludeAlbum(t.album_source);
+        toast.undo(`Album "${entry.name}" ausgeschlossen`,
+                   () => restoreHidden({ albums: [t.album_source] }).catch((e) => toast.error(e.message)));
       } },
     { icon: 'fa-ban', label: 'Keine Musik', video: true, run: async (t) => {
         await api.setMusicBatch([t.id], false);
-        onChanged(t, { removed: true });
+        emitMusicChange({ removed: [t.id], reload: true });
         toast.success('Aus der Musik genommen (von Hand, bleibt so)');
       } },
   ];
@@ -76,7 +81,7 @@
   <div class="menue" style:left="{x}px" style:top="{y}px" role="menu">
     <div class="kopf"><div class="t">{track.title}</div><div class="tv-leise tv-klein">{track.artist}</div></div>
     <!-- Was nur ein Video kann, fehlt bei Dateien der eigenen Sammlung -->
-    {#each actions.filter(a => (!a.video || !isFile(track)) && (!a.file || isFile(track))) as action}
+    {#each actions.filter(a => (!a.video || !isFile(track)) && (!a.file || isFile(track)) && (!a.album || track.album_source)) as action}
       {#if action.trenner}<hr />
       {:else}
         <button role="menuitem" onclick={() => act(action.run)}>

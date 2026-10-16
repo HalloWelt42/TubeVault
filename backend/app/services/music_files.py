@@ -370,12 +370,14 @@ def info_of(row) -> FileInfo:
 VISIBLE = "COALESCE(hidden, 0) = 0"
 
 
-async def all_files(category: Optional[str] = MUSIC) -> list[FileInfo]:
-    """Sichtbare Dateien einer Art (Standard: Musik), neueste zuerst; None = alle."""
+async def all_files(category: Optional[str] = MUSIC, visible_only: bool = True) -> list[FileInfo]:
+    """Sichtbare Dateien einer Art (Standard: Musik), neueste zuerst; None = alle.
+    visible_only=False: auch ausgeblendete (z.B. damit ihr Video-Doppel nicht nachrückt)."""
+    visible = VISIBLE if visible_only else "1 = 1"
     if category is None:
-        return [info_of(r) for r in await db.fetch_all(f"SELECT * FROM music_files WHERE {VISIBLE} ORDER BY added_at DESC, path")]
+        return [info_of(r) for r in await db.fetch_all(f"SELECT * FROM music_files WHERE {visible} ORDER BY added_at DESC, path")]
     return [info_of(r) for r in await db.fetch_all(
-        f"SELECT * FROM music_files WHERE COALESCE(category, ?) = ? AND {VISIBLE} ORDER BY added_at DESC, path",
+        f"SELECT * FROM music_files WHERE COALESCE(category, ?) = ? AND {visible} ORDER BY added_at DESC, path",
         (MUSIC, category))]
 
 
@@ -396,6 +398,19 @@ async def set_hidden(item_id: str, hidden: bool) -> bool:
         "UPDATE music_files SET hidden = ?, hidden_at = CASE WHEN ? THEN datetime('now') END WHERE id = ?",
         (int(hidden), int(hidden), item_id))
     return cursor.rowcount == 1
+
+
+async def hidden_count() -> int:
+    return await db.fetch_val("SELECT COUNT(*) FROM music_files WHERE COALESCE(hidden, 0) = 1") or 0
+
+
+async def show_again(item_ids: list[str]) -> int:
+    """Mehrere ausgeblendete Titel auf einmal wieder einblenden."""
+    if not item_ids:
+        return 0
+    marks = ",".join("?" * len(item_ids))
+    cursor = await db.execute(f"UPDATE music_files SET hidden = 0, hidden_at = NULL WHERE id IN ({marks})", item_ids)
+    return cursor.rowcount
 
 
 async def get(item_id: str) -> Optional[FileInfo]:

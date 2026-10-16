@@ -11,6 +11,10 @@ Welche Quellen gelten, legt die Einstellung music.source fest (alle,
 sammlung = nur Dateien, videos). Gibt es einen Song als Datei und als Video,
 gilt bei "alle" die Datei (bessere Tonqualität).
 
+Ausgeblendete Dateien und ausgeschlossene Alben (music_exclusions) fallen
+überall heraus; ein Album ohne sichtbare Titel gibt es dann nicht mehr. Ihr
+Video-Doppel rückt nicht nach.
+
 Interpret und Songtitel: was am Video festgelegt ist (music_artist,
 music_title), sonst aus "Interpret - Titel" im Videotitel, sonst der Kanal.
 Das dient nur der Anzeige und Gruppierung - ob etwas Musik ist, entscheidet
@@ -24,7 +28,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import music_files, setting_values
+from app.services import music_exclusions, music_files, setting_values
 from app.services.lyrics_service import suggest_artist_title
 
 MUSIC_SOURCE = "music.source"
@@ -45,6 +49,7 @@ class Track(BaseModel):
     artist: str
     artist_source: str               # Quelle zum Abspielen aller Titel des Interpreten
     album: Optional[str] = None
+    album_source: Optional[str] = None   # Gruppe des Albums (z.B. zum Ausschließen)
     channel_id: Optional[str] = None
     channel_name: Optional[str] = None
     duration: Optional[int] = None
@@ -96,6 +101,10 @@ def group_key(name: str) -> str:
     return re.sub(r"\s+", " ", name.casefold()).strip()
 
 
+def album_source(artist: str, album: Optional[str]) -> Optional[str]:
+    return f"album:{group_key(f'{artist}|{album}')}" if album else None
+
+
 TRACK_SQL = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name, v.upload_date,
                          v.duration, COALESCE(v.play_count, 0) AS play_count, v.last_played, v.download_date,
                          COALESCE(v.has_lyrics, 0) AS has_lyrics, COALESCE(v.is_music, 0) AS is_music,
@@ -111,7 +120,7 @@ def video_track(row) -> Track:
     else:
         artist, title = clean_channel(row["channel_name"]) or "Unbekannt", row["title"] or row["id"]
     return Track(id=row["id"], title=title, artist=artist, artist_source=f"artist:{group_key(artist)}",
-                 album=row["music_album"] or None,
+                 album=row["music_album"] or None, album_source=album_source(artist, row["music_album"]),
                  channel_id=row["channel_id"], channel_name=row["channel_name"],
                  duration=row["duration"], play_count=row["play_count"], last_played=row["last_played"],
                  added=row["download_date"], favorite=bool(row["favorite"]),
@@ -121,7 +130,7 @@ def video_track(row) -> Track:
 def file_track(f: music_files.FileInfo) -> Track:
     artist = (f.artist or f.album_artist or "Unbekannt").strip()
     return Track(id=f.id, title=f.title, artist=artist, artist_source=f"artist:{group_key(artist)}",
-                 album=f.album, duration=int(f.duration) if f.duration else None, play_count=f.play_count,
+                 album=f.album, album_source=album_source(artist, f.album), duration=int(f.duration) if f.duration else None, play_count=f.play_count,
                  last_played=f.last_played, added=f.added_at, favorite=f.favorite, has_lyrics=f.has_lyrics, kind=FILE,
                  codec=f.codec)
 
@@ -133,10 +142,6 @@ async def video_tracks() -> list[Track]:
     return [video_track(row) for row in rows]
 
 
-async def file_tracks() -> list[Track]:
-    return [file_track(f) for f in await music_files.all_files()]
-
-
 async def source_setting() -> str:
     return await setting_values.get(MUSIC_SOURCE)
 
@@ -145,12 +150,15 @@ async def tracks() -> list[Track]:
     """Alle Musiktitel der gewählten Quellen (neueste zuerst)."""
     source = await source_setting()
     videos = await video_tracks() if source != "sammlung" else []
-    files = await file_tracks() if source != "videos" else []
-    if videos and files:
-        # Doppelte Songs: die Datei gilt (bessere Tonqualität)
-        have = {(group_key(t.artist), group_key(t.title)) for t in files}
+    every_file = await music_files.all_files(visible_only=False) if source != "videos" else []
+    files = [file_track(f) for f in every_file if not f.hidden]
+    if videos and every_file:
+        # Doppelte Songs: die Datei gilt (bessere Tonqualität) - auch eine
+        # ausgeblendete, sonst käme der Song als Video zurück
+        have = {(group_key(t.artist), group_key(t.title)) for t in map(file_track, every_file)}
         videos = [t for t in videos if (group_key(t.artist), group_key(t.title)) not in have]
-    merged = [*videos, *files]
+    excluded = await music_exclusions.sources()
+    merged = [t for t in (*videos, *files) if t.album_source not in excluded]
     merged.sort(key=lambda t: t.added or "", reverse=True)
     return merged
 
