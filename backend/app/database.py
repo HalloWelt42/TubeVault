@@ -414,6 +414,9 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = await aiosqlite.connect(str(self.db_path))
         self._connection.row_factory = aiosqlite.Row
+        # Wer hält die eine Verbindung wie lange? Langsame Schritte ins Live-Log
+        from app.services import db_watch
+        db_watch.install(self._connection)
         await self._connection.execute("PRAGMA journal_mode=WAL")
         await self._connection.execute("PRAGMA foreign_keys=ON")
         await self._init_schema()
