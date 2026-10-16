@@ -89,7 +89,7 @@
   .wert { display: flex; gap: var(--tv-a2); justify-content: flex-end; align-items: center; }
   .wert .kurz { width: 100px; text-align: right; }
   .wert .einheit { width: 120px; }
-  .wert select.tv-eingabe { width: 140px; }
+  .wert select.tv-eingabe { width: auto; min-width: 140px; max-width: 100%; }
   .wert .text { width: 100%; }
   .einheit-text { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
   .ohne-grenze { display: flex; align-items: center; gap: var(--tv-a2); font-size: var(--tv-gr-klein); color: var(--tv-text-2); white-space: nowrap; }
