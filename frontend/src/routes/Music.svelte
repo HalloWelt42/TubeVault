@@ -4,7 +4,8 @@
   Interpreten, Alben, Lieblingssongs, Wiedergabelisten, Verlauf und
   Musikkanäle. Jede Gruppe ist eine dynamische Wiedergabeliste und lässt sich
   der Reihe nach oder zufällig abspielen; ein Klick auf eine Kachel spielt
-  sofort. Rechts "Läuft gerade" mit Warteschlange und Liedtext. Ganze Alben
+  sofort. Rechts "Läuft gerade" mit Warteschlange und Liedtext. Wiedergabelisten
+  entstehen im Listen-Baukasten (links alle Titel, rechts die Liste). Ganze Alben
   lassen sich ausschließen; Ausgeblendetes hat einen eigenen Bereich zum
   Zurückholen. Änderungen von überall (Spieler, Menü) kommen über
   utils/musicChanges.js und frischen Listen und Zahlen auf.
@@ -12,6 +13,7 @@
 -->
 <script>
   import HiddenArea from '../lib/components/music/HiddenArea.svelte';
+  import PlaylistBuilder from '../lib/components/music/PlaylistBuilder.svelte';
   import { onMount, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { api } from '../lib/api/client.js';
@@ -133,10 +135,6 @@
         groups = await api.musicAlbums();
       } else if (tab === 'kanaele') {
         groups = await api.musicChannels();
-      } else if (tab === 'wiedergabelisten') {
-        const playlists = await api.getPlaylists();
-        groups = (Array.isArray(playlists) ? playlists : playlists.playlists || []).map(p => ({
-          key: `playlist:${p.id}`, name: p.name, count: p.video_count || 0, duration: 0, covers: [] }));
       } else if (tab === 'verlauf') {
         groupTracks = await api.musicPlay('recent');
       } else if (tab === 'hoerbuecher') {
@@ -274,7 +272,8 @@
     </div>
   </div>
 
-  <div class="musik">
+  <!-- Der Listen-Baukasten braucht beide Hälften: dort ohne die Spalte "Läuft gerade" -->
+  <div class="musik" class:breit={tab === 'wiedergabelisten' && !source}>
     <div class="tv-rollfeld" data-scroll-root>
       {#if source}
         <!-- Geöffnete Gruppe: Interpret, Album, Kanal, Wiedergabeliste, Mix -->
@@ -415,6 +414,9 @@
           <div class="tv-leer">Noch nichts gehört.</div>
         {/if}
 
+      {:else if tab === 'wiedergabelisten'}
+        <PlaylistBuilder />
+
       {:else if tab === 'ausgeblendet'}
         <HiddenArea />
 
@@ -471,7 +473,7 @@
         {:else}
           <div class="raster">
             {#each groups as group (group.key)}
-              <GroupTile {group} icon={tab === 'wiedergabelisten' ? 'fa-list-ul' : null} onOpen={() => openGroup(group.key)} />
+              <GroupTile {group} onOpen={() => openGroup(group.key)} />
             {/each}
           </div>
         {/if}
@@ -516,6 +518,8 @@
   /* Eigene Höhe als Maß für "Läuft gerade" (Bildgröße), nichts ragt heraus */
   .jetzt-spalte { border-left: 1px solid var(--tv-rand); background: var(--tv-leiste); min-height: 0;
                   overflow: hidden; container-type: size; }
+  .musik.breit { grid-template-columns: minmax(0, 1fr); }
+  .musik.breit .jetzt-spalte { display: none; }
   @media (max-width: 1100px) {
     .musik { grid-template-columns: minmax(0, 1fr); }
     .jetzt-spalte { display: none; }

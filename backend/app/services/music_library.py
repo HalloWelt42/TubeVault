@@ -28,10 +28,11 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import music_exclusions, music_files, setting_values
+from app.services import music_exclusions, music_files, playlist_items, setting_values
 from app.services.lyrics_service import suggest_artist_title
 
 MUSIC_SOURCE = "music.source"
+MUSIC_LIST = "musik"                 # playlists.source einer in der Musik angelegten Liste
 VIDEO = "video"
 FILE = "datei"
 
@@ -266,8 +267,7 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     elif kind == "forgotten":
         chosen = sorted(items, key=lambda t: t.last_played or "")[:200]
     elif kind == "playlist":
-        ids = [r["video_id"] for r in await db.fetch_all(
-            "SELECT video_id FROM playlist_videos WHERE playlist_id = ? ORDER BY position", (value,))]
+        ids = await playlist_items.entries(_list_id(value))
         by_id = {t.id: t for t in items}
         chosen = [by_id[i] for i in ids if i in by_id]
         title = await db.fetch_val("SELECT name FROM playlists WHERE id = ?", (value,)) or "Wiedergabeliste"
@@ -278,6 +278,42 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     else:
         raise ValueError("Unbekannte Quelle")
     return _arranged(source, title, chosen, shuffle, start)
+
+
+def _list_id(value: str) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError("Unbekannte Wiedergabeliste")
+
+
+# ─── Wiedergabelisten der Musik ───────────────────────────────────────
+
+async def music_playlists() -> list[Group]:
+    """Listen für die Musik: in der Musik angelegte (auch leere) und alle
+    übrigen mit mindestens einem Musiktitel; zuletzt angelegte zuerst. Gezählt
+    wird, was davon in der Musik spielbar ist."""
+    by_id = {t.id: t for t in await tracks()}
+    members: dict[int, list[Track]] = defaultdict(list)
+    for row in await db.fetch_all(
+            """SELECT playlist_id, video_id AS id, position FROM playlist_videos
+               UNION ALL SELECT playlist_id, file_id AS id, position FROM playlist_files
+               ORDER BY playlist_id, position, id"""):
+        if row["id"] in by_id:
+            members[row["playlist_id"]].append(by_id[row["id"]])
+    groups = []
+    for row in await db.fetch_all("SELECT id, name, source FROM playlists ORDER BY created_at DESC, id DESC"):
+        found = members.get(row["id"], [])
+        if found or row["source"] == MUSIC_LIST:
+            groups.append(Group(key=f"playlist:{row['id']}", name=row["name"], count=len(found),
+                                duration=sum(t.duration or 0 for t in found), covers=[t.id for t in found[:4]],
+                                kinds=sorted({t.kind for t in found})))
+    return groups
+
+
+async def create_music_playlist(name: str) -> int:
+    cursor = await db.execute("INSERT INTO playlists (name, source) VALUES (?, ?)", (name, MUSIC_LIST))
+    return cursor.lastrowid
 
 
 async def _audiobook(source: str, key: str, start: Optional[str]) -> PlayList:
@@ -323,20 +359,31 @@ async def _similar(items: list[Track], video_id: str, limit: int = 50) -> list[T
 
 
 async def export_items(source: str) -> tuple[str, list[tuple[str, str]]]:
-    """(Titel, [(video_id, "Interpret - Titel")]) für den Ton-Export einer
-    Quelle. Eine Wiedergabeliste gibt alle ihre geladenen Videos aus, nicht
-    nur die als Musik gekennzeichneten."""
+    """(Titel, [(Kennung, "Interpret - Titel")]) für den Ton-Export einer
+    Quelle. Eine Wiedergabeliste gibt alle ihre geladenen Videos und Dateien
+    aus, nicht nur die als Musik gekennzeichneten."""
     kind, _, value = source.partition(":")
     if kind == "playlist":
         name = await db.fetch_val("SELECT name FROM playlists WHERE id = ?", (value,))
         if name is None:
             raise ValueError("Wiedergabeliste unbekannt")
-        rows = await db.fetch_all(
-            """SELECT v.id, v.title, v.music_artist, v.music_title, v.channel_name, v.is_music
-               FROM playlist_videos p JOIN videos v ON v.id = p.video_id
-               WHERE p.playlist_id = ? AND v.status = 'ready' ORDER BY p.position""", (value,))
-        # Musik als "Interpret - Titel", alles andere unter seinem Videotitel
-        return name, [(r["id"], " - ".join(names_of(r)) if r["is_music"] else (r["title"] or r["id"])) for r in rows]
+        ids = await playlist_items.entries(_list_id(value))
+        marks = ",".join("?" * len(ids)) or "''"
+        rows = {r["id"]: r for r in await db.fetch_all(
+            f"""SELECT id, title, music_artist, music_title, channel_name, is_music
+                FROM videos WHERE status = 'ready' AND id IN ({marks})""", ids)}
+        files = {f.id: f for f in await music_files.all_files(category=None, visible_only=False)}
+
+        def label(item_id: str) -> Optional[str]:
+            if item_id in files:
+                f = files[item_id]
+                return f"{f.artist} - {f.title}" if f.artist else f.title
+            row = rows.get(item_id)
+            if not row:
+                return None
+            # Musik als "Interpret - Titel", alles andere unter seinem Videotitel
+            return " - ".join(names_of(row)) if row["is_music"] else (row["title"] or row["id"])
+        return name, [(i, label(i)) for i in ids if label(i)]
     playlist = await play_list(source)
     return playlist.title, [(t.id, f"{t.artist} - {t.title}") for t in playlist.tracks]
 

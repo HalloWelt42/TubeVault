@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import drip, loadable, watch_state
+from app.services import drip, loadable, music_files, playlist_items, watch_state
 from app.utils.file_utils import next_drip_run
 
 router = APIRouter(prefix="/api/playlists", tags=["Playlists (Lokal)"])
@@ -189,19 +189,16 @@ async def load_pending(playlist_id: int, limit: Optional[int] = Query(None, ge=1
 
 @router.post("/{playlist_id}/copy")
 async def copy_playlist(playlist_id: int):
-    """Kopie mit allen Videos in derselben Reihenfolge anlegen."""
+    """Kopie mit allen Einträgen (Videos und Dateien der Sammlung) in derselben Reihenfolge anlegen."""
     source = await db.fetch_one("SELECT name, description FROM playlists WHERE id = ?", (playlist_id,))
     if not source:
         raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
     cursor = await db.execute("INSERT INTO playlists (name, description) VALUES (?, ?)",
                               (f"{source['name']} (Kopie)", source["description"]))
     new_id = cursor.lastrowid
-    await db.execute(
-        """INSERT INTO playlist_videos (playlist_id, video_id, position)
-           SELECT ?, video_id, position FROM playlist_videos WHERE playlist_id = ?""", (new_id, playlist_id))
-    count = await db.fetch_val("SELECT COUNT(*) FROM playlist_videos WHERE playlist_id = ?", (new_id,))
-    await db.execute("UPDATE playlists SET video_count = ? WHERE id = ?", (count or 0, new_id))
-    return {"id": new_id, "name": f"{source['name']} (Kopie)", "video_count": count or 0}
+    await playlist_items.copy(playlist_id, new_id)
+    count = await playlist_items.refresh_count(new_id)
+    return {"id": new_id, "name": f"{source['name']} (Kopie)", "video_count": count}
 
 
 @router.delete("/{playlist_id}")
@@ -218,6 +215,12 @@ async def add_video_to_playlist(playlist_id: int, data: PlaylistAddVideo):
     pl = await db.fetch_one("SELECT id FROM playlists WHERE id = ?", (playlist_id,))
     if not pl:
         raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
+
+    # Titel der eigenen Musiksammlung: nur, was die Sammlung kennt
+    if music_files.is_file_id(data.video_id):
+        if not await playlist_items.add(playlist_id, [data.video_id]):
+            raise HTTPException(status_code=409, detail="Titel unbekannt oder bereits in der Playlist")
+        return {"added": True, "video_count": await playlist_items.refresh_count(playlist_id)}
 
     # Video existiert? Falls nicht → Stub erstellen (Vormerken)
     vid = await db.fetch_one("SELECT id FROM videos WHERE id = ?", (data.video_id,))
@@ -239,48 +242,25 @@ async def add_video_to_playlist(playlist_id: int, data: PlaylistAddVideo):
     if existing:
         raise HTTPException(status_code=409, detail="Video bereits in Playlist")
 
-    # Position: ans Ende
-    max_pos = await db.fetch_val(
-        "SELECT COALESCE(MAX(position), -1) FROM playlist_videos WHERE playlist_id = ?",
-        (playlist_id,)
-    )
+    # Position: ans Ende (hinter Videos und Dateien)
+    position = await playlist_items.next_position(playlist_id)
     await db.execute(
         "INSERT INTO playlist_videos (playlist_id, video_id, position) VALUES (?, ?, ?)",
-        (playlist_id, data.video_id, max_pos + 1)
+        (playlist_id, data.video_id, position)
     )
-    # video_count aktualisieren
-    count = await db.fetch_val(
-        "SELECT COUNT(*) FROM playlist_videos WHERE playlist_id = ?", (playlist_id,)
-    )
-    await db.execute(
-        "UPDATE playlists SET video_count = ? WHERE id = ?", (count or 0, playlist_id)
-    )
-    return {"added": True, "position": max_pos + 1, "video_count": count or 0}
+    count = await playlist_items.refresh_count(playlist_id)
+    return {"added": True, "position": position, "video_count": count}
 
 
 @router.delete("/{playlist_id}/videos/{video_id}")
 async def remove_video_from_playlist(playlist_id: int, video_id: str):
-    """Video aus Playlist entfernen."""
-    await db.execute(
-        "DELETE FROM playlist_videos WHERE playlist_id = ? AND video_id = ?",
-        (playlist_id, video_id)
-    )
-    # video_count aktualisieren
-    count = await db.fetch_val(
-        "SELECT COUNT(*) FROM playlist_videos WHERE playlist_id = ?", (playlist_id,)
-    )
-    await db.execute(
-        "UPDATE playlists SET video_count = ? WHERE id = ?", (count or 0, playlist_id)
-    )
-    return {"removed": True, "video_count": count or 0}
+    """Video (oder Titel der Sammlung) aus Playlist entfernen."""
+    await playlist_items.remove(playlist_id, video_id)
+    return {"removed": True, "video_count": await playlist_items.refresh_count(playlist_id)}
 
 
 @router.put("/{playlist_id}/reorder")
 async def reorder_playlist(playlist_id: int, data: PlaylistReorder):
-    """Videos in Playlist neu ordnen."""
-    for i, vid in enumerate(data.video_ids):
-        await db.execute(
-            "UPDATE playlist_videos SET position = ? WHERE playlist_id = ? AND video_id = ?",
-            (i, playlist_id, vid)
-        )
+    """Einträge der Playlist neu ordnen (Videos und Dateien gemeinsam)."""
+    await playlist_items.reorder(playlist_id, data.video_ids)
     return {"reordered": True, "count": len(data.video_ids)}

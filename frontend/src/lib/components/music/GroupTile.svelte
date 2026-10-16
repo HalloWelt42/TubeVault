@@ -9,8 +9,8 @@
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDurationLong } from '../../utils/format.js';
 
-  // group: { key, name, subtitle, count, duration, covers }; icon für Mixe ohne Bilder
-  let { group, icon = null, onOpen = () => {} } = $props();
+  // group: { key, name, subtitle, count, duration, covers }
+  let { group, onOpen = () => {} } = $props();
 
   let covers = $derived(group.covers?.length ? [0, 1, 2, 3].map(i => group.covers[i % group.covers.length]) : []);
   let current = $derived(player.source === group.key);
@@ -20,7 +20,7 @@
      onkeydown={(e) => e.key === 'Enter' && onOpen()} title="{group.name} - öffnen">
   <div class="cover" class:collage={covers.length}>
     {#each covers as id, i (i)}<img src={coverUrl(id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />{/each}
-    {#if !covers.length}<i class="fa-solid {icon || 'fa-music'} zeichen"></i>{/if}
+    {#if !covers.length}<i class="fa-solid fa-music zeichen"></i>{/if}
     <div class="tasten">
       <button class="taste" onclick={(e) => { e.stopPropagation(); player.playSource(group.key); }} title="Abspielen">
         <i class="fa-solid fa-play"></i></button>

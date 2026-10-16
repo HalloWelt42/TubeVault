@@ -31,7 +31,7 @@ KEEP_EXPORTS = 14
 TABLES = [
     "favorites", "watch_history", "categories", "video_categories",
     "category_rules", "category_exclusions",
-    "playlists", "playlist_videos", "subscriptions",
+    "playlists", "playlist_videos", "playlist_files", "subscriptions",
     "blocked_channels", "ignored_videos", "deleted_videos", "music_exclusions",
 ]
 

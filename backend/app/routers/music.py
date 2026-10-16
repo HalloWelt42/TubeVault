@@ -4,16 +4,19 @@ TubeVault – Musik
 Übersicht, Titel, Interpreten, Alben, Musikkanäle und dynamische
 Wiedergabelisten für die Musikseite und den Musikspieler; dazu die eigenen
 Musikdateien (Abspielen, Cover, Liedtext, Wiedergaben, Lieblingssongs) und
-der Bereich "Ausgeblendet" (ausgeblendete Dateien, ausgeschlossene Alben).
+der Bereich "Ausgeblendet" (ausgeblendete Dateien, ausgeschlossene Alben)
+und die Wiedergabelisten der Musik (Videos und Dateien gemischt).
 """
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from app.services import ad_free_export, audio_export, audiobooks, music_exclusions, music_files, music_library
+from app.services import (ad_free_export, audio_export, audiobooks, music_exclusions, music_files, music_library,
+                          playlist_items)
+from app.database import db
 from app.utils.range_file import range_response
 from app.services.music_library import Group, PlayList, Track
 
@@ -234,6 +237,58 @@ async def file_hidden(item_id: str, req: HiddenRequest):
     await _file_or_404(item_id)
     await music_files.set_hidden(item_id, req.hidden)
     return {"hidden": req.hidden}
+
+
+# ─── Wiedergabelisten der Musik: anlegen, füllen, ordnen ───
+
+class ListCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class ListItems(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=2000)   # Videos und Dateien der Sammlung, ans Ende
+
+
+class ListOrder(BaseModel):
+    ids: list[str]
+
+
+async def _list_or_404(list_id: int) -> None:
+    if not await db.fetch_val("SELECT 1 FROM playlists WHERE id = ?", (list_id,)):
+        raise HTTPException(status_code=404, detail="Wiedergabeliste nicht gefunden")
+
+
+@router.get("/playlists", response_model=list[Group])
+async def music_playlists():
+    """In der Musik angelegte Listen und alle anderen mit Musik, zuletzt angelegte zuerst."""
+    return await music_library.music_playlists()
+
+
+@router.post("/playlists", response_model=Group)
+async def create_music_playlist(req: ListCreate):
+    list_id = await music_library.create_music_playlist(req.name.strip())
+    return Group(key=f"playlist:{list_id}", name=req.name.strip(), count=0, duration=0, covers=[])
+
+
+@router.post("/playlists/{list_id}/items")
+async def add_list_items(list_id: int, req: ListItems):
+    await _list_or_404(list_id)
+    added = await playlist_items.add(list_id, req.ids)
+    return {"added": added, "count": await playlist_items.refresh_count(list_id)}
+
+
+@router.delete("/playlists/{list_id}/items/{item_id}")
+async def remove_list_item(list_id: int, item_id: str):
+    await _list_or_404(list_id)
+    await playlist_items.remove(list_id, item_id)
+    return {"count": await playlist_items.refresh_count(list_id)}
+
+
+@router.put("/playlists/{list_id}/items")
+async def order_list_items(list_id: int, req: ListOrder):
+    await _list_or_404(list_id)
+    await playlist_items.reorder(list_id, req.ids)
+    return {"ordered": True}
 
 
 # ─── Ausgeblendet: zurückholen, einzeln oder mehrere ───

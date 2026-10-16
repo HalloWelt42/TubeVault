@@ -504,6 +504,13 @@ export const api = {
   musicArtists: () => request('/api/music/artists'),
   musicAlbums: () => request('/api/music/albums'),
   musicChannels: () => request('/api/music/channels'),
+  // Wiedergabelisten der Musik: Videos und Dateien der Sammlung gemischt
+  musicPlaylists: () => request('/api/music/playlists'),
+  musicCreatePlaylist: (name) => request('/api/music/playlists', { method: 'POST', body: JSON.stringify({ name }) }),
+  musicAddToPlaylist: (id, ids) =>
+    request(`/api/music/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ ids }) }),
+  musicRemoveFromPlaylist: (id, itemId) => request(`/api/music/playlists/${id}/items/${itemId}`, { method: 'DELETE' }),
+  musicOrderPlaylist: (id, ids) => request(`/api/music/playlists/${id}/items`, { method: 'PUT', body: JSON.stringify({ ids }) }),
   musicAudioInfo: (videoId) => request(`/api/music/audio-info/${videoId}`),
   // Eigene Musiksammlung (Dateien) - welche Art ein Titel ist, weiß utils/musicTrack.js
   musicCoverUrl: (id) => `${API_BASE}/api/music/cover/${id}`,
