@@ -159,7 +159,8 @@ async def index_batch(url: str, model: str) -> int:
         todo = [(ref, text, _hash(text)) for ref, text in items if text.strip() and stored.get(ref) != _hash(text)][:_BATCH]
         if not todo:
             continue
-        vectors = await semantic_index.embed_texts([text for _, text, _ in todo], url, model, timeout=_TIMEOUT_S)
+        vectors = await semantic_index.embed_texts([text for _, text, _ in todo], url, model, timeout=_TIMEOUT_S,
+                                                   purpose="Einträge für die Bedeutungssuche einbetten", background=True)
         for (ref, _, text_hash), vector in zip(todo, vectors):
             packed, code = semantic_index.pack_with_code(vector)
             await db.conn.execute(

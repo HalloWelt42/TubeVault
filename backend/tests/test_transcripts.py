@@ -41,7 +41,7 @@ async def test_wort_im_transkript_findet_video_mit_stelle(stock):
 
 
 async def test_bedeutung_im_transkript(stock, set_setting, monkeypatch):
-    async def fake_embed(texts, url, model, timeout):
+    async def fake_embed(texts, url, model, timeout, purpose="", background=False):
         return [[1.0, 0.0] if ("Zinn" in t or "Lot" in t) else [0.0, 1.0] for t in texts]
     monkeypatch.setattr(semantic_index, "embed_texts", fake_embed)
 

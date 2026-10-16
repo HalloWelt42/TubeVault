@@ -38,7 +38,7 @@ def _fake_vector(text: str) -> list[float]:
 async def ai(test_db, set_setting, monkeypatch):
     calls = {"n": 0, "up": True}
 
-    async def fake_embed(texts, url, model, timeout):
+    async def fake_embed(texts, url, model, timeout, purpose="", background=False):
         if not calls["up"]:
             raise ConnectionError("aus")
         calls["n"] += 1

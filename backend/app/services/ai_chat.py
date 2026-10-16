@@ -39,7 +39,7 @@ def _is_text_model(entry: dict) -> bool:
 
 async def _list_models(url: str) -> Optional[str]:
     root = re.sub(r"/v1$", "", url)
-    async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S) as client:
+    async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
         # Dienste mit Ladezustand (/api/v0/models): ein geladenes Sprachmodell
         try:
             response = await client.get(f"{root}/api/v0/models")
@@ -109,7 +109,8 @@ async def complete_json(system: str, user: str, name: str, schema: dict,
     }
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(f"{cfg[0]}/chat/completions", json=payload)
+            response = await client.post(f"{cfg[0]}/chat/completions", json=payload,
+                                         headers=await semantic_index.headers(f"Textaufgabe {name}"))
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
     except (httpx.HTTPError, KeyError, IndexError, ValueError) as e:

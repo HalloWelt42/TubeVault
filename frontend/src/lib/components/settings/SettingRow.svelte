@@ -7,6 +7,7 @@
     number    Zahl; mit zero_label zusätzlich "ohne Grenze" (gespeichert als 0)
     select    Auswahl
     text      Textfeld
+    secret    verdecktes Textfeld mit Auge (Schlüssel)
 -->
 <script>
   let { def, value, onSave = () => {} } = $props();
@@ -23,6 +24,7 @@
   }
 
   let unlimited = $derived(def.zero_label && Number(value) === 0);
+  let shown = $state(false);   // Schlüssel aufgedeckt
   // Was beim Ausschalten von "ohne Grenze" eingetragen wird
   let fallback = $derived(Number(def.default) > 0 ? def.default : (def.min || 1));
 </script>
@@ -63,6 +65,12 @@
       <select class="tv-eingabe" value={value} onchange={(e) => onSave(e.target.value)}>
         {#each def.options as option}<option value={option}>{def.option_labels?.[option] || option}</option>{/each}
       </select>
+
+    {:else if def.kind === 'secret'}
+      <input class="tv-eingabe text" type={shown ? 'text' : 'password'} value={value} autocomplete="off"
+             onchange={(e) => onSave(e.target.value)} />
+      <button class="tv-knopf symbol" onclick={() => (shown = !shown)} title={shown ? 'Verdecken' : 'Aufdecken'}>
+        <i class="fa-solid {shown ? 'fa-eye-slash' : 'fa-eye'}"></i></button>
 
     {:else}
       <input class="tv-eingabe text" type="text" value={value} onchange={(e) => onSave(e.target.value)} />

@@ -25,7 +25,7 @@ from app.services import language
 # Qualitäten, die Download und Auswahllisten kennen (höchste zuerst)
 VIDEO_QUALITIES = ["best", "2160p", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"]
 
-SettingKind = Literal["toggle", "number", "duration", "select", "text"]
+SettingKind = Literal["toggle", "number", "duration", "select", "text", "secret"]
 
 
 class SettingDef(BaseModel):
@@ -126,6 +126,24 @@ SETTINGS: list[SettingDef] = [
     SettingDef(key="ai.url", default="", kind="text", category="ai", section="extensions",
                label="Adresse des KI-Dienstes",
                description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.178.20:1234/v1"),
+    # Weg zum KI-Dienst (Wunsch 16.10.2026): direkt oder über die Leitstelle, jederzeit umschaltbar.
+    # Nur die KI-Aufrufe gehen diesen Weg; Videoquelle, Bewertungen, Liedtexte, Werbeabschnitte und
+    # alle anderen Anbindungen bleiben direkt.
+    SettingDef(key="ai.route", default="direct", kind="select", category="ai", section="extensions",
+               options=["direct", "leitstelle"], option_labels={"direct": "Direkt", "leitstelle": "Über die Leitstelle"},
+               label="Weg zum KI-Dienst",
+               description="Direkt: TubeVault spricht den KI-Dienst unter der Adresse oben selbst an. Über die "
+                           "Leitstelle: die KI-Anfragen gehen an die Leitstelle, die Speicher, Vorrang und "
+                           "Warteschlange für alle Programme regelt. Nur die KI nimmt diesen Weg; Videoquelle, "
+                           "Bewertungen, Liedtexte und alle anderen Anbindungen bleiben direkt."),
+    SettingDef(key="ai.leitstelle_url", default="", kind="text", category="ai", section="extensions",
+               label="Adresse der Leitstelle",
+               description="Fassade der Leitstelle, z.B. http://192.168.178.49:8530/v1. Gilt, wenn der Weg "
+                           "zum KI-Dienst auf Leitstelle steht."),
+    SettingDef(key="ai.leitstelle_key", default="", kind="secret", category="ai", section="extensions",
+               label="Schlüssel der Leitstelle",
+               description="Schlüssel der Anwendung TubeVault aus der Leitstelle (dort unter Anwendungen). "
+                           "Wird bei jeder KI-Anfrage über die Leitstelle mitgeschickt."),
     SettingDef(key="ai.precision", default="ausgewogen", kind="select", category="ai", section="extensions",
                options=["weit", "ausgewogen", "genau", "sehr_genau"],
                option_labels={"weit": "Weit", "ausgewogen": "Ausgewogen", "genau": "Genau",
@@ -256,10 +274,14 @@ def validate(key: str, raw) -> str:
         return value
 
     # text
-    if key == "ai.url":
+    if key in ("ai.url", "ai.leitstelle_url"):
         if value and not value.startswith(("http://", "https://")):
             raise ValueError(f"{definition.label}: Adresse muss mit http:// oder https:// beginnen")
         return value.rstrip("/")
+    if definition.kind == "secret":
+        if any(c.isspace() for c in value):
+            raise ValueError(f"{definition.label}: ohne Leerzeichen")
+        return value
     if key == "download.subtitle_lang":
         langs = [part.strip().lower() for part in value.split(",") if part.strip()]
         if not langs or not all(part.replace("-", "").isalnum() and len(part) <= 10 for part in langs):

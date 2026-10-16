@@ -24,6 +24,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -155,17 +156,39 @@ async def fill_codes(connection, table: str, key: str) -> int:
 
 # ─── Einstellungen und Erreichbarkeit ─────────────────────────────────
 
+async def via_leitstelle() -> bool:
+    return (await setting_values.get("ai.route")) == "leitstelle"
+
+
 async def config() -> Optional[tuple[str, str]]:
-    """(Adresse, Modell), wenn die Erweiterung eingeschaltet und eingerichtet ist."""
+    """(Adresse, Modell), wenn die Erweiterung eingeschaltet und eingerichtet ist. Die Adresse folgt dem
+    Weg zum KI-Dienst: direkt (ai.url) oder über die Leitstelle (ai.leitstelle_url)."""
     if (await setting_values.get("ai.enabled")) != "true":
         return None
-    url = (await setting_values.get("ai.url")).strip().rstrip("/")
+    key = "ai.leitstelle_url" if await via_leitstelle() else "ai.url"
+    url = (await setting_values.get(key)).strip().rstrip("/")
     return (url, EMBEDDING_MODEL) if url else None
 
 
-async def embed_texts(texts: list[str], url: str, model: str, timeout: float) -> list[list[float]]:
+async def headers(purpose: str, background: bool = False) -> dict[str, str]:
+    """Köpfe einer KI-Anfrage. Über die Leitstelle: Schlüssel, lesbarer Titel (prozentkodiert, Köpfe
+    tragen nur ASCII) und bei Stapelarbeit der Vorrang Hintergrund. Direkt: keine."""
+    if not await via_leitstelle():
+        return {}
+    result = {"X-Leitstelle-Titel": quote(f"TubeVault: {purpose}")}
+    key = (await setting_values.get("ai.leitstelle_key")).strip()
+    if key:
+        result["Authorization"] = f"Bearer {key}"
+    if background:
+        result["X-Leitstelle-Prioritaet"] = "hintergrund"
+    return result
+
+
+async def embed_texts(texts: list[str], url: str, model: str, timeout: float,
+                      purpose: str = "Einbetten", background: bool = False) -> list[list[float]]:
     async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(f"{url}/embeddings", json={"model": model, "input": texts})
+        response = await client.post(f"{url}/embeddings", json={"model": model, "input": texts},
+                                     headers=await headers(purpose, background))
         response.raise_for_status()
         data = sorted(response.json()["data"], key=lambda item: item.get("index", 0))
     return [item["embedding"] for item in data]
@@ -181,7 +204,7 @@ async def available() -> bool:
     ok = False
     if cfg:
         try:
-            await embed_texts(["bereit"], cfg[0], cfg[1], timeout=_QUERY_TIMEOUT_S)
+            await embed_texts(["bereit"], cfg[0], cfg[1], timeout=_QUERY_TIMEOUT_S, purpose="Erreichbarkeit prüfen")
             ok = True
         except Exception as e:
             logger.debug(f"[BEDEUTUNG] KI-Dienst nicht erreichbar: {e.__class__.__name__}")
@@ -253,7 +276,8 @@ async def index_batch(url: str, model: str) -> int:
             todo.append((video_id, text, text_hash))
 
     if todo:
-        vectors = await embed_texts([text for _, text, _ in todo], url, model, timeout=_REQUEST_TIMEOUT_S)
+        vectors = await embed_texts([text for _, text, _ in todo], url, model, timeout=_REQUEST_TIMEOUT_S,
+                                     purpose="Videos für die Bedeutungssuche einbetten", background=True)
         for (video_id, _text, text_hash), vector in zip(todo, vectors):
             await db.conn.execute(
                 """INSERT INTO video_embeddings (video_id, model, text_hash, vector)
@@ -360,7 +384,8 @@ async def index_chunk_batch(url: str, model: str) -> int:
            ORDER BY c.id LIMIT ?""", (_chunk_cursor, model, _BATCH))
     if not rows:
         return 0
-    vectors = await embed_texts([row["text"] for row in rows], url, model, timeout=_REQUEST_TIMEOUT_S)
+    vectors = await embed_texts([row["text"] for row in rows], url, model, timeout=_REQUEST_TIMEOUT_S,
+                                 purpose="Gesagtes einbetten", background=True)
     for row, vector in zip(rows, vectors):
         packed, code = pack_with_code(vector)
         await db.conn.execute(
@@ -423,7 +448,7 @@ async def query_vector(query: str, url: str, model: str):
     key = (model, query.strip().casefold())
     vector = _query_cache.get(key)
     if vector is None:
-        vector = (await embed_texts([query.strip()], url, model, timeout=_QUERY_TIMEOUT_S))[0]
+        vector = (await embed_texts([query.strip()], url, model, timeout=_QUERY_TIMEOUT_S, purpose="Bedeutungssuche"))[0]
         if len(_query_cache) > 200:
             _query_cache.clear()
         _query_cache[key] = vector
