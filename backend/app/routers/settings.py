@@ -80,6 +80,9 @@ async def reset_settings():
 
 async def _notify_services(key: str) -> None:
     """Dienste, die einen Wert zwischengespeichert halten, neu lesen lassen."""
+    # Schalter von Hintergrundarbeiten: die geteilte Übersicht sofort neu rechnen
+    from app.services import shared_cache
+    shared_cache.forget("background_overview")
     if key.startswith("ai."):
         from app.services import semantic_index
         semantic_index.reset_availability()

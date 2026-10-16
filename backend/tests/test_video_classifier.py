@@ -122,5 +122,5 @@ async def test_typpruefung_laesst_sich_anhalten(test_db, set_setting):
     assert await vc.check_enabled()
     await set_setting("types.check_enabled", "false")
     assert not await vc.check_enabled()
-    item = next(i for i in await background_work.overview() if i.key == "type_check")
+    item = next(i for i in await background_work.compute_overview() if i.key == "type_check")
     assert item.paused and item.switch_key == "types.check_enabled" and item.eta_seconds is None

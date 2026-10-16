@@ -110,15 +110,30 @@ async def _lyrics(model: str, limit: int) -> list[tuple[str, str]]:
     return await asyncio.to_thread(read)
 
 
+# Bis zu diesem Feed-Eintrag (rss_entries.id) ist alles gerechnet - je Modell.
+# Ohne Merker durchsuchte jeder Durchgang (alle 2 Min.) alle 100.000 Einträge,
+# um meist nichts zu finden (gemessen 1,1 s, die Datenbank war so lange belegt).
+_feed_done = {"model": "", "upto": 0}
+
+
 async def _feed(model: str, limit: int) -> list[tuple[str, str]]:
     """Nur noch nicht gerechnete Einträge (Feed-Texte ändern sich nicht)."""
+    if _feed_done["model"] != model:
+        _feed_done.update(model=model, upto=0)
+    newest = await db.fetch_val("SELECT MAX(id) FROM rss_entries") or 0
+    if newest < _feed_done["upto"]:
+        _feed_done["upto"] = 0           # andere Datenbank (zurückgespielt): von vorn
+    if newest <= _feed_done["upto"]:
+        return []
     rows = await db.fetch_all(
         """SELECT r.video_id, r.title, r.description, s.channel_name FROM rss_entries r
            LEFT JOIN subscriptions s ON s.channel_id = r.channel_id
            LEFT JOIN item_embeddings e ON e.kind = 'feed' AND e.ref = r.video_id AND e.model = ?
-           WHERE e.ref IS NULL
+           WHERE r.id > ? AND e.ref IS NULL
              AND NOT EXISTS (SELECT 1 FROM videos v WHERE v.id = r.video_id AND v.status = 'ready')
-           ORDER BY r.published DESC LIMIT ?""", (model, limit))
+           ORDER BY r.published DESC LIMIT ?""", (model, _feed_done["upto"], limit))
+    if not rows:
+        _feed_done["upto"] = newest      # alles bis hier gerechnet: künftig nur Neueres ansehen
     return [(r["video_id"], "\n".join(p for p in (
         r["title"] or "", f"Kanal: {r['channel_name']}" if r["channel_name"] else "",
         (r["description"] or "")[:600]) if p)) for r in rows]

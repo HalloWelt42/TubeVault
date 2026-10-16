@@ -6,24 +6,25 @@
   lassen sich direkt hier anhalten und fortsetzen.
 -->
 <script>
-  import { api } from '../../api/client.js';
+  import { onMount } from 'svelte';
   import { parseServerTime, formatClock } from '../../utils/format.js';
   import { toast } from '../../stores/notifications.js';
-  import { workPercent as percent, switchWork } from '../../utils/backgroundWork.js';
+  import { workPercent as percent } from '../../utils/backgroundWork.js';
+  import { backgroundWork } from '../../stores/backgroundWork.svelte.js';
 
-  const REFRESH_MS = 8000;
 
-  let items = $state([]);
+  let items = $derived(backgroundWork.items || []);
   let open = $state(false);
   let now = $state(Date.now());
   let switching = $state(null);   // key der Arbeit, deren Schalter gerade umgelegt wird
   let allPaused = $derived(items.length > 0 && items.every(i => i.paused));
 
-  async function load() {
-    try { items = (await api.getBackgroundWork()).items || []; } catch { /* Statusleiste bleibt still */ }
+  // Laufzeiten mitzählen; ohne Arbeiten klappt die Anzeige zu
+  $effect(() => {
+    backgroundWork.items;
     now = Date.now();
-    if (items.length === 0) open = false;
-  }
+  });
+  $effect(() => { if (items.length === 0) open = false; });
 
   function runningFor(item) {
     if (!item.since) return null;
@@ -39,17 +40,12 @@
   async function toggle(item) {
     switching = item.key;
     try {
-      await switchWork(item);
-      await load();
+      await backgroundWork.toggle(item);
     } catch (e) { toast.error(e.message); }
     switching = null;
   }
 
-  $effect(() => {
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => clearInterval(timer);
-  });
+  onMount(() => backgroundWork.use());
 </script>
 
 {#if items.length > 0}

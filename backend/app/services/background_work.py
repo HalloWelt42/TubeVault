@@ -179,7 +179,9 @@ async def _ai_transcripts() -> Optional[WorkItem]:
            LEFT JOIN videos v ON v.id = a.video_id WHERE a.status = 'working' LIMIT 1""")
     # Erledigt von insgesamt: fertige gegen fertige plus laufende plus wartende
     counts = await transcripts.ai_counts()
-    remaining = await transcripts.pending() + counts["working"]
+    # Videos ohne Transkript zählen ist teuer (0,5 s), der Fortschritt verträgt eine Minute
+    from app.services import shared_cache
+    remaining = await shared_cache.cached("ai_transcripts_pending", 60, transcripts.pending) + counts["working"]
     if not row and not (paused and remaining):
         return None   # wartende ohne Bearbeiter: kein laufender Vorgang
     done = counts["done"]
@@ -289,7 +291,17 @@ _REPORT_GAP_S = 300
 _last_slow_report = 0.0
 
 
+OVERVIEW_TTL_S = 8     # Statusleiste und Übersichtskarte jedes Fensters fragen alle 8 s
+
+
 async def overview() -> list[WorkItem]:
+    """Stand aller Hintergrundarbeiten - einmal gerechnet gilt für alle Fenster."""
+    from app.services import shared_cache
+    return await shared_cache.cached("background_overview", OVERVIEW_TTL_S, compute_overview)
+
+
+async def compute_overview() -> list[WorkItem]:
+    """Stand aller Hintergrundarbeiten, frisch gerechnet (overview teilt ihn)."""
     global _last_slow_report
     items = []
     spent = []

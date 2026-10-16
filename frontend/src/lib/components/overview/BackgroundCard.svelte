@@ -4,33 +4,26 @@
   hier (Pause ist bei ihnen der Normalfall). Lädt sich selbst nach.
 -->
 <script>
-  import { onDestroy, onMount } from 'svelte';
-  import { api } from '../../api/client.js';
+  import { onMount } from 'svelte';
   import { toast } from '../../stores/notifications.js';
-  import { workPercent, switchWork } from '../../utils/backgroundWork.js';
+  import { workPercent } from '../../utils/backgroundWork.js';
+  import { backgroundWork } from '../../stores/backgroundWork.svelte.js';
   import OverviewCard from './OverviewCard.svelte';
 
-  const REFRESH_MS = 8000;
 
-  let items = $state(null);
+  let items = $derived(backgroundWork.items);
   let switching = $state(null);   // key der Arbeit, deren Schalter gerade umgelegt wird
-  let timer;
 
-  async function load() {
-    try { items = (await api.getBackgroundWork()).items || []; } catch { /* bleibt beim letzten Stand */ }
-  }
 
   async function toggle(item) {
     switching = item.key;
     try {
-      await switchWork(item);
-      await load();
+      await backgroundWork.toggle(item);
     } catch (e) { toast.error(e.message); }
     switching = null;
   }
 
-  onMount(() => { load(); timer = setInterval(load, REFRESH_MS); });
-  onDestroy(() => clearInterval(timer));
+  onMount(() => backgroundWork.use());   // ein Abruf für Karte und Statusleiste
 </script>
 
 {#if items?.length}

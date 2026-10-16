@@ -314,6 +314,15 @@ async def get_badges():
     """Leichtgewichtige Zähler für Sidebar-Badges.
     Alle Definitionen zentral aus counts_service (eine Quelle der Wahrheit).
     Jedes Badge zählt exakt das, was seine Zielseite anzeigt."""
+    # Jedes Fenster fragt alle 8 s: einmal gerechnet gilt für alle (shared_cache)
+    from app.services import shared_cache
+    return await shared_cache.cached("badges", BADGES_TTL_S, _badges)
+
+
+BADGES_TTL_S = 8
+
+
+async def _badges() -> dict:
     from app.services.counts_service import counts_service as cs
     active_dl = await db.fetch_val(
         "SELECT COUNT(*) FROM jobs WHERE type='download' AND status IN ('queued','active')") or 0

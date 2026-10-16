@@ -63,11 +63,17 @@ class CountsService:
 
     # ─── Feed / Abos ──────────────────────────────────────────────
     async def feed_new(self) -> int:
-        """Neue RSS-Einträge in aktiven Feeds – wie das Feed-Badge/-Tab."""
-        return await db.fetch_val(
-            "SELECT COUNT(*) FROM rss_entries r WHERE " + feed_scope.new_entry("r")
-            + await video_classifier.without_shorts("r")
-        ) or 0
+        """Neue RSS-Einträge in aktiven Feeds – wie das Feed-Badge/-Tab.
+        Prüft ~100.000 Einträge (0,5 s auf dem Pi) und ändert sich nur mit
+        Kanalprüfung und Downloads: eine Minute lang gilt das letzte Ergebnis."""
+        from app.services import shared_cache
+
+        async def count() -> int:
+            return await db.fetch_val(
+                "SELECT COUNT(*) FROM rss_entries r WHERE " + feed_scope.new_entry("r")
+                + await video_classifier.without_shorts("r")
+            ) or 0
+        return await shared_cache.cached("feed_new", 60, count)
 
     async def subscriptions_enabled(self) -> int:
         return await db.fetch_val(

@@ -318,11 +318,11 @@ async def test_nachziehen_ist_in_den_hintergrundarbeiten_sichtbar(test_db):
     from app.services import background_work
     for n in range(60):
         await test_db.execute("INSERT INTO videos (id, title, status) VALUES (?, 'T', 'ready')", (f"v{n:03d}",))
-    item = next(i for i in await background_work.overview() if i.key == "languages")
+    item = next(i for i in await background_work.compute_overview() if i.key == "languages")
     assert item.total == 60 and item.done == 0 and item.label == "Sprachen werden zugeordnet"
     while await language_assign.catch_up(limit=25):
         pass
-    assert not [i for i in await background_work.overview() if i.key == "languages"]
+    assert not [i for i in await background_work.compute_overview() if i.key == "languages"]
 
 
 async def test_schlagwoerter_folgen_dem_sprachfilter(async_client_factory, stocked):

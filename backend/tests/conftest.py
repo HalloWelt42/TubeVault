@@ -40,6 +40,16 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(autouse=True)
+def fresh_shared_cache():
+    """Geteilte Ergebnisse (shared_cache) gelten je Test neu - sonst sähe ein
+    Test die Zählungen der Datenbank eines früheren."""
+    from app.services import shared_cache
+    shared_cache.clear()
+    yield
+    shared_cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def own_texts_root(tmp_path, monkeypatch):
     """Textdateien (Beschreibung, Kapitel) je Test in einem eigenen Ordner:
     sonst fände ein Test die Beschreibungsdatei eines früheren Tests mit

@@ -289,8 +289,6 @@ PASSAGE_SLICE_S = 120
 
 async def _passages_slice(cfg: tuple[str, str]) -> bool:
     """Abschnitte einbetten, höchstens PASSAGE_SLICE_S lang; True, wenn noch welche warten."""
-    global _chunk_cursor
-    _chunk_cursor = 0
     started = time.monotonic()
     while time.monotonic() - started < PASSAGE_SLICE_S:
         if not await index_chunk_batch(*cfg):
@@ -334,8 +332,13 @@ async def background_index() -> None:
 
 # Abschnitte ohne Vektor: der Lauf merkt sich, bis wohin er gekommen ist
 # (neue Abschnitte bekommen immer größere Nummern), statt bei jedem Stapel
-# alle schon gerechneten zu überspringen. Jede Runde beginnt wieder vorn.
+# alle schon gerechneten zu überspringen. Von vorn beginnt er nur beim
+# Programmstart und bei einem anderen Modell - früher jede Runde (alle 2 Min.),
+# dann überging die erste Abfrage alle schon gerechneten Abschnitte und hielt
+# die Datenbank mit wachsendem Bestand immer länger auf (gemessen 0,7 s bei
+# 55.000, Ziel 416.000).
 _chunk_cursor = 0
+_chunk_cursor_model = ""
 # Schalter: Abschnitte des Gesagten einbetten (lange Arbeit auf dem KI-Dienst)
 PASSAGES_SWITCH = "ai.passages_enabled"
 
@@ -348,7 +351,9 @@ async def pending_chunks(model: str) -> int:
 
 async def index_chunk_batch(url: str, model: str) -> int:
     """Einen Stapel Transkript-Abschnitte einbetten. Gibt die Zahl zurück."""
-    global _chunk_cursor
+    global _chunk_cursor, _chunk_cursor_model
+    if model != _chunk_cursor_model:
+        _chunk_cursor, _chunk_cursor_model = 0, model
     rows = await db.fetch_all(
         """SELECT c.id, c.text FROM transcript_chunks c
            WHERE c.id > ? AND NOT EXISTS (SELECT 1 FROM chunk_embeddings e WHERE e.chunk_id = c.id AND e.model = ?)

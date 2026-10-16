@@ -13,7 +13,7 @@ def fresh():
 
 
 async def test_nichts_laeuft(test_db):
-    assert await background_work.overview() == []
+    assert await background_work.compute_overview() == []
 
 
 async def test_typ_pruefung_mit_fortschritt(test_db):
@@ -21,12 +21,12 @@ async def test_typ_pruefung_mit_fortschritt(test_db):
         await test_db.execute(
             "INSERT INTO videos (id, title, duration, video_type) VALUES (?, 'T', 30, 'video')",
             (f"abcdefghi{n:02d}",))
-    first = (await background_work.overview())[0]
+    first = (await background_work.compute_overview())[0]
     assert (first.key, first.done, first.total) == ("type_check", 0, 4)
     assert first.eta_seconds == 8 and first.since
 
     await test_db.execute("UPDATE videos SET type_verified = 1 WHERE id = 'abcdefghi00'")
-    second = (await background_work.overview())[0]
+    second = (await background_work.compute_overview())[0]
     assert (second.done, second.total, second.progress) == (1, 4, 0.25)
 
 
@@ -39,7 +39,7 @@ async def test_nachvertonung_in_arbeit(test_db, set_setting):
         "INSERT INTO dub_requests (video_id, target_language, status, progress, note, worker, claimed_at) "
         "VALUES ('abcdefghijk', 'de', 'working', 0.4, 'Übersetzen', 'Mac', datetime('now'))")
     await test_db.execute("INSERT INTO dub_requests (video_id, target_language) VALUES ('abcdefghijk', 'en')")
-    item = (await background_work.overview())[0]
+    item = (await background_work.compute_overview())[0]
     assert item.label == "Nachvertonung: Ein Film"
     assert (item.progress, item.detail, item.waiting) == (0.4, "Übersetzen · Mac", 1)
 
@@ -56,7 +56,7 @@ async def test_ki_transkripte_mit_erledigt_und_restzeit(test_db):
            ('kivideo0000', 'done', datetime('now', '-30 minutes'), datetime('now', '-20 minutes')),
            ('kivideo0001', 'done', datetime('now', '-20 minutes'), datetime('now', '-10 minutes')),
            ('kivideo0002', 'working', datetime('now', '-1 minutes'), NULL)""")
-    item = next(i for i in await background_work.overview() if i.key == "ai_transcripts")
+    item = next(i for i in await background_work.compute_overview() if i.key == "ai_transcripts")
     assert (item.done, item.total) == (2, 5)                 # 2 fertig, 1 läuft, 2 warten
     assert abs(item.eta_seconds - 3 * 600) < 5               # 3 offen zu je 10 Minuten
 
@@ -71,7 +71,7 @@ async def test_ki_transkripte_lassen_sich_anhalten(test_db, set_setting):
             (f"kivideo{n:04d}",))
     await set_setting("transcripts.ai_enabled", "false")
     assert await transcripts.claim_ai("mac") is None
-    item = next(i for i in await background_work.overview() if i.key == "ai_transcripts")
+    item = next(i for i in await background_work.compute_overview() if i.key == "ai_transcripts")
     assert item.paused and item.switch_key == "transcripts.ai_enabled"
     assert (item.done, item.total) == (0, 3) and item.eta_seconds is None
 

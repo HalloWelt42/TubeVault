@@ -50,7 +50,7 @@ async def test_angehalten_ist_standard(kanaele, scans):
     seen, _ = scans
     assert await auto_scan.pending() == 2
     assert await auto_scan.run_due() is None and seen == []
-    [item] = [i for i in await background_work.overview() if i.key == "channel_scan"]
+    [item] = [i for i in await background_work.compute_overview() if i.key == "channel_scan"]
     assert item.paused and item.switch_key == "scan.auto_enabled" and (item.done, item.total) == (1, 3)
 
 
@@ -65,7 +65,7 @@ async def test_einer_alle_zwei_stunden_bis_alle_erfasst(kanaele, scans, set_sett
     await _zwei_stunden_spaeter(kanaele)
     assert await auto_scan.run_due() is None and seen == ["UCa", "UCb"]
     assert await auto_scan.pending() == 0
-    assert not [i for i in await background_work.overview() if i.key == "channel_scan"]
+    assert not [i for i in await background_work.compute_overview() if i.key == "channel_scan"]
 
 
 async def test_gescheiterter_kanal_kommt_zuletzt_wieder(kanaele, scans, set_setting):
@@ -85,16 +85,16 @@ async def test_gescheiterter_kanal_kommt_zuletzt_wieder(kanaele, scans, set_sett
 async def test_vertonen_angehalten_gibt_keinen_auftrag(test_db, set_setting):
     from app.services import dubbing
     await set_setting("dub.enabled", "true")
-    [item] = [i for i in await background_work.overview() if i.key == "dubbing"]
+    [item] = [i for i in await background_work.compute_overview() if i.key == "dubbing"]
     assert item.paused and item.waiting == 0           # angehalten immer sichtbar, auch ohne Auftrag
     await test_db.execute("INSERT INTO videos (id, title, status) VALUES ('vid00000001', 'Ein Video', 'ready')")
     await test_db.execute("INSERT INTO dub_requests (video_id, target_language, status) VALUES ('vid00000001', 'de', 'queued')")
     assert await dubbing.claim("Rechner") is None
-    [item] = [i for i in await background_work.overview() if i.key == "dubbing"]
+    [item] = [i for i in await background_work.compute_overview() if i.key == "dubbing"]
     assert (item.label, item.paused, item.waiting, item.switch_key) == ("Vertonen", True, 1, "dub.processing_enabled")
 
     await set_setting("dub.processing_enabled", "true")
     claimed = await dubbing.claim("Rechner")
     assert claimed and claimed.video_id == "vid00000001"
-    [item] = [i for i in await background_work.overview() if i.key == "dubbing"]
+    [item] = [i for i in await background_work.compute_overview() if i.key == "dubbing"]
     assert not item.paused and item.label.startswith("Nachvertonung: Ein Video")

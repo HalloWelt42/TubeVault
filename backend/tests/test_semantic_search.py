@@ -43,6 +43,10 @@ async def ai(test_db, set_setting, monkeypatch):
         return [_fake_vector(t) for t in texts]
 
     monkeypatch.setattr(semantic_index, "embed_texts", fake_embed)
+    from app.services import semantic_items
+    semantic_items._feed_done.update(model="", upto=0)
+    monkeypatch.setattr(semantic_index, "_chunk_cursor", 0)
+    monkeypatch.setattr(semantic_index, "_chunk_cursor_model", "")
     semantic_index.reset_availability()
     semantic_index._matrix = None
     semantic_index._query_cache.clear()
@@ -192,3 +196,36 @@ async def test_bedeutung_findet_kanaele_playlists_feed_und_liedtexte(ai, test_db
     sterne = (await _search("Teleskop", precision="ausgewogen"))[2]
     assert "liedmond001" in [v.id for v in sterne.sections["sinngemaess"].items]
     assert [p.name for p in sterne.sections["playlists"].items] == ["Sterne schauen"]
+
+
+async def test_feed_wird_nicht_jedes_mal_ganz_durchsucht(ai, test_db, monkeypatch):
+    """Ist alles gerechnet, sieht der nächste Durchgang nur neuere Einträge an
+    (vorher alle 2 Min. alle 100.000, gemessen 1,1 s); Neues kommt trotzdem dran."""
+    from app.services import semantic_items
+    semantic_items._codes.clear()
+    await test_db.execute("INSERT INTO rss_entries (video_id, channel_id, title) VALUES ('feedalt0001', 'UCx', 'Brot backen')")
+    url, model = await semantic_index.config()
+    while await semantic_items.index_batch(url, model):
+        pass
+    assert semantic_items._feed_done["upto"] > 0
+    assert await semantic_items._feed(model, 10) == []
+    await test_db.execute("INSERT INTO rss_entries (video_id, channel_id, title) VALUES ('feedneu0001', 'UCx', 'Teleskop bauen')")
+    assert [ref for ref, _ in await semantic_items._feed(model, 10)] == ["feedneu0001"]
+
+
+async def test_abschnitte_beginnen_nicht_jede_runde_vorn(ai, test_db, monkeypatch):
+    """Der Lesezeiger der Abschnitte bleibt zwischen den Runden stehen; von vorn
+    nur bei einem anderen Modell."""
+    await test_db.execute("INSERT INTO videos (id, title, status) VALUES ('abschn00001', 'T', 'ready')")
+    await test_db.execute("INSERT INTO transcripts (video_id, language, status) VALUES ('abschn00001', 'de', 'ok')")
+    for n in range(3):
+        await test_db.execute("INSERT INTO transcript_chunks (video_id, start, end, text) VALUES ('abschn00001', ?, ?, 'Mond und Sterne')", (n, n + 1))
+    url, model = await semantic_index.config()
+    monkeypatch.setattr(semantic_index, "PASSAGE_SLICE_S", 0.2)
+    await semantic_index._passages_slice((url, model))
+    cursor = semantic_index._chunk_cursor
+    assert cursor > 0
+    await semantic_index._passages_slice((url, model))
+    assert semantic_index._chunk_cursor == cursor            # früher wieder 0
+    await semantic_index.index_chunk_batch(url, "anderes-modell")
+    assert semantic_index._chunk_cursor_model == "anderes-modell"
