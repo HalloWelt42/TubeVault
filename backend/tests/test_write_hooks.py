@@ -9,7 +9,7 @@ automatisch aktualisiert werden. Kontrakt:
 - leerer description-String schreibt keine Datei (konsistent zu export)
 
 Die Download-Pfade (download_service, own_videos) rufen dieselbe
-export_description() auf, das ist in test_text_export.py abgedeckt.
+write_description() auf, das ist in test_text_export.py abgedeckt.
 Hier steht der User-Pfad über das Edit-Panel im Fokus.
 """
 import pytest

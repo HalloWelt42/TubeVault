@@ -163,15 +163,14 @@ async def adopt(file_id: int, video_id: Optional[str] = None) -> str:
         thumbnail = str(made) if made else None
     now = now_sqlite()
     await db.execute(
-        """INSERT INTO videos (id, title, channel_id, channel_name, description, duration, upload_date,
+        """INSERT INTO videos (id, title, channel_id, channel_name, duration, upload_date,
                                download_date, thumbnail_path, file_path, file_size, status, source,
                                source_url, import_path, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'imported', ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'imported', ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                title = COALESCE(NULLIF(videos.title, ''), excluded.title),
                channel_id = COALESCE(NULLIF(videos.channel_id, ''), excluded.channel_id),
                channel_name = COALESCE(NULLIF(videos.channel_name, ''), excluded.channel_name),
-               description = COALESCE(NULLIF(videos.description, ''), excluded.description),
                duration = COALESCE(videos.duration, excluded.duration),
                upload_date = COALESCE(videos.upload_date, excluded.upload_date),
                download_date = excluded.download_date,
@@ -179,10 +178,13 @@ async def adopt(file_id: int, video_id: Optional[str] = None) -> str:
                file_path = excluded.file_path, file_size = excluded.file_size,
                status = 'ready', source = 'imported', import_path = excluded.import_path,
                updated_at = excluded.updated_at""",
-        (video_id, title, channel_id, channel_name, feed["description"] if feed else None,
+        (video_id, title, channel_id, channel_name,
          item.duration or (feed["duration"] if feed else None), feed["published"] if feed else None,
          now, thumbnail, str(target), target.stat().st_size,
          f"https://www.youtube.com/watch?v={video_id}", item.rel_path, now, now))
+    if feed and feed["description"]:
+        from app.services import text_export
+        await text_export.write_description(video_id, feed["description"], keep_existing=True)
     await asyncio.to_thread(_remove_leftovers, item.rel_path)
     await _decide(file_id, Decision.ADOPTED, video_id)
     await _after_library_change(video_id, title)

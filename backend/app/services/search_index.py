@@ -39,6 +39,16 @@ from app.database import db
 
 logger = logging.getLogger(__name__)
 
+# Änderungen an Videos merken. Die Beschreibung fehlt bewusst: sie liegt als
+# Datei, und text_export merkt das Video beim Schreiben selbst vor.
+UPDATE_TRIGGER_SQL = """
+CREATE TRIGGER IF NOT EXISTS trg_search_dirty_update
+AFTER UPDATE OF title, channel_name, tags, notes, has_lyrics ON videos
+BEGIN
+    INSERT OR IGNORE INTO search_dirty (video_id) VALUES (new.id);
+END;
+"""
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS search_docs (
     doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,16 +67,11 @@ CREATE TRIGGER IF NOT EXISTS trg_search_dirty_insert AFTER INSERT ON videos
 BEGIN
     INSERT OR IGNORE INTO search_dirty (video_id) VALUES (new.id);
 END;
-CREATE TRIGGER IF NOT EXISTS trg_search_dirty_update
-AFTER UPDATE OF title, channel_name, description, tags, notes, has_lyrics ON videos
-BEGIN
-    INSERT OR IGNORE INTO search_dirty (video_id) VALUES (new.id);
-END;
 CREATE TRIGGER IF NOT EXISTS trg_search_dirty_delete AFTER DELETE ON videos
 BEGIN
     INSERT OR IGNORE INTO search_dirty (video_id) VALUES (old.id);
 END;
-"""
+""" + UPDATE_TRIGGER_SQL
 
 # Gewichte je Spalte (title, channel_name, description, tags, notes, lyrics)
 BM25_WEIGHTS = "10.0, 5.0, 1.0, 3.0, 2.0, 1.0"

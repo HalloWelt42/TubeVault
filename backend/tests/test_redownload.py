@@ -120,7 +120,8 @@ async def test_erfolg_ersetzt_datei_und_bewahrt_angaben(
     assert row["title"] == "Mein eigener Titel", "gepflegter Titel bleibt"
     assert json.loads(row["tags"]) == ["eigener-tag"], "gepflegte Tags bleiben"
     assert row["video_type"] == "short", "gepflegter Typ bleibt"
-    assert row["description"] == "Beschreibung", "Leeres wird aufgefüllt"
+    from app.services import text_resolver
+    assert await text_resolver.get_description(VID) == "Beschreibung", "Leeres wird aufgefüllt (als Datei)"
     assert not ready_video.exists(), "Vorgängerdatei wird nach Erfolg entfernt"
 
     streams = await test_db.fetch_all("SELECT quality FROM streams WHERE video_id = ?", (VID,))

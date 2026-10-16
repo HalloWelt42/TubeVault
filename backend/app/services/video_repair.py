@@ -101,13 +101,17 @@ async def metadata_from_source(video_id: str) -> dict:
         if thumbnail:
             updates["thumbnail_path"] = str(thumbnail)
     updates["updated_at"] = now_sqlite()
+    description = updates.pop("description", None)
 
     await db.execute(
         f"UPDATE videos SET {', '.join(f'{key} = ?' for key in updates)} WHERE id = ?",
         (*updates.values(), video_id))
     # Inhalte als Datei mitziehen: sonst zeigte die (zuerst gelesene) alte
     # Beschreibungsdatei weiter den alten Text, und info.json bliebe veraltet
-    from app.services import content_files
+    from app.services import content_files, text_export
+    if description:
+        await text_export.write_description(video_id, description)
     await content_files.write_for(video_id)
-    logger.info(f"Angaben von der Quelle übernommen für {video_id}: {list(updates)}")
-    return {"status": "ok", "updated_fields": list(updates), "title": updates.get("title")}
+    logger.info(f"Angaben von der Quelle übernommen für {video_id}: {list(updates)}{' + Beschreibung' if description else ''}")
+    fields = list(updates) + (["description"] if description else [])
+    return {"status": "ok", "updated_fields": fields, "title": updates.get("title")}

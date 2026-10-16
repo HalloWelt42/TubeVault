@@ -245,19 +245,20 @@ async def register_local_video(data: LocalVideoRegister):
 
     await db.execute(
         """INSERT INTO videos
-           (id, title, channel_name, description, duration, download_date,
+           (id, title, channel_name, duration, download_date,
             tags, status, file_path, file_size, source, source_url, notes,
             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, 'local', ?, ?, ?, ?)""",
-        (video_id, title, data.channel_name, data.description,
+           VALUES (?, ?, ?, ?, ?, ?, 'ready', ?, ?, 'local', ?, ?, ?, ?)""",
+        (video_id, title, data.channel_name,
          duration, now, tags_json, str(file_path), file_size,
          str(file_path), data.notes, now, now)
     )
 
     logger.info(f"Lokales Video registriert: {video_id} ({title})")
 
-    # Inhalte als Datei: info.json, Beschreibung, Kapitel (wirft nie)
-    from app.services import content_files
+    # Inhalte als Datei: Beschreibung, dann info.json und Kapitel (wirft nie)
+    from app.services import content_files, text_export
+    await text_export.write_description(video_id, data.description)
     await content_files.write_for(video_id)
     return {
         "id": video_id,

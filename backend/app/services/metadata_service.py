@@ -265,6 +265,13 @@ class MetadataService:
                 "UPDATE videos SET suggest_override = NULL, updated_at = ? WHERE id = ?",
                 (now_sqlite(), video_id))
 
+        # Beschreibung nur als Datei (text_export.write_description), nie in der Spalte
+        description = filtered.pop("description", None)
+        if description is not None:
+            from app.services import text_export
+            await text_export.write_description(video_id, description)
+            filtered.setdefault("updated_at", now_sqlite())
+
         if filtered:
             filtered["updated_at"] = now_sqlite()
             set_clause = ", ".join(f"{k} = ?" for k in filtered)
@@ -272,13 +279,6 @@ class MetadataService:
             await db.execute(
                 f"UPDATE videos SET {set_clause} WHERE id = ?", values
             )
-
-            if "description" in filtered:
-                try:
-                    from app.services import text_export
-                    await text_export.export_description(video_id)
-                except Exception as e:
-                    logger.warning(f"text_export description {video_id}: {e}")
 
         # Typ von Hand gesetzt: gilt auch für den Feed und bleibt vor der
         # automatischen Prüfung geschützt

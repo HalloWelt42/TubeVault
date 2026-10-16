@@ -139,17 +139,37 @@ async def _delete_text_file(video_id: str, kind: str) -> bool:
 # Description (Phase 3a)
 # ═══════════════════════════════════════════════════════════════
 
-async def export_description(video_id: str) -> dict | None:
-    """Schreibt videos.description als Datei. Idempotent via sha256."""
-    row = await db.fetch_one(
-        "SELECT description FROM videos WHERE id = ?", (video_id,)
-    )
-    if not row:
-        return None
-    content = (row["description"] or "").strip()
-    if not content:
-        return None
-    return await _write_text_file(video_id, "description", content)
+async def write_description(video_id: str, text: str | None, keep_existing: bool = False) -> bool:
+    """Die eine Schreibstelle der Beschreibung: schreibt die Datei und leert die
+    Spalte videos.description (Inhalte als Datei, Nutzerentscheidung 16.10.2026).
+    Leerer Text löscht die Beschreibung. keep_existing: nur schreiben, wenn das
+    Video noch keine hat (erneutes Laden behält gepflegte Texte).
+    Liefert True, wenn sich etwas geändert hat."""
+    content = (text or "").strip()
+    if keep_existing:
+        from app.services import text_resolver
+        if not content or await text_resolver.get_description(video_id):
+            return False
+    if content:
+        await _write_text_file(video_id, "description", content)
+    else:
+        await _delete_text_file(video_id, "description")
+    # Steht noch Text in der Spalte, ist er jetzt überholt
+    await db.execute("UPDATE videos SET description = NULL WHERE id = ? AND description IS NOT NULL", (video_id,))
+    return True
+
+
+async def move_description_from_column(video_id: str, column_text: str) -> bool:
+    """Übergang: Text aus der Spalte in die Datei bringen, dann die Spalte
+    leeren - nur wenn sie sich seither nicht geändert hat. Die Spalte ist hier
+    die neuere Fassung (bis 2.71 schrieb jede Schreibstelle erst die Spalte,
+    dann die Datei; eine abweichende Datei ist also veraltet)."""
+    content = (column_text or "").strip()
+    if content:
+        await _write_text_file(video_id, "description", content)   # gleicher Inhalt: kein Schreiben
+    cursor = await db.execute(
+        "UPDATE videos SET description = NULL WHERE id = ? AND description = ?", (video_id, column_text))
+    return cursor.rowcount == 1
 
 
 # ═══════════════════════════════════════════════════════════════

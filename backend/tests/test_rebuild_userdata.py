@@ -123,7 +123,10 @@ class TestRebuild:
         assert row["status"] == "ready"
         assert row["file_path"].endswith("video.mp4")  # größte Datei gewonnen
         assert row["file_size"] == 500
-        assert row["description"] == "Beschreibung!"
+        # Die Beschreibung bleibt in ihrer Datei (Inhalte als Datei), die Spalte leer
+        assert row["description"] is None
+        from app.services import text_resolver
+        assert await text_resolver.get_description(vid) == "Beschreibung!"
         assert json.loads(row["tags"]) == ["x"]
 
     async def test_rebuild_laesst_bestehende_in_ruhe(self, test_db, roots):

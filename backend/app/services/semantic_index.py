@@ -32,6 +32,16 @@ from app.services import setting_values
 
 logger = logging.getLogger(__name__)
 
+# Änderungen an Videos merken. Die Beschreibung fehlt bewusst: sie liegt als
+# Datei, und text_export merkt das Video beim Schreiben selbst vor (mark_dirty).
+UPDATE_TRIGGER_SQL = """
+CREATE TRIGGER IF NOT EXISTS trg_semantic_dirty_update
+AFTER UPDATE OF title, channel_name, tags, status ON videos
+BEGIN
+    INSERT OR IGNORE INTO semantic_dirty (video_id) VALUES (new.id);
+END;
+"""
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS video_embeddings (
     video_id TEXT PRIMARY KEY,
@@ -44,11 +54,6 @@ CREATE TABLE IF NOT EXISTS semantic_dirty (
     video_id TEXT PRIMARY KEY
 );
 CREATE TRIGGER IF NOT EXISTS trg_semantic_dirty_insert AFTER INSERT ON videos
-BEGIN
-    INSERT OR IGNORE INTO semantic_dirty (video_id) VALUES (new.id);
-END;
-CREATE TRIGGER IF NOT EXISTS trg_semantic_dirty_update
-AFTER UPDATE OF title, channel_name, description, tags, status ON videos
 BEGIN
     INSERT OR IGNORE INTO semantic_dirty (video_id) VALUES (new.id);
 END;
@@ -69,7 +74,7 @@ BEGIN
     DELETE FROM video_embeddings WHERE video_id = old.id;
     DELETE FROM semantic_dirty WHERE video_id = old.id;
 END;
-"""
+""" + UPDATE_TRIGGER_SQL
 
 # Kleine Stapel: der KI-Dienst arbeitet nacheinander, eine Suchanfrage soll
 # während des Einbettens nicht lange hinter einem Stapel warten.

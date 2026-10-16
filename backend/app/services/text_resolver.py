@@ -9,12 +9,13 @@ tags, notes). Strategie:
     3. None wenn beides leer/fehlt.
 
 Dieser Service ist reiner Reader – er schreibt nichts (kein Self-Heal),
-damit Read-Pfade keine Seiteneffekte auslösen. Wer Files schreiben will,
-nutzt text_export.export_description().
+damit Read-Pfade keine Seiteneffekte auslösen. Geschrieben wird nur über
+text_export.write_description (Datei, nie Spalte).
 
-Solange die DB-Spalte gefüllt ist, ist der Fallback redundant aber
-gefahrlos. Nach einer DB-Leerung trägt die Datei-Schicht alle Reads.
+Die Spalte ist Übergang: content_files überträgt, was dort noch steht, in
+die Datei und leert sie danach. Bis dahin ist der Fallback gefahrlos.
 """
+import asyncio
 import logging
 from pathlib import Path
 
@@ -55,6 +56,30 @@ async def get_description(video_id: str) -> str | None:
     if row and row["description"]:
         return row["description"]
     return None
+
+
+async def descriptions_of(video_ids: list[str]) -> dict[str, str]:
+    """Beschreibungen vieler Videos auf einmal (z.B. Export): Dateien im
+    eigenen Faden lesen, Rest aus der Spalte (Übergang)."""
+    def _read_all() -> dict[str, str]:
+        found = {}
+        for video_id in video_ids:
+            try:
+                content = _description_file(video_id).read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if content:
+                found[video_id] = content
+        return found
+    found = await asyncio.to_thread(_read_all)
+    rest = [video_id for video_id in video_ids if video_id not in found]
+    for start in range(0, len(rest), 500):
+        chunk = rest[start:start + 500]
+        rows = await db.fetch_all(
+            f"SELECT id, description FROM videos WHERE id IN ({','.join('?' * len(chunk))}) AND COALESCE(description, '') <> ''",
+            chunk)
+        found.update({row["id"]: row["description"] for row in rows})
+    return found
 
 
 async def get_chapters(video_id: str) -> list | None:

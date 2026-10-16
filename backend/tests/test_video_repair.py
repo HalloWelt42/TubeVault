@@ -66,8 +66,7 @@ async def test_angaben_von_der_quelle_erneuern_die_dateien(test_db, monkeypatch,
     monkeypatch.setattr(rate_limiter, "disabled", True)
     monkeypatch.setattr(text_export, "TEXTS_DIR", tmp_path)
     await _video(test_db)
-    await test_db.execute("UPDATE videos SET description = 'Alte Beschreibung' WHERE id = 'vid00000001'")
-    await text_export.export_description("vid00000001")
+    await text_export.write_description("vid00000001", "Alte Beschreibung")
     monkeypatch.setattr(video_repair, "_fetch_metadata",
                         lambda video_id: {"title": "Neu", "description": "Neue Beschreibung"})
 

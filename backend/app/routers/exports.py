@@ -40,9 +40,13 @@ async def list_exports():
 async def export_videos_json():
     """Alle Videos als JSON exportieren."""
     rows = await db.fetch_all("SELECT * FROM videos WHERE status = 'ready' ORDER BY title")
+    # Beschreibungen liegen als Datei (Inhalte als Datei), nicht in der Spalte
+    from app.services import text_resolver
+    descriptions = await text_resolver.descriptions_of([r["id"] for r in rows])
     videos = []
     for r in rows:
         d = dict(r)
+        d["description"] = descriptions.get(d["id"])
         if isinstance(d.get("tags"), str):
             try:
                 d["tags"] = json.loads(d["tags"])

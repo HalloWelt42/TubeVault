@@ -1,149 +1,91 @@
 """
-Text-Export Tests (Phase 3a – Daten aus DB in Dateien auslagern).
+Beschreibung als Datei (app/services/text_export, Nutzerentscheidung 16.10.2026).
 
-Kontrakt des Export-Services:
-- schreibt Datei <video_id>.<kind>.<ext> in TEXTS_DIR
-- registriert Metadata (size, sha256, synced_at) in text_files-Tabelle
-- idempotent: gleicher Content → kein Write, kein Timestamp-Update
-- verändertes DB-Feld → neuer Hash, File wird überschrieben
-- leeres/None-Feld → kein File, kein Registry-Eintrag
-- Restore: aus File zurück in DB lesen
+Kontrakt:
+- write_description ist die eine Schreibstelle: Datei <texts>/<id>/description.txt
+  samt Eintrag in text_files (Größe, sha256); die Spalte videos.description
+  wird dabei geleert, nie beschrieben.
+- gleicher Text: kein erneutes Schreiben; leerer Text löscht die Beschreibung;
+  keep_existing behält einen vorhandenen Text (erneutes Laden).
+- move_description_from_column bringt Altbestand aus der Spalte in die Datei
+  und leert die Spalte nur, wenn sie sich seither nicht geändert hat.
 """
-import hashlib
-from pathlib import Path
-
 import pytest
 
-from app.services.text_export import export_description
+from app.services import text_export, text_resolver
 
 
 @pytest.fixture
-async def video_row(test_db):
-    """Fügt ein Test-Video in videos-Tabelle ein."""
-    await test_db.execute(
-        "INSERT INTO videos (id, title, description) VALUES (?, ?, ?)",
-        ("vidABC", "Test-Titel", "Das ist die Beschreibung.\nZweite Zeile."),
-    )
+def texte(tmp_path, monkeypatch):
+    monkeypatch.setattr(text_export, "TEXTS_DIR", tmp_path)
+    return tmp_path
+
+
+@pytest.fixture
+async def video(test_db):
+    await test_db.execute("INSERT INTO videos (id, title, description) VALUES ('vidABC', 'T', 'Alt in der Spalte')")
     return "vidABC"
 
 
-async def test_export_writes_file(test_db, video_row, tmp_path, monkeypatch):
-    # Override TEXTS_DIR auf tmp
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    result = await export_description(video_row)
-
-    assert result is not None
-    # Ordner pro Video (konsistent zu lyrics_service)
-    expected_file = tmp_path / video_row / "description.txt"
-    assert expected_file.exists()
-    assert expected_file.read_text() == "Das ist die Beschreibung.\nZweite Zeile."
+async def _registry(db, video_id):
+    return await db.fetch_one("SELECT * FROM text_files WHERE video_id = ? AND kind = 'description'", (video_id,))
 
 
-async def test_export_registers_in_db(test_db, video_row, tmp_path, monkeypatch):
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    await export_description(video_row)
-
-    row = await test_db.fetch_one(
-        "SELECT * FROM text_files WHERE video_id=? AND kind='description'",
-        (video_row,),
-    )
-    assert row is not None
-    # Relativer Pfad: '<video_id>/<kind>.<ext>'
-    assert row["filename"] == f"{video_row}/description.txt"
-    assert row["size_bytes"] > 0
-    assert len(row["sha256"]) == 64  # hex-length
-    assert row["synced_at"] is not None
+async def test_schreibt_datei_und_leert_spalte(test_db, texte, video):
+    assert await text_export.write_description(video, "Das ist die Beschreibung.\nZweite Zeile.")
+    assert (texte / video / "description.txt").read_text(encoding="utf-8") == "Das ist die Beschreibung.\nZweite Zeile."
+    row = await _registry(test_db, video)
+    assert row["filename"] == f"{video}/description.txt" and row["size_bytes"] > 0 and len(row["sha256"]) == 64
+    assert await test_db.fetch_val("SELECT description FROM videos WHERE id = ?", (video,)) is None
+    assert await text_resolver.get_description(video) == "Das ist die Beschreibung.\nZweite Zeile."
 
 
-async def test_export_idempotent(test_db, video_row, tmp_path, monkeypatch):
-    """Zweiter Export mit identischem Content → keine Neu-Schreibung.
-    r1.skipped=False (erst geschrieben), r2.skipped=True (keine Änderung)."""
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    r1 = await export_description(video_row)
-    first_synced = (await test_db.fetch_one(
-        "SELECT synced_at FROM text_files WHERE video_id=?", (video_row,)
-    ))["synced_at"]
-
-    # Zweiter Export – erkennt via sha256 dass identisch ist
-    r2 = await export_description(video_row)
-    second_synced = (await test_db.fetch_one(
-        "SELECT synced_at FROM text_files WHERE video_id=?", (video_row,)
-    ))["synced_at"]
-
-    assert r1["skipped"] is False
-    assert r2["skipped"] is True
-    # File + Hash stabil
-    assert r1["filename"] == r2["filename"]
-    assert r1["sha256"] == r2["sha256"]
-    assert r1["size"] == r2["size"]
-    # Timestamp darf sich nicht ändern (Idempotenz)
-    assert first_synced == second_synced
+async def test_gleicher_text_schreibt_nicht_neu(test_db, texte, video):
+    await text_export.write_description(video, "Gleich")
+    first = (await _registry(test_db, video))["synced_at"]
+    await text_export.write_description(video, "Gleich")
+    assert (await _registry(test_db, video))["synced_at"] == first
 
 
-async def test_export_rewrites_when_content_changes(test_db, video_row, tmp_path, monkeypatch):
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    await export_description(video_row)
-    hash1 = (await test_db.fetch_one(
-        "SELECT sha256 FROM text_files WHERE video_id=?", (video_row,)
-    ))["sha256"]
-
-    # Beschreibung in DB ändern
-    await test_db.execute(
-        "UPDATE videos SET description=? WHERE id=?",
-        ("Geänderter Text", video_row),
-    )
-    await export_description(video_row)
-
-    hash2 = (await test_db.fetch_one(
-        "SELECT sha256 FROM text_files WHERE video_id=?", (video_row,)
-    ))["sha256"]
-    assert hash1 != hash2
-
-    file = tmp_path / video_row / "description.txt"
-    assert file.read_text() == "Geänderter Text"
+async def test_leerer_text_loescht(test_db, texte, video):
+    await text_export.write_description(video, "Weg damit")
+    await text_export.write_description(video, "")
+    assert not (texte / video / "description.txt").exists()
+    assert await _registry(test_db, video) is None
+    assert await text_resolver.get_description(video) is None
 
 
-async def test_export_skips_empty_description(test_db, tmp_path, monkeypatch):
-    """Video ohne/mit leerer description → keine Datei, kein Registry-Eintrag."""
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    await test_db.execute(
-        "INSERT INTO videos (id, title, description) VALUES (?, ?, ?)",
-        ("emptyvid", "Leer", ""),
-    )
-    r = await export_description("emptyvid")
-    assert r is None
-    assert not (tmp_path / "emptyvid" / "description.txt").exists()
-    row = await test_db.fetch_one(
-        "SELECT * FROM text_files WHERE video_id='emptyvid'"
-    )
-    assert row is None
+async def test_vorhandener_text_bleibt_beim_erneuten_laden(test_db, texte, video):
+    await text_export.write_description(video, "Vom Nutzer gepflegt")
+    assert not await text_export.write_description(video, "Von der Quelle", keep_existing=True)
+    assert await text_resolver.get_description(video) == "Vom Nutzer gepflegt"
 
 
-async def test_export_never_modifies_videos_table(test_db, video_row, tmp_path, monkeypatch):
-    """SAFETY-Regression: export_description darf videos.description NIE ändern.
-    Die DB bleibt unangetastet, nur text_files bekommt Einträge."""
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
+async def test_altbestand_wandert_aus_der_spalte(test_db, texte, video):
+    assert await text_export.move_description_from_column(video, "Alt in der Spalte")
+    assert (texte / video / "description.txt").read_text(encoding="utf-8") == "Alt in der Spalte"
+    assert await test_db.fetch_val("SELECT description FROM videos WHERE id = ?", (video,)) is None
 
-    before = await test_db.fetch_one(
-        "SELECT description FROM videos WHERE id=?", (video_row,)
-    )
-    await export_description(video_row)
-    await export_description(video_row)  # idempotent
 
-    after = await test_db.fetch_one(
-        "SELECT description FROM videos WHERE id=?", (video_row,)
-    )
-    assert after["description"] == before["description"], (
-        "export darf videos.description NICHT verändern"
-    )
+async def test_spalte_neuer_als_datei_gewinnt(test_db, texte, video):
+    # Bis 2.71 schrieb jede Schreibstelle erst die Spalte: eine abweichende Datei ist veraltet
+    (texte / video).mkdir()
+    (texte / video / "description.txt").write_text("Veraltet", encoding="utf-8")
+    await text_export.move_description_from_column(video, "Alt in der Spalte")
+    assert await text_resolver.get_description(video) == "Alt in der Spalte"
+
+
+async def test_geaenderte_spalte_wird_nicht_geleert(test_db, texte, video):
+    # Hat sich die Spalte zwischen Lesen und Leeren geändert, bleibt sie stehen
+    await test_db.execute("UPDATE videos SET description = 'Inzwischen anders' WHERE id = ?", (video,))
+    assert not await text_export.move_description_from_column(video, "Alt in der Spalte")
+    assert await test_db.fetch_val("SELECT description FROM videos WHERE id = ?", (video,)) == "Inzwischen anders"
+
+
+async def test_viele_auf_einmal_lesen(test_db, texte, video):
+    # Export: Dateien gesammelt im Faden lesen, Übergang aus der Spalte
+    await test_db.execute("INSERT INTO videos (id, title) VALUES ('ohneText01', 'T')")
+    await test_db.execute("INSERT INTO videos (id, title, description) VALUES ('nurSpalte1', 'T', 'Noch in der Spalte')")
+    await text_export.write_description(video, "Aus der Datei")
+    found = await text_resolver.descriptions_of([video, "ohneText01", "nurSpalte1"])
+    assert found == {video: "Aus der Datei", "nurSpalte1": "Noch in der Spalte"}

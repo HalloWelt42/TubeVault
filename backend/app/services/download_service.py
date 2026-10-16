@@ -982,7 +982,6 @@ class DownloadService:
                        title=COALESCE(NULLIF(title,''), ?),
                        channel_name=COALESCE(NULLIF(channel_name,''), ?),
                        channel_id=COALESCE(NULLIF(channel_id,''), ?),
-                       description=COALESCE(NULLIF(description,''), ?),
                        duration=COALESCE(?, duration),
                        upload_date=COALESCE(upload_date, ?),
                        download_date=?, thumbnail_path=COALESCE(thumbnail_path, ?),
@@ -990,32 +989,32 @@ class DownloadService:
                        status='ready', file_path=?, file_size=?, updated_at=?
                        WHERE id=?""",
                     (meta["title"], meta["channel_name"], meta["channel_id"],
-                     meta["description"], meta["duration"], meta.get("upload_date"),
+                     meta["duration"], meta.get("upload_date"),
                      now, thumb, meta.get("view_count"),
                      str(final_path), file_size, now, vid))
                 self._remove_replaced_file(existing_video["file_path"], final_path, vid)
             elif existing_video:
                 await db.execute(
                     """UPDATE videos SET title=?, channel_name=?, channel_id=?,
-                       description=?, duration=?, upload_date=?,
+                       duration=?, upload_date=?,
                        download_date=?, thumbnail_path=COALESCE(?,thumbnail_path),
                        view_count=?, tags=?, status='ready',
                        file_path=?, file_size=?,
                        source='youtube', source_url=?, video_type=?, updated_at=?
                        WHERE id=?""",
                     (meta["title"], meta["channel_name"], meta["channel_id"],
-                     meta["description"], meta["duration"], meta.get("upload_date"),
+                     meta["duration"], meta.get("upload_date"),
                      now, thumb, meta.get("view_count"), tags_json,
                      str(final_path), file_size, source_url, video_type, now, vid))
             else:
                 await db.execute(
                     """INSERT INTO videos
-                       (id,title,channel_name,channel_id,description,duration,upload_date,
+                       (id,title,channel_name,channel_id,duration,upload_date,
                         download_date,thumbnail_path,view_count,tags,status,file_path,file_size,
                         source,source_url,video_type,created_at,updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,'ready',?,?,'youtube',?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,'ready',?,?,'youtube',?,?,?,?)""",
                     (vid, meta["title"], meta["channel_name"], meta["channel_id"],
-                     meta["description"], meta["duration"], meta.get("upload_date"),
+                     meta["duration"], meta.get("upload_date"),
                      now, thumb, meta.get("view_count"), tags_json,
                      str(final_path), file_size, source_url, video_type, now, now))
 
@@ -1052,11 +1051,12 @@ class DownloadService:
             from app.services import language, language_assign
             await language_assign.reassess(vid, meta.get("language"), language.QUELLE)
 
+            # Beschreibung als Datei; erneutes Laden behält einen gepflegten Text
             try:
                 from app.services import text_export
-                await text_export.export_description(vid)
+                await text_export.write_description(vid, meta["description"], keep_existing=replaces_existing)
             except Exception as e:
-                logger.warning(f"text_export description {vid}: {e}")
+                logger.warning(f"Beschreibung {vid}: {e}")
 
             # Meta-Redundanz: info.json neben das Video (wirft nie)
             from app.services import meta_sidecar

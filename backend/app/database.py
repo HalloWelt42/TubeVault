@@ -11,7 +11,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 57
+SCHEMA_VERSION = 58
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS videos (
     is_archived INTEGER DEFAULT 0,
     is_music INTEGER,
     music_source TEXT,                -- 'user' (von Hand) | 'auto' (eindeutig erkannt), siehe music_flag
+    music_certain INTEGER DEFAULT 0,  -- beim Laden eindeutig als Musik erkannt (music_flag, v58)
     music_artist TEXT,
     music_title TEXT,
     music_album TEXT,
@@ -1240,6 +1241,25 @@ class Database:
                 "INSERT OR IGNORE INTO sidecar_stale (video_id) SELECT id FROM videos WHERE status = 'ready'")
             await self._connection.commit()
             logger.info(f"Migration v57: {cursor.rowcount} Videos für ihre Begleitdatei vorgemerkt")
+
+        # v58: Beschreibung nur noch als Datei (text_export.write_description).
+        # Die Auslöser für Suchindex und Bedeutungssuche lauschen nicht mehr auf
+        # die Spalte - sonst setzte ihr Leeren (content_files) alle Videos auf die
+        # Wartelisten; Dateiänderungen melden sich selbst. "Eindeutig Musik"
+        # wird als Merkmal festgehalten, solange die Beschreibung noch dort steht.
+        if current_version < 58:
+            from app.services import music_flag, search_index, semantic_index
+            await self._connection.executescript(
+                "DROP TRIGGER IF EXISTS trg_search_dirty_update; DROP TRIGGER IF EXISTS trg_semantic_dirty_update;")
+            await self._connection.executescript(search_index.UPDATE_TRIGGER_SQL + semantic_index.UPDATE_TRIGGER_SQL)
+            try:
+                await self._connection.execute("ALTER TABLE videos ADD COLUMN music_certain INTEGER DEFAULT 0")
+            except Exception:
+                pass  # Spalte existiert bereits
+            cursor = await self._connection.execute(
+                f"UPDATE videos SET music_certain = 1 WHERE {music_flag.CERTAIN_SQL}")
+            await self._connection.commit()
+            logger.info(f"Migration v58: Auslöser ohne Beschreibung, {cursor.rowcount} Videos eindeutig Musik")
 
         # v36: zusätzliche Tonspuren und Warteliste der Nachvertonung
         from app.services import audio_tracks, dubbing

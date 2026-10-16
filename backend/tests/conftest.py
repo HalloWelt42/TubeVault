@@ -40,6 +40,14 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(autouse=True)
+def own_texts_root(tmp_path, monkeypatch):
+    """Textdateien (Beschreibung, Kapitel) je Test in einem eigenen Ordner:
+    sonst fände ein Test die Beschreibungsdatei eines früheren Tests mit
+    derselben Videokennung (Inhalte liegen als Datei, nicht in der Datenbank)."""
+    monkeypatch.setenv("TUBEVAULT_TEXTS_ROOT", str(tmp_path / "texts"))
+
+
+@pytest.fixture(autouse=True)
 def no_network_type_probe(monkeypatch):
     """Die Typ-Prüfung fragt sonst die Quelle im Netz. Tests bekommen "unklar";
     wer eine Antwort braucht, setzt probe_short selbst."""

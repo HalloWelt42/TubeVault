@@ -48,16 +48,6 @@ def _find_media_file(folder):
     return best, max(best_size, 0)
 
 
-def _read_description(video_id: str) -> str | None:
-    p = storage.texts_root / video_id / "description.txt"
-    try:
-        if p.exists():
-            return p.read_text(encoding="utf-8")
-    except OSError:
-        pass
-    return None
-
-
 def _kept_language(data: dict) -> tuple:
     """(language, language_source) aus dem Sidecar, soweit sie sich nicht lokal
     neu bestimmen lassen; sonst (None, None)."""
@@ -108,19 +98,19 @@ async def rebuild_from_sidecars(dry_run: bool = False,
                 rebuild_state["restored"] += 1
                 continue
 
-            desc = await asyncio.to_thread(_read_description, data["id"])
+            # Die Beschreibung bleibt in ihrer Datei (Inhalte als Datei), nicht in der Spalte
             await db.execute(
                 """INSERT OR IGNORE INTO videos
-                   (id, title, channel_id, channel_name, description,
+                   (id, title, channel_id, channel_name,
                     duration, upload_date, download_date, view_count,
                     like_count, dislike_count, tags, status,
                     file_path, file_size, source, source_url, video_type,
                     is_music, music_source, music_artist, music_title, music_album,
                     is_archived, thumbnail_path, language, language_source, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,'ready',?,?,?,?,?,?,?,?,?,?,?,?,?,?,
                            datetime('now'), datetime('now'))""",
                 (data["id"], data.get("title"), data.get("channel_id"),
-                 data.get("channel_name"), desc,
+                 data.get("channel_name"),
                  data.get("duration"), data.get("upload_date"),
                  data.get("download_date"), data.get("view_count"),
                  data.get("like_count"), data.get("dislike_count"),

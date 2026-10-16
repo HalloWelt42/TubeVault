@@ -4,7 +4,8 @@ Inhalte als Datei (app/services/content_files, Nutzerentscheidung 16.10.2026).
 Kontrakt:
 - Inhalte liegen als Datei neben dem Video: info.json, Beschreibung, Kapitel.
 - Was fehlt (Altbestand, Vorgemerktes), zieht der Dienst paketweise nach,
-  ohne Knopf; danach ist nichts mehr offen.
+  ohne Knopf; Beschreibungen wandern aus der Spalte in die Datei, danach ist
+  die Spalte leer und nichts mehr offen.
 - Import und eigene Videos schreiben über write_for alle Dateien.
 - Ein Video, dessen Datei sich nicht schreiben lässt, hält die Schleife
   nicht in einer Endlosrunde fest.
@@ -43,6 +44,7 @@ async def test_altbestand_wird_nachgezogen(test_db, ablage, monkeypatch):
     assert (ablage / "texts" / "alt00000000" / "description.txt").read_text(encoding="utf-8") == "Hallo Welt"
     assert len(json.loads((ablage / "texts" / "alt00000000" / "chapters.json").read_text(encoding="utf-8"))) == 2
     assert json.loads(meta_sidecar.sidecar_path("alt00000002").read_text(encoding="utf-8"))["id"] == "alt00000002"
+    assert await db_spalte_leer(test_db)
 
 
 async def test_write_for_schreibt_alles(test_db, ablage):
@@ -57,8 +59,12 @@ async def test_write_for_schreibt_alles(test_db, ablage):
 async def test_fehlschlag_kreist_nicht(test_db, ablage, monkeypatch):
     await _video(test_db, ablage, "kaputt00001")
 
-    async def scheitert(video_id):
+    async def scheitert(video_id, text):
         raise PermissionError("schreibgeschützt")
-    monkeypatch.setattr(text_export, "export_description", scheitert)
+    monkeypatch.setattr(text_export, "move_description_from_column", scheitert)
     assert await content_files.run_batch() == 0          # Schleife wartet dann, statt zu kreisen
     assert await content_files.remaining() == 1
+
+
+async def db_spalte_leer(db) -> bool:
+    return await db.fetch_val("SELECT COUNT(*) FROM videos WHERE COALESCE(description, '') <> ''") == 0
