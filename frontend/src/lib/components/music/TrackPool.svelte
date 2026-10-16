@@ -3,8 +3,9 @@
   Sammlung (eigene Wahl, unabhängig von der Quelle der Musikseite),
   durchsuchbar und seitenweise. Schnell in die Liste rechts:
   ziehen, doppelt klicken oder +. Klick wählt aus (Umschalt: von bis), dann
-  wandert die ganze Auswahl auf einmal. Was schon in der Liste steht, ist
-  markiert.
+  wandert die ganze Auswahl auf einmal. Klick aufs Cover hört hinein (ab
+  dort läuft die Titelquelle weiter, nochmals Klick hält an). Was schon in der
+  Liste steht, ist markiert.
 -->
 <script>
   import { onMount } from 'svelte';
@@ -16,6 +17,7 @@
   import { setDraggedTracks } from '../../utils/trackDrag.js';
   import { isRemoved, onMusicChange } from '../../utils/musicChanges.js';
   import { toast } from '../../stores/notifications.js';
+  import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
 
   // inList: Kennungen, die schon in der Liste stehen; onAdd(titel): ans Ende der Liste
   let { inList = new Set(), canAdd = false, onAdd = () => {} } = $props();
@@ -76,6 +78,13 @@
   // Gewählte Zeile: die ganze Auswahl, sonst nur diese
   const cargo = (track) => (chosen.has(track.id) ? picked : [track]);
 
+  // Hineinhören, ohne die Auswahl zu ändern; Weiter springt zum nächsten Titel der Quelle
+  function listen(index) {
+    const track = list.items[index];
+    if (player.current?.id === track.id) return player.toggle();
+    player.playTracks(list.items, index, 'Listen-Baukasten');
+  }
+
   function add(tracks) {
     if (!canAdd) return toast.info('Rechts erst eine Liste wählen oder anlegen');
     onAdd(tracks);
@@ -121,12 +130,17 @@
       <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
     {:else}
       {#each list.items as track, i (track.id)}
+        {@const playing = player.current?.id === track.id}
         <div class="zeile" class:gewaehlt={chosen.has(track.id)} class:drin={inList.has(track.id)} role="button" tabindex="0"
              draggable="true" ondragstart={(e) => setDraggedTracks(e, cargo(track))}
              onclick={(e) => click(e, i)} ondblclick={() => add([track])}
              onkeydown={(e) => { if (e.key === 'Enter') add(cargo(track)); else if (e.key === ' ') { e.preventDefault(); click(e, i); } }}
              title={inList.has(track.id) ? 'Schon in der Liste' : 'Ziehen oder doppelt klicken: in die Liste'}>
-          <img src={coverUrl(track)} alt="" loading="lazy" draggable="false" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+          <button class="cover" class:laeuft={playing} draggable="false" onclick={(e) => { e.stopPropagation(); listen(i); }}
+                  ondblclick={(e) => e.stopPropagation()} title={playing && player.playing ? 'Anhalten' : 'Hineinhören'}>
+            <img src={coverUrl(track)} alt="" loading="lazy" draggable="false" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+            <i class="fa-solid {playing && player.playing ? 'fa-pause' : 'fa-play'}"></i>
+          </button>
           <span class="text"><span class="t">{#if track.kind === 'datei'}<i class="fa-solid fa-compact-disc sammlung" title="Aus der eigenen Sammlung"></i> {/if}{track.title}</span>
             <span class="w">{track.artist}{#if track.album}{' · '}{track.album}{/if}</span></span>
           <span class="zahl dauer">{formatDuration(track.duration || 0)}</span>
@@ -156,7 +170,14 @@
   .zeile.gewaehlt { background: rgba(var(--tv-akzent-rgb), 0.14); }
   .zeile.drin .t { color: var(--tv-text-2); }
   .zeile:focus-visible { outline: 2px solid var(--tv-akzent); outline-offset: -2px; }
-  img { width: 40px; height: 40px; object-fit: cover; border-radius: var(--tv-ecke-klein); background: var(--tv-mulde); }
+  .cover { position: relative; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--tv-ecke-klein); overflow: hidden;
+           background: var(--tv-mulde); cursor: pointer; }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cover i { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 13, 16, 0.55); color: var(--tv-text);
+             font-size: 15px; opacity: 0; }
+  .cover:hover i, .cover:focus-visible i, .cover.laeuft i { opacity: 1; }
+  .cover.laeuft i { color: var(--tv-akzent); }
+  .zeile:has(.cover.laeuft) .t { color: var(--tv-akzent); }
   .text { min-width: 0; display: flex; flex-direction: column; }
   .text > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .t { font-weight: 600; }
