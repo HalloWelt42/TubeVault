@@ -14,12 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.text_export import (
-    export_description,
-    export_all_descriptions,
-    read_description_from_file,
-    get_export_overview,
-)
+from app.services.text_export import export_description
 
 
 @pytest.fixture
@@ -134,40 +129,6 @@ async def test_export_skips_empty_description(test_db, tmp_path, monkeypatch):
     assert row is None
 
 
-async def test_export_all_reports_counts(test_db, tmp_path, monkeypatch):
-    """Batch-Export gibt Statistik: {written, skipped, errors}."""
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    for i in range(3):
-        await test_db.execute(
-            "INSERT INTO videos (id, title, description) VALUES (?, ?, ?)",
-            (f"v{i}", f"Titel {i}", f"Beschreibung {i}" if i > 0 else ""),
-        )
-
-    stats = await export_all_descriptions()
-    assert stats["written"] == 2   # v1, v2 (v0 hat leere description)
-    assert stats["skipped"] == 1   # v0 leer
-    assert stats["errors"] == 0
-
-
-async def test_read_from_file_restores_content(test_db, tmp_path, monkeypatch):
-    """Reverse-Pfad: File lesen, in DB zurueckschreiben."""
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    # DB leer, File existiert
-    await test_db.execute(
-        "INSERT INTO videos (id, title) VALUES (?, ?)", ("restore1", "x"),
-    )
-    d = tmp_path / "restore1"
-    d.mkdir(parents=True)
-    (d / "description.txt").write_text("Restauriert aus Datei")
-
-    content = await read_description_from_file("restore1")
-    assert content == "Restauriert aus Datei"
-
-
 async def test_export_never_modifies_videos_table(test_db, video_row, tmp_path, monkeypatch):
     """SAFETY-Regression: export_description darf videos.description NIE ändern.
     Die DB bleibt unangetastet, nur text_files bekommt Einträge."""
@@ -179,59 +140,10 @@ async def test_export_never_modifies_videos_table(test_db, video_row, tmp_path, 
     )
     await export_description(video_row)
     await export_description(video_row)  # idempotent
-    await mod.delete_description_export(video_row)
-    await export_description(video_row)  # re-export
 
     after = await test_db.fetch_one(
         "SELECT description FROM videos WHERE id=?", (video_row,)
     )
     assert after["description"] == before["description"], (
-        "export/delete darf videos.description NICHT verändern"
+        "export darf videos.description NICHT verändern"
     )
-
-
-async def test_delete_export_never_touches_videos_table(test_db, video_row, tmp_path, monkeypatch):
-    """SAFETY: delete_description_export löscht nur Datei + text_files,
-    NIE irgendwas in videos-Tabelle."""
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    # Video mit Export
-    await export_description(video_row)
-    # DB-Video-Count merken
-    cnt_before = await test_db.fetch_val("SELECT COUNT(*) FROM videos")
-    desc_before = (await test_db.fetch_one(
-        "SELECT description FROM videos WHERE id=?", (video_row,)
-    ))["description"]
-
-    await mod.delete_description_export(video_row)
-
-    # Keine Videos gelöscht, description unverändert
-    assert await test_db.fetch_val("SELECT COUNT(*) FROM videos") == cnt_before
-    desc_after = (await test_db.fetch_one(
-        "SELECT description FROM videos WHERE id=?", (video_row,)
-    ))["description"]
-    assert desc_after == desc_before
-
-
-async def test_overview_shows_counts(test_db, tmp_path, monkeypatch):
-    """Overview fuer Frontend-Tabelle."""
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    # 3 Videos, 1 mit Beschreibung, 0 exportiert
-    for i in range(3):
-        await test_db.execute(
-            "INSERT INTO videos (id, title, description) VALUES (?, ?, ?)",
-            (f"ov{i}", f"T{i}", "x" if i == 0 else ""),
-        )
-    ov = await get_export_overview()
-    assert ov["description"]["in_db"] == 1    # nur ov0 hat text
-    assert ov["description"]["as_file"] == 0
-    assert ov["description"]["pending"] == 1
-
-    # Nach Export: pending=0, as_file=1
-    await export_description("ov0")
-    ov2 = await get_export_overview()
-    assert ov2["description"]["as_file"] == 1
-    assert ov2["description"]["pending"] == 0

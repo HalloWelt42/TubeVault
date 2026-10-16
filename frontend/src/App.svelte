@@ -1,13 +1,11 @@
 <script>
   import { route, navigate } from './lib/router/router.js';
-  import { routeDefinitions } from './lib/router/routes.js';
   import { loadSettings } from './lib/stores/settings.js';
   import { playlistQueue, stopQueue } from './lib/stores/playlistQueue.js';
   import { miniPlayer as miniPlayerStore } from './lib/stores/miniPlayer.js';
   import { get } from 'svelte/store';
   import Header from './lib/components/layout/Header.svelte';
   import Sidebar from './lib/components/layout/Sidebar.svelte';
-  import AdminLayout from './lib/components/layout/AdminLayout.svelte';
   import Toast from './lib/components/common/Toast.svelte';
   import ActivityPanel from './lib/components/common/ActivityPanel.svelte';
   import LiveLogWindow from './lib/components/livelog/LiveLogWindow.svelte';
@@ -37,10 +35,7 @@
   import Stats from './routes/Stats.svelte';
   import OwnVideos from './routes/OwnVideos.svelte';
   import Search from './routes/Search.svelte';
-  import Admin from './routes/Admin.svelte';
-  import AdminTexts from './routes/AdminTexts.svelte';
-  import AdminRebuild from './routes/AdminRebuild.svelte';
-  import AdminCleanup from './routes/AdminCleanup.svelte';
+  import Cleanup from './routes/Cleanup.svelte';
   import Dubbing from './routes/Dubbing.svelte';
   import Music from './routes/Music.svelte';
 
@@ -66,20 +61,13 @@
     category: Categories,
     search: Search,
     dubbing: Dubbing,
-    admin: Admin,
-    'admin-texts': AdminTexts,
-    'admin-rebuild': AdminRebuild,
-    'admin-cleanup': AdminCleanup,
+    cleanup: Cleanup,
   };
 
   import { onConnectionChange } from './lib/api/client.js';
 
   let CurrentPage = $derived(pages[$route.page] || Dashboard);
 
-  // Admin-Routes bekommen eigenes Layout (keine Haupt-Sidebar, kein ActivityPanel)
-  let isAdminPage = $derived(
-    routeDefinitions[$route.page]?.group === 'admin'
-  );
 
   // Einstellungen beim Start laden; Seiten erscheinen erst danach, damit sie
   // von Anfang an mit den gespeicherten Werten arbeiten.
@@ -119,41 +107,28 @@
   <VersionBar />
   {#if offline}
     <div class="offline-banner">
-      <i class="fa-solid fa-plug-circle-xmark"></i> Backend nicht erreichbar — Verbindung zum Pi prüfen
+      <i class="fa-solid fa-plug-circle-xmark"></i> Backend nicht erreichbar - Verbindung zum Pi prüfen
     </div>
   {/if}
-  {#if isAdminPage}
-    <!-- Admin: komplett eigenes Layout, eigene Menüs, kein ActivityPanel -->
-    <AdminLayout>
-      {#snippet children()}
+  <Header />
+  <div class="app-body">
+    <Sidebar onToggleLog={() => logVisible = !logVisible} logActive={logVisible} />
+    <div class="content-area">
+      <main class="main-content">
         {#if settingsReady}
           {#key $route.page + ($route.id || '')}
             <CurrentPage />
           {/key}
         {/if}
-      {/snippet}
-    </AdminLayout>
-  {:else}
-    <Header />
-    <div class="app-body">
-      <Sidebar onToggleLog={() => logVisible = !logVisible} logActive={logVisible} />
-      <div class="content-area">
-        <main class="main-content">
-          {#if settingsReady}
-            {#key $route.page + ($route.id || '')}
-              <CurrentPage />
-            {/key}
-          {/if}
-        </main>
-        {#if remoteDevice}
-          <RemoteBar device={remoteDevice} />
-        {:else}
-          <MusicPlayerBar />
-        {/if}
-        <ActivityPanel />
-      </div>
+      </main>
+      {#if remoteDevice}
+        <RemoteBar device={remoteDevice} />
+      {:else}
+        <MusicPlayerBar />
+      {/if}
+      <ActivityPanel />
     </div>
-  {/if}
+  </div>
 </div>
 <Toast />
 <LiveLogWindow bind:visible={logVisible} />

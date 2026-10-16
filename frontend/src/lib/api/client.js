@@ -95,16 +95,16 @@ export const api = {
   unarchiveVideo: (id) => request(`/api/videos/${id}/unarchive`, { method: 'POST' }),
   archiveBatch: (videoIds, unarchive = false) => request(`/api/videos/archive/batch?unarchive=${unarchive}`, { method: 'POST', body: JSON.stringify(videoIds) }),
   cleanupVideos: (view, { channelId = null, offset = 0, limit = 60 } = {}) =>
-    request(`/api/admin/cleanup/videos?view=${view}&offset=${offset}&limit=${limit}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
+    request(`/api/cleanup/videos?view=${view}&offset=${offset}&limit=${limit}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
   cleanupIds: (view, channelId = null) =>
-    request(`/api/admin/cleanup/ids?view=${view}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
-  cleanupChannels: () => request('/api/admin/cleanup/channels'),
-  cleanupExemptChannels: () => request('/api/admin/cleanup/exempt-channels'),
+    request(`/api/cleanup/ids?view=${view}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
+  cleanupChannels: () => request('/api/cleanup/channels'),
+  cleanupExemptChannels: () => request('/api/cleanup/exempt-channels'),
   setShortExempt: (channelId, exempt) =>
     request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/short-exempt`, { method: 'PUT', body: JSON.stringify({ exempt }) }),
   setMusicChannel: (channelId, music) =>
     request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/music`, { method: 'PUT', body: JSON.stringify({ music }) }),
-  cleanupDelete: (videoIds) => request('/api/admin/cleanup/delete', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
+  cleanupDelete: (videoIds) => request('/api/cleanup/delete', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
   setTypeBatch: (videoIds, videoType) => request('/api/videos/type/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, video_type: videoType }) }),
   setMusicBatch: (videoIds, isMusic) => request('/api/videos/music/batch', { method: 'POST', body: JSON.stringify({ video_ids: videoIds, is_music: isMusic }) }),
   // Hörbuch/Hörspiel von Hand festlegen (die Automatik ändert das nie mehr)
@@ -378,59 +378,12 @@ export const api = {
   },
   deleteCookies: () => request('/api/cookies', { method: 'DELETE' }),
 
-  // Admin: Meta-Redundanz / Wiederaufbau
-  adminRedundancyStatus: () => request('/api/admin/redundancy/status'),
-  adminSidecarBackfill: () => request('/api/admin/redundancy/sidecars/backfill', { method: 'POST' }),
-  adminUserdataExport: () => request('/api/admin/redundancy/userdata/export', { method: 'POST' }),
-  adminUserdataRestore: (folder = null) =>
-    request(`/api/admin/redundancy/userdata/restore${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`, { method: 'POST' }),
-  adminRebuildStart: (dryRun = false) =>
-    request(`/api/admin/redundancy/rebuild?dry_run=${dryRun}`, { method: 'POST' }),
-
-  // Admin: Textexport
-  adminTextOverview: () => request('/api/admin/text-export/overview'),
-  adminTextSyncAll: () => request('/api/admin/text-export/description/sync-all', { method: 'POST' }),
-  adminTextSyncBatch: (limit = 100) =>
-    request(`/api/admin/text-export/description/sync-batch?limit=${limit}`, { method: 'POST' }),
-  adminTextList: ({ status = 'all', page = 1, per_page = 50, search = '', sort = 'created_at', order = 'desc', channel_id = '' } = {}) => {
-    const p = new URLSearchParams({ status, page: String(page), per_page: String(per_page), sort, order });
-    if (search) p.set('search', search);
-    if (channel_id) p.set('channel_id', channel_id);
-    return request(`/api/admin/text-export/description/list?${p.toString()}`);
-  },
-  adminTextSyncMany: (video_ids) =>
-    request('/api/admin/text-export/description/sync-many', { method: 'POST', body: video_ids }),
-  adminTextDeleteBulk: (video_ids) =>
-    request('/api/admin/text-export/description/bulk', { method: 'DELETE', body: video_ids }),
-  adminTextSyncOne: (video_id) =>
-    request(`/api/admin/text-export/description/${encodeURIComponent(video_id)}`, { method: 'POST' }),
-  adminTextGetFile: async (video_id) => {
-    // Response ist text/plain, nicht JSON → direkt fetch
-    const url = `${API_BASE}/api/admin/text-export/description/${encodeURIComponent(video_id)}/file`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({ detail: 'Fehler' }));
-      throw new Error(j.detail || `HTTP ${res.status}`);
-    }
-    return await res.text();
-  },
-  adminTextDelete: (video_id) =>
-    request(`/api/admin/text-export/description/${encodeURIComponent(video_id)}`, { method: 'DELETE' }),
-  adminChaptersSyncAll: () =>
-    request('/api/admin/text-export/chapters/sync-all', { method: 'POST' }),
-  adminChaptersSyncBatch: (limit = 100) =>
-    request(`/api/admin/text-export/chapters/sync-batch?limit=${limit}`, { method: 'POST' }),
-  adminChaptersSyncOne: (video_id) =>
-    request(`/api/admin/text-export/chapters/${encodeURIComponent(video_id)}`, { method: 'POST' }),
-  adminChaptersDelete: (video_id) =>
-    request(`/api/admin/text-export/chapters/${encodeURIComponent(video_id)}`, { method: 'DELETE' }),
-  adminTextBackupDescriptions: () =>
-    request('/api/admin/text-export/backup/descriptions', { method: 'POST' }),
-  adminTextListBackups: () => request('/api/admin/text-export/backup/list'),
-  adminTextAudit: () => request('/api/admin/text-export/audit/description'),
-  adminFtsRebuild: () => request('/api/admin/fts/rebuild', { method: 'POST' }),
-  adminTextPurgeDbDescriptions: () =>
-    request('/api/admin/text-export/purge-db-descriptions?confirm=YES', { method: 'POST' }),
+  // Wiederherstellen (Einstellungen > System): Wiederaufbau aus Begleitdateien, Nutzerdaten
+  restoreStatus: () => request('/api/restore/status'),
+  restoreUserdataExport: () => request('/api/restore/userdata/export', { method: 'POST' }),
+  restoreUserdata: (folder = null) =>
+    request(`/api/restore/userdata/restore${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`, { method: 'POST' }),
+  restoreRebuild: (dryRun = false) => request(`/api/restore/rebuild?dry_run=${dryRun}`, { method: 'POST' }),
   getJobStats: () => request('/api/jobs/stats'),
   // Dienste im Hintergrund (Live-Log, Reiter Aufträge)
   getTasks: () => request('/api/system/tasks'),

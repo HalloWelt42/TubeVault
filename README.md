@@ -103,10 +103,11 @@ Die Nachvertonung ist eine abschaltbare Erweiterung.
   - Videodateien von einer Platte werden eingelesen; Doppeltes lässt sich löschen, Bekanntes übernehmen.
   - Eigenes wird einem Kanal zugeordnet.
   - `info.json` und NFO-Dateien gelten dabei als verlässlichste Quelle.
-- **Metadaten doppelt:**
-  - Neben jedem Video liegt eine `info.json`, die bei jeder Änderung aktuell bleibt.
+- **Inhalte als Datei:**
+  - Neben jedem Video liegen `info.json`, Beschreibung und Kapitel als Datei und bleiben bei jeder Änderung aktuell; die Datenbank ist Index und Suche.
+  - Was bei einem älteren Bestand noch fehlt, schreibt der Hintergrund von selbst nach.
   - Favoriten, Verlauf, Playlists, Kategorien und Abos gehen täglich als JSONL-Export auf die Platte.
-- **Wiederaufbau:** Die Datenbank lässt sich vollständig aus den Dateien neu aufbauen, mit Probelauf.
+- **Wiederaufbau:** Unter Einstellungen > System lässt sich die Datenbank vollständig aus den Dateien neu aufbauen, mit Probelauf; Nutzerdaten lassen sich dort sichern und zurückspielen.
 - **Sicherung:** wöchentlich, mit Rotation und Prüfung der Unversehrtheit. Beim Start wird geprüft, ob die richtige Datenbank angebunden ist.
 - **Sichtbare Arbeit:**
   - Lange Vorgänge zeigen Stand, Laufzeit und Restdauer in der Statusleiste.

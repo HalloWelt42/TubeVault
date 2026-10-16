@@ -175,6 +175,15 @@ export const routeDefinitions = {
     queryParams: ['section'],
     description: 'App-Einstellungen',
   },
+  'cleanup': {
+    path: '/cleanup',
+    label: 'Aufräumen',
+    icon: 'fa-solid fa-broom',
+    group: 'system',
+    hasId: false,
+    queryParams: ['sicht', 'kanal'],
+    description: 'Shorts, Kanäle, große Videos sichten und restlos löschen',
+  },
 
   // ─── Versteckte Routen (nicht in Sidebar) ──────────────
   'watch': {
@@ -226,48 +235,6 @@ export const routeDefinitions = {
     queryParams: ['q', 'bereich', 'sprache', 'laenge', 'zeitraum', 'ort', 'stand', 'ordnung', 'genau'],
     description: 'Suche über alles: Bibliothek, Gesagtes, Kapitel, Abos, Kanäle, Playlists, Musik; Quelle auf Wunsch',
   },
-
-  // ─── Admin (eigene Menü-Gruppe, Fullsize-Layout) ────────────
-  'admin': {
-    path: '/admin',
-    label: 'Admin',
-    icon: 'fa-solid fa-screwdriver-wrench',
-    group: 'admin',
-    hasId: false,
-    queryParams: [],
-    description: 'Admin-Übersicht',
-    fullsize: true,
-  },
-  'admin-texts': {
-    path: '/admin/texts',
-    label: 'Textexport',
-    icon: 'fa-solid fa-file-lines',
-    group: 'admin',
-    hasId: false,
-    queryParams: [],
-    description: 'Texte aus DB in Dateien exportieren',
-    fullsize: true,
-  },
-  'admin-cleanup': {
-    path: '/admin/cleanup',
-    label: 'Aufräumen',
-    icon: 'fa-solid fa-broom',
-    group: 'admin',
-    hasId: false,
-    queryParams: ['sicht', 'kanal'],
-    description: 'Shorts, Kanäle, große Videos sichten und restlos löschen',
-    fullsize: true,
-  },
-  'admin-rebuild': {
-    path: '/admin/rebuild',
-    label: 'Wiederaufbau',
-    icon: 'fa-solid fa-life-ring',
-    group: 'admin',
-    hasId: false,
-    queryParams: [],
-    description: 'Meta-Redundanz: Sidecars, Nutzerdaten-Export, Offline-Wiederaufbau',
-    fullsize: true,
-  },
 };
 
 /**
@@ -303,15 +270,6 @@ export function getMainRoutes() {
 export function getSystemRoutes() {
   return Object.entries(routeDefinitions)
     .filter(([, def]) => def.group === 'system')
-    .map(([key, def]) => ({ key, ...def }));
-}
-
-/**
- * Nur Admin-Routen (eigene Sidebar-Sektion).
- */
-export function getAdminRoutes() {
-  return Object.entries(routeDefinitions)
-    .filter(([, def]) => def.group === 'admin')
     .map(([key, def]) => ({ key, ...def }));
 }
 

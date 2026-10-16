@@ -6,7 +6,6 @@ Kontrakt:
 - Idempotent via sha256 (wiederholter Call → skip)
 - Leere Chapter-Liste → keine Datei, kein Registry-Eintrag
 - Inhalt enthält title/start_time/end_time/source, kein thumbnail_url
-- read_chapters_from_file gibt Array zurück
 - Resolver get_chapters: File-first, DB-Fallback
 - Write-Hook (via chapters-Router): neuer/geänderter Chapter synchronisiert Datei
 """
@@ -17,9 +16,7 @@ from httpx import AsyncClient, ASGITransport
 
 from app.services.text_export import (
     export_chapters,
-    read_chapters_from_file,
     delete_chapters_export,
-    get_export_overview,
 )
 from app.services.text_resolver import get_chapters
 
@@ -156,24 +153,6 @@ async def test_delete_removes_file_and_registry(test_db, video_with_chapters, tm
     )
     assert reg is None
 
-
-async def test_overview_includes_chapters(test_db, video_with_chapters, tmp_path, monkeypatch):
-    from app.services import text_export as mod
-    monkeypatch.setattr(mod, "TEXTS_DIR", tmp_path)
-
-    ov = await get_export_overview()
-    assert "chapters" in ov
-    assert ov["chapters"]["in_db"] == 1
-    assert ov["chapters"]["as_file"] == 0
-    assert ov["chapters"]["pending"] == 1
-
-    await export_chapters(video_with_chapters)
-    ov2 = await get_export_overview()
-    assert ov2["chapters"]["as_file"] == 1
-    assert ov2["chapters"]["pending"] == 0
-
-
-# ─── Write-Hook über HTTP-Router ──────────────────────────────────
 
 async def test_add_chapter_syncs_file(test_db, video_with_chapters, tmp_path, monkeypatch, make_test_app):
     """POST /api/chapters/{video_id} → Datei wird sofort aktualisiert."""

@@ -1305,11 +1305,6 @@ class Database:
         await search_index.mark_dirty(video_id)
         await search_index.flush()
 
-    async def fts_rebuild_from_resolver(self) -> dict:
-        """Suchindex komplett neu aufbauen (Beschreibung aus dem text_resolver)."""
-        from app.services import search_index
-        return await search_index.rebuild()
-
 
 # Singleton
 db = Database()

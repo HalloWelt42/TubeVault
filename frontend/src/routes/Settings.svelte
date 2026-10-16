@@ -16,6 +16,7 @@
   import ChannelCheckStatus from '../lib/components/settings/ChannelCheckStatus.svelte';
   import BackupCard from '../lib/components/settings/BackupCard.svelte';
   import MaintenanceCard from '../lib/components/settings/MaintenanceCard.svelte';
+  import RestoreCard from '../lib/components/settings/RestoreCard.svelte';
 
   let confirmRef;
   const confirm = (...args) => confirmRef.ask(...args);
@@ -181,6 +182,7 @@
             </div>
           {/if}
           <BackupCard onRestored={afterRestore} />
+          <RestoreCard {confirm} />
           <MaintenanceCard {confirm} onReset={afterRestore} />
           <details class="tv-karte dienste">
             <summary><i class="fa-solid fa-plug"></i> Dienste und Schnittstellen</summary>

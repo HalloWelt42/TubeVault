@@ -2,12 +2,14 @@
 FTS5-Rebuild-Tests (Phase 3a – Such-Pfad).
 
 Kontrakt:
-- fts_rebuild_from_resolver() holt description aus text_resolver
+- search_index.rebuild() holt die Beschreibung aus dem text_resolver (Datei vor Datenbank)
   (File-first) und baut den Index komplett neu.
 - Die Suche (services/search) findet nach dem Rebuild, auch wenn die DB-Spalte
   videos.description leer ist (weil der Inhalt aus der Datei kommt).
 """
 import pytest
+
+from app.services import search_index
 
 
 @pytest.fixture
@@ -44,7 +46,7 @@ async def test_rebuild_populates_fts_from_file(
         "Apfelstrudel mit Vanillesauce – altes Rezept aus 1890"
     )
 
-    stats = await test_db.fts_rebuild_from_resolver()
+    stats = await search_index.rebuild()
     assert stats["rebuilt"] >= 1
 
     # Suchbegriff aus dem FILE-Inhalt muss Hit geben
@@ -70,7 +72,7 @@ async def test_rebuild_uses_file_over_db(
     vd.mkdir()
     (vd / "description.txt").write_text("NEU-TEXT Quantenverschränkung")
 
-    await test_db.fts_rebuild_from_resolver()
+    await search_index.rebuild()
 
     hits_new = await _hits("Quantenverschränkung")
     assert any(h.id == search_video for h in hits_new), "FTS nutzt File-Inhalt"
@@ -85,6 +87,6 @@ async def test_rebuild_skips_non_ready_videos(test_db, tmp_path, monkeypatch):
         "INSERT INTO videos (id, title, status, description) VALUES (?, ?, ?, ?)",
         ("pending_vid", "T", "pending", "Uniquekeyword12345"),
     )
-    await test_db.fts_rebuild_from_resolver()
+    await search_index.rebuild()
     hits = await _hits("Uniquekeyword12345")
     assert not any(h.id == "pending_vid" for h in hits)

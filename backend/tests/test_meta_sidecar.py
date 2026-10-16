@@ -112,23 +112,13 @@ class TestReadUndBackfill:
         p.write_text("kein json", encoding="utf-8")
         assert meta_sidecar.read_sidecar_file(p) is None
 
-    async def test_backfill_schreibt_nur_vorhandene_ordner(self, test_db, videos_root):
+    async def test_vorgemerkte_schreibt_nur_vorhandene_ordner(self, test_db, videos_root):
+        # Nachziehen läuft über die Vormerkliste (content_files, Migration v57)
         v1 = await _insert_video(test_db, vid="backfill0001")
         v2 = await _insert_video(test_db, vid="backfill0002")
-        await _insert_video(test_db, vid="backfill0003", status="pending")
         (videos_root / v1).mkdir()  # nur v1 hat einen Ordner
-        res = await meta_sidecar.backfill_sidecars(throttle_every=0)
-        assert res["total"] == 2          # nur ready-Videos
-        assert res["written"] == 1        # v1
-        assert res["skipped"] == 1        # v2: kein Ordner
+        await test_db.execute("INSERT INTO sidecar_stale (video_id) VALUES (?), (?)", (v1, v2))
+        assert await meta_sidecar.refresh_stale(throttle_every=0, limit=10) == 2
         assert (videos_root / v1 / "info.json").exists()
         assert not (videos_root / v2).exists()
-
-    async def test_status_zaehlt(self, test_db, videos_root):
-        vid = await _insert_video(test_db, vid="statuscnt001")
-        (videos_root / vid).mkdir()
-        await meta_sidecar.write_sidecar(vid)
-        st = await meta_sidecar.sidecar_status()
-        assert st["videos_ready"] == 1
-        assert st["sidecars_present"] == 1
-        assert st["sidecars_missing"] == 0
+        assert await test_db.fetch_val("SELECT COUNT(*) FROM sidecar_stale") == 0

@@ -9,7 +9,6 @@
   let storage = $state(null);
   let exports = $state([]);
   let loading = $state(true);
-  let backingUp = $state(false);
   let exporting = $state({});
   let cleaningTemp = $state(false);
 
@@ -28,15 +27,6 @@
       toast.error('Stats laden fehlgeschlagen');
     }
     loading = false;
-  }
-
-  async function createBackup() {
-    backingUp = true;
-    try {
-      await api.backupCreate();
-      toast.success('Backup erstellt (siehe Einstellungen → Backup)');
-    } catch (e) { toast.error(e.message); }
-    backingUp = false;
   }
 
   function exportData(type) {
@@ -154,11 +144,8 @@
 
     <!-- Backup & Export -->
     <section class="section">
-      <h2>Backup & Export</h2>
+      <h2>Export</h2>
       <div class="export-actions">
-        <button class="btn-export" onclick={createBackup} disabled={backingUp}>
-          {backingUp ? 'Erstelle…' : 'DB-Backup'}
-        </button>
         <button class="btn-export" onclick={() => exportData('videos_json')} disabled={exporting.videos_json}>
           Videos JSON
         </button>

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.services import cleanup
 
-router = APIRouter(prefix="/api/admin/cleanup", tags=["Aufräumen"])
+router = APIRouter(prefix="/api/cleanup", tags=["Aufräumen"])
 
 # Je Aufruf gelöscht; größere Mengen schickt die Oberfläche in Teilen
 MAX_DELETE_PER_CALL = 100

@@ -28,9 +28,9 @@ from app.services import video_classifier
 from app.routers import (
     videos, downloads, player, favorites, categories, settings, system,
     jobs, subscriptions, playlists, chapters, search, exports, imports,
-    ad_markers, own_collection, music, video_repair, backup, api_endpoints, admin_cleanup, transcripts as transcripts_router,
+    ad_markers, own_collection, music, video_repair, backup, api_endpoints, cleanup, transcripts as transcripts_router,
     feed_router, channel_playlists, lyrics, blocked_channels, ignored_videos,
-    cookies, admin, dubbing, collections as collections_router, remote, languages,
+    cookies, restore, dubbing, collections as collections_router, remote, languages,
 )
 
 # Logging
@@ -392,7 +392,7 @@ app.include_router(own_collection.router)
 app.include_router(music.router)
 app.include_router(collections_router.router)
 app.include_router(video_repair.router)
-app.include_router(admin_cleanup.router)
+app.include_router(cleanup.router)
 app.include_router(transcripts_router.router)
 app.include_router(backup.router)
 # System
@@ -405,7 +405,7 @@ app.include_router(lyrics.router)
 app.include_router(blocked_channels.router)
 app.include_router(ignored_videos.router)
 app.include_router(cookies.router)
-app.include_router(admin.router)
+app.include_router(restore.router)
 app.include_router(dubbing.router)
 app.include_router(remote.router)
 app.include_router(languages.router)

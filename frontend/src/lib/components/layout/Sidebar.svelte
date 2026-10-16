@@ -5,7 +5,7 @@
 <script>
   import VersionMark from './VersionMark.svelte';
   import { route, navigate } from '../../router/router.js';
-  import { getMainRoutes, getSystemRoutes, getAdminRoutes } from '../../router/routes.js';
+  import { getMainRoutes, getSystemRoutes } from '../../router/routes.js';
   import { sidebarOpen } from '../../stores/app.js';
   import { miniPlayer } from '../../stores/miniPlayer.js';
   import { api } from '../../api/client.js';
@@ -21,10 +21,9 @@
   // Einträge mit `feature` erscheinen nur, wenn die Einstellung eingeschaltet ist
   const navItems = $derived(getMainRoutes().filter(r => !r.feature || $settings[r.feature] === 'true'));
   const systemItems = getSystemRoutes();
-  const adminItems = getAdminRoutes();
 
   function nav(routeKey) {
-    const item = [...navItems, ...systemItems, ...adminItems].find(r => r.key === routeKey);
+    const item = [...navItems, ...systemItems].find(r => r.key === routeKey);
     if (item) navigate(item.path);
   }
 
@@ -81,14 +80,6 @@
     </button>
   </div>
 
-  <!-- Admin: nur als DEZENTER Link unten; das komplette Admin-Menü liegt im
-       eigenen Admin-Layout (AdminLayout.svelte), nicht hier. -->
-  {#if adminItems.length > 0}
-    <button class="nav-item admin-link" onclick={() => nav('admin')} title="Admin-Bereich">
-      <i class="fa-solid fa-screwdriver-wrench"></i>
-      <span>Admin</span>
-    </button>
-  {/if}
 
   <!-- Mini-Player oder Video-Vorschlag -->
   <div class="sidebar-player-area">
