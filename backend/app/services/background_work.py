@@ -9,6 +9,9 @@ der Statusleiste. (Downloads haben ihre eigene, ausführlichere Anzeige.)
 Eine neue Hintergrundarbeit trägt sich hier mit einer Funktion ein, die
 ihren Stand als WorkItem liefert (oder None, wenn nichts zu tun ist).
 """
+import logging
+import time
+
 from app.utils.file_utils import now_sqlite
 from datetime import datetime
 from typing import Awaitable, Callable, Optional
@@ -16,6 +19,8 @@ from typing import Awaitable, Callable, Optional
 from pydantic import BaseModel
 
 from app.database import db
+
+logger = logging.getLogger(__name__)
 
 
 class WorkItem(BaseModel):
@@ -279,10 +284,25 @@ SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
     _type_check, _languages, _content_files]
 
 
+SLOW_OVERVIEW_S = 1.0      # dauert die Übersicht länger, steht im Live-Log, was wie lange brauchte
+_REPORT_GAP_S = 300
+_last_slow_report = 0.0
+
+
 async def overview() -> list[WorkItem]:
+    global _last_slow_report
     items = []
+    spent = []
+    started = time.monotonic()
     for source in SOURCES:
+        before = time.monotonic()
         item = await source()
+        spent.append((source.__name__.lstrip("_"), time.monotonic() - before))
         if item:
             items.append(item)
+    total = time.monotonic() - started
+    if total >= SLOW_OVERVIEW_S and time.monotonic() - _last_slow_report >= _REPORT_GAP_S:
+        _last_slow_report = time.monotonic()
+        parts = ", ".join(f"{name} {seconds:.1f} s" for name, seconds in sorted(spent, key=lambda x: -x[1]) if seconds >= 0.05)
+        logger.warning(f"Übersicht der Hintergrundarbeiten brauchte {total:.1f} s: {parts}")
     return items
