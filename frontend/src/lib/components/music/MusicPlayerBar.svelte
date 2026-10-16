@@ -14,6 +14,7 @@
   import { dragValue, playerBarHeight } from '../../utils/playerBar.js';
   import { remote } from '../../stores/remote.svelte.js';
   import DeviceButton from '../remote/DeviceButton.svelte';
+  import ArtistLink from './ArtistLink.svelte';
   import { playerBar } from '../../stores/playerBar.svelte.js';
 
   let track = $derived(player.current);
@@ -47,7 +48,7 @@
       </button>
       <div class="text">
         <div class="t" title={track.title}>{track.title}</div>
-        <div class="tv-leise tv-klein w">{track.artist}{#if player.title}{' · '}{player.title}{/if}</div>
+        <div class="tv-leise tv-klein w"><ArtistLink {track} />{#if player.title}{' · '}{player.title}{/if}</div>
       </div>
       <button class="taste" class:an={track.favorite} onclick={favorite} title="Lieblingssong">
         <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>

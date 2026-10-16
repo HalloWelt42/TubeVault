@@ -6,6 +6,7 @@
   import { api } from '../../api/client.js';
   import { coverUrl } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
+  import ArtistLink from './ArtistLink.svelte';
 
   let { track, onPlay = () => {}, onMenu = () => {} } = $props();
 
@@ -22,7 +23,7 @@
     <span class="spielen"><i class="fa-solid {current && player.playing ? 'fa-pause' : 'fa-play'}"></i></span>
   </div>
   <div class="name">{track.title}</div>
-  <div class="wer">{track.artist}</div>
+  <div class="wer"><ArtistLink {track} /></div>
 </div>
 
 <style>

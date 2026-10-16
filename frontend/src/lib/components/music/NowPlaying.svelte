@@ -1,9 +1,11 @@
 <!--
   Läuft gerade: Bild, Titel, Warteschlange (verschiebbar), mitlaufender
   Liedtext (Klick auf eine Zeile springt dorthin) und Angaben zum Titel.
+  Ein Klick auf den Interpreten öffnet alle seine Titel (ArtistLink).
 -->
 <script>
   import SegmentList from './SegmentList.svelte';
+  import ArtistLink from './ArtistLink.svelte';
   import { untrack } from 'svelte';
   import { coverUrl, isFile } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
@@ -12,7 +14,7 @@
   import { scrollWithin } from '../../utils/scrollRoot.js';
 
   // schlange | liedtext | infos; Navigation kommt vom Router der jeweiligen Oberfläche
-  let { view = 'schlange', onOpenArtist = null, onOpenVideo = null } = $props();
+  let { view = 'schlange', onOpenVideo = null } = $props();
 
   let track = $derived(player.current);
   const lyrics = new TrackLyrics();
@@ -43,9 +45,7 @@
     <div class="kopf">
       <img src={coverUrl(track)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
       <div class="titel">{track.title}</div>
-      {#if onOpenArtist}
-        <button class="interpret" onclick={() => onOpenArtist(track)}>{track.artist}</button>
-      {:else}<div class="tv-leise">{track.artist}</div>{/if}
+      <div class="tv-leise"><ArtistLink {track} /></div>
       {#if player.title}<div class="tv-schwach tv-klein">aus: {player.title}</div>{/if}
     </div>
     <div class="tv-reiter">
@@ -61,10 +61,11 @@
             <div class="eintrag" class:aktuell={i === player.index} role="listitem" draggable={i !== player.index}
                  ondragstart={() => dragFrom = i} ondragover={(e) => e.preventDefault()} ondrop={() => drop(i)}>
               <i class="fa-solid {i === player.index ? 'fa-volume-high' : 'fa-grip-vertical'} griff"></i>
-              <button class="eintrag-text" onclick={() => player.jump(i)} title="Abspielen">
+              <div class="eintrag-text" role="button" tabindex="0" title="Abspielen"
+                   onclick={() => player.jump(i)} onkeydown={(e) => e.key === 'Enter' && player.jump(i)}>
                 <img src={coverUrl(item)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-                <span class="text"><span class="t">{item.title}</span><span class="tv-leise">{item.artist}</span></span>
-              </button>
+                <span class="text"><span class="t">{item.title}</span><span class="tv-leise"><ArtistLink track={item} /></span></span>
+              </div>
               <span class="zahl tv-leise">{formatDuration(item.duration || 0)}</span>
               {#if i !== player.index}
                 <button class="weg" onclick={() => player.remove(i)} title="Aus der Warteschlange"><i class="fa-solid fa-xmark"></i></button>
@@ -93,7 +94,7 @@
       </div>
     {:else}
       <dl class="infos tv-klein">
-        <dt>Interpret</dt><dd>{track.artist}</dd>
+        <dt>Interpret</dt><dd><ArtistLink {track} /></dd>
         {#if track.album}<dt>Album</dt><dd>{track.album}</dd>{/if}
         <dt>Kanal</dt><dd>{track.channel_name || '-'}</dd>
         <dt>Dauer</dt><dd class="zahl">{formatDuration(track.duration || 0)}</dd>
@@ -127,8 +128,6 @@
     .titel { margin-top: 0; }
   }
   .titel { margin-top: var(--tv-a3); font-weight: 700; font-size: 19px; }
-  .interpret { padding: 0; border: 0; background: none; color: var(--tv-text-2); font: inherit; cursor: pointer; }
-  .interpret:hover { color: var(--tv-akzent); text-decoration: underline; }
   .tv-reiter { flex-wrap: nowrap; padding: 0 var(--tv-a4); }
   .tv-reiter button { padding: 0 10px; }
   .schlange, .liedtext { flex: 1; min-height: 0; overflow-y: auto; padding: var(--tv-a2) var(--tv-a3) var(--tv-a4); }

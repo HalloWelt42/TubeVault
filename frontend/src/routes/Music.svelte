@@ -24,6 +24,7 @@
   import TrackTable from '../lib/components/music/TrackTable.svelte';
   import TrackMenu from '../lib/components/music/TrackMenu.svelte';
   import NowPlaying from '../lib/components/music/NowPlaying.svelte';
+  import ArtistLink from '../lib/components/music/ArtistLink.svelte';
 
   const TABS = [
     { id: 'start', label: 'Start', icon: 'fa-house' },
@@ -196,7 +197,6 @@
   }
 
   const openMenu = (e, track) => menu?.open(e, track);
-  const onOpenArtist = (track) => openGroup(track.artist_source);
   const onOpenVideo = (track) => navigate(`/watch/${track.id}`);
   const groupName = $derived(groupTracks?.title || '');
   const groupDuration = $derived((groupTracks?.tracks || []).reduce((sum, t) => sum + (t.duration || 0), 0));
@@ -286,7 +286,7 @@
                 <div class="text">
                   <span class="tv-etikett">{player.playing ? 'Läuft gerade' : 'Weiterhören'}</span>
                   <div class="titel">{player.current.title}</div>
-                  <div class="tv-leise tv-klein">{player.current.artist} · noch {player.upcoming.length} Titel in der Warteschlange</div>
+                  <div class="tv-leise tv-klein"><ArtistLink track={player.current} /> · noch {player.upcoming.length} Titel in der Warteschlange</div>
                 </div>
                 <button class="tv-knopf haupt" onclick={() => player.toggle()}>
                   <i class="fa-solid {player.playing ? 'fa-pause' : 'fa-play'}"></i> {player.playing ? 'Pause' : 'Fortsetzen'}</button>
@@ -375,7 +375,7 @@
         {/if}
 
       {:else if tab === 'jetzt'}
-        <div class="jetzt-schmal"><NowPlaying view={nowView} {onOpenArtist} {onOpenVideo} /></div>
+        <div class="jetzt-schmal"><NowPlaying view={nowView} {onOpenVideo} /></div>
 
       {:else if tab === 'hoerbuecher'}
         <!-- Hörbücher: nie zufällig, immer in ihrer Reihenfolge, Weiterhören an der gemerkten Stelle -->
@@ -435,7 +435,7 @@
     </div>
 
     <aside class="jetzt-spalte">
-      <NowPlaying view={nowView} {onOpenArtist} {onOpenVideo} />
+      <NowPlaying view={nowView} {onOpenVideo} />
     </aside>
   </div>
 </div>

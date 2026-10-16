@@ -8,6 +8,7 @@
   import { coverUrl } from '../../utils/musicTrack.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDuration } from '../../utils/format.js';
+  import ArtistLink from './ArtistLink.svelte';
 
   let { tracks = [], numbered = true, showPlays = false, stickyTop = null,
         onPlay = () => {}, onMenu = () => {}, onFavorite = () => {} } = $props();
@@ -30,7 +31,7 @@
       </span>
       <img src={coverUrl(track)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
       <span class="t" title={track.title}>{#if track.kind === 'datei'}<i class="fa-solid fa-compact-disc sammlung" title="Aus der eigenen Sammlung"></i> {/if}{track.title}</span>
-      <span class="w" title={track.artist}>{track.artist}</span>
+      <span class="w"><ArtistLink {track} /></span>
       {#if showPlays}<span class="zahl w">{track.play_count}x</span>{/if}
       <span class="zahl w">{formatDuration(track.duration || 0)}</span>
       <button class="knopf" class:an={track.favorite} onclick={(e) => { e.stopPropagation(); onFavorite(track); }}
