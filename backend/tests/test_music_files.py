@@ -287,3 +287,19 @@ async def test_mehrere_auf_einmal_zurueckholen(test_db, sammlung, async_client_f
         restored = (await client.post("/api/music/hidden/restore", json={"tracks": [t["id"] for t in hidden]})).json()
     assert restored == {"tracks": 2, "albums": 0}
     assert await music_files.hidden_count() == 0
+
+
+async def test_neuaufbau_dann_einlesen_behaelt_nutzerdaten(test_db, sammlung):
+    """Nach einem Neuaufbau steht ein Eintrag aus der Sicherung; das Einlesen
+    ergänzt Tags und Technik und lässt Lieblingssong und Ausgeblendet stehen."""
+    await music_files.scan()
+    enjoy = next(f for f in await music_files.all_files() if f.title == "Enjoy the Silence")
+    await music_files.set_favorite(enjoy.id, True)
+    await music_files.set_hidden(enjoy.id, True)
+    saved = [dict(r) for r in await test_db.fetch_all(music_files.USERDATA_SQL)]
+    await test_db.execute("DELETE FROM music_files")
+
+    assert await music_files.restore_userdata(saved) == 1
+    await music_files.scan()
+    again = await music_files.get(enjoy.id)
+    assert (again.favorite, again.hidden, again.codec, again.album) == (True, True, "FLAC", "Violator")

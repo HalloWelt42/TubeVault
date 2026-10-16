@@ -400,6 +400,43 @@ async def set_hidden(item_id: str, hidden: bool) -> bool:
     return cursor.rowcount == 1
 
 
+# ─── Sicherung: Nutzerdaten der Sammlung (userdata_export, rebuild_service) ───
+# Lieblingssong, Wiedergaben, Ausgeblendetes - dazu Pfad und Grundangaben, damit
+# ein Neuaufbau den Eintrag schon vor dem nächsten Einlesen zeigen kann.
+USERDATA_SQL = """SELECT id, path, title, artist, album, duration, category,
+                         favorite, play_count, last_played, hidden, hidden_at
+                  FROM music_files
+                  WHERE COALESCE(favorite, 0) = 1 OR COALESCE(play_count, 0) > 0 OR COALESCE(hidden, 0) = 1"""
+
+
+async def restore_userdata(rows: list[dict]) -> int:
+    """Gesicherte Nutzerdaten zurückspielen, ohne Frischeres zu überschreiben:
+    Lieblingssong und Ausgeblendet bleiben gesetzt, Wiedergaben zählen das
+    Höhere. Fehlt die Datei noch in der Tabelle (Neuaufbau vor dem Einlesen),
+    entsteht ein Eintrag aus Pfad und Grundangaben; Größe und Zeitstempel
+    fehlen ihm, also liest das nächste Einlesen die Datei ganz und behält die
+    Nutzerdaten (scan aktualisiert nur die Tags)."""
+    changed = 0
+    for row in rows:
+        if not row.get("id") or not row.get("path"):
+            continue
+        cursor = await db.execute(
+            """INSERT INTO music_files (id, path, title, artist, album, duration, category,
+                                        favorite, play_count, last_played, hidden, hidden_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   favorite = MAX(COALESCE(favorite, 0), excluded.favorite),
+                   play_count = MAX(COALESCE(play_count, 0), excluded.play_count),
+                   last_played = COALESCE(last_played, excluded.last_played),
+                   hidden = MAX(COALESCE(hidden, 0), excluded.hidden),
+                   hidden_at = COALESCE(hidden_at, excluded.hidden_at)""",
+            (row["id"], row["path"], row.get("title") or PurePosixPath(row["path"]).stem, row.get("artist"),
+             row.get("album"), row.get("duration"), row.get("category") or MUSIC, int(row.get("favorite") or 0),
+             int(row.get("play_count") or 0), row.get("last_played"), int(row.get("hidden") or 0), row.get("hidden_at")))
+        changed += max(cursor.rowcount, 0)
+    return changed
+
+
 async def hidden_count() -> int:
     return await db.fetch_val("SELECT COUNT(*) FROM music_files WHERE COALESCE(hidden, 0) = 1") or 0
 

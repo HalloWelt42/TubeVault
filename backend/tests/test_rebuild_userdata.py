@@ -6,6 +6,10 @@ Pin-Punkte:
 - Rotation behält nur die letzten KEEP Exporte
 - Restore: INSERT OR IGNORE (vorhandene Zeilen gewinnen), Video-Nutzerfelder
   überschreiben keine frischeren Werte
+- Musik (16.10.2026): Lieblingssong, Wiedergaben und Ausgeblendetes der eigenen
+  Sammlung, Hörbuch-Stand, Musikkanäle und die Hörbuch-Wahl an Videos kommen
+  mit; fehlt eine Datei noch in der Tabelle, entsteht ihr Eintrag aus der
+  Sicherung (das nächste Einlesen ergänzt den Rest)
 - Rebuild stellt gelöschte videos-Zeilen aus Sidecars wieder her,
   findet die Mediendatei (auch video_tmp.*) und liest description aus TEXTS
 - dry_run zählt nur, schreibt nichts
@@ -94,6 +98,37 @@ class TestRestore:
         await rebuild_service.restore_userdata()
         row = await test_db.fetch_one("SELECT rating FROM videos WHERE id=?", (vid,))
         assert row["rating"] == 2  # COALESCE: vorhandener Wert gewinnt
+
+    async def test_musik_und_hoerbuecher_kommen_mit(self, test_db, roots):
+        await test_db.execute(
+            """INSERT INTO music_files (id, path, title, artist, size, mtime, favorite, play_count, hidden, hidden_at) VALUES
+               ('f111111111111111', 'A/lieb.flac', 'Lieb', 'Band', 10, 1.0, 1, 3, 0, NULL),
+               ('f222222222222222', 'A/weg.flac', 'Weg', 'Band', 10, 1.0, 0, 0, 1, '2026-10-16 10:00:00'),
+               ('f333333333333333', 'A/egal.flac', 'Egal', 'Band', 10, 1.0, 0, 0, 0, NULL)""")
+        await test_db.execute("INSERT INTO audiobook_progress (book, file_id, position) VALUES ('insel', 'f111111111111111', 42)")
+        await test_db.execute("INSERT INTO music_channels (channel_id) VALUES ('UCmusik')")
+        await test_db.execute(
+            """INSERT INTO videos (id, title, status, is_audiobook, audiobook_source)
+               VALUES ('hoerspiel01', 'Folge 1', 'ready', 1, 'user')""")
+        manifest = await userdata_export.export_userdata()
+        assert manifest["counts"]["music_file_userdata"] == 2          # nur Zeilen mit Nutzerdaten
+
+        await test_db.execute("DELETE FROM music_files WHERE id <> 'f111111111111111'")
+        await test_db.execute("UPDATE music_files SET play_count = 9, favorite = 0 WHERE id = 'f111111111111111'")
+        for table in ("audiobook_progress", "music_channels"):
+            await test_db.execute(f"DELETE FROM {table}")
+        await test_db.execute("UPDATE videos SET is_audiobook = 0, audiobook_source = NULL WHERE id = 'hoerspiel01'")
+
+        res = await rebuild_service.restore_userdata()
+        assert res["tables"]["music_file_userdata"]["rows"] == 2
+        lieb = await test_db.fetch_one("SELECT favorite, play_count FROM music_files WHERE id = 'f111111111111111'")
+        assert (lieb["favorite"], lieb["play_count"]) == (1, 9)          # frischere Wiedergaben bleiben
+        weg = await test_db.fetch_one("SELECT path, title, hidden, size FROM music_files WHERE id = 'f222222222222222'")
+        assert (weg["path"], weg["title"], weg["hidden"], weg["size"]) == ("A/weg.flac", "Weg", 1, None)
+        assert await test_db.fetch_val("SELECT position FROM audiobook_progress WHERE book = 'insel'") == 42
+        assert await test_db.fetch_val("SELECT COUNT(*) FROM music_channels") == 1
+        video = await test_db.fetch_one("SELECT is_audiobook, audiobook_source FROM videos WHERE id = 'hoerspiel01'")
+        assert (video["is_audiobook"], video["audiobook_source"]) == (1, "user")
 
     async def test_restore_ohne_export(self, test_db, roots):
         res = await rebuild_service.restore_userdata()

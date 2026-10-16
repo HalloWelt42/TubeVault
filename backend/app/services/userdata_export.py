@@ -3,9 +3,11 @@ TubeVault – Userdata-Export Service v1.0.0
 
 Täglicher JSONL-Export aller NUTZER-Daten – also allem, was sich NICHT aus
 den info.json-Sidecars neben den Videos rekonstruieren lässt:
-favorites, watch_history, categories (+ Zuordnungen und Regeln), playlists (+ Inhalte),
-subscriptions, blocked_channels, ignored_videos sowie die Nutzerfelder aus
-videos (rating, play_count, last_position, notes, suggest_override).
+favorites, watch_history, categories (+ Zuordnungen und Regeln), playlists (+ Inhalte,
+auch Dateien der Sammlung), subscriptions, blocked_channels, ignored_videos,
+Musikkanäle, ausgeschlossene Alben, Hörbuch-Stand sowie die Nutzerfelder aus
+videos (rating, play_count, last_position, notes, suggest_override, Hörbuch-Wahl)
+und aus der eigenen Musiksammlung (Lieblingssong, Wiedergaben, Ausgeblendet).
 
 Ablage:  EXPORTS/userdata/userdata_YYYYMMDD_HHMMSS/<tabelle>.jsonl
          + manifest.json (Zeilenzahlen, Zeitpunkt, Schema-Version)
@@ -21,6 +23,7 @@ import shutil
 from datetime import datetime
 
 from app.database import db
+from app.services import music_files
 from app.services.storage import storage
 
 logger = logging.getLogger(__name__)
@@ -33,16 +36,18 @@ TABLES = [
     "category_rules", "category_exclusions",
     "playlists", "playlist_videos", "playlist_files", "subscriptions",
     "blocked_channels", "ignored_videos", "deleted_videos", "music_exclusions",
+    "music_channels", "audiobook_progress",
 ]
 
 # Nutzerfelder aus videos (nur Zeilen, in denen tatsächlich etwas steht).
 # rating hat Spalten-Default 0 (= unbewertet), daher > 0 statt IS NOT NULL.
 VIDEO_USERDATA_SQL = """
     SELECT id, rating, play_count, last_position, last_played,
-           notes, suggest_override
+           notes, suggest_override, is_audiobook, audiobook_source
     FROM videos
     WHERE rating > 0 OR play_count > 0 OR last_position > 0
        OR (notes IS NOT NULL AND notes != '') OR suggest_override IS NOT NULL
+       OR audiobook_source IS NOT NULL
 """
 
 
@@ -83,6 +88,7 @@ async def export_userdata() -> dict:
         dumps[table] = [dict(r) for r in rows]
     rows = await db.fetch_all(VIDEO_USERDATA_SQL)
     dumps["video_userdata"] = [dict(r) for r in rows]
+    dumps["music_file_userdata"] = [dict(r) for r in await db.fetch_all(music_files.USERDATA_SQL)]
 
     counts = {name: len(rows) for name, rows in dumps.items()}
     manifest = {

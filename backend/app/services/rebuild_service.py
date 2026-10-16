@@ -20,7 +20,7 @@ import json
 import logging
 
 from app.database import db
-from app.services import meta_sidecar
+from app.services import meta_sidecar, music_files
 from app.services.storage import storage
 from app.services.userdata_export import TABLES, userdata_root
 
@@ -199,13 +199,31 @@ async def restore_userdata(folder: str = None) -> dict:
                    last_position = MAX(COALESCE(last_position, 0), ?),
                    last_played = COALESCE(last_played, ?),
                    notes = COALESCE(NULLIF(notes, ''), ?),
-                   suggest_override = COALESCE(suggest_override, ?)
+                   suggest_override = COALESCE(suggest_override, ?),
+                   is_audiobook = CASE WHEN audiobook_source IS NULL AND ? IS NOT NULL
+                                       THEN ? ELSE is_audiobook END,
+                   audiobook_source = COALESCE(audiobook_source, ?)
                    WHERE id = ?""",
                 (row.get("rating"), row.get("play_count") or 0,
                  row.get("last_position") or 0, row.get("last_played"),
-                 row.get("notes"), row.get("suggest_override"), row.get("id")))
+                 row.get("notes"), row.get("suggest_override"),
+                 row.get("audiobook_source"), row.get("is_audiobook") or 0, row.get("audiobook_source"),
+                 row.get("id")))
             updated += cursor.rowcount if cursor.rowcount > 0 else 0
         result["tables"]["video_userdata"] = {"rows": len(lines), "updated": updated}
+
+    # Eigene Musiksammlung: Lieblingssong, Wiedergaben, Ausgeblendet (music_files.restore_userdata)
+    f = target / "music_file_userdata.jsonl"
+    if f.exists():
+        lines = await asyncio.to_thread(lambda: f.read_text(encoding="utf-8").splitlines())
+        rows = []
+        for line in lines:
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        result["tables"]["music_file_userdata"] = {"rows": len(rows),
+                                                    "updated": await music_files.restore_userdata(rows)}
 
     logger.info(f"[rebuild] Userdata aus {target.name} zurückgespielt")
     return result
