@@ -16,6 +16,7 @@ import { wsBaseUrl } from '../api/client.js';
 import { musicPlayer } from './musicPlayer.svelte.js';
 import { videoSession } from './videoSession.svelte.js';
 import { rememberLanguage } from '../utils/audioTrackSync.js';
+import { elementVolumeWorks } from '../utils/softVolume.js';
 import {
   KIND_NAMES, deviceKind, musicState, playingElsewhere, positionOf, randomId, videoState, visibleDevices,
 } from '../utils/remoteDevices.js';
@@ -43,11 +44,6 @@ function stored(storage, key, make) {
   }
 }
 
-function volumeAdjustable() {
-  // iOS lässt die Lautstärke nicht per Seite ändern: der Wert bleibt bei 1
-  try { const probe = new Audio(); probe.volume = 0.5; return probe.volume === 0.5; } catch { return false; }
-}
-
 class Remote {
   me = $state(null);              // { id, geraet, name, art }
   devices = $state([]);           // wie vom Server, je Gerät zusätzlich _an: Empfangszeit des Stands
@@ -60,7 +56,7 @@ class Remote {
   #reportTimer = null;
   #pingTimer = null;
   #reconnectTimer = null;
-  #canVolume = false;
+  #videoVolume = false;           // iOS: Videos nur über die Tasten am Gerät (Musik: musicPlayer.volumeAdjustable)
   #started = false;
 
   /** Geräte zum Anzeigen: dieses zuerst, je anderem Browser eins */
@@ -76,7 +72,7 @@ class Remote {
     if (this.#started || typeof window === 'undefined') return;
     this.#started = true;
     this.#hooks = hooks;
-    this.#canVolume = volumeAdjustable();
+    this.#videoVolume = elementVolumeWorks();
     const art = deviceKind(window.matchMedia?.('(pointer: coarse)').matches, screen.width, screen.height);
     this.me = {
       id: stored(sessionStorage, WINDOW_KEY, randomId),
@@ -202,8 +198,8 @@ class Remote {
 
   #state() {
     const media = this.#localMedia();
-    if (media === 'video') return videoState(videoSession, this.#canVolume);
-    if (media === 'musik') return musicState(musicPlayer, this.#canVolume);
+    if (media === 'video') return videoState(videoSession, this.#videoVolume);
+    if (media === 'musik') return musicState(musicPlayer, musicPlayer.volumeAdjustable);
     return null;
   }
 

@@ -1,6 +1,7 @@
 <!--
   Fernbedienung am Handy: steuert, was auf einem anderen Gerät läuft (Musik,
-  Hörbuch oder Video), und holt es auf Wunsch hierher. Gestaltung nach
+  Hörbuch oder Video), und holt es auf Wunsch hierher. Die Steuerung steht
+  unten fest, Bild oder Cover nehmen den übrigen Platz. Gestaltung nach
   mockups/fernsteuerung.html; Kennfarbe Blau für "läuft woanders".
 -->
 <script>
@@ -33,7 +34,7 @@
   const send = (aktion, wert = null) => remote.send(device.id, aktion, wert);
 </script>
 
-<div class="fern m-view">
+<div class="fern">
   {#if !device || !state}
     <header class="band">
       <button class="zurueck" onclick={back} aria-label="Schließen"><i class="fa-solid fa-chevron-down"></i></button>
@@ -53,15 +54,22 @@
     </header>
 
     <div class="koerper">
+      <div class="feld">
+        {#if video}
+          <div class="vbild">
+            <img src={api.thumbnailUrl(state.kennung)} alt="" />
+            <span class="auf"><i class="fa-solid {KIND_ICONS[device.art]}"></i> Bild läuft auf {device.name}</span>
+          </div>
+        {:else}
+          <img class="cover" src={coverUrl(state.kennung)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+        {/if}
+      </div>
       {#if video}
-        <div class="vbild">
-          <img src={api.thumbnailUrl(state.kennung)} alt="" />
-          <span class="auf"><i class="fa-solid {KIND_ICONS[device.art]}"></i> Bild läuft auf {device.name}</span>
+        <div>
+          <h1 class="vtitel">{state.titel}</h1>
+          {#if state.untertitel}<div class="leise">{state.untertitel}</div>{/if}
         </div>
-        <h1 class="vtitel">{state.titel}</h1>
-        {#if state.untertitel}<div class="leise">{state.untertitel}</div>{/if}
       {:else}
-        <img class="cover" src={coverUrl(state.kennung)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
         <div class="titelzeile">
           <div class="text">
             <h1 class="titel">{state.titel}</h1>
@@ -74,65 +82,68 @@
         </div>
       {/if}
 
-      <div>
-        <div class="spur" use:dragValue={(v) => send('stelle', v * state.dauer)} role="slider" tabindex="0"
-             aria-label="Stelle" aria-valuemin="0" aria-valuemax={Math.round(state.dauer)} aria-valuenow={Math.round(position)}>
-          <b style:width="{progress * 100}%"></b>
-        </div>
-        <div class="zeiten"><span>{formatDuration(Math.floor(position))}</span><span>{formatDuration(Math.floor(state.dauer))}</span></div>
-      </div>
-
-      <div class="tasten">
-        {#if video || book}
-          <button class="klein" disabled={!can.has('zurueck')} onclick={() => send('zurueck')} aria-label="Zurück">
-            <i class="fa-solid fa-backward-step"></i></button>
-          <button onclick={() => send('sprung', video ? -10 : -30)} aria-label="Zurückspringen">
-            <i class="fa-solid fa-rotate-left"></i><span class="sek">{video ? 10 : 30}</span></button>
-        {:else}
-          <button class="klein" class:an={state.zufall} onclick={() => send('zufall')} aria-label="Zufall">
-            <i class="fa-solid fa-shuffle"></i></button>
-          <button onclick={() => send('zurueck')} aria-label="Zurück"><i class="fa-solid fa-backward-step"></i></button>
-        {/if}
-        <button class="mitte" onclick={() => send('umschalten')} aria-label={state.laeuft ? 'Pause' : 'Abspielen'}>
-          <i class="fa-solid {state.laeuft ? 'fa-pause' : 'fa-play'}"></i></button>
-        {#if video || book}
-          <button onclick={() => send('sprung', video ? 10 : 30)} aria-label="Vorspringen">
-            <i class="fa-solid fa-rotate-right"></i><span class="sek">{video ? 10 : 30}</span></button>
-          <button class="klein" disabled={!can.has('weiter')} onclick={() => send('weiter')} aria-label="Weiter">
-            <i class="fa-solid fa-forward-step"></i></button>
-        {:else}
-          <button disabled={!can.has('weiter')} onclick={() => send('weiter')} aria-label="Weiter"><i class="fa-solid fa-forward-step"></i></button>
-          <button class="klein" class:an={state.wiederholen && state.wiederholen !== 'off'} onclick={() => send('wiederholen')} aria-label="Wiederholen">
-            <i class="fa-solid fa-repeat"></i></button>
-        {/if}
-      </div>
-
-      {#if state.tonspuren?.length}
-        <div class="wahl" role="group" aria-label="Tonspur">
-          <button class:an={!state.tonspur} onclick={() => send('tonspur', null)}>Original</button>
-          {#each state.tonspuren as track (track.id)}
-            <button class:an={state.tonspur === track.id} onclick={() => send('tonspur', track.id)}>{track.label}</button>
-          {/each}
-        </div>
-      {/if}
-
-      {#if state.lautstaerke !== null && state.lautstaerke !== undefined}
-        <div class="laut">
-          <i class="fa-solid fa-volume-low"></i>
-          <div class="spur" use:dragValue={(v) => send('lautstaerke', v)} role="slider" tabindex="0" aria-label="Lautstärke dort"
-               aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(state.lautstaerke * 100)}>
-            <b style:width="{state.lautstaerke * 100}%"></b>
+      <div class="steuerung">
+        <div>
+          <div class="spur" use:dragValue={(v) => send('stelle', v * state.dauer)} role="slider" tabindex="0"
+               aria-label="Stelle" aria-valuemin="0" aria-valuemax={Math.round(state.dauer)} aria-valuenow={Math.round(position)}>
+            <b style:width="{progress * 100}%"></b>
           </div>
-          <i class="fa-solid fa-volume-high"></i>
+          <div class="zeiten"><span>{formatDuration(Math.floor(position))}</span><span>{formatDuration(Math.floor(state.dauer))}</span></div>
         </div>
-        <div class="leise mitte-text">Lautstärke auf {device.name}</div>
-      {/if}
+
+        <div class="tasten">
+          {#if video || book}
+            <button class="klein" disabled={!can.has('zurueck')} onclick={() => send('zurueck')} aria-label="Zurück">
+              <i class="fa-solid fa-backward-step"></i></button>
+            <button onclick={() => send('sprung', video ? -10 : -30)} aria-label="Zurückspringen">
+              <i class="fa-solid fa-rotate-left"></i><span class="sek">{video ? 10 : 30}</span></button>
+          {:else}
+            <button class="klein" class:an={state.zufall} onclick={() => send('zufall')} aria-label="Zufall">
+              <i class="fa-solid fa-shuffle"></i></button>
+            <button onclick={() => send('zurueck')} aria-label="Zurück"><i class="fa-solid fa-backward-step"></i></button>
+          {/if}
+          <button class="mitte" onclick={() => send('umschalten')} aria-label={state.laeuft ? 'Pause' : 'Abspielen'}>
+            <i class="fa-solid {state.laeuft ? 'fa-pause' : 'fa-play'}"></i></button>
+          {#if video || book}
+            <button onclick={() => send('sprung', video ? 10 : 30)} aria-label="Vorspringen">
+              <i class="fa-solid fa-rotate-right"></i><span class="sek">{video ? 10 : 30}</span></button>
+            <button class="klein" disabled={!can.has('weiter')} onclick={() => send('weiter')} aria-label="Weiter">
+              <i class="fa-solid fa-forward-step"></i></button>
+          {:else}
+            <button disabled={!can.has('weiter')} onclick={() => send('weiter')} aria-label="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+            <button class="klein" class:an={state.wiederholen && state.wiederholen !== 'off'} onclick={() => send('wiederholen')} aria-label="Wiederholen">
+              <i class="fa-solid fa-repeat"></i></button>
+          {/if}
+        </div>
+
+        {#if state.tonspuren?.length}
+          <div class="wahl" role="group" aria-label="Tonspur">
+            <button class:an={!state.tonspur} onclick={() => send('tonspur', null)}>Original</button>
+            {#each state.tonspuren as track (track.id)}
+              <button class:an={state.tonspur === track.id} onclick={() => send('tonspur', track.id)}>{track.label}</button>
+            {/each}
+          </div>
+        {/if}
+
+        {#if state.lautstaerke !== null && state.lautstaerke !== undefined}
+          <div class="laut">
+            <i class="fa-solid fa-volume-low"></i>
+            <div class="spur" use:dragValue={(v) => send('lautstaerke', v)} role="slider" tabindex="0" aria-label="Lautstärke dort"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(state.lautstaerke * 100)}>
+              <b style:width="{state.lautstaerke * 100}%"></b>
+            </div>
+            <i class="fa-solid fa-volume-high"></i>
+          </div>
+          <div class="leise mitte-text">Lautstärke auf {device.name}</div>
+        {/if}
+</div>
     </div>
   {/if}
 </div>
 
 <style>
-  .fern { display: flex; flex-direction: column; }
+  .fern { height: 100%; display: flex; flex-direction: column; overflow: hidden;
+          padding-left: var(--m-safe-left); padding-right: var(--m-safe-right); }
   .band { display: grid; grid-template-columns: var(--m-touch) auto minmax(0, 1fr) auto; gap: 8px; align-items: center;
           padding: calc(var(--m-safe-top) + 8px) 12px 10px 4px; background: rgba(var(--tv-info-rgb), 0.16); color: var(--tv-info); }
   .zurueck { width: var(--m-touch); height: var(--m-touch); font-size: 1.2rem; color: var(--m-dim); }
@@ -141,9 +152,13 @@
   .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .w { font-size: var(--tv-gr-klein); color: var(--m-dim); }
   .holen { height: 44px; padding: 0 14px; border-radius: var(--m-radius); background: var(--tv-info); color: #0b1a22; font-weight: 700; }
-  .koerper { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px calc(var(--m-safe-bottom) + 20px); }
-  .cover { width: 100%; max-width: 420px; aspect-ratio: 1; object-fit: cover; border-radius: var(--m-radius); align-self: center; background: var(--m-surface); }
-  .vbild { position: relative; aspect-ratio: 16 / 9; border-radius: var(--m-radius); overflow: hidden; background: #000; }
+  .koerper { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px calc(var(--m-safe-bottom) + 20px); }
+  /* Bild oder Cover im übrigen Platz; die Steuerung darunter steht fest */
+  .feld { flex: 1 1 0; min-height: 0; container-type: size; display: grid; place-items: center; }
+  .cover { width: min(100cqw, 100cqh, 420px); height: min(100cqw, 100cqh, 420px); object-fit: cover; border-radius: var(--m-radius);
+           background: var(--m-surface); }
+  .vbild { position: relative; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9; border-radius: var(--m-radius); overflow: hidden; background: #000; }
+  .steuerung { flex: none; display: flex; flex-direction: column; gap: 14px; }
   .vbild img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.55; }
   .auf { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; color: #fff; text-align: center; }
   .vtitel { font-size: 1.05rem; font-weight: 700; line-height: 1.25; }

@@ -1,7 +1,8 @@
 <!--
   Läuft gerade (Musik): großes Cover (Wischen nach links oder rechts: weiter
-  oder zurück), Titel mit Herz, woher der Ton kommt und in welcher Güte,
-  Spur und Tasten; unten Liedtext und Warteschlange. Gestaltung nach
+  oder zurück), Titel mit Abwählen und Herz, woher der Ton kommt und in
+  welcher Güte; die Steuerung (Spur, Tasten, Lautstärke, Liedtext und
+  Warteschlange) steht unten fest, das Cover gibt nach. Gestaltung nach
   mockups/mobil-musik.html. Gesteuert wird nur der Musikspieler.
 -->
 <script>
@@ -11,6 +12,7 @@
   import { toast } from '../../../lib/stores/notifications.js';
   import { back, go } from '../../router.js';
   import Spur from '../../parts/Spur.svelte';
+  import Lautstaerke from '../../parts/Lautstaerke.svelte';
   import SpielerKopf from '../../parts/SpielerKopf.svelte';
   import { wischen } from '../../parts/wischen.js';
 
@@ -57,8 +59,8 @@
     go(`/video/${track.id}`);
   }
 
+  // Abwählen: aus der Wiedergabeliste bzw. Warteschlange, es geht mit dem nächsten weiter
   async function removeFromList() {
-    menu = false;
     const fromPlaylist = !!player.playlistId;
     try {
       await player.removeFromList();
@@ -96,9 +98,14 @@
 
   <div class="m-titelzeile">
     <div class="texte"><div class="t">{track.title}</div><div class="w">{track.artist}</div></div>
-    <button class="m-rund herz" class:an={track.favorite} onclick={favorite}
-            aria-label={track.favorite ? 'Aus den Lieblingssongs nehmen' : 'Zu den Lieblingssongs'} aria-pressed={!!track.favorite}>
-      <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
+    <div class="knoepfe">
+      <button class="m-rund" onclick={removeFromList}
+              aria-label={player.playlistId ? 'Aus der Wiedergabeliste nehmen und weiter' : 'Aus der Warteschlange nehmen und weiter'}>
+        <i class="fa-solid fa-circle-minus"></i></button>
+      <button class="m-rund herz" class:an={track.favorite} onclick={favorite}
+              aria-label={track.favorite ? 'Aus den Lieblingssongs nehmen' : 'Zu den Lieblingssongs'} aria-pressed={!!track.favorite}>
+        <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
+    </div>
   </div>
   <div class="technik">
     <i class="fa-solid {origin.icon}"></i>
@@ -110,26 +117,30 @@
       <span class="zahl">{player.segment.index + 1}/{player.segment.count}</span> {player.segment.title}</button>
   {/if}
 
-  <div class="spur"><Spur time={player.time} duration={player.duration} onseek={(s) => player.seek(s)}
-                          marks={player.segments.slice(1).map((segment) => segment.start)} /></div>
+  <div class="m-steuerung">
+    <div class="spur"><Spur time={player.time} duration={player.duration} onseek={(s) => player.seek(s)}
+                            marks={player.segments.slice(1).map((segment) => segment.start)} /></div>
 
-  <div class="m-tasten">
-    <button class="klein" class:an={player.shuffle} onclick={() => player.toggleShuffle()} aria-label="Zufall" aria-pressed={player.shuffle}>
-      <i class="fa-solid fa-shuffle"></i></button>
-    <button onclick={() => player.prev()} aria-label="Zurück"><i class="fa-solid fa-backward-step"></i></button>
-    <button class="mitte" onclick={() => player.toggle()} aria-label={player.playing ? 'Pause' : 'Abspielen'}>
-      <i class="fa-solid {player.loading ? 'fa-spinner fa-spin' : player.playing ? 'fa-pause' : 'fa-play'}"></i></button>
-    <button onclick={() => player.next()} aria-label="Weiter"><i class="fa-solid fa-forward-step"></i></button>
-    <button class="klein" class:an={player.repeat !== 'off'} onclick={() => player.cycleRepeat()} aria-label={REPEAT_LABELS[player.repeat]}>
-      <i class="fa-solid fa-repeat"></i>{#if player.repeat === 'one'}<b class="eins zahl">1</b>{/if}</button>
-  </div>
+    <div class="m-tasten">
+      <button class="klein" class:an={player.shuffle} onclick={() => player.toggleShuffle()} aria-label="Zufall" aria-pressed={player.shuffle}>
+        <i class="fa-solid fa-shuffle"></i></button>
+      <button onclick={() => player.prev()} aria-label="Zurück"><i class="fa-solid fa-backward-step"></i></button>
+      <button class="mitte" onclick={() => player.toggle()} aria-label={player.playing ? 'Pause' : 'Abspielen'}>
+        <i class="fa-solid {player.loading ? 'fa-spinner fa-spin' : player.playing ? 'fa-pause' : 'fa-play'}"></i></button>
+      <button onclick={() => player.next()} aria-label="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+      <button class="klein" class:an={player.repeat !== 'off'} onclick={() => player.cycleRepeat()} aria-label={REPEAT_LABELS[player.repeat]}>
+        <i class="fa-solid fa-repeat"></i>{#if player.repeat === 'one'}<b class="eins zahl">1</b>{/if}</button>
+    </div>
 
-  <div class="unten">
-    {#if track.has_lyrics}
-      <button onclick={() => go('/jetzt', { ansicht: 'liedtext' })}><i class="fa-solid fa-align-left"></i>Liedtext</button>
-    {/if}
-    <button onclick={() => go('/jetzt', { ansicht: 'schlange' })}><i class="fa-solid fa-list-ol"></i>Warteschlange</button>
-    {@render extra?.()}
+    {#if player.volumeAdjustable}<Lautstaerke />{/if}
+
+    <div class="unten">
+      {#if track.has_lyrics}
+        <button onclick={() => go('/jetzt', { ansicht: 'liedtext' })}><i class="fa-solid fa-align-left"></i>Liedtext</button>
+      {/if}
+      <button onclick={() => go('/jetzt', { ansicht: 'schlange' })}><i class="fa-solid fa-list-ol"></i>Warteschlange</button>
+      {@render extra?.()}
+    </div>
   </div>
 
   {#if menu}
@@ -140,8 +151,6 @@
         <button role="menuitem" onclick={asVideo}><i class="fa-solid fa-display"></i> Als Video ansehen</button>
       {/if}
       <a role="menuitem" href={downloadUrl(track)} download onclick={() => menu = false}><i class="fa-solid fa-download"></i> Ton herunterladen</a>
-      <button role="menuitem" onclick={removeFromList}><i class="fa-solid fa-circle-minus"></i>
-        {player.playlistId ? 'Aus der Wiedergabeliste nehmen' : 'Aus der Warteschlange nehmen'}</button>
       {#if isFile(track)}
         <button role="menuitem" class="gefahr" onclick={discardTrack}><i class="fa-solid fa-eye-slash"></i> Gefällt nicht: ausblenden</button>
       {:else}
@@ -168,7 +177,7 @@
   .technik b { color: var(--tv-erfolg); }
   .spur { margin-top: 10px; flex: none; }
   .eins { position: absolute; right: 8px; bottom: 8px; font-size: 13px; }
-  .unten { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; margin-top: auto; padding-top: 12px; flex: none; }
+  .unten { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding-top: 8px; flex: none; }
   .unten > :global(button) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
                              height: 56px; color: var(--m-dim); font-size: 13px; font-weight: 600; }
   .unten > :global(button i) { font-size: 19px; }

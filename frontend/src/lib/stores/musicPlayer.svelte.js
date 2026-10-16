@@ -16,6 +16,7 @@ import { insertItem, moveItem, removeItem } from '../utils/queueOps.js';
 import { normalizeRate } from '../utils/playbackRate.js';
 import { afterMinutes, afterTrack, frozen, isDue, remainingMs, running } from '../utils/sleepTimer.js';
 import { nextSegmentStart, previousSegmentStart, segmentIndexAt, toSegments } from '../utils/segments.js';
+import { createVolume, volumeMode } from '../utils/softVolume.js';
 
 const BOOK_PREFIX = 'hoerbuch:';
 const RATE_KEY = 'musik.tempo';             // Tempo je Hörbuch: { <Buch>: 1.25 }
@@ -35,6 +36,10 @@ function readJson(key) {
 }
 function writeJson(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Speicher gesperrt */ }
+}
+// Ton vom eigenen Ursprung: nur dann darf er durch den Verstärker (utils/softVolume.js)
+function sameOrigin(base) {
+  try { return !base || new URL(base, location.href).origin === location.origin; } catch { return false; }
 }
 
 class MusicPlayer {
@@ -64,8 +69,12 @@ class MusicPlayer {
   #saveTimer = null;
   #unlocked = false;
   #deleteTimer = null;
+  #volume = null;                // stellt die Lautstärke am Element oder über den Verstärker
+  #volumeMode = null;            // 'element', 'gain' oder null (utils/softVolume.js)
 
   get current() { return this.queue[this.index] || null; }
+  /** Lässt sich die Lautstärke hier in der Seite stellen (iOS: über den Verstärker)? */
+  get volumeAdjustable() { return this.#volumeMode !== null; }
   get active() { return this.queue.length > 0; }
   get upcoming() { return this.queue.slice(this.index + 1); }
 
@@ -84,8 +93,11 @@ class MusicPlayer {
                             time: saved.time || 0 });
       this.rate = this.#rateFor(this.source);
     }
+    this.#volumeMode = volumeMode({ gainAllowed: sameOrigin(api.baseUrl) });
     const volume = parseFloat(localStorage.getItem(VOLUME_KEY));
     if (volume >= 0 && volume <= 1) this.volume = volume;
+    // Über den Verstärker beginnt es voll: das Element bleibt unberührt, bis jemand leiser stellt
+    else if (this.#volumeMode === 'gain') this.volume = 1;
     // Wird die Seite geschlossen, gilt ein angestoßenes Löschen sofort
     window.addEventListener('pagehide', () => this.#commitDelete());
   }
@@ -97,7 +109,8 @@ class MusicPlayer {
     audio.preload = 'auto';
     audio.style.display = 'none';
     audio.dataset.musik = '1';
-    audio.volume = this.volume;
+    this.#volume = createVolume(audio, this.#volumeMode);
+    this.#volume.set(this.volume);
     document.body.appendChild(audio);
     audio.addEventListener('play', () => {
       this.playing = true;
@@ -132,6 +145,7 @@ class MusicPlayer {
     const audio = this.#element();
     if (this.#unlocked) return;
     this.#unlocked = true;
+    this.#volume.prepare();
     if (!audio.getAttribute('src')) audio.src = SILENCE;
     const muted = audio.muted;
     audio.muted = true;
@@ -314,7 +328,7 @@ class MusicPlayer {
 
   setVolume(value) {
     this.volume = Math.max(0, Math.min(1, value));
-    if (this.#audio) this.#audio.volume = this.volume;
+    this.#volume?.set(this.volume);
     try { localStorage.setItem(VOLUME_KEY, String(this.volume)); } catch { /* Speicher gesperrt */ }
   }
 
