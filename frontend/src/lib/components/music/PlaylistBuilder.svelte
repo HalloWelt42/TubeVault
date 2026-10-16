@@ -3,7 +3,8 @@
   die gewählte Wiedergabeliste. Titel von links an jede Stelle der Liste
   ziehen, in der Liste per Ziehen umordnen, mit x herausnehmen; eine neue
   Liste entsteht mit einem Namen und Eingabetaste und ist sofort gewählt.
-  Abspielen geht jederzeit. Videos und Dateien der Sammlung mischen sich
+  Abspielen geht jederzeit, ganz oder je Titel (Cover oder Titel: spielt die
+  Liste ab dort, beim laufenden Titel anhalten und fortsetzen). Videos und Dateien der Sammlung mischen sich
   (backend/app/services/playlist_items.py). Die gewählte Liste steht in der
   Adresse (?liste=).
 -->
@@ -11,7 +12,6 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { api } from '../../api/client.js';
-  import { coverUrl } from '../../utils/musicTrack.js';
   import { formatDuration, formatDurationLong } from '../../utils/format.js';
   import { route, updateParams } from '../../router/router.js';
   import { carriesTracks, draggedTracks, dropIndex, moveTarget } from '../../utils/trackDrag.js';
@@ -19,6 +19,7 @@
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { toast } from '../../stores/notifications.js';
   import TrackPool from './TrackPool.svelte';
+  import CoverPlay from './CoverPlay.svelte';
   import ConfirmDialog from '../common/ConfirmDialog.svelte';
 
   let lists = $state([]);
@@ -151,6 +152,8 @@
   }
 
   const play = (options = {}) => player.playSource(key, options).catch((e) => toast.error(e.message));
+  // Ein Titel der Liste: läuft er schon, anhalten bzw. fortsetzen, sonst die Liste ab ihm
+  const playTrack = (track) => (player.current?.id === track.id ? player.toggle() : play({ start: track.id }));
 
   onMount(() => {
     loadLists();
@@ -202,10 +205,11 @@
                draggable="true" ondragstart={(e) => startMove(e, i)} ondragend={() => { movingFrom = null; dropAt = null; }}
                ondragover={(e) => overRow(e, i)}>
             <span class="nr zahl">{i + 1}</span>
-            <button class="spielen" onclick={() => play({ start: track.id })} title="Ab hier abspielen">
-              <img src={coverUrl(track)} alt="" loading="lazy" draggable="false" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-              <span class="text"><span class="t">{track.title}</span><span class="w">{track.artist}</span></span>
-            </button>
+            <span class="spielen">
+              <CoverPlay {track} onplay={() => play({ start: track.id })} />
+              <button class="text" onclick={() => playTrack(track)} title="Ab hier abspielen">
+                <span class="t">{track.title}</span><span class="w">{track.artist}</span></button>
+            </span>
             <span class="zahl dauer">{formatDuration(track.duration || 0)}</span>
             <button class="weg" onclick={() => remove(track)} title="Aus der Liste nehmen"><i class="fa-solid fa-xmark"></i></button>
           </div>
@@ -249,10 +253,10 @@
   .zeile.wandert { opacity: 0.4; }
   .zeile.laeuft .t { color: var(--tv-akzent); }
   .nr { text-align: right; font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
-  .spielen { min-width: 0; display: flex; align-items: center; gap: var(--tv-a2); padding: 0; border: 0; background: none;
-             color: var(--tv-text); font: inherit; text-align: left; cursor: pointer; }
-  .spielen img { width: 40px; height: 40px; flex: none; object-fit: cover; border-radius: var(--tv-ecke-klein); background: var(--tv-flaeche); }
-  .text { min-width: 0; display: flex; flex-direction: column; }
+  .spielen { min-width: 0; display: flex; align-items: center; gap: var(--tv-a2); }
+  .text { min-width: 0; display: flex; flex-direction: column; padding: 0; border: 0; background: none; color: var(--tv-text);
+          font: inherit; text-align: left; cursor: pointer; }
+  .text:focus-visible { outline: 2px solid var(--tv-akzent); outline-offset: 2px; }
   .text > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .t { font-weight: 600; }
   .w { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
