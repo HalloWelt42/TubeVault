@@ -1,0 +1,14 @@
+{
+  "name": "TubeVault",
+  "short_name": "TubeVault",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#11191e",
+  "background_color": "#172127",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

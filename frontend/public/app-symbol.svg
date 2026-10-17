@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <!-- TubeVault-Symbol: Kastenfernseher mit Abspielzeichen. Einzige Quelle;
-       die PNG-Fassungen und das freigestellte favicon.svg (Browser-Tab,
-       ohne Grund) erzeugt scripts/app-symbole.sh daraus. -->
+       die PNG- und ICO-Fassungen und das freigestellte favicon.svg (Browser-Tab,
+       ohne Grund) erzeugt scripts/symbole.py daraus. -->
   <defs>
     <linearGradient id="grund" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#26343c"/><stop offset="1" stop-color="#0d1418"/>
