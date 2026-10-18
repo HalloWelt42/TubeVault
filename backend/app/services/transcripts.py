@@ -22,6 +22,10 @@ danach geht es mit den nächstälteren weiter.
 
 Solche Transkripte tragen die Art "ai" und sind überall als KI-Transkript
 gekennzeichnet - sie stammen nicht vom Autor und können Hörfehler enthalten.
+Dasselbe gilt für das Transkript, das bei einer Nachvertonung entsteht: es
+kommt mit der Tonspur und erledigt den KI-Auftrag des Videos gleich mit. Der
+Text der neuen Tonspur (meist die Übersetzung) liegt als eigene Untertitel-Datei
+"v.<sprache>.vtt" daneben (Art "dub"), nicht im Suchbestand.
 Früher geholte Untertitel der Quelle (Art "manual" oder "auto") bleiben
 bestehen und werden nicht ersetzt.
 
@@ -94,8 +98,9 @@ KIND_LABELS = {
     "manual": "Untertitel vom Autor",
     "auto": "Untertitel der Quelle (automatisch erzeugt)",
     "ai": "KI-Transkript",
+    "dub": "Text der Vertonung",
 }
-_FILE_PREFIX = {"manual": "", "auto": "a.", "ai": "ki."}
+_FILE_PREFIX = {"manual": "", "auto": "a.", "ai": "ki.", "dub": "v."}
 # Ohne Lebenszeichen gilt ein abgeholter KI-Auftrag nach dieser Zeit als verwaist
 AI_STALE_AFTER_MINUTES = 30
 
@@ -372,31 +377,75 @@ async def heartbeat_ai(video_id: str, note: Optional[str] = None) -> bool:
     return cursor.rowcount == 1
 
 
-async def finish_ai(video_id: str, result: AiResult) -> int:
-    """KI-Transkript übernehmen: Abschnitte für die Suche, Untertitel-Datei
+def _saetze(result: AiResult) -> tuple[str, list[Segment]]:
+    return (result.language.strip().lower()[:8],
+            [s for s in result.segments if s.text.strip() and s.end > s.start])
+
+
+async def _ki_ablegen(video_id: str, language: str, sentences: list[Segment]) -> int:
+    """Als KI-Transkript ablegen: Abschnitte für die Suche, Untertitel-Datei
     "ki.<sprache>.vtt" für die Wiedergabe. Ein früher geholtes Transkript
-    der Quelle wird nicht überschrieben."""
+    der Quelle (vom Autor oder automatisch) wird nicht überschrieben."""
+    existing = await db.fetch_one("SELECT status, kind FROM transcripts WHERE video_id = ?", (video_id,))
+    if existing and existing["status"] == "ok" and existing["kind"] != "ai":
+        return 0
+    path = _subtitle_file(video_id, language, "ai")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(subtitle_segments.to_vtt(
+        sentences, note="KI-Transkript (Spracherkennung, nicht vom Autor)"), encoding="utf-8")
+    count = await store(video_id, language, "ai", sentences)
+    # Die erkannte gesprochene Sprache zählt für das Video (Vorrang in language)
+    from app.services import language_assign
+    await language_assign.reassess(video_id)
+    return count
+
+
+async def finish_ai(video_id: str, result: AiResult) -> int:
+    """KI-Transkript eines KI-Auftrags übernehmen (siehe _ki_ablegen)."""
     job = await db.fetch_one("SELECT status FROM ai_transcriptions WHERE video_id = ?", (video_id,))
     if not job or job["status"] != "working":
         raise ValueError("Auftrag ist nicht in Arbeit")
-    existing = await db.fetch_one("SELECT status, kind FROM transcripts WHERE video_id = ?", (video_id,))
-    language = result.language.strip().lower()[:8]
-    sentences = [s for s in result.segments if s.text.strip() and s.end > s.start]
-    if not existing or existing["status"] != "ok" or existing["kind"] == "ai":
-        path = _subtitle_file(video_id, language, "ai")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(subtitle_segments.to_vtt(
-            sentences, note="KI-Transkript (Spracherkennung, nicht vom Autor)"), encoding="utf-8")
-        count = await store(video_id, language, "ai", sentences)
-        # Die erkannte gesprochene Sprache zählt für das Video (Vorrang in language)
-        from app.services import language_assign
-        await language_assign.reassess(video_id)
-    else:
-        count = 0
+    language, sentences = _saetze(result)
+    count = await _ki_ablegen(video_id, language, sentences)
     await db.execute(
         """UPDATE ai_transcriptions SET status = 'done', finished_at = datetime('now'), note = ?
            WHERE video_id = ?""", (f"{len(sentences)} Sätze, {language}", video_id))
     return count
+
+
+async def from_dubbing(video_id: str, result: AiResult) -> int:
+    """Das Transkript, das bei einer Nachvertonung entstand: abgelegt wie ein
+    KI-Transkript; der KI-Auftrag des Videos ist damit erledigt (ein gerade
+    laufender bleibt unberührt und liefert selbst)."""
+    language, sentences = _saetze(result)
+    if not sentences:
+        return 0
+    count = await _ki_ablegen(video_id, language, sentences)
+    await db.execute(
+        """INSERT INTO ai_transcriptions (video_id, status, finished_at, note)
+           VALUES (?, 'done', datetime('now'), ?)
+           ON CONFLICT(video_id) DO UPDATE SET status = 'done', finished_at = excluded.finished_at,
+               note = excluded.note WHERE ai_transcriptions.status != 'working'""",
+        (video_id, f"{len(sentences)} Sätze, {language}, aus der Vertonung"))
+    return count
+
+
+def dub_subtitle(video_id: str, result: AiResult) -> int:
+    """Der Text einer neuen Tonspur als Untertitel "v.<sprache>.vtt" (ersetzt
+    den einer früheren Vertonung derselben Sprache). Gibt die Zahl der Sätze."""
+    language, sentences = _saetze(result)
+    path = _subtitle_file(video_id, language, "dub")
+    if not sentences:
+        path.unlink(missing_ok=True)
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(subtitle_segments.to_vtt(
+        sentences, note="Text der Vertonung (zur neuen Tonspur)"), encoding="utf-8")
+    return len(sentences)
+
+
+def dub_subtitle_remove(video_id: str, language: str) -> None:
+    _subtitle_file(video_id, language.strip().lower()[:8], "dub").unlink(missing_ok=True)
 
 
 async def fail_ai(video_id: str, note: str) -> None:

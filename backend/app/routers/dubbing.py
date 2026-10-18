@@ -210,20 +210,35 @@ async def dubbing_failed(request_id: int, request: FailRequest):
     return {"ok": True}
 
 
+class DubTexts(BaseModel):
+    """Was bei der Nachvertonung an Text entstand (beides wahlweise): das
+    Transkript der Quelle (wird KI-Transkript, wenn es noch keines vom Autor
+    gibt) und der Text der neuen Tonspur mit ihren Zeiten (wird Untertitel)."""
+    transcript: Optional[transcripts.AiResult] = None
+    translation: Optional[transcripts.AiResult] = None
+
+
 @router.post("/api/dubbing/requests/{request_id}/result")
 async def dubbing_result(
     request_id: int,
     file: UploadFile = File(...),
     source_language: Optional[str] = Form(None),
     voice: Optional[str] = Form(None),
+    texts: Optional[str] = Form(None, description="JSON wie DubTexts, wahlweise"),
 ):
     """Fertige Tonspur abliefern. Sie wird geprüft und als zusätzliche Tonspur
-    am Video gespeichert; erst dann gilt der Auftrag als fertig."""
+    am Video gespeichert; erst dann gilt der Auftrag als fertig. Mitgelieferte
+    Texte werden mit der Spur übernommen (für jeden Bearbeiter gleich, nicht an
+    eine bestimmte Umgebung gebunden)."""
     job = await dubbing.get(request_id)
     if not job:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
     if job.status != "working":
         raise HTTPException(status_code=409, detail="Auftrag ist nicht mehr in Arbeit")
+    try:
+        mitgeliefert = DubTexts.model_validate_json(texts) if texts else None
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"Texte nicht lesbar: {e}")
     suffix = Path(file.filename or "").suffix.lower()
 
     config.TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -249,5 +264,11 @@ async def dubbing_result(
         await db.execute(
             "UPDATE videos SET language = ? WHERE id = ? AND COALESCE(language, '') = ''",
             (source_language.strip().lower()[:8], job.video_id))
+    uebernommen = {}
+    if mitgeliefert and mitgeliefert.transcript:
+        uebernommen["transcript_chunks"] = await transcripts.from_dubbing(job.video_id, mitgeliefert.transcript)
+    if mitgeliefert and mitgeliefert.translation:
+        uebernommen["translation_sentences"] = transcripts.dub_subtitle(
+            job.video_id, mitgeliefert.translation.model_copy(update={"language": job.target_language}))
     await dubbing.finish(request_id, "done")
-    return {"ok": True, "track": track}
+    return {"ok": True, "track": track, **uebernommen}

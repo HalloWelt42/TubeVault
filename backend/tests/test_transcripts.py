@@ -128,11 +128,12 @@ async def test_untertitel_liste_nennt_die_herkunft(async_client_factory, stock, 
     client = await async_client_factory(player.router)
     folder = tmp_path / "vidkochen1"
     folder.mkdir()
-    for name in ("de.vtt", "a.en.vtt", "ki.de.vtt"):
+    for name in ("de.vtt", "a.en.vtt", "ki.de.vtt", "v.de.vtt"):
         (folder / name).write_text("WEBVTT\n", encoding="utf-8")
     listed = {s["code"]: (s["kind"], s["name"]) for s in
               (await client.get("/api/player/vidkochen1/subtitles")).json()["subtitles"]}
     assert listed["ki.de"] == ("ai", "Deutsch - KI-Transkript")
+    assert listed["v.de"] == ("dub", "Deutsch - Text der Vertonung")
     assert listed["a.en"][0] == "auto" and listed["de"][0] == "manual"
 
 

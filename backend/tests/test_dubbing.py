@@ -214,3 +214,44 @@ async def test_gleiche_sprache_heisst_neu_gesprochen(client, videos, tmp_path):
     from app.services.metadata_service import metadata_service
     listed = {v["id"]: v["extra_audio"] for v in (await metadata_service.get_videos())["videos"]}
     assert listed["de1"] == ["neu"]
+
+
+@needs_ffmpeg
+async def test_texte_kommen_mit_der_tonspur(client, videos, tmp_path, monkeypatch):
+    """Mit der Tonspur geliefert: das Transkript der Quelle wird KI-Transkript (durchsuchbar, erledigt den KI-Auftrag),
+    der Text der neuen Tonspur eigener Untertitel "v.de"; er geht mit der Spur. Für jeden Bearbeiter gleich."""
+    import json
+
+    from app.services import transcripts
+    monkeypatch.setattr(transcripts, "SUBTITLES_DIR", tmp_path / "subtitles")
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
+    job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
+    texte = {"transcript": {"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": "Good evening."},
+                                                           {"start": 1.2, "end": 2.0, "text": "Welcome."}]},
+             "translation": {"language": "de", "segments": [{"start": 0.0, "end": 1.1, "text": "Guten Abend."},
+                                                            {"start": 1.2, "end": 2.0, "text": "Willkommen."}]}}
+    with _tone(tmp_path / "de.m4a").open("rb") as fh:
+        r = await client.post(f"/api/dubbing/requests/{job['id']}/result",
+                              files={"file": ("de.m4a", fh, "audio/mp4")},
+                              data={"source_language": "en", "texts": json.dumps(texte)})
+    assert r.status_code == 200, r.text
+    assert r.json()["transcript_chunks"] == 1 and r.json()["translation_sentences"] == 2
+    vtt = (tmp_path / "subtitles" / "en1" / "v.de.vtt").read_text(encoding="utf-8")
+    assert "Guten Abend." in vtt and "Text der Vertonung" in vtt
+    assert (tmp_path / "subtitles" / "en1" / "ki.en.vtt").is_file()
+    from app.database import db
+    assert await db.fetch_val("SELECT status FROM ai_transcriptions WHERE video_id = 'en1'") == "done"
+    assert await db.fetch_val("SELECT kind FROM transcripts WHERE video_id = 'en1'") == "ai"
+    assert "en1" not in [r["id"] for r in await db.fetch_all(f"SELECT v.id {transcripts._WAITING_SQL}")]
+
+    track = r.json()["track"]
+    assert (await client.delete(f"/api/videos/en1/audio-tracks/{track['id']}")).status_code == 200
+    assert not (tmp_path / "subtitles" / "en1" / "v.de.vtt").exists()                 # der Text geht mit der Spur
+
+    # unlesbare Texte: abgelehnt, bevor etwas gespeichert wird
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
+    job = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()["request"]
+    with _tone(tmp_path / "de2.m4a").open("rb") as fh:
+        r = await client.post(f"/api/dubbing/requests/{job['id']}/result",
+                              files={"file": ("de.m4a", fh, "audio/mp4")}, data={"texts": "{kaputt"})
+    assert r.status_code == 422 and (await client.get("/api/videos/en1/audio-tracks")).json()["tracks"] == []

@@ -97,6 +97,12 @@ class Buehne:
             return httpx.Response(200, json={})
         if p == "/api/v1/inhalt/plaene/p1/ergebnis":
             return httpx.Response(200, content=b"M4A-ERGEBNIS")
+        if p == "/api/v1/dienst/a1/texte":
+            assert not self.abgeholt, "Texte vor dem Abholen (danach liegt alles im Papierkorb)"
+            return httpx.Response(200, json={
+                "transkript": {"sprache": "en", "segmente": [{"start": 0.0, "ende": 1.0, "text": "Hello.", "sprecher": "A"},
+                                                             {"start": 1.0, "ende": 1.0, "text": "", "sprecher": "A"}]},
+                "uebersetzung": {"sprache": "de", "segmente": [{"start": 0.1, "ende": 1.2, "text": "Hallo.", "sprecher": "A"}]}})
         if p == "/api/v1/dienst/a1/abgeholt":
             self.abgeholt = True
             return httpx.Response(200, json={"behalten": False})
@@ -131,6 +137,9 @@ async def test_vollstaendiger_ablauf(bauen, tmp_path):
     assert {"progress": 0.515, "note": "Übersetzen"} in [{"progress": round(f["progress"], 3), "note": f["note"]}
                                                           for f in b.fortschritt if f["progress"] is not None]
     assert b"M4A-ERGEBNIS" in b.ergebnis_tv and b'name="source_language"\r\n\r\nen' in b.ergebnis_tv
+    texte = json.loads(b.ergebnis_tv.split(b'name="texts"\r\n\r\n')[1].split(b"\r\n--")[0])
+    assert texte == {"transcript": {"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": "Hello."}]},
+                     "translation": {"language": "de", "segments": [{"start": 0.1, "end": 1.2, "text": "Hallo."}]}}
     assert b.abgeholt and b.gescheitert is None
     assert not any((tmp_path / "arbeit").iterdir()), "Arbeitsordner ist aufgeräumt"
 
@@ -282,3 +291,20 @@ async def test_ki_transkripte_warten_auf_freie_rechenzeit(bauen):
         return original(r)
     n.tv = nv.TubeVault(httpx.AsyncClient(base_url="http://tv", transport=httpx.MockTransport(tv)))
     assert await n.schritt() is False and geholt == []
+
+
+async def test_ton_wird_nur_umgepackt_nie_neu_kodiert(tmp_path):
+    """Opus aus WebM (passt nicht in M4A) und AAC aus MP4: beide kommen unverändert in Matroska; der Pi dekodiert nie."""
+    for name, video_kodierung, ton_kodierung, endung in (("a", "libvpx-vp9", "libopus", ".webm"), ("b", "libx264", "aac", ".mp4")):
+        video = tmp_path / f"{name}{endung}"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x64:rate=5",
+                        "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-c:v", video_kodierung, "-c:a", ton_kodierung,
+                        "-shortest", str(video)], check=True)
+        ordner = tmp_path / name
+        ordner.mkdir()
+        ton = await nv.ton_herausloesen(video, ordner)
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_name,codec_type", "-of", "json", str(ton)],
+                               capture_output=True, text=True, check=True)
+        stroeme = json.loads(probe.stdout)["streams"]
+        assert ton.suffix == ".mka" and [s["codec_type"] for s in stroeme] == ["audio"]
+        assert stroeme[0]["codec_name"] == {"libopus": "opus", "aac": "aac"}[ton_kodierung]

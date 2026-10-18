@@ -1,6 +1,6 @@
 {
   "name": "tubevault-frontend",
-  "version": "2.77.4",
+  "version": "2.78.0",
   "private": true,
   "type": "module",
   "scripts": {

@@ -111,8 +111,9 @@ async def list_subtitles(video_id: str):
 
     def describe(code: str) -> tuple[str, str]:
         """Art und lesbarer Name aus dem Dateinamen: "de" vom Autor,
-        "a.de" automatisch erzeugt, "ki.de" KI-Transkript."""
-        for prefix, kind in (("ki.", "ai"), ("a.", "auto")):
+        "a.de" automatisch erzeugt, "ki.de" KI-Transkript, "v.de" Text der
+        Vertonung (zur neuen Tonspur)."""
+        for prefix, kind in (("ki.", "ai"), ("a.", "auto"), ("v.", "dub")):
             if code.startswith(prefix):
                 language = code[len(prefix):]
                 return kind, f"{audio_tracks.language_name(language)} - {transcripts.KIND_LABELS[kind]}"

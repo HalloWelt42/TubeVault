@@ -6,8 +6,11 @@ Nachvertoner holt Aufträge ab und gibt sie an die Apps, die die Arbeit tun:
 - **Vertonen** über den Dienst der Vertonung. Die Stimme kommt aus deren
   Stimmen (Privat und Fremd, Vorgabe "Zeit Stimme"); die eingebauten Stimmen
   des Sprachmodells werden nie angeboten. Zurück an TubeVault geht nur die
-  neue Tonspur; in der Kellerwolke bleibt nichts liegen (der Auftrag geht mit
-  "nicht behalten" an die Vertonung und wird nach dem Abliefern abgeholt).
+  neue Tonspur samt ihren Texten: das Transkript der Quelle (wenn die
+  Vertonung transkribieren ließ; wird KI-Transkript) und der Text der neuen
+  Tonspur an seinen Zeiten (wird Untertitel "Text der Vertonung"). In der
+  Kellerwolke bleibt nichts liegen (der Auftrag geht mit "nicht behalten" an
+  die Vertonung und wird nach dem Abliefern abgeholt).
 - **Originalstimmen**: wer beim Vormerken die Stimme "Originalstimmen" wählt,
   bekommt je Sprecher seine eigene Stimme aus dem Video (eine früher
   gewonnene wird wiederverwendet, sonst schneidet die Vertonung die beste
@@ -21,6 +24,10 @@ Vertonungen gehen vor KI-Transkripten. Untertitel der Quelle werden
 mitgeschickt, wenn TubeVault sie anbietet; sonst transkribiert die
 Vertonung selbst (über die Transkription).
 
+Der Nachvertoner rechnet keinen Ton: aus dem Video löst er nur die Tonspur,
+Paket für Paket umgepackt in Matroska (jede Kodierung passt, nie neu
+kodiert). Gewandelt wird im Tondienst auf dem Mac.
+
 ## Betrieb
 
 Als Container `tubevault-nachvertoner` in `docker-compose.yml`, auf dem Pi
@@ -31,7 +38,7 @@ mit TubeVault ausgerollt. Er braucht:
 - die Hausstelle der Vertonung (`/mnt/data/vertonung/zertifikate/rootCA.pem`),
 - den Arbeitsordner `/mnt/data/tubevault/nachvertoner` (gehört pi).
 
-ffmpeg kommt vom Pi (nur lesend eingehängt, `ffmpeg-vom-pi`).
+ffmpeg kommt vom Pi (nur lesend eingehängt, `ffmpeg-vom-pi`) und packt nur um.
 
 Einstellungen (Umgebung, wahlweise in `nachvertoner/.env` auf dem Pi):
 

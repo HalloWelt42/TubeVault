@@ -153,10 +153,13 @@ async def store_track(video_id: str, language: str, source: Path, *, suffix: str
 
 
 async def delete_track(video_id: str, track_id: int) -> bool:
+    """Spur samt ihrem Text (Untertitel "v.<sprache>.vtt" der Vertonung)."""
+    from app.services import transcripts
     row = await db.fetch_one(
-        "SELECT file_path FROM audio_tracks WHERE id = ? AND video_id = ?", (track_id, video_id))
+        "SELECT file_path, language FROM audio_tracks WHERE id = ? AND video_id = ?", (track_id, video_id))
     if not row:
         return False
     Path(row["file_path"]).unlink(missing_ok=True)
+    transcripts.dub_subtitle_remove(video_id, row["language"])
     await db.execute("DELETE FROM audio_tracks WHERE id = ?", (track_id,))
     return True

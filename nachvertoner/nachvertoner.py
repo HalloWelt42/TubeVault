@@ -99,13 +99,16 @@ async def ffmpeg(*argumente: str) -> None:
         raise RuntimeError(f"ffmpeg: {fehler.decode(errors='replace').strip()[-300:]}")
 
 
+TON_TYP = "audio/x-matroska"
+
+
 async def ton_herausloesen(video: Path, ziel_ordner: Path) -> Path:
-    """Nur die Tonspur, unverändert (AAC bleibt AAC in .m4a); andere Kodierungen verlustarm als AAC 192 kbit/s."""
-    ziel = ziel_ordner / "ton.m4a"
-    try:
-        await ffmpeg("-i", str(video), "-vn", "-map", "0:a:0", "-c:a", "copy", str(ziel))
-    except RuntimeError:
-        await ffmpeg("-i", str(video), "-vn", "-map", "0:a:0", "-c:a", "aac", "-b:a", "192k", str(ziel))
+    """Nur die Tonspur, Paket für Paket umgepackt und nie dekodiert: Matroska nimmt jede Kodierung auf (AAC, Opus ...),
+    das Umpacken gelingt also immer. Gewandelt wird nicht hier (der Pi liefert nur Daten), sondern im Tondienst auf dem
+    Mac, wenn Vertonung oder Transkription den Ton brauchen. Das ganze Video wird nie weitergereicht: es wäre um ein
+    Vielfaches größer."""
+    ziel = ziel_ordner / "ton.mka"
+    await ffmpeg("-i", str(video), "-vn", "-map", "0:a:0", "-c:a", "copy", str(ziel))
     return ziel
 
 
@@ -225,7 +228,7 @@ class Vertonung:
             daten["segmente"] = json.dumps([{"start": s["start"], "ende": s["end"], "text": s["text"]} for s in segmente],
                                            ensure_ascii=False)
         with ton.open("rb") as datei:
-            r = await self.c.post("/api/v1/dienst/vertonen", data=daten, files={"datei": (ton.name, datei, "audio/mp4")})
+            r = await self.c.post("/api/v1/dienst/vertonen", data=daten, files={"datei": (ton.name, datei, TON_TYP)})
         r.raise_for_status()
         return r.json()["id"]
 
@@ -244,8 +247,27 @@ class Vertonung:
                 async for stueck in r.aiter_bytes(1024 * 1024):
                     datei.write(stueck)
 
+    async def texte(self, auftrag: str) -> dict:
+        """Transkript der Quelle (wenn die Vertonung transkribieren ließ) und Text der neuen Tonspur; vor `abgeholt`."""
+        r = await self.c.get(f"/api/v1/dienst/{auftrag}/texte", timeout=60)
+        r.raise_for_status()
+        return r.json()
+
     async def abgeholt(self, auftrag: str) -> None:
         await self.c.post(f"/api/v1/dienst/{auftrag}/abgeholt", timeout=60)
+
+
+def texte_fuer_tubevault(texte: dict) -> dict:
+    """Die Texte der Vertonung in der Form, die TubeVault mit der Tonspur annimmt (Sprache, Sätze mit start, end,
+    text); was fehlt oder leer ist, bleibt weg."""
+    aus = {}
+    for von, nach in (("transkript", "transcript"), ("uebersetzung", "translation")):
+        spur = texte.get(von) or {}
+        saetze = [{"start": s["start"], "end": s["ende"], "text": s["text"]} for s in spur.get("segmente") or []
+                  if s.get("text", "").strip() and s["ende"] > s["start"]]
+        if saetze and spur.get("sprache"):
+            aus[nach] = {"language": spur["sprache"], "segments": saetze}
+    return aus
 
 
 def stimme_waehlen(stimmen: dict[str, str], gewuenscht: str | None, vorgabe: str) -> tuple[str, str]:
@@ -302,10 +324,16 @@ class Nachvertoner:
             spur = ordner / f"{ziel}.m4a"
             await geduldig(lambda: self.vt.ergebnis(ergebnis["plan_id"], spur), was="Vertonung")
             erkannt = ergebnis.get("ausgangssprache") or ausgang or ""
+            daten = {"source_language": erkannt, "voice": ORIGINALSTIMMEN if original else name}
+            try:      # Transkript und Text der Tonspur mit ihr abliefern; fehlen sie, kommt die Spur trotzdem
+                texte = texte_fuer_tubevault(await geduldig(lambda: self.vt.texte(auftrag), was="Vertonung"))
+                if texte:
+                    daten["texts"] = json.dumps(texte, ensure_ascii=False)
+            except Exception:  # noqa: BLE001
+                log.warning("Vertonung %s: Texte nicht abholbar, nur die Tonspur", nr, exc_info=True)
             with spur.open("rb") as datei:
                 r = await self.tv.c.post(abgeholt["result_url"], files={"file": (spur.name, datei, "audio/mp4")},
-                                         data={"source_language": erkannt, "voice": ORIGINALSTIMMEN if original else name},
-                                         timeout=OHNE_FRIST)
+                                         data=daten, timeout=OHNE_FRIST)
             r.raise_for_status()
             await geduldig(lambda: self.vt.abgeholt(auftrag), was="Vertonung")
             log.info("Vertonung %s fertig (%s, Stimme %s)", nr, erkannt or "Sprache unbekannt", name)
@@ -350,7 +378,7 @@ class Nachvertoner:
             ton = await ton_herausloesen(video, ordner)
             video.unlink(missing_ok=True)
             ziel = await self._transkript_ordner()
-            knoten = await self.kw.schreiben(pfad_aus(ziel.pfad, f"{video_id}.m4a"), ton, inhaltstyp="audio/mp4")
+            knoten = await self.kw.schreiben(pfad_aus(ziel.pfad, f"{video_id}{ton.suffix}"), ton, inhaltstyp=TON_TYP)
             sprache = (job.get("language") or "auto").lower()
             neu = await self.kw.weitergeben(self.s.transkription, "transkribieren", knoten.id, {"sprache": sprache})
             await notiz("Transkribieren")
