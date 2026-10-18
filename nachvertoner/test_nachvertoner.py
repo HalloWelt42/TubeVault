@@ -130,7 +130,7 @@ def bauen(tmp_path):
 async def test_vollstaendiger_ablauf(bauen, tmp_path):
     n, b = bauen([{"zustand": "laeuft", "fortschritt": 0.5, "schritt": "Übersetzen"}, FERTIG])
     assert await n.schritt() is True
-    assert b.gemeldet_stimmen == ["Originalstimmen", "Kerstin", "Zeit Stimme"], "nur Klonstimmen, nie der Katalog"
+    assert b.gemeldet_stimmen == ["Originalstimmen", "Zeit Stimme"], "nur private Stimmen der Erlaubnisliste, nie fremde oder der Katalog"
     daten = b.vertonen_daten.decode("latin-1")
     assert ZEIT in daten and 'name="behalten"\r\n\r\nfalse' in daten and "ausgangssprache" not in daten
     assert 'name="stimmen"\r\n\r\nfest' in daten
@@ -183,7 +183,7 @@ async def test_unbekannte_stimme_scheitert_mit_auswahl(bauen):
     n, b = bauen([FERTIG], stimme="Gibtsnicht")
     n.s = nv.Einstellungen(**{**n.s.__dict__, "stimme": "Auch nicht"})
     await n.schritt()
-    assert "Kerstin, Zeit Stimme" in b.gescheitert["note"] and b.vertonen_daten is None
+    assert "(vorhanden: Zeit Stimme)" in b.gescheitert["note"] and b.vertonen_daten is None, "fremde Stimmen nie dabei"
 
 
 async def test_entfernter_auftrag_bricht_in_der_vertonung_ab(bauen):

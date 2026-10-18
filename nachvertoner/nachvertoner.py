@@ -207,13 +207,10 @@ class Vertonung:
             return True
 
     async def stimmen(self) -> dict[str, str]:
-        """Name -> Kennung der Klonstimmen (Privat, soweit erlaubt, und Fremd); nie der Katalog des Sprachmodells."""
-        aus: dict[str, str] = {}
-        for bereich in ("privat", "fremd"):
-            r = await self.c.get("/api/v1/stimmen", params={"bereich": bereich}, timeout=60)
-            if r.status_code == 200:
-                aus |= {s["name"]: s["id"] for s in r.json()}
-        return aus
+        """Name -> Kennung der privaten Stimmen, die die Erlaubnisliste der Vertonung diesem Zugang freigibt (dort
+        geordnet). Nie die fremden (aus Videos gesammelt, nur vorübergehend) und nie der Katalog des Sprachmodells."""
+        r = await self.c.get("/api/v1/stimmen", params={"bereich": "privat"}, timeout=60)
+        return {s["name"]: s["id"] for s in r.json()} if r.status_code == 200 else {}
 
     async def vertonen(self, ton: Path, name: str, ausgang: str | None, ziel: str, stimme_id: str,
                        segmente: list[dict] | None, original: bool = False) -> str:

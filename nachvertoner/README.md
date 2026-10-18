@@ -3,9 +3,11 @@
 Eigenes Programm neben TubeVault. TubeVault führt nur die Warteliste; der
 Nachvertoner holt Aufträge ab und gibt sie an die Apps, die die Arbeit tun:
 
-- **Vertonen** über den Dienst der Vertonung. Die Stimme kommt aus deren
-  Stimmen (Privat und Fremd, Vorgabe "Zeit Stimme"); die eingebauten Stimmen
-  des Sprachmodells werden nie angeboten. Zurück an TubeVault geht nur die
+- **Vertonen** über den Dienst der Vertonung. Zur Wahl stehen nur deren
+  private Stimmen, die die Erlaubnisliste der Vertonung dem Nachvertoner
+  freigibt (Vorgabe "Zeit Stimme"); die fremden (aus Videos gesammelt, nur
+  vorübergehend) und die eingebauten Stimmen des Sprachmodells werden nie
+  angeboten. Zurück an TubeVault geht nur die
   neue Tonspur samt ihren Texten: das Transkript der Quelle (wenn die
   Vertonung transkribieren ließ; wird KI-Transkript) und der Text der neuen
   Tonspur an seinen Zeiten (wird Untertitel "Text der Vertonung"). In der
