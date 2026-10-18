@@ -11,9 +11,10 @@ Welche Quellen gelten, legt die Einstellung music.source fest (alle,
 sammlung = nur Dateien, videos). Gibt es einen Song als Datei und als Video,
 gilt bei "alle" die Datei (bessere Tonqualität).
 
-Ausgeblendete Dateien und ausgeschlossene Alben (music_exclusions) fallen
-überall heraus; ein Album ohne sichtbare Titel gibt es dann nicht mehr. Ihr
-Video-Doppel rückt nicht nach.
+Abgewählte Titel (Minus-Knopf: Dateien music_files.hidden, Videos
+music_video_hiding) und ausgeschlossene Alben (music_exclusions) fallen
+überall heraus; ein Album ohne sichtbare Titel gibt es dann nicht mehr. Das
+Video-Doppel einer ausgeblendeten Datei rückt nicht nach.
 
 Ein Album sind die Dateien mit genau gleichem Cover (Wunsch 19.10.2026), gleich
 welcher Interpret und welche Schreibweise des Albums - so bleiben Sampler und
@@ -34,7 +35,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import music_exclusions, music_files, playlist_items, setting_values
+from app.services import music_exclusions, music_files, music_video_hiding, playlist_items, setting_values
 from app.services.lyrics_service import suggest_artist_title
 
 MUSIC_SOURCE = "music.source"
@@ -119,11 +120,15 @@ def album_source(artist: str, album: Optional[str], cover_hash: Optional[str] = 
     return f"album:cover:{cover_hash}" if cover_hash else f"album:{group_key(f'{artist}|{album}')}"
 
 
-TRACK_SQL = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name, v.upload_date,
-                         v.duration, COALESCE(v.play_count, 0) AS play_count, v.last_played, v.download_date,
-                         COALESCE(v.has_lyrics, 0) AS has_lyrics, COALESCE(v.is_music, 0) AS is_music,
-                         EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id) AS favorite
-                  FROM videos v WHERE v.status = 'ready'"""
+TRACK_SELECT = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name,
+                            v.upload_date, v.duration, COALESCE(v.play_count, 0) AS play_count, v.last_played,
+                            v.download_date, COALESCE(v.has_lyrics, 0) AS has_lyrics,
+                            COALESCE(v.is_music, 0) AS is_music, v.music_hidden_at,
+                            EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id) AS favorite
+                     FROM videos v WHERE v.status = 'ready'"""
+# Jede Musikliste liest ihre Videos hier: abgewählte fallen überall heraus,
+# auch aus Hörbüchern und als Musik gespielten Sammlungen
+TRACK_SQL = f"{TRACK_SELECT} AND {music_video_hiding.VISIBLE}"
 
 
 def video_track(row) -> Track:
@@ -186,6 +191,14 @@ async def tracks_of(video_ids: list[str]) -> list[Track]:
     marks = ",".join("?" * len(video_ids))
     by_id = {r["id"]: video_track(r) for r in await db.fetch_all(f"{TRACK_SQL} AND v.id IN ({marks})", video_ids)}
     return [by_id[i] for i in video_ids if i in by_id]
+
+
+async def hidden_tracks() -> list[Track]:
+    """Abgewählte Titel beider Arten für den Bereich "Ausgeblendet", zuletzt abgewählte zuerst."""
+    files = [(f.hidden_at or "", file_track(f)) for f in await music_files.hidden_files()]
+    rows = await db.fetch_all(f"{TRACK_SELECT} AND {music_video_hiding.HIDDEN}")
+    videos = [(row["music_hidden_at"] or "", video_track(row)) for row in rows]
+    return [track for _, track in sorted((*files, *videos), key=lambda pair: pair[0], reverse=True)]
 
 
 def _most_common(members: list[Track], name_of) -> str:
@@ -356,9 +369,9 @@ async def _music_list_rows() -> list:
     """Listen für die Musik: in der Musik angelegte (auch leere) und alle
     übrigen mit mindestens einem Musiktitel; zuletzt angelegte zuerst."""
     with_music = {row["playlist_id"] for row in await db.fetch_all(
-        """SELECT DISTINCT p.playlist_id FROM playlist_videos p JOIN videos v ON v.id = p.video_id
-           WHERE v.is_music = 1 AND v.status = 'ready'
-           UNION SELECT DISTINCT playlist_id FROM playlist_files""")}
+        f"""SELECT DISTINCT p.playlist_id FROM playlist_videos p JOIN videos v ON v.id = p.video_id
+            WHERE v.is_music = 1 AND v.status = 'ready' AND {music_video_hiding.VISIBLE}
+            UNION SELECT DISTINCT playlist_id FROM playlist_files""")}
     return [row for row in await db.fetch_all("SELECT id, name, source FROM playlists ORDER BY created_at DESC, id DESC")
             if row["id"] in with_music or row["source"] == MUSIC_LIST]
 
@@ -432,7 +445,7 @@ async def _similar(items: list[Track], video_id: str, limit: int = 50) -> list[T
 async def export_items(source: str) -> tuple[str, list[tuple[str, str]]]:
     """(Titel, [(Kennung, "Interpret - Titel")]) für den Ton-Export einer
     Quelle. Eine Wiedergabeliste gibt alle ihre geladenen Videos und Dateien
-    aus, nicht nur die als Musik gekennzeichneten."""
+    aus, nicht nur die als Musik gekennzeichneten - abgewählte nicht."""
     kind, _, value = source.partition(":")
     if kind == "playlist":
         name = await db.fetch_val("SELECT name FROM playlists WHERE id = ?", (value,))
@@ -441,9 +454,9 @@ async def export_items(source: str) -> tuple[str, list[tuple[str, str]]]:
         ids = await playlist_items.entries(_list_id(value))
         marks = ",".join("?" * len(ids)) or "''"
         rows = {r["id"]: r for r in await db.fetch_all(
-            f"""SELECT id, title, music_artist, music_title, channel_name, is_music
-                FROM videos WHERE status = 'ready' AND id IN ({marks})""", ids)}
-        files = {f.id: f for f in await music_files.all_files(category=None, visible_only=False)}
+            f"""SELECT v.id, v.title, v.music_artist, v.music_title, v.channel_name, v.is_music
+                FROM videos v WHERE v.status = 'ready' AND {music_video_hiding.VISIBLE} AND v.id IN ({marks})""", ids)}
+        files = {f.id: f for f in await music_files.all_files(category=None)}
 
         def label(item_id: str) -> Optional[str]:
             if item_id in files:

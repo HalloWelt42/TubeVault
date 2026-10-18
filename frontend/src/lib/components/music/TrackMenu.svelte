@@ -1,6 +1,6 @@
 <!--
   Menü eines Musiktitels: als Nächstes, hinten anstellen, ähnliche Titel,
-  Interpret, Video, Lieblingssong, keine Musik, bei Dateien der Sammlung ausblenden,
+  Interpret, Video, Lieblingssong, keine Musik, überall in der Musik ausblenden,
   das ganze Album ausschließen. Erscheint an der Klickstelle. Herausnehmen meldet
   sich über utils/musicChanges.js; onChanged bekommt nur den Lieblingssong.
   Nutzung: <TrackMenu bind:this={menu} onChanged={...} />, menu.open(event, track)
@@ -57,10 +57,7 @@
         link.click();
       } },
     { icon: 'fa-display', label: 'Als Video ansehen', video: true, run: (t) => { player.pause(); navigate(`/watch/${t.id}`); } },
-    { icon: 'fa-eye-slash', label: 'Ausblenden', file: true, run: async (t) => {
-        await hideTrack(t);
-        toast.undo(`Ausgeblendet: ${t.title}`, () => restoreHidden({ tracks: [t.id] }).catch((e) => toast.error(e.message)));
-      } },
+    { icon: 'fa-circle-minus', label: 'Ausblenden', run: (t) => hideTrack(t) },
     { icon: 'fa-compact-disc', label: 'Album ausschließen', album: true, run: async (t) => {
         const entry = await excludeAlbum(t.album_source);
         toast.undo(`Album "${entry.name}" ausgeschlossen`,
@@ -81,7 +78,7 @@
   <div class="menue" style:left="{x}px" style:top="{y}px" role="menu">
     <div class="kopf"><div class="t">{track.title}</div><div class="tv-leise tv-klein">{track.artist}</div></div>
     <!-- Was nur ein Video kann, fehlt bei Dateien der eigenen Sammlung -->
-    {#each actions.filter(a => (!a.video || !isFile(track)) && (!a.file || isFile(track)) && (!a.album || track.album_source)) as action}
+    {#each actions.filter(a => (!a.video || !isFile(track)) && (!a.album || track.album_source)) as action}
       {#if action.trenner}<hr />
       {:else}
         <button role="menuitem" onclick={() => act(action.run)}>

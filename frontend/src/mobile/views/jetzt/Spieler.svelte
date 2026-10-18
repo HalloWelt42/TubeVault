@@ -1,6 +1,7 @@
 <!--
   Läuft gerade (Musik): großes Cover (Wischen nach links oder rechts: weiter
-  oder zurück), Titel mit Abwählen und Herz, woher der Ton kommt und in
+  oder zurück), Titel mit Ausblenden (Minus: überall in der Musik, nichts wird
+  gelöscht) und Herz, woher der Ton kommt und in
   welcher Güte; die Steuerung (Spur, Tasten, Lautstärke, Liedtext und
   Warteschlange) steht unten fest, das Cover gibt nach. Gestaltung nach
   mockups/mobil-musik.html. Gesteuert wird nur der Musikspieler.
@@ -10,7 +11,7 @@
   import { coverUrl, downloadUrl, isFile } from '../../../lib/utils/musicTrack.js';
   import { audioDetails, codecName, trackOrigin } from '../../../lib/utils/audioTech.js';
   import { toast } from '../../../lib/stores/notifications.js';
-  import { excludeAlbum, restoreHidden } from '../../../lib/utils/musicHiding.js';
+  import { excludeAlbum, hideTrack, restoreHidden } from '../../../lib/utils/musicHiding.js';
   import { back, go } from '../../router.js';
   import Spur from '../../parts/Spur.svelte';
   import Lautstaerke from '../../parts/Lautstaerke.svelte';
@@ -60,12 +61,17 @@
     go(`/video/${track.id}`);
   }
 
-  // Abwählen: aus der Wiedergabeliste bzw. Warteschlange, es geht mit dem nächsten weiter
-  async function removeFromList() {
-    const fromPlaylist = !!player.playlistId;
+  // Ausblenden: überall in der Musik, es geht mit dem nächsten weiter (Rückgängig im Hinweis)
+  async function hide() {
+    try { await hideTrack(track); } catch (e) { toast.error(e.message); }
+  }
+
+  // Nur aus der laufenden Wiedergabeliste nehmen, sonst bleibt der Titel überall
+  async function removeFromPlaylist() {
+    menu = false;
     try {
       await player.removeFromList();
-      toast.info(fromPlaylist ? 'Aus der Wiedergabeliste genommen' : 'Aus der Warteschlange genommen');
+      toast.info('Aus der Wiedergabeliste genommen');
     } catch (e) { toast.error(e.message); }
   }
 
@@ -79,13 +85,12 @@
     } catch (e) { toast.error(e.message); }
   }
 
-  // Gefällt nicht: Videos werden gelöscht, Dateien der Sammlung nur ausgeblendet
+  // Gefällt nicht: das Video wird gelöscht (Dateien der Sammlung blendet das Minus aus)
   function discardTrack() {
     menu = false;
     const title = track.title;
-    const file = isFile(track);
     player.deleteTrack();
-    toast.undo(`"${title}" wird ${file ? 'ausgeblendet' : 'gelöscht'}`, () => player.undoDelete(), UNDO_MS);
+    toast.undo(`"${title}" wird gelöscht`, () => player.undoDelete(), UNDO_MS);
   }
 </script>
 
@@ -110,8 +115,7 @@
   <div class="m-titelzeile">
     <div class="texte"><div class="t">{track.title}</div><div class="w">{track.artist}</div></div>
     <div class="knoepfe">
-      <button class="m-rund" onclick={removeFromList}
-              aria-label={player.playlistId ? 'Aus der Wiedergabeliste nehmen und weiter' : 'Aus der Warteschlange nehmen und weiter'}>
+      <button class="m-rund" onclick={hide} aria-label="Überall in der Musik ausblenden und weiter">
         <i class="fa-solid fa-circle-minus"></i></button>
       <button class="m-rund herz" class:an={track.favorite} onclick={favorite}
               aria-label={track.favorite ? 'Aus den Lieblingssongs nehmen' : 'Zu den Lieblingssongs'} aria-pressed={!!track.favorite}>
@@ -162,12 +166,13 @@
         <button role="menuitem" onclick={asVideo}><i class="fa-solid fa-display"></i> Als Video ansehen</button>
       {/if}
       <a role="menuitem" href={downloadUrl(track)} download onclick={() => menu = false}><i class="fa-solid fa-download"></i> Ton herunterladen</a>
+      {#if player.playlistId}
+        <button role="menuitem" onclick={removeFromPlaylist}><i class="fa-solid fa-xmark"></i> Aus der Wiedergabeliste nehmen</button>
+      {/if}
       {#if track.album_source}
         <button role="menuitem" onclick={excludeTrackAlbum}><i class="fa-solid fa-compact-disc"></i> Album ausschließen</button>
       {/if}
-      {#if isFile(track)}
-        <button role="menuitem" class="gefahr" onclick={discardTrack}><i class="fa-solid fa-eye-slash"></i> Gefällt nicht: ausblenden</button>
-      {:else}
+      {#if !isFile(track)}
         <button role="menuitem" class="gefahr" onclick={discardTrack}><i class="fa-solid fa-trash-can"></i> Gefällt nicht: Video löschen</button>
       {/if}
     </div>

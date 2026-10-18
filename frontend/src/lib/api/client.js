@@ -522,10 +522,12 @@ export const api = {
   musicFilePlayed: (id) => request(`/api/music/files/${id}/played`, { method: 'POST' }),
   musicFileFavorite: (id, favorite) =>
     request(`/api/music/files/${id}/favorite`, { method: 'PUT', body: JSON.stringify({ favorite }) }),
-  // Sammlung liegt nur lesend vor: ausblenden statt löschen
+  // Aus der ganzen Musik ausblenden (Minus-Knopf), gelöscht wird nichts; welcher Weg gilt, weiß utils/musicTrack.js
   musicFileHidden: (id, hidden) =>
     request(`/api/music/files/${id}/hidden`, { method: 'PUT', body: JSON.stringify({ hidden }) }),
-  // Bereich "Ausgeblendet": ausgeblendete Dateien und ausgeschlossene Alben, zurückholen einzeln oder mehrere
+  musicVideoHidden: (id, hidden) =>
+    request(`/api/music/videos/${id}/hidden`, { method: 'PUT', body: JSON.stringify({ hidden }) }),
+  // Bereich "Ausgeblendet": ausgeblendete Titel (Dateien und Videos) und ausgeschlossene Alben, zurückholen einzeln oder mehrere
   musicHidden: () => request('/api/music/hidden'),
   musicExclude: (source) => request('/api/music/exclusions', { method: 'POST', body: JSON.stringify({ source }) }),
   musicRestoreHidden: ({ tracks = [], albums = [] }) =>

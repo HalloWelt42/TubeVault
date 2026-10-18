@@ -1,6 +1,6 @@
 <!--
-  Ausgeblendet (Handy): ausgeschlossene Alben und ausgeblendete Titel der
-  Sammlung. Antippen setzt oder nimmt den Haken, "Zurückholen" holt die
+  Ausgeblendet (Handy): ausgeschlossene Alben und ausgeblendete Titel
+  (Dateien und Videos). Antippen setzt oder nimmt den Haken, "Zurückholen" holt die
   gewählten zurück (ohne Haken: alle). Gleiche Wege wie am Rechner
   (lib/utils/musicHiding.js).
 -->

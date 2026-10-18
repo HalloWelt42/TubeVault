@@ -19,7 +19,7 @@ import os
 from app.database import db
 from app.config import VIDEOS_DIR, DB_DIR
 
-from app.services import feed_scope, video_classifier
+from app.services import feed_scope, music_video_hiding, video_classifier
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,9 @@ class CountsService:
         ) or 0
 
     async def music(self) -> int:
-        """Musiktitel - genau die Sammlung der Musikseite (music_library)."""
-        return await db.fetch_val("SELECT COUNT(*) FROM videos WHERE status = 'ready' AND is_music = 1") or 0
+        """Musiktitel - genau die Sammlung der Musikseite (music_library), ohne abgewählte."""
+        return await db.fetch_val(
+            f"SELECT COUNT(*) FROM videos v WHERE v.status = 'ready' AND v.is_music = 1 AND {music_video_hiding.VISIBLE}") or 0
 
     async def own_videos(self) -> int:
         """Eigene und übernommene Videos - genau die Liste "Eingeordnet"."""

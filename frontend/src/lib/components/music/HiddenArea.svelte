@@ -1,6 +1,6 @@
 <!--
   Bereich "Ausgeblendet" der Musik (Rechner): ausgeschlossene Alben und
-  ausgeblendete Titel der Sammlung. Zurückholen einzeln (Knopf je Zeile)
+  ausgeblendete Titel (Dateien und Videos). Zurückholen einzeln (Knopf je Zeile)
   oder mehrere (Haken setzen, dann "Zurückholen"). Was zurückkommt, steht
   sofort wieder in allen Listen und Mixen (utils/musicHiding.js).
 -->
@@ -54,7 +54,7 @@
 {#if !area}
   <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
 {:else if !total}
-  <div class="tv-leer">Nichts ausgeblendet. Ausblenden geht im Menü eines Titels, ganze Alben schließt der Knopf im Album aus.</div>
+  <div class="tv-leer">Nichts ausgeblendet. Ausblenden geht mit dem Minus im Spieler oder im Menü eines Titels, ganze Alben schließt der Knopf im Album aus.</div>
 {:else}
   <div class="leiste">
     <button class="tv-knopf klein" onclick={chooseAll}>

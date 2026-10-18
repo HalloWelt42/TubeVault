@@ -28,7 +28,7 @@ const COUNT_AFTER_S = 30;                    // ab dann zählt ein Titel als geh
 const RESTART_AFTER_S = 3;                   // "Zurück" springt danach erst an den Titelanfang
 const BOOK_SKIP_S = 30;                       // Sprungtasten beim Hörbuch (Sperrbildschirm, Uhr)
 const REPEAT_MODES = ['off', 'all', 'one'];
-export const UNDO_MS = 6000;                 // so lange lässt sich ein Löschen zurücknehmen
+export const UNDO_MS = 6000;                 // so lange lässt sich Löschen oder Ausblenden zurücknehmen
 // Stille, um die Wiedergabe in einer Nutzeraktion freizuschalten (iOS)
 const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
@@ -56,7 +56,7 @@ class MusicPlayer {
   muted = $state(false);
   shuffle = $state(false);
   repeat = $state('off');
-  pendingDelete = $state(null);  // { track } - wird nach UNDO_MS endgültig gelöscht
+  pendingDelete = $state(null);  // { track } - Video, wird nach UNDO_MS endgültig gelöscht
   audioInfo = $state(null);      // Format und Bitrate des laufenden Titels
   rate = $state(1);              // Tempo; nur bei Hörbüchern wählbar, je Buch gemerkt
   sleep = $state(null);          // Schlaf-Zeitgeber (utils/sleepTimer.js), null = aus
@@ -70,6 +70,7 @@ class MusicPlayer {
   #saveTimer = null;
   #unlocked = false;
   #deleteTimer = null;
+  #putBackDeleted = null;        // stellt das Video beim Rückgängig zurück (takeOut)
   #volume = null;                // stellt die Lautstärke am Element oder über den Verstärker
   #volumeMode = null;            // 'element', 'gain' oder null (utils/softVolume.js)
 
@@ -422,24 +423,40 @@ class MusicPlayer {
 
   #drop(track) { this.dropWhere((t) => t.id === track.id); }
 
+  /** Einen Titel aus der Warteschlange nehmen (wie dropWhere); liefert, wie er
+   *  beim Rückgängig zurückkommt: an seine alte Stelle, der laufende als nächster */
+  takeOut(track) {
+    const position = this.queue.findIndex((t) => t.id === track.id);
+    if (position < 0) return () => {};
+    const wasCurrent = position === this.index;
+    this.#drop(track);
+    return () => {
+      if (this.queue.some((t) => t.id === track.id)) return;
+      if (!this.active) return this.#arrange({ queue: [track], index: 0 });
+      this.insertAt(track, wasCurrent ? this.index + 1 : position);
+    };
+  }
+
   /** Läuft gerade eine Wiedergabeliste? Dann deren Nummer */
   get playlistId() {
     return this.source?.startsWith('playlist:') ? this.source.slice(9) : null;
   }
 
-  /** Aus der Wiedergabeliste werfen (oder nur aus der Warteschlange) */
+  /** Nur aus der laufenden Wiedergabeliste werfen (oder nur aus der Warteschlange); überall
+   *  ausblenden geht über utils/musicHiding.js */
   async removeFromList(track = this.current) {
     if (!track) return;
     if (this.playlistId) await api.removeFromPlaylist(this.playlistId, track.id);
     this.#drop(track);
   }
 
-  /** Löschen: sofort weiter, endgültig erst nach UNDO_MS (Rückgängig möglich) */
+  /** Video löschen: sofort weiter, endgültig erst nach UNDO_MS (Rückgängig möglich).
+   *  Dateien der Sammlung lassen sich nur ausblenden (utils/musicHiding.js) */
   deleteTrack(track = this.current) {
-    if (!track) return;
+    if (!track || isFile(track)) return;
     this.#commitDelete();
-    this.#drop(track);
-    this.pendingDelete = { track, at: this.index };
+    this.#putBackDeleted = this.takeOut(track);
+    this.pendingDelete = { track };
     this.#deleteTimer = setTimeout(() => this.#commitDelete(), UNDO_MS);
     emitMusicChange({ removed: [track.id] });
   }
@@ -447,10 +464,9 @@ class MusicPlayer {
   undoDelete() {
     if (!this.pendingDelete) return;
     clearTimeout(this.#deleteTimer);
-    const { track } = this.pendingDelete;
     this.pendingDelete = null;
-    this.queue = [...this.queue.slice(0, this.index + 1), track, ...this.queue.slice(this.index + 1)];
-    this.#save();
+    this.#putBackDeleted?.();
+    this.#putBackDeleted = null;
     emitMusicChange({ restored: true, reload: true });
   }
 
@@ -458,10 +474,11 @@ class MusicPlayer {
     clearTimeout(this.#deleteTimer);
     const pending = this.pendingDelete;
     this.pendingDelete = null;
+    this.#putBackDeleted = null;
     if (!pending) return;
     discard(pending.track)
       .then(() => {
-        if (!isFile(pending.track)) emitVideoMutation(pending.track.id, 'deleted');
+        emitVideoMutation(pending.track.id, 'deleted');
         emitMusicChange({ reload: true });
       })
       .catch(() => {});

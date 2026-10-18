@@ -29,6 +29,9 @@ export async function setFavorite(track, favorite) {
   return favorite ? api.addFavorite({ video_id: track.id }) : api.removeFavorite(track.id);
 }
 
-/** "Gefällt nicht": ein Video wird gelöscht, eine Datei der Sammlung nur ausgeblendet
- *  (die Sammlung ist lesend eingebunden, die Datei bleibt unberührt) */
-export const discard = (track) => (isFile(track) ? api.musicFileHidden(track.id, true) : api.deleteVideo(track.id));
+/** Aus der ganzen Musik ausblenden oder zurückholen; Datei und Video bleiben, wo sie sind */
+export const setHidden = (track, hidden) =>
+  (isFile(track) ? api.musicFileHidden(track.id, hidden) : api.musicVideoHidden(track.id, hidden));
+
+/** "Gefällt nicht: Video löschen" - nur Videos; Dateien der Sammlung liegen lesend vor */
+export const discard = (track) => api.deleteVideo(track.id);

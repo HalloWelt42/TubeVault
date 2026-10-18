@@ -1,11 +1,12 @@
 <!--
   Abspielleiste der Musik (Gestaltung nach mockups/musik.html). Steht unten
   über allen Seiten, solange etwas in der Warteschlange ist; steuert nur den
-  Musikspieler (lib/stores/musicPlayer.svelte.js).
+  Musikspieler (lib/stores/musicPlayer.svelte.js). Das Minus blendet den Titel
+  überall in der Musik aus (utils/musicHiding.js), der Papierkorb löscht ein Video.
 -->
 <script>
-  import { api } from '../../api/client.js';
   import { coverUrl, downloadUrl, isFile } from '../../utils/musicTrack.js';
+  import { hideTrack } from '../../utils/musicHiding.js';
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
@@ -24,11 +25,8 @@
   // "OPUS · 160 kbit/s · 48 kHz" oder "FLAC · 16 Bit · 44,1 kHz" - was die Datei hergibt
   let quality = $derived(audioQuality(player.audioInfo));
 
-  async function removeFromList() {
-    try {
-      await player.removeFromList();
-      toast.info(player.playlistId ? 'Aus der Wiedergabeliste genommen' : 'Aus der Warteschlange genommen');
-    } catch (e) { toast.error(e.message); }
+  async function hide() {
+    try { await hideTrack(track); } catch (e) { toast.error(e.message); }
   }
 
   async function favorite() {
@@ -52,13 +50,16 @@
       </div>
       <button class="taste" class:an={track.favorite} onclick={favorite} title="Lieblingssong">
         <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
-      <button class="taste weg" onclick={removeFromList}
-              title={player.playlistId ? 'Aus der Wiedergabeliste nehmen und weiter' : 'Aus der Warteschlange nehmen und weiter'}>
-        <i class="fa-solid fa-circle-minus"></i></button>
-      <button class="taste weg" onclick={() => player.deleteTrack()}
-              title={isFile(track) ? 'Gefällt nicht: aus der Sammlung ausblenden und weiter (die Datei bleibt). Kurz rückgängig zu machen'
-                                   : 'Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück'}>
-        <i class="fa-solid {isFile(track) ? 'fa-eye-slash' : 'fa-trash-can'}"></i></button>
+      <!-- Hörbücher haben ihre Teile fest: dort kein Ausblenden -->
+      {#if !player.audiobook}
+        <button class="taste weg" onclick={hide} title="Überall in der Musik ausblenden und weiter (nichts wird gelöscht)">
+          <i class="fa-solid fa-circle-minus"></i></button>
+      {/if}
+      {#if !isFile(track)}
+        <button class="taste weg" onclick={() => player.deleteTrack()}
+                title="Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück">
+          <i class="fa-solid fa-trash-can"></i></button>
+      {/if}
     </div>
 
     <div class="mitte">
@@ -90,7 +91,7 @@
         {#if player.pendingDelete}
           <div class="rueckgaengig">
             <i class="fa-solid fa-trash-can"></i>
-            <span class="was" title={player.pendingDelete.track.title}>{isFile(player.pendingDelete.track) ? 'Ausgeblendet' : 'Gelöscht'}: {player.pendingDelete.track.title}</span>
+            <span class="was" title={player.pendingDelete.track.title}>Gelöscht: {player.pendingDelete.track.title}</span>
             <button onclick={() => player.undoDelete()}>Rückgängig</button>
           </div>
         {:else if player.segment}

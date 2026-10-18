@@ -202,12 +202,15 @@ async def restore_userdata(folder: str = None) -> dict:
                    suggest_override = COALESCE(suggest_override, ?),
                    is_audiobook = CASE WHEN audiobook_source IS NULL AND ? IS NOT NULL
                                        THEN ? ELSE is_audiobook END,
-                   audiobook_source = COALESCE(audiobook_source, ?)
+                   audiobook_source = COALESCE(audiobook_source, ?),
+                   music_hidden = MAX(COALESCE(music_hidden, 0), ?),
+                   music_hidden_at = COALESCE(music_hidden_at, ?)
                    WHERE id = ?""",
                 (row.get("rating"), row.get("play_count") or 0,
                  row.get("last_position") or 0, row.get("last_played"),
                  row.get("notes"), row.get("suggest_override"),
                  row.get("audiobook_source"), row.get("is_audiobook") or 0, row.get("audiobook_source"),
+                 row.get("music_hidden") or 0, row.get("music_hidden_at"),
                  row.get("id")))
             updated += cursor.rowcount if cursor.rowcount > 0 else 0
         result["tables"]["video_userdata"] = {"rows": len(lines), "updated": updated}

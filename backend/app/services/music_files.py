@@ -125,6 +125,7 @@ class FileInfo(BaseModel):
     last_played: Optional[str] = None
     favorite: bool = False
     hidden: bool = False              # vom Nutzer ausgeblendet; die Datei bleibt unberührt
+    hidden_at: Optional[str] = None
     added_at: Optional[str] = None
 
 

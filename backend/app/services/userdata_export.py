@@ -6,7 +6,8 @@ den info.json-Sidecars neben den Videos rekonstruieren lässt:
 favorites, watch_history, categories (+ Zuordnungen und Regeln), playlists (+ Inhalte,
 auch Dateien der Sammlung), subscriptions, blocked_channels, ignored_videos,
 Musikkanäle, ausgeschlossene Alben, Hörbuch-Stand sowie die Nutzerfelder aus
-videos (rating, play_count, last_position, notes, suggest_override, Hörbuch-Wahl)
+videos (rating, play_count, last_position, notes, suggest_override, Hörbuch-Wahl,
+aus der Musik abgewählt)
 und aus der eigenen Musiksammlung (Lieblingssong, Wiedergaben, Ausgeblendet).
 
 Ablage:  EXPORTS/userdata/userdata_YYYYMMDD_HHMMSS/<tabelle>.jsonl
@@ -43,11 +44,11 @@ TABLES = [
 # rating hat Spalten-Default 0 (= unbewertet), daher > 0 statt IS NOT NULL.
 VIDEO_USERDATA_SQL = """
     SELECT id, rating, play_count, last_position, last_played,
-           notes, suggest_override, is_audiobook, audiobook_source
+           notes, suggest_override, is_audiobook, audiobook_source, music_hidden, music_hidden_at
     FROM videos
     WHERE rating > 0 OR play_count > 0 OR last_position > 0
        OR (notes IS NOT NULL AND notes != '') OR suggest_override IS NOT NULL
-       OR audiobook_source IS NOT NULL
+       OR audiobook_source IS NOT NULL OR COALESCE(music_hidden, 0) = 1
 """
 
 

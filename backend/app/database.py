@@ -1124,9 +1124,10 @@ class Database:
         # v47: Musik nur noch eindeutig automatisch, sonst von Hand (music_flag).
         # Nutzerentscheidung 15.10.2026: Bestand zurück auf "keine Musik".
         from app.services import (audio_export, audiobook_flag, audiobooks, deleted_videos, meta_sidecar, music_exclusions,
-                                  music_files, music_flag, semantic_items)
+                                  music_files, music_flag, music_video_hiding, semantic_items)
         await music_files.install_schema(self._connection)
         await music_exclusions.install_schema(self._connection)    # ausgeschlossene Alben (16.10.2026)
+        await music_video_hiding.install_schema(self._connection)  # abgewählte Videos der Musik (19.10.2026)
         from app.services import playlist_items
         await playlist_items.install_schema(self._connection)      # Dateien der Sammlung in Wiedergabelisten
         await audiobooks.install_schema(self._connection)

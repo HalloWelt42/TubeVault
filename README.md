@@ -62,7 +62,8 @@
   - Mixe: Alles zufällig, Lieblingssongs, Lange nicht gehört, Oft gehört.
   - Gruppen: Interpreten, Alben und Musikkanäle.
   - Ein Album sind die Titel mit gleichem Cover, auch ein Sampler mit vielen Interpreten.
-  - "Gefällt nicht" entfernt einen Titel mit Rückgängig.
+  - Das Minus blendet einen Titel überall in der Musik aus, mit Rückgängig; gelöscht wird nichts.
+  - "Gefällt nicht" löscht ein Video, ebenfalls mit Rückgängig.
 - **Mitnehmen:** einzelne Tondateien oder ganze Listen als ZIP, im Original oder umgewandelt.
 - **Hörbücher getrennt von Musik:**
   - Hörbücher und Hörspiele landen nie in Musiklisten oder Mixen.
