@@ -229,6 +229,10 @@ class KellerwolkeAttrappe:
     async def loeschen(self, knoten_id):
         self.geloescht.append(knoten_id)
 
+    async def alle_kinder(self, ordner_id):
+        for k in [SimpleNamespace(id="rest", haupt_id=None), SimpleNamespace(id="sein-transkript", haupt_id="rest")]:
+            yield k
+
 
 async def test_ki_transkript_ueber_die_transkription(bauen):
     n, b = bauen([FERTIG])
@@ -254,3 +258,9 @@ async def test_ki_transkript_ueber_die_transkription(bauen):
     assert kw.weitergegeben == ("Transkription", "transkribieren", "t1", {"sprache": "en"})
     assert geliefert == {"language": "en", "segments": [{"start": 0.0, "end": 1.2, "text": "Hello."}]}
     assert kw.geloescht == ["t1"], "Ton samt Transkript in den Papierkorb"
+
+
+async def test_aufraeumen_legt_nur_hauptdateien_weg(bauen):
+    n, _ = bauen([FERTIG])
+    n.kw = KellerwolkeAttrappe(["fertig"], {})
+    assert await n.aufraeumen() == 1 and n.kw.geloescht == ["rest"]      # das Transkript geht als Begleiter mit

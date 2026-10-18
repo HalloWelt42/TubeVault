@@ -48,6 +48,7 @@ OHNE_FRIST = httpx.Timeout(None, connect=30)
 UNTERTITEL_ARTEN = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch", "ai": "KI-Transkript"}
 WARTEN_TRANSKRIPT_S = 6 * 3600
 ORIGINALSTIMMEN = "Originalstimmen"   # Wahl in TubeVault: je Sprecher seine eigene Stimme, die Vorgabestimme als Ersatz
+TRANSKRIPT_ORDNER = "Transkripte"   # Arbeitsordner im eigenen Zweig der Kellerwolke, nur Arbeitskopien
 AUSFALL_S = 15 * 60          # so lange gilt ein Dienst als kurz weg (Neustart, Ausrollen), bevor ein Auftrag scheitert
 
 
@@ -339,8 +340,7 @@ class Nachvertoner:
             await self.tv.laden(abgeholt["media_url"], video)
             ton = await ton_herausloesen(video, ordner)
             video.unlink(missing_ok=True)
-            zweig = (await self.kw.ich()).zweig
-            ziel = await self.kw.ordner(pfad_aus(zweig, "Transkripte"))
+            ziel = await self._transkript_ordner()
             knoten = await self.kw.schreiben(pfad_aus(ziel.pfad, f"{video_id}.m4a"), ton, inhaltstyp="audio/mp4")
             sprache = (job.get("language") or "auto").lower()
             neu = await self.kw.weitergeben(self.s.transkription, "transkribieren", knoten.id, {"sprache": sprache})
@@ -368,6 +368,20 @@ class Nachvertoner:
                     await self.kw.loeschen(knoten.id)       # Papierkorb, samt Transkript (Begleiter)
                 except Exception:  # noqa: BLE001
                     log.warning("Ton %s blieb in der Kellerwolke liegen", knoten.pfad)
+
+    async def _transkript_ordner(self):
+        return await self.kw.ordner(pfad_aus((await self.kw.ich()).zweig, TRANSKRIPT_ORDNER))
+
+    async def aufraeumen(self) -> int:
+        """Beim Start: was im Arbeitsordner der Kellerwolke liegt, ist der Ton eines abgebrochenen KI-Transkripts
+        (Absturz, Neustart); er kommt samt Transkript in den Papierkorb. Nur eigene Arbeitskopien liegen dort."""
+        ordner = await self._transkript_ordner()
+        reste = [k async for k in self.kw.alle_kinder(ordner.id) if k.haupt_id is None]
+        for k in reste:
+            await self.kw.loeschen(k.id)
+        if reste:
+            log.info("Aufgeräumt: %d liegengebliebene Töne in den Papierkorb", len(reste))
+        return len(reste)
 
     async def _transkript_abwarten(self, anfrage_id, knoten_id, notiz) -> dict:
         warten = 0
@@ -438,6 +452,10 @@ async def haupt(args) -> int:
             n = Nachvertoner(s, TubeVault(tv), Vertonung(vt), kw)
             if args.pruefen:
                 return await n.pruefen()
+            try:
+                await n.aufraeumen()
+            except Exception:  # noqa: BLE001 - die Kellerwolke kann beim Start fehlen; dann beim nächsten Start
+                log.warning("Aufräumen in der Kellerwolke nicht möglich", exc_info=True)
             log.info("Nachvertoner '%s' bereit: TubeVault %s, Vertonung %s", s.name, s.tubevault, s.vertonung)
             while True:
                 gearbeitet = await n.schritt()
