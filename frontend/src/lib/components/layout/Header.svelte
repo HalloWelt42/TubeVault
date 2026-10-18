@@ -1,20 +1,26 @@
 <!--
   TubeVault – Header v1.5.88
-  Mit dem Suchfeld samt Aufklappliste (SearchBox).
+  Mit dem Suchfeld samt Aufklappliste (SearchBox). Auf einem Telefon führt
+  "Handy-Ansicht" zurück zur Mobil-Ansicht (utils/mobileView.js).
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import { onMount } from 'svelte';
   import { route, navigate } from '../../router/router.js';
   import { sidebarOpen } from '../../stores/app.js';
+  import { isPhone, openMobileView, watchPhone } from '../../utils/mobileView.js';
   import SearchBox from './SearchBox.svelte';
   import UpdateHint from './UpdateHint.svelte';
+
+  let phone = $state(isPhone());
+  onMount(() => watchPhone((matches) => { phone = matches; }));
 
   function toggleSidebar() {
     sidebarOpen.update(v => !v);
   }
 </script>
 
-<header class="header">
+<header class="header" class:telefon={phone}>
   <div class="header-left">
     <button class="btn-icon" onclick={toggleSidebar} title="Seitenleiste ein- oder ausblenden">
       <i class="fa-solid fa-bars"></i>
@@ -30,6 +36,9 @@
   </div>
 
   <div class="header-right">
+    {#if phone}
+      <button class="handy" onclick={openMobileView}><i class="fa-solid fa-mobile-screen"></i> Handy-Ansicht</button>
+    {/if}
     <UpdateHint />
     <button class="btn-icon" onclick={() => navigate('/downloads')} title="Downloads">
       <i class="fa-solid fa-download"></i>
@@ -65,4 +74,13 @@
     transition: background var(--tv-schnell), color var(--tv-schnell);
   }
   .btn-icon:hover { background: var(--tv-karte); color: var(--tv-text); }
+  .handy {
+    display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; white-space: nowrap;
+    background: var(--tv-akzent); border: 0; border-radius: var(--tv-ecke); color: var(--tv-akzent-text);
+    font: inherit; font-weight: 700; cursor: pointer;
+  }
+  /* Telefon: Platz für den Rückweg; die Suche ist dort zu schmal und bleibt in der Seitenleiste erreichbar */
+  .telefon { gap: var(--tv-a2); padding: 0 var(--tv-a2); }
+  .telefon .header-left { width: auto; }
+  .telefon .logo-text, .telefon .header-center { display: none; }
 </style>

@@ -1,10 +1,11 @@
-<!-- Start: angefangene Videos fortsetzen, zuletzt Geladenes ansehen. -->
+<!-- Start: angefangene Videos fortsetzen, zuletzt Geladenes ansehen; ohne
+     Videos der Weg zur Suche. Die volle Ansicht gilt bis Tab oder App schließen. -->
 <script>
   import { api, FE_VERSION } from '../../lib/api/client.js';
+  import { openFullView } from '../../lib/utils/mobileView.js';
   import { go } from '../router.js';
   import VideoRow from '../parts/VideoRow.svelte';
 
-  const DESKTOP_FLAG = 'tv_volle_ansicht';
   const MIN_STARTED_S = 30;
   const NEAR_END_S = 20;
 
@@ -12,6 +13,7 @@
   let latest = $state([]);
   let loading = $state(true);
   let failed = $state(false);
+  let empty = $derived(!started.length && !latest.length);
 
   function inProgress(v) {
     const pos = v.history_position ?? v.last_position ?? 0;
@@ -31,11 +33,6 @@
     loading = false;
   }
 
-  function fullView() {
-    try { localStorage.setItem(DESKTOP_FLAG, '1'); } catch {}
-    window.location.href = '/';
-  }
-
   load();
 </script>
 
@@ -51,6 +48,15 @@
     <p>Der Server ist gerade nicht erreichbar.</p>
     <button class="m-btn" onclick={load}><i class="fa-solid fa-rotate"></i> Erneut versuchen</button>
   </div>
+{:else if empty}
+  <div class="m-note">
+    <p>Noch keine Videos. Suche ein Video und lade es.</p>
+    <button class="m-btn primary" onclick={() => go('/suche')}><i class="fa-solid fa-magnifying-glass"></i> Video suchen</button>
+  </div>
+  <footer class="foot">
+    <button class="nebenbei" onclick={openFullView}><i class="fa-solid fa-display"></i> Volle Ansicht öffnen</button>
+    <span class="version">TubeVault {FE_VERSION}</span>
+  </footer>
 {:else}
   {#if started.length > 0}
     <h2 class="m-h2">Weiter ansehen</h2>
@@ -74,7 +80,7 @@
   {/each}
 
   <footer class="foot">
-    <button class="m-btn" onclick={fullView}><i class="fa-solid fa-display"></i> Volle Ansicht öffnen</button>
+    <button class="m-btn" onclick={openFullView}><i class="fa-solid fa-display"></i> Volle Ansicht öffnen</button>
     <span class="version">TubeVault {FE_VERSION}</span>
   </footer>
 {/if}
@@ -86,4 +92,6 @@
   .marke img { width: 32px; height: 32px; border-radius: 2px; }
   .foot { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px 32px; }
   .version { color: var(--m-faint); font-size: 0.78rem; }
+  .nebenbei { display: inline-flex; align-items: center; gap: 8px; min-height: var(--m-touch); padding: 0 12px;
+              color: var(--m-dim); font-size: 15px; font-weight: 600; }
 </style>
