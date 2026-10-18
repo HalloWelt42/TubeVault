@@ -131,6 +131,26 @@ async def test_vollstaendiger_ablauf(bauen, tmp_path):
     assert not any((tmp_path / "arbeit").iterdir()), "Arbeitsordner ist aufgeräumt"
 
 
+async def test_kurzer_ausfall_der_vertonung_bricht_nichts_ab(bauen, monkeypatch):
+    """Ein Neustart der Vertonung (502) während des Wartens: weiter nachfragen statt scheitern."""
+    monkeypatch.setattr(nv.asyncio, "sleep", _sofort)
+    n, b = bauen([{"zustand": "laeuft", "fortschritt": 0.3, "schritt": "Sprechen"}, FERTIG])
+    original, ausfaelle = b.vertonung, [2]
+
+    def mit_ausfall(r: httpx.Request) -> httpx.Response:
+        if r.url.path == "/api/v1/auftraege/a1" and ausfaelle[0]:
+            ausfaelle[0] -= 1
+            return httpx.Response(502)
+        return original(r)
+    n.vt = nv.Vertonung(httpx.AsyncClient(base_url="https://vt", transport=httpx.MockTransport(mit_ausfall)))
+    await n.schritt()
+    assert b.gescheitert is None and b.abgeholt and b.ergebnis_tv
+
+
+async def _sofort(*_):
+    return None
+
+
 async def test_untertitel_gehen_als_segmente_mit(bauen):
     untertitel = {"language": "en", "kind": "manual", "segments": [{"start": 0.0, "end": 1.5, "text": "Hello there."}]}
     n, b = bauen([FERTIG], untertitel=untertitel)

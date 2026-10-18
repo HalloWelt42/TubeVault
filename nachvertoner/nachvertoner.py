@@ -35,17 +35,19 @@ import os
 import shutil
 import ssl
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
-from appkern.kellerwolke import Kellerwolke, pfad_aus
+from appkern.kellerwolke import Kellerwolke, NichtErreichbar, pfad_aus
 
 log = logging.getLogger("nachvertoner")
 OHNE_FRIST = httpx.Timeout(None, connect=30)
 UNTERTITEL_ARTEN = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch", "ai": "KI-Transkript"}
 WARTEN_TRANSKRIPT_S = 6 * 3600
+AUSFALL_S = 15 * 60          # so lange gilt ein Dienst als kurz weg (Neustart, Ausrollen), bevor ein Auftrag scheitert
 
 
 class Abbruch(Exception):
@@ -103,6 +105,22 @@ async def ton_herausloesen(video: Path, ziel_ordner: Path) -> Path:
     except RuntimeError:
         await ffmpeg("-i", str(video), "-vn", "-map", "0:a:0", "-c:a", "aac", "-b:a", "192k", str(ziel))
     return ziel
+
+
+async def geduldig(aufruf, *, was: str, frist_s: float = AUSFALL_S, takt_s: float = 10.0):
+    """Ein lesender Aufruf, der bei kurzen Ausfällen (Neustart, 502, keine Verbindung) wiederholt wird, bis zur Frist;
+    die Aufträge der Vertonung und der Transkription laufen über einen Neustart hinweg weiter."""
+    ende = time.monotonic() + frist_s
+    while True:
+        try:
+            return await aufruf()
+        except (httpx.TransportError, httpx.HTTPStatusError, NichtErreichbar) as f:
+            if isinstance(f, httpx.HTTPStatusError) and f.response.status_code < 500:
+                raise
+            if time.monotonic() > ende:
+                raise
+            log.info("%s gerade nicht erreichbar (%s), neuer Versuch", was, type(f).__name__)
+            await asyncio.sleep(takt_s)
 
 
 class TubeVault:
@@ -267,13 +285,13 @@ class Nachvertoner:
             ergebnis = await self._verfolgen(auftrag, melden)
             await melden(0.96, "Tonspur abliefern")
             spur = ordner / f"{ziel}.m4a"
-            await self.vt.ergebnis(ergebnis["plan_id"], spur)
+            await geduldig(lambda: self.vt.ergebnis(ergebnis["plan_id"], spur), was="Vertonung")
             erkannt = ergebnis.get("ausgangssprache") or ausgang or ""
             with spur.open("rb") as datei:
                 r = await self.tv.c.post(abgeholt["result_url"], files={"file": (spur.name, datei, "audio/mp4")},
                                          data={"source_language": erkannt, "voice": name}, timeout=OHNE_FRIST)
             r.raise_for_status()
-            await self.vt.abgeholt(auftrag)
+            await geduldig(lambda: self.vt.abgeholt(auftrag), was="Vertonung")
             log.info("Vertonung %s fertig (%s, Stimme %s)", nr, erkannt or "Sprache unbekannt", name)
         except Abbruch:
             log.info("Vertonung %s wurde bei TubeVault entfernt, abgebrochen", nr)
@@ -288,7 +306,7 @@ class Nachvertoner:
     async def _verfolgen(self, auftrag: str, melden) -> dict:
         """Bis der Auftrag der Vertonung endet; der Fortschritt belegt 8 bis 95 Prozent des Ganzen."""
         while True:
-            st = await self.vt.stand(auftrag)
+            st = await geduldig(lambda: self.vt.stand(auftrag), was="Vertonung")
             if st["zustand"] == "fertig":
                 return st.get("ergebnis") or {}
             if st["zustand"] in ("fehler", "abgebrochen"):
@@ -348,7 +366,7 @@ class Nachvertoner:
     async def _transkript_abwarten(self, anfrage_id, knoten_id, notiz) -> dict:
         warten = 0
         while warten < WARTEN_TRANSKRIPT_S:
-            a = await self.kw.anfrage(anfrage_id)
+            a = await geduldig(lambda: self.kw.anfrage(anfrage_id), was="Kellerwolke")
             if a.zustand == "fertig":
                 b = next((x for x in await self.kw.begleiter(knoten_id) if x.rolle == "transkript"), None)
                 if b is None:
