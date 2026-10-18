@@ -71,6 +71,19 @@ async def _content_files() -> Optional[WorkItem]:
                     done=done, total=total, progress=done / total if total else None, since=since)
 
 
+async def _cover_hashes() -> Optional[WorkItem]:
+    """Cover der Musiksammlung vergleichen (music_files.fill_cover_hashes): einmal für den Bestand."""
+    from app.services import music_files
+    remaining = await music_files.missing_cover_hashes() if music_files.available() else 0
+    if remaining < 20:   # einzelne holt der nächste Lauf nach
+        _forget("cover_hashes")
+        return None
+    done, total, since = _countdown("cover_hashes", remaining)
+    return WorkItem(key="cover_hashes", label="Cover der Musiksammlung werden verglichen",
+                    detail="Titel mit gleichem Cover werden ein Album; bis dahin fehlen manche Alben noch.",
+                    done=done, total=total, progress=done / total if total else None, since=since)
+
+
 async def _search_index() -> Optional[WorkItem]:
     from app.services import search_index
     remaining = await search_index.pending()
@@ -283,7 +296,7 @@ async def _own_videos() -> Optional[WorkItem]:
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
     _dubbing, _ai_transcripts, _channel_scan, _subtitle_import, _own_videos, _search_index, _semantic_index, _passage_index,
-    _type_check, _languages, _content_files]
+    _type_check, _languages, _content_files, _cover_hashes]
 
 
 SLOW_OVERVIEW_S = 1.0      # dauert die Übersicht länger, steht im Live-Log, was wie lange brauchte

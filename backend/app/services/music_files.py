@@ -8,7 +8,10 @@ nur lesend eingehängt):
   Nummer, CD, Jahr, Genre, Dauer, Format, Bitrate, Abtastrate, Bittiefe.
   Fehlen sie, hilft der Dateiname ("01. Interpret - Titel").
 - Cover: eingebettetes Bild oder cover/folder/front.jpg im Ordner,
-  verkleinert zwischengespeichert in MUSIC_COVERS_DIR.
+  verkleinert zwischengespeichert in MUSIC_COVERS_DIR. Dazu die Prüfsumme
+  der Bildbytes (cover_hash): Titel mit gleichem Cover sind ein Album
+  (music_library). Für den Bestand von davor trägt fill_cover_hashes sie
+  nach dem Einlesen nach.
 - Liedtext: .lrc mit gleichem Namen (mitlaufend) oder Text im Tag.
 Neu gelesen wird nur, was sich geändert hat (Größe, Änderungszeit);
 Verschwundenes fällt heraus. Wiedergaben und Lieblingssongs merkt sich die
@@ -39,6 +42,8 @@ logger = logging.getLogger(__name__)
 AUDIO_SUFFIXES = {".flac", ".mp3", ".m4a", ".ogg", ".opus", ".wav", ".aiff", ".aif", ".wv", ".ape"}
 FOLDER_COVERS = ("cover.jpg", "cover.png", "folder.jpg", "folder.png", "front.jpg", "front.png")
 COVER_SIZE = 600
+EMBEDDED = "embedded"
+COVER_HASH_BATCH = 50                 # so viele Dateien je Portion beim Nachtragen
 ID_PREFIX = "f"
 MUSIC = "musik"
 AUDIOBOOK = "hoerbuch"
@@ -114,6 +119,7 @@ class FileInfo(BaseModel):
     channels: Optional[int] = None
     category: str = MUSIC             # musik | hoerbuch
     has_cover: bool = False
+    cover_hash: Optional[str] = None  # gleiche Prüfsumme = gleiches Bild
     has_lyrics: bool = False
     play_count: int = 0
     last_played: Optional[str] = None
@@ -124,7 +130,8 @@ class FileInfo(BaseModel):
 
 async def install_schema(connection) -> None:
     await connection.executescript(SCHEMA_SQL)
-    for column in (f"category TEXT DEFAULT '{MUSIC}'", "hidden INTEGER DEFAULT 0", "hidden_at TEXT"):
+    for column in (f"category TEXT DEFAULT '{MUSIC}'", "hidden INTEGER DEFAULT 0", "hidden_at TEXT",
+                   "cover_hash TEXT"):   # sha1 der Bildbytes, wie sie in Datei oder Ordnerbild stehen
         try:
             await connection.execute(f"ALTER TABLE music_files ADD COLUMN {column}")
         except Exception:
@@ -217,7 +224,7 @@ def read_tags(path: Path) -> dict:
             info["artist"] = info["artist"] or match["artist"].strip()
             info["title"] = info["title"] or match["title"].strip()
     info["title"] = info["title"] or (numbered["rest"].strip() if numbered else path.stem)
-    info["cover"] = "embedded" if _picture_of(raw) else _folder_cover(path)
+    info["cover"], info["cover_hash"] = _cover_of(path, raw)
     lrc = path.with_suffix(".lrc")
     info["lyrics_path"] = str(lrc.relative_to(root())) if lrc.is_file() else None
     info["lyrics_text"] = _lyrics_of(raw)
@@ -239,6 +246,32 @@ def _picture_of(audio) -> Optional[bytes]:
         if key == "covr" and tags[key]:
             return bytes(tags[key][0])
     return None
+
+
+def _digest(data: Optional[bytes]) -> Optional[str]:
+    return hashlib.sha1(data).hexdigest() if data else None
+
+
+def _folder_bytes(relpath: str) -> Optional[bytes]:
+    try:
+        return (root() / relpath).read_bytes()
+    except OSError:
+        return None
+
+
+def _cover_of(path: Path, audio) -> tuple[Optional[str], Optional[str]]:
+    """(cover, cover_hash): eingebettetes Bild vor dem Ordnerbild, ohne beides (None, None)."""
+    picture = _picture_of(audio)
+    if picture:
+        return EMBEDDED, _digest(picture)
+    folder = _folder_cover(path)
+    return folder, _digest(_folder_bytes(folder)) if folder else None
+
+
+def _cover_hash(relpath: str, cover: str) -> Optional[str]:
+    """Prüfsumme des Covers, das am Eintrag steht (zum Nachtragen); None, wenn nicht lesbar."""
+    data = _embedded_picture(root() / relpath) if cover == EMBEDDED else _folder_bytes(cover)
+    return _digest(data)
 
 
 def _embedded_picture(path: Path) -> Optional[bytes]:
@@ -315,20 +348,22 @@ async def scan() -> ScanResult:
                 size, mtime = found[relpath]
                 await db.execute(
                     """INSERT INTO music_files (id, path, size, mtime, title, artist, album_artist, album, track_no, disc_no,
-                           year, genre, duration, codec, bitrate, sample_rate, bit_depth, channels, cover, lyrics_path, lyrics_text,
-                           category)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           year, genre, duration, codec, bitrate, sample_rate, bit_depth, channels, cover, cover_hash,
+                           lyrics_path, lyrics_text, category)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, title = excluded.title,
                            artist = excluded.artist, album_artist = excluded.album_artist, album = excluded.album,
                            track_no = excluded.track_no, disc_no = excluded.disc_no, year = excluded.year, genre = excluded.genre,
                            duration = excluded.duration, codec = excluded.codec, bitrate = excluded.bitrate,
                            sample_rate = excluded.sample_rate, bit_depth = excluded.bit_depth, channels = excluded.channels,
-                           cover = excluded.cover, lyrics_path = excluded.lyrics_path, lyrics_text = excluded.lyrics_text,
+                           cover = excluded.cover, cover_hash = excluded.cover_hash,
+                           lyrics_path = excluded.lyrics_path, lyrics_text = excluded.lyrics_text,
                            category = excluded.category""",
                     (file_id(relpath), relpath, size, mtime, info["title"], info["artist"], info["album_artist"], info["album"],
                      info["track_no"], info["disc_no"], info["year"], info["genre"], info.get("duration"), info["codec"],
                      info.get("bitrate"), info.get("sample_rate"), info.get("bit_depth"), info.get("channels"),
-                     info["cover"], info["lyrics_path"], info["lyrics_text"], category_of(relpath, info["genre"])))
+                     info["cover"], info["cover_hash"], info["lyrics_path"], info["lyrics_text"],
+                     category_of(relpath, info["genre"])))
         for relpath in removed:
             await db.execute("DELETE FROM music_files WHERE path = ?", (relpath,))
         result = ScanResult(files=len(found), read=len(changed), removed=len(removed),
@@ -344,12 +379,47 @@ async def scan() -> ScanResult:
         return result
 
 
+MISSING_COVER_HASH = "cover IS NOT NULL AND cover_hash IS NULL"
+
+
+async def missing_cover_hashes() -> int:
+    return await db.fetch_val(f"SELECT COUNT(*) FROM music_files WHERE {MISSING_COVER_HASH}") or 0
+
+
+async def fill_cover_hashes() -> int:
+    """Fehlende Prüfsummen der Cover nachtragen (Bestand von vor cover_hash):
+    in Portionen im Hintergrund, die Dateien werden nur gelesen. Was fehlt,
+    steht in der Tabelle - ein abgebrochener Lauf macht beim nächsten dort
+    weiter; nicht Lesbares bleibt offen und kommt im nächsten Lauf wieder dran.
+    Ändert das Einlesen einen Eintrag zwischendurch, gilt dessen Prüfsumme."""
+    if not available():
+        return 0
+    filled, after = 0, ""
+    while True:
+        rows = await db.fetch_all(
+            f"SELECT id, path, cover FROM music_files WHERE {MISSING_COVER_HASH} AND id > ? ORDER BY id LIMIT ?",
+            (after, COVER_HASH_BATCH))
+        if not rows:
+            return filled
+        after = rows[-1]["id"]
+        hashes = await asyncio.to_thread(lambda b=rows: [(_cover_hash(r["path"], r["cover"]), r["id"], r["cover"]) for r in b])
+        found = [entry for entry in hashes if entry[0]]
+        await db.conn.executemany(
+            f"UPDATE music_files SET cover_hash = ? WHERE id = ? AND cover = ? AND {MISSING_COVER_HASH}", found)
+        await db.conn.commit()
+        filled += len(found)
+
+
 async def background_scan() -> None:
-    """Beim Start und danach täglich einlesen (nur Geändertes kostet Zeit)."""
+    """Beim Start und danach täglich einlesen (nur Geändertes kostet Zeit),
+    danach fehlende Prüfsummen der Cover nachtragen."""
     await asyncio.sleep(90)
     while True:
         try:
             await scan()
+            filled = await fill_cover_hashes()
+            if filled:
+                logger.info(f"[MUSIKDATEIEN] {filled} Cover-Prüfsummen nachgetragen")
         except Exception as e:
             logger.warning(f"[MUSIKDATEIEN] Einlesen fehlgeschlagen: {e}")
         await asyncio.sleep(24 * 3600)
@@ -479,7 +549,7 @@ async def cover_path(item_id: str) -> Optional[Path]:
     def build() -> Optional[Path]:
         from PIL import Image
         source = root() / row["path"]
-        data = _embedded_picture(source) if row["cover"] == "embedded" else (root() / row["cover"]).read_bytes()
+        data = _embedded_picture(source) if row["cover"] == EMBEDDED else (root() / row["cover"]).read_bytes()
         if not data:
             return None
         image = Image.open(BytesIO(data)).convert("RGB")

@@ -11,7 +11,12 @@ Kontrakt:
 - Ausgeblendet (Wünsche 16.10.2026): ausgeblendete Dateien und ausgeschlossene
   Alben fallen überall heraus, ein leeres Album verschwindet, ihr Video-Doppel
   rückt nicht nach; zurückholen einzeln oder mehrere.
+- Alben nach Cover (Wunsch 19.10.2026): Dateien mit genau gleichem Cover sind
+  ein Album, gleich welcher Interpret und Albumname; ohne Cover gilt Interpret
+  und Album, Videos behalten music_album. Die Prüfsummen des Bestands trägt ein
+  Hintergrundlauf nach.
 """
+import hashlib
 import os
 import shutil
 import subprocess
@@ -36,6 +41,19 @@ def _jpeg(color=(200, 30, 30)) -> bytes:
     buffer = BytesIO()
     Image.new("RGB", (800, 800), color).save(buffer, "JPEG")
     return buffer.getvalue()
+
+
+def _tagged(path, cover: bytes = None, **tags):
+    """FLAC mit Tags und wahlweise eingebettetem Cover (genau diese Bytes)."""
+    from mutagen.flac import FLAC, Picture
+    _flac(path)
+    audio = FLAC(path)
+    audio.update(tags)
+    if cover:
+        picture = Picture()
+        picture.type, picture.mime, picture.data = 3, "image/jpeg", cover
+        audio.add_picture(picture)
+    audio.save()
 
 
 @pytest.fixture
@@ -252,28 +270,147 @@ async def test_ausgeblendet_rueckt_kein_video_nach(test_db, sammlung):
 
 
 async def test_album_ausschliessen_und_zurueckholen(test_db, sammlung, async_client_factory):
+    """Ein Video mit Albumnamen bleibt in seinem eigenen Album (Interpret und
+    Album), die Datei mit Cover in ihrem: Ausschließen trifft nur das gewählte."""
     await music_files.scan()
     await test_db.execute(
         """INSERT INTO videos (id, title, music_artist, music_title, music_album, channel_id, channel_name, is_music, status,
                                download_date)
            VALUES ('dmvideo0003', 'Depeche Mode - Halo', 'Depeche Mode', 'Halo', 'Violator', 'UCdm', 'Depeche Mode', 1,
                    'ready', '2026-10-01')""")
-    album = next(g for g in music_library.albums(await music_library.tracks()) if g.name == "Violator")
-    assert album.count == 2 and album.kinds == ["datei", "video"]
+    violator = {g.kinds[0]: g for g in music_library.albums(await music_library.tracks()) if g.name == "Violator"}
+    assert violator["video"].key == "album:depeche mode|violator"
+    album = violator["datei"]
+    assert album.key.startswith("album:cover:") and album.count == 1
     async with await async_client_factory(music.router) as client:
         assert (await client.post("/api/music/exclusions", json={"source": "artist:depeche mode"})).status_code == 400
         entry = (await client.post("/api/music/exclusions", json={"source": album.key})).json()
-        assert (entry["name"], entry["subtitle"], entry["count"]) == ("Violator", "Depeche Mode", 2)
+        assert (entry["name"], entry["subtitle"], entry["count"]) == ("Violator", "Depeche Mode", 1)
 
         items = await music_library.tracks()
-        assert not {"Enjoy the Silence", "Halo"} & {t.title for t in items}
-        assert "Violator" not in {g.name for g in music_library.albums(items)}
+        assert "Enjoy the Silence" not in {t.title for t in items} and "Halo" in {t.title for t in items}
+        assert [g.key for g in music_library.albums(items) if g.name == "Violator"] == ["album:depeche mode|violator"]
         assert (await music.overview()).counts.hidden == 1
         assert [a["name"] for a in (await client.get("/api/music/hidden")).json()["albums"]] == ["Violator"]
 
         restored = (await client.post("/api/music/hidden/restore", json={"albums": [album.key]})).json()
         assert restored == {"tracks": 0, "albums": 1}
     assert {"Enjoy the Silence", "Halo"} <= {t.title for t in await music_library.tracks()}
+
+
+@pytest.fixture
+def sampler(sammlung):
+    """Ein Sampler: drei Interpreten, zwei Schreibweisen des Albums, ein Cover;
+    dazu ein Titel mit gleichem Albumnamen, aber eigenem Cover, und einer ohne Cover."""
+    cover = _jpeg((10, 160, 90))
+    folder = sammlung / "Sampler"
+    _tagged(folder / "01.flac", cover, artist="Nena", title="99 Luftballons", album="Bravo Hits 1")
+    _tagged(folder / "02.flac", cover, artist="Falco", title="Rock Me Amadeus", album="Bravo Hits 1")
+    _tagged(folder / "03.flac", cover, artist="Alphaville", title="Big in Japan", album="Bravo Hits Vol. 1")
+    _tagged(sammlung / "Andere" / "04.flac", _jpeg((90, 90, 90)), artist="Nena", title="Irgendwie", album="Bravo Hits 1")
+    _tagged(sammlung / "Ohne Bild" / "05.flac", None, artist="Moby", title="Porcelain", album="Play")
+    return hashlib.sha1(cover).hexdigest()
+
+
+async def _albums() -> dict[str, music_library.Group]:
+    return {g.key: g for g in music_library.albums(await music_library.tracks())}
+
+
+async def test_gleiches_cover_ist_ein_album(test_db, sampler):
+    await music_files.scan()
+    albums = await _albums()
+    bravo = albums[f"album:cover:{sampler}"]
+    # Name: die häufigste Schreibweise; Unterzeile: mehrere Interpreten
+    assert (bravo.name, bravo.subtitle, bravo.count) == ("Bravo Hits 1", music_library.VARIOUS_ARTISTS, 3)
+    assert len(bravo.covers) == 1                       # gleiches Bild: eins statt vier gleicher
+    # gleicher Albumname, eigenes Cover: ein eigenes Album
+    andere = [g for g in albums.values() if g.name == "Bravo Hits 1" and g is not bravo]
+    assert len(andere) == 1 and (andere[0].subtitle, andere[0].count) == ("Nena", 1)
+    # Jeder Titel trägt sein Album: dieselbe Quelle wie die Gruppe
+    members = [t for t in await music_library.tracks() if t.album_source == bravo.key]
+    assert sorted(t.artist for t in members) == ["Alphaville", "Falco", "Nena"]
+
+
+async def test_ohne_cover_interpret_und_album(test_db, sampler):
+    """Ohne Cover: Interpret und Album wie bisher, auch zusammen mit einem Video
+    gleichen Albums. Ein Ordnerbild zählt als Cover (Prüfsumme seiner Bytes)."""
+    await music_files.scan()
+    await test_db.execute(
+        """INSERT INTO videos (id, title, music_artist, music_title, music_album, channel_id, channel_name, is_music, status,
+                               download_date)
+           VALUES ('mobyvideo01', 'Moby - Natural Blues', 'Moby', 'Natural Blues', 'Play', 'UCmoby', 'Moby', 1,
+                   'ready', '2026-10-01')""")
+    play = (await _albums())["album:moby|play"]
+    assert (play.name, play.subtitle, play.count, play.kinds) == ("Play", "Moby", 2, ["datei", "video"])
+    nocturne = next(f for f in await music_files.all_files() if f.title == "Nocturne")
+    folder_image = music_files.root() / "Sammler" / "folder.jpg"
+    assert nocturne.cover_hash == hashlib.sha1(folder_image.read_bytes()).hexdigest()
+
+
+async def test_cover_album_abspielen(test_db, sampler, async_client_factory):
+    await music_files.scan()
+    key = f"album:cover:{sampler}"
+    async with await async_client_factory(music.router) as client:
+        played = (await client.get("/api/music/play", params={"source": key})).json()
+    assert played["title"] == "Bravo Hits 1"
+    assert sorted(t["title"] for t in played["tracks"]) == ["99 Luftballons", "Big in Japan", "Rock Me Amadeus"]
+    assert {t["album_source"] for t in played["tracks"]} == {key}
+    shuffled = await music_library.play_list(key, shuffle=True, start=played["tracks"][2]["id"])
+    assert shuffled.tracks[0].id == played["tracks"][2]["id"] and len(shuffled.tracks) == 3
+
+
+async def test_cover_album_ausschliessen(test_db, sampler, async_client_factory):
+    """Ausgeschlossen wird die Cover-Gruppe: ihre Titel fehlen überall, auch bei
+    den Interpreten; ein Titel mit gleichem Albumnamen und anderem Cover bleibt."""
+    await music_files.scan()
+    key = f"album:cover:{sampler}"
+    async with await async_client_factory(music.router) as client:
+        entry = (await client.post("/api/music/exclusions", json={"source": key})).json()
+        assert (entry["name"], entry["subtitle"], entry["count"]) == ("Bravo Hits 1", music_library.VARIOUS_ARTISTS, 3)
+        items = await music_library.tracks()
+        assert not {"99 Luftballons", "Rock Me Amadeus", "Big in Japan"} & {t.title for t in items}
+        assert "Irgendwie" in {t.title for t in items}
+        assert {"Falco", "Alphaville"}.isdisjoint({g.name for g in music_library.artists(items)})
+        assert key not in await _albums()
+        assert (await client.get("/api/music/play", params={"source": key})).json()["tracks"] == []
+        await client.post("/api/music/hidden/restore", json={"albums": [key]})
+    assert (await _albums())[key].count == 3
+
+
+async def test_cover_pruefsummen_nachtragen(test_db, sampler, monkeypatch):
+    """Bestand von vor cover_hash: der Hintergrundlauf trägt nach, in Portionen,
+    nur lesend; Unlesbares bleibt offen, ohne den Lauf aufzuhalten."""
+    from app.services import background_work
+    await music_files.scan()
+    expected = {f.id: f.cover_hash for f in await music_files.all_files()}
+    assert sum(1 for h in expected.values() if h) == 6
+    await test_db.execute("UPDATE music_files SET cover_hash = NULL")
+    assert await music_files.missing_cover_hashes() == 6
+    # vorher: Alben nach Interpret und Album
+    assert f"album:cover:{sampler}" not in await _albums()
+
+    nocturne = next(f for f in await music_files.all_files() if f.title == "Nocturne")
+    await test_db.execute("UPDATE music_files SET cover = 'Sammler/fehlt.jpg' WHERE id = ?", (nocturne.id,))
+    monkeypatch.setattr(music_files, "COVER_HASH_BATCH", 2)
+    assert await music_files.fill_cover_hashes() == 5
+    assert await music_files.missing_cover_hashes() == 1            # das unlesbare bleibt offen
+    assert await music_files.fill_cover_hashes() == 0               # und hält keinen Lauf auf
+    filled = {f.id: f.cover_hash for f in await music_files.all_files() if f.id != nocturne.id}
+    assert filled == {k: v for k, v in expected.items() if k != nocturne.id}
+    assert (await _albums())[f"album:cover:{sampler}"].count == 3
+    assert await background_work._cover_hashes() is None             # einzelne zeigt die Leiste nicht
+
+
+async def test_nachtragen_sichtbar_als_hintergrundarbeit(test_db, sammlung):
+    from app.services import background_work
+    sammlung.mkdir(parents=True, exist_ok=True)
+    for n in range(25):
+        await test_db.execute("INSERT INTO music_files (id, path, title, cover) VALUES (?, ?, 'Alt', 'embedded')",
+                              (f"f{n:015x}", f"alt/{n}.flac"))
+    background_work._forget("cover_hashes")
+    item = await background_work._cover_hashes()
+    assert item and (item.done, item.total) == (0, 25)
+    background_work._forget("cover_hashes")
 
 
 async def test_mehrere_auf_einmal_zurueckholen(test_db, sammlung, async_client_factory):

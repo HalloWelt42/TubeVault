@@ -109,7 +109,7 @@ async def channel_list():
 
 @router.get("/play", response_model=PlayList)
 async def play(source: str = Query(..., min_length=3), shuffle: bool = False, start: Optional[str] = None):
-    """Dynamische Wiedergabeliste: all, artist:<name>, album:<schlüssel>,
+    """Dynamische Wiedergabeliste: all, artist:<name>, album:<schlüssel> (Track.album_source),
     channel:<id>, favorites, often, new, recent, forgotten, playlist:<id>,
     similar:<video_id>, sammlung:<favorites:Liste|playlist:id> (alle Videos
     als Ton) - wahlweise zufällig."""
@@ -303,7 +303,7 @@ class HiddenArea(BaseModel):
 
 
 class ExcludeRequest(BaseModel):
-    source: str                                  # Gruppe, z.B. album:<schlüssel>
+    source: str                                  # Gruppe wie Track.album_source, z.B. album:cover:<prüfsumme>
 
 
 class RestoreRequest(BaseModel):
@@ -323,11 +323,10 @@ async def exclude_group(req: ExcludeRequest):
     """Ein ganzes Album aus der Musik ausschließen (auch was später dazukommt)."""
     if not music_exclusions.allowed(req.source):
         raise HTTPException(status_code=400, detail="Nur Alben lassen sich ausschließen")
-    album = await music_library.play_list(req.source)
-    if not album.tracks:
+    album = await music_library.album(req.source)
+    if not album:
         raise HTTPException(status_code=404, detail="Album nicht gefunden")
-    entry = music_exclusions.Exclusion(source=req.source, name=album.title, subtitle=album.tracks[0].artist,
-                                       count=len(album.tracks))
+    entry = music_exclusions.Exclusion(source=req.source, name=album.name, subtitle=album.subtitle, count=album.count)
     await music_exclusions.exclude(entry.source, entry.name, entry.subtitle, entry.count)
     return entry
 

@@ -15,6 +15,12 @@ Ausgeblendete Dateien und ausgeschlossene Alben (music_exclusions) fallen
 überall heraus; ein Album ohne sichtbare Titel gibt es dann nicht mehr. Ihr
 Video-Doppel rückt nicht nach.
 
+Ein Album sind die Dateien mit genau gleichem Cover (Wunsch 19.10.2026), gleich
+welcher Interpret und welche Schreibweise des Albums - so bleiben Sampler und
+Ordner wie Playlisten beisammen. Ohne Cover gilt Interpret und Albumname, für
+Videos immer (music_album). Welches Album ein Titel hat, steht allein in
+Track.album_source; Albenliste, Abspielen und Ausschließen fragen nur dort.
+
 Interpret und Songtitel: was am Video festgelegt ist (music_artist,
 music_title), sonst aus "Interpret - Titel" im Videotitel, sonst der Kanal.
 Das dient nur der Anzeige und Gruppierung - ob etwas Musik ist, entscheidet
@@ -35,6 +41,8 @@ MUSIC_SOURCE = "music.source"
 MUSIC_LIST = "musik"                 # playlists.source einer in der Musik angelegten Liste
 VIDEO = "video"
 FILE = "datei"
+VARIOUS_ARTISTS = "Verschiedene Interpreten"
+COLLAGE = 4                          # so viele Bilder höchstens in der Kachel einer Gruppe
 
 # Zusätze an Kanalnamen von Musikkanälen
 _CHANNEL_NOISE = re.compile(r"(?:\s*-\s*Topic|VEVO|\s+Official|\s+Music)$", re.IGNORECASE)
@@ -50,7 +58,7 @@ class Track(BaseModel):
     artist: str
     artist_source: str               # Quelle zum Abspielen aller Titel des Interpreten
     album: Optional[str] = None
-    album_source: Optional[str] = None   # Gruppe des Albums (z.B. zum Ausschließen)
+    album_source: Optional[str] = None   # Gruppe des Albums: die eine Wahrheit, wer zu welchem Album gehört
     channel_id: Optional[str] = None
     channel_name: Optional[str] = None
     duration: Optional[int] = None
@@ -61,6 +69,7 @@ class Track(BaseModel):
     has_lyrics: bool = False
     kind: str = VIDEO                # video | datei (music_files)
     codec: Optional[str] = None      # Format der Datei (FLAC, MP3 ...); Videos ohne
+    cover_hash: Optional[str] = None # gleiche Prüfsumme, gleiches Bild (Dateien mit Cover)
 
 
 class Group(BaseModel):
@@ -70,7 +79,7 @@ class Group(BaseModel):
     subtitle: Optional[str] = None
     count: int
     duration: int
-    covers: list[str]                # bis zu vier Titel-Kennungen für die Collage (Bild über /api/music/cover)
+    covers: list[str]                # bis zu vier Titel mit verschiedenen Bildern (Bild über /api/music/cover); eins = ein Bild
     kinds: list[str] = []            # woher die Titel kommen: datei, video
 
 
@@ -102,8 +111,12 @@ def group_key(name: str) -> str:
     return re.sub(r"\s+", " ", name.casefold()).strip()
 
 
-def album_source(artist: str, album: Optional[str]) -> Optional[str]:
-    return f"album:{group_key(f'{artist}|{album}')}" if album else None
+def album_source(artist: str, album: Optional[str], cover_hash: Optional[str] = None) -> Optional[str]:
+    """Gruppe des Albums: gleiches Cover ist ein Album, sonst Interpret und
+    Albumname. Ohne Albumnamen gehört ein Titel zu keinem Album."""
+    if not album:
+        return None
+    return f"album:cover:{cover_hash}" if cover_hash else f"album:{group_key(f'{artist}|{album}')}"
 
 
 TRACK_SQL = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name, v.upload_date,
@@ -131,9 +144,10 @@ def video_track(row) -> Track:
 def file_track(f: music_files.FileInfo) -> Track:
     artist = (f.artist or f.album_artist or "Unbekannt").strip()
     return Track(id=f.id, title=f.title, artist=artist, artist_source=f"artist:{group_key(artist)}",
-                 album=f.album, album_source=album_source(artist, f.album), duration=int(f.duration) if f.duration else None, play_count=f.play_count,
+                 album=f.album, album_source=album_source(artist, f.album, f.cover_hash),
+                 duration=int(f.duration) if f.duration else None, play_count=f.play_count,
                  last_played=f.last_played, added=f.added_at, favorite=f.favorite, has_lyrics=f.has_lyrics, kind=FILE,
-                 codec=f.codec)
+                 codec=f.codec, cover_hash=f.cover_hash)
 
 
 async def video_tracks() -> list[Track]:
@@ -174,37 +188,74 @@ async def tracks_of(video_ids: list[str]) -> list[Track]:
     return [by_id[i] for i in video_ids if i in by_id]
 
 
-def _groups(items: list[Track], kind: str, key_of, name_of, subtitle_of=None) -> list[Group]:
+def _most_common(members: list[Track], name_of) -> str:
+    """Schreibweise, die am häufigsten vorkommt (bei Gleichstand die erste)."""
+    spellings = defaultdict(int)
+    for track in members:
+        spellings[name_of(track)] += 1
+    return max(spellings, key=spellings.get)
+
+
+def _covers(members: list[Track]) -> list[str]:
+    """Bis zu vier Titel mit verschiedenen Bildern für die Collage: Dateien mit
+    gleichem Cover zählen einmal, jedes Video hat sein eigenes Bild."""
+    seen, chosen = set(), []
+    for track in members:
+        image = track.cover_hash or track.id
+        if image not in seen:
+            seen.add(image)
+            chosen.append(track.id)
+            if len(chosen) == COLLAGE:
+                break
+    return chosen
+
+
+def _group(source: str, members: list[Track], name_of, subtitle_of=None) -> Group:
+    return Group(key=source, name=_most_common(members, name_of),
+                 subtitle=subtitle_of(members) if subtitle_of else None,
+                 count=len(members), duration=sum(t.duration or 0 for t in members),
+                 covers=_covers(members), kinds=sorted({t.kind for t in members}))
+
+
+def _groups(items: list[Track], source_of, name_of, subtitle_of=None) -> list[Group]:
+    """Titel nach ihrer Quelle (z.B. Track.album_source) zu Gruppen bündeln."""
     buckets: dict[str, list[Track]] = defaultdict(list)
     for track in items:
-        key = key_of(track)
-        if key:
-            buckets[key].append(track)
-    groups = []
-    for key, members in buckets.items():
-        # Schreibweise, die am häufigsten vorkommt
-        spellings = defaultdict(int)
-        for track in members:
-            spellings[name_of(track)] += 1
-        name = max(spellings, key=spellings.get)
-        groups.append(Group(key=f"{kind}:{key}", name=name,
-                            subtitle=subtitle_of(members) if subtitle_of else None,
-                            count=len(members), duration=sum(t.duration or 0 for t in members),
-                            covers=[t.id for t in members[:4]], kinds=sorted({t.kind for t in members})))
+        source = source_of(track)
+        if source:
+            buckets[source].append(track)
+    groups = [_group(source, members, name_of, subtitle_of) for source, members in buckets.items()]
     return sorted(groups, key=lambda g: g.name.casefold())
 
 
+def _album_name(track: Track) -> str:
+    return track.album
+
+
+def album_subtitle(members: list[Track]) -> str:
+    """Der Interpret, wenn alle Titel denselben haben, sonst "Verschiedene Interpreten"."""
+    if len({group_key(t.artist) for t in members}) > 1:
+        return VARIOUS_ARTISTS
+    return _most_common(members, lambda t: t.artist)
+
+
 def artists(items: list[Track]) -> list[Group]:
-    return _groups(items, "artist", lambda t: group_key(t.artist), lambda t: t.artist)
+    return _groups(items, lambda t: t.artist_source, lambda t: t.artist)
 
 
 def albums(items: list[Track]) -> list[Group]:
-    return _groups(items, "album", lambda t: group_key(f"{t.artist}|{t.album}") if t.album else None,
-                   lambda t: t.album, subtitle_of=lambda members: members[0].artist)
+    return _groups(items, lambda t: t.album_source, _album_name, subtitle_of=album_subtitle)
 
 
 def channels(items: list[Track]) -> list[Group]:
-    return _groups(items, "channel", lambda t: t.channel_id, lambda t: t.channel_name or t.channel_id)
+    return _groups(items, lambda t: f"channel:{t.channel_id}" if t.channel_id else None,
+                   lambda t: t.channel_name or t.channel_id)
+
+
+async def album(source: str) -> Optional[Group]:
+    """Ein Album mit Name und Unterzeile wie in der Albenliste; None, wenn es keine sichtbaren Titel hat."""
+    members = [t for t in await tracks() if t.album_source == source]
+    return _group(source, members, _album_name, album_subtitle) if members else None
 
 
 SORTS = {
@@ -253,12 +304,12 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     if kind == "all":
         chosen = sorted(items, key=SORTS["artist"])
     elif kind == "artist":
-        chosen = [t for t in items if group_key(t.artist) == value]
+        chosen = [t for t in items if t.artist_source == source]
         chosen.sort(key=SORTS["title"])
         title = chosen[0].artist if chosen else "Interpret"
     elif kind == "album":
-        chosen = [t for t in items if t.album and group_key(f"{t.artist}|{t.album}") == value]
-        title = chosen[0].album if chosen else "Album"
+        chosen = [t for t in items if t.album_source == source]
+        title = _most_common(chosen, _album_name) if chosen else "Album"
     elif kind == "channel":
         chosen = [t for t in items if t.channel_id == value]
         title = chosen[0].channel_name if chosen else "Kanal"
@@ -326,7 +377,7 @@ async def music_playlists() -> list[Group]:
     for row in shown:
         found = [by_id[i] for i in entries[row["id"]] if i in by_id]
         groups.append(Group(key=f"playlist:{row['id']}", name=row["name"], count=len(found),
-                            duration=sum(t.duration or 0 for t in found), covers=[t.id for t in found[:4]],
+                            duration=sum(t.duration or 0 for t in found), covers=_covers(found),
                             kinds=sorted({t.kind for t in found})))
     return groups
 

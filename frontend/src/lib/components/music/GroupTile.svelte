@@ -1,7 +1,8 @@
 <!--
   Kachel einer dynamischen Wiedergabeliste (Interpret, Album, Kanal, Mix):
-  Collage aus vier Titelbildern. Klick öffnet die Liste, die Tasten spielen
-  sie ab - der Reihe nach oder zufällig.
+  Collage aus vier Titelbildern, bei nur einem Bild (z.B. ein Album mit einem
+  Cover) dieses eine ganz. Klick öffnet die Liste, die Tasten spielen sie ab -
+  der Reihe nach oder zufällig.
 -->
 <script>
   import { api } from '../../api/client.js';
@@ -9,16 +10,17 @@
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { formatDurationLong } from '../../utils/format.js';
 
-  // group: { key, name, subtitle, count, duration, covers }
+  // group: { key, name, subtitle, count, duration, covers } - covers: Titel mit verschiedenen Bildern
   let { group, onOpen = () => {} } = $props();
 
-  let covers = $derived(group.covers?.length ? [0, 1, 2, 3].map(i => group.covers[i % group.covers.length]) : []);
+  let covers = $derived(group.covers?.length > 1 ? [0, 1, 2, 3].map(i => group.covers[i % group.covers.length])
+                                                 : group.covers || []);
   let current = $derived(player.source === group.key);
 </script>
 
 <div class="gruppe" class:laeuft={current} role="button" tabindex="0" onclick={onOpen}
      onkeydown={(e) => e.key === 'Enter' && onOpen()} title="{group.name} - öffnen">
-  <div class="cover" class:collage={covers.length}>
+  <div class="cover" class:collage={covers.length > 1}>
     {#each covers as id, i (i)}<img src={coverUrl(id)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />{/each}
     {#if !covers.length}<i class="fa-solid fa-music zeichen"></i>{/if}
     <div class="tasten">
