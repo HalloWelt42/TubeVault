@@ -42,6 +42,7 @@ class Buehne:
         self.gemeldet_stimmen = None
         self.fortschritt_status = 200
         self.offen = True
+        self.vertonung_laufend = 0
 
     def tubevault(self, r: httpx.Request) -> httpx.Response:
         p = r.url.path
@@ -77,6 +78,8 @@ class Buehne:
 
     def vertonung(self, r: httpx.Request) -> httpx.Response:
         p = r.url.path
+        if p == "/api/v1/app":
+            return httpx.Response(200, json={"auftraege_laufend": self.vertonung_laufend})
         if p == "/api/v1/verbindungen":
             return httpx.Response(200, json=[{"name": "Kellerwolke", "ok": True}, {"name": "Leitstelle", "ok": True}])
         if p == "/api/v1/stimmen":
@@ -264,3 +267,18 @@ async def test_aufraeumen_legt_nur_hauptdateien_weg(bauen):
     n, _ = bauen([FERTIG])
     n.kw = KellerwolkeAttrappe(["fertig"], {})
     assert await n.aufraeumen() == 1 and n.kw.geloescht == ["rest"]      # das Transkript geht als Begleiter mit
+
+
+async def test_ki_transkripte_warten_auf_freie_rechenzeit(bauen):
+    n, b = bauen([FERTIG])
+    b.offen = False                                   # keine Vertonung bei TubeVault
+    b.vertonung_laufend = 1                           # aber die Vertonung arbeitet für jemand anderen
+    geholt = []
+    original = b.tubevault
+
+    def tv(r):
+        if r.url.path == "/api/transcripts/ai/claim":
+            geholt.append(1)
+        return original(r)
+    n.tv = nv.TubeVault(httpx.AsyncClient(base_url="http://tv", transport=httpx.MockTransport(tv)))
+    assert await n.schritt() is False and geholt == []

@@ -194,6 +194,15 @@ class Vertonung:
         schlecht = [v["name"] for v in r.json() if not v.get("ok")]
         return f"Vertonung ohne {', '.join(schlecht)}" if schlecht else None
 
+    async def beschaeftigt(self) -> bool:
+        """Arbeitet die Vertonung gerade (für wen auch immer)? Dann warten KI-Transkripte: sie teilen sich die Rechner
+        mit dem Sprechen und sollen nur freie Rechenzeit nutzen."""
+        try:
+            r = await self.c.get("/api/v1/app", timeout=15)
+            return int(r.json().get("auftraege_laufend") or 0) > 0
+        except (httpx.HTTPError, ValueError):
+            return True
+
     async def stimmen(self) -> dict[str, str]:
         """Name -> Kennung der Klonstimmen (Privat, soweit erlaubt, und Fremd); nie der Katalog des Sprachmodells."""
         aus: dict[str, str] = {}
@@ -413,6 +422,9 @@ class Nachvertoner:
             if abgeholt and abgeholt.get("request"):
                 await self.vertonen(abgeholt)
                 return True
+            if await self.vt.beschaeftigt():
+                log.debug("Vertonung arbeitet, KI-Transkripte warten")
+                return False
             transkript = await self.tv.transkript_abholen(self.s.name)
             if transkript and transkript.get("request"):
                 await self.transkribieren(transkript)
