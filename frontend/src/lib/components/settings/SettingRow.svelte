@@ -8,9 +8,25 @@
     select    Auswahl
     text      Textfeld
     secret    verdecktes Textfeld mit Auge (Schlüssel)
+    choices   Mehrfachwahl aus einer Auswahl, die options_from live liefert (gespeichert durch Komma getrennt)
 -->
 <script>
+  import { api } from '../../api/client.js';
+
   let { def, value, onSave = () => {} } = $props();
+
+  // choices: Auswahl live holen; Eingetragenes, das nicht mehr angeboten wird, bleibt sichtbar und abwählbar
+  let angebot = $state({ options: [], state: '' });
+  $effect(() => {
+    if (def.kind !== 'choices' || !def.options_from) return;
+    api.request(def.options_from).then((a) => (angebot = a)).catch(() => (angebot = { options: [], state: 'Auswahl nicht abrufbar' }));
+  });
+  let gewaehlt = $derived(String(value || '').split(',').map((x) => x.trim()).filter(Boolean));
+  let wahl = $derived([...angebot.options, ...gewaehlt.filter((g) => !angebot.options.some((o) => o.value === g))
+    .map((g) => ({ value: g, label: g, hint: 'nicht mehr angeboten' }))]);
+  function umschalten(w) {
+    onSave((gewaehlt.includes(w) ? gewaehlt.filter((x) => x !== w) : [...gewaehlt, w]).join(','));
+  }
 
   const HOUR = 3600, DAY = 86400;
 
@@ -66,6 +82,16 @@
         {#each def.options as option}<option value={option}>{def.option_labels?.[option] || option}</option>{/each}
       </select>
 
+    {:else if def.kind === 'choices'}
+      <div class="wahlen">
+        {#each wahl as o (o.value)}
+          <button class="tv-chip" class:aktiv={gewaehlt.includes(o.value)} aria-pressed={gewaehlt.includes(o.value)} title={o.hint}
+                  onclick={() => umschalten(o.value)}>
+            <i class="fa-solid {gewaehlt.includes(o.value) ? 'fa-square-check' : 'fa-square'}"></i> {o.label}</button>
+        {/each}
+        {#if angebot.state}<div class="stand">{angebot.state}</div>{/if}
+      </div>
+
     {:else if def.kind === 'secret'}
       <input class="tv-eingabe text" type={shown ? 'text' : 'password'} value={value} autocomplete="off"
              onchange={(e) => onSave(e.target.value)} />
@@ -92,5 +118,7 @@
   .wert select.tv-eingabe { width: auto; min-width: 140px; max-width: 100%; }
   .wert .text { width: 100%; }
   .einheit-text { font-size: var(--tv-gr-klein); color: var(--tv-text-2); }
+  .wahlen { display: flex; flex-wrap: wrap; gap: var(--tv-a2); justify-content: flex-end; }
+  .wahlen .stand { flex-basis: 100%; text-align: right; font-size: var(--tv-gr-klein); color: var(--tv-text-3); }
   .ohne-grenze { display: flex; align-items: center; gap: var(--tv-a2); font-size: var(--tv-gr-klein); color: var(--tv-text-2); white-space: nowrap; }
 </style>

@@ -8,6 +8,7 @@ Kontrakt:
 - Umschalten wirkt sofort, ohne Neustart; beide Adressen bleiben gespeichert.
 - Nur die KI nimmt diesen Weg (hier: Bedeutungssuche und Textaufgaben fragen headers()).
 """
+import json
 from urllib.parse import unquote
 
 import httpx
@@ -66,8 +67,8 @@ async def test_anfragen_tragen_die_koepfe(ki, monkeypatch):
         gesehen.append(request)
         if request.url.path.endswith("/embeddings"):
             return httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.1, 0.2]}]})
-        if request.url.path.endswith("/api/v0/models"):
-            return httpx.Response(200, json={"data": [{"id": "qwen/qwen3-next-80b", "type": "llm", "state": "loaded"}]})
+        if request.url.path.endswith("/v1/models"):
+            return httpx.Response(200, json={"data": [{"id": "qwen/qwen3-next-80b", "x-leitstelle": {"faehigkeiten": ["text"], "extern": False}}]})
         return httpx.Response(200, json={"choices": [{"message": {"content": "{\"themen\": []}"}}]})
 
     echter_client = httpx.AsyncClient
@@ -78,6 +79,7 @@ async def test_anfragen_tragen_die_koepfe(ki, monkeypatch):
     assert [r.url.host for r in gesehen] == ["leitstelle.test"] * 3
     assert all(r.headers["authorization"] == "Bearer ls_geheim" for r in gesehen)
     assert unquote(gesehen[-1].headers["x-leitstelle-titel"]) == "TubeVault: Textaufgabe themen"
+    assert json.loads(gesehen[-1].content)["model"] == "leitstelle", "über die Leitstelle wählt sie das Modell"
 
 
 def test_schluessel_wird_geprueft():

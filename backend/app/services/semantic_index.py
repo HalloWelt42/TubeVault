@@ -181,6 +181,10 @@ async def headers(purpose: str, background: bool = False) -> dict[str, str]:
         result["Authorization"] = f"Bearer {key}"
     if background:
         result["X-Leitstelle-Prioritaet"] = "hintergrund"
+    # Erlaubnisliste externer Modelle: ohne sie weicht die Leitstelle nie nach extern aus
+    extern = (await setting_values.get("ai.leitstelle_extern")).strip()
+    if extern:
+        result["X-Leitstelle-Extern"] = quote(extern, safe=",")
     return result
 
 

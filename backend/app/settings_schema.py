@@ -25,7 +25,7 @@ from app.services import language
 # Qualitäten, die Download und Auswahllisten kennen (höchste zuerst)
 VIDEO_QUALITIES = ["best", "2160p", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"]
 
-SettingKind = Literal["toggle", "number", "duration", "select", "text", "secret"]
+SettingKind = Literal["toggle", "number", "duration", "select", "text", "secret", "choices"]
 
 
 class SettingDef(BaseModel):
@@ -43,6 +43,7 @@ class SettingDef(BaseModel):
     options: Optional[list[str]] = None
     option_labels: Optional[dict[str, str]] = None   # Anzeige je Auswahlwert
     zero_label: Optional[str] = None   # 0 bedeutet "ohne Grenze"; so heißt es in der Oberfläche
+    options_from: Optional[str] = None # choices: Adresse, die die Auswahl live liefert (GET, Liste aus value, label, hint)
 
 
 SETTINGS: list[SettingDef] = [
@@ -144,6 +145,14 @@ SETTINGS: list[SettingDef] = [
                label="Schlüssel der Leitstelle",
                description="Schlüssel der Anwendung TubeVault aus der Leitstelle (dort unter Anwendungen). "
                            "Wird bei jeder KI-Anfrage über die Leitstelle mitgeschickt."),
+    # Erlaubnisliste externer Modelle (Nutzer 18.10.2026: die Apps entscheiden selbst per Einstellung, nur wo die
+    # Qualität reicht; freiwillig, entlastet die lokale KI). Gespeichert als Namen durch Komma getrennt.
+    SettingDef(key="ai.leitstelle_extern", default="", kind="choices", category="ai", section="extensions",
+               options_from="/api/settings/options/ai.leitstelle_extern",
+               label="Ausweichen nach extern",
+               description="Externe Modelle (etwa bei Hetzner), auf die die Leitstelle ausweichen darf, wenn die "
+                           "eigenen Rechner lange belegt sind; dabei verlassen Texte das Heimnetz. Nur wählen, wo "
+                           "die Qualität reicht. Leer: alles bleibt im Heimnetz. Gilt über die Leitstelle."),
     SettingDef(key="ai.precision", default="ausgewogen", kind="select", category="ai", section="extensions",
                options=["weit", "ausgewogen", "genau", "sehr_genau"],
                option_labels={"weit": "Weit", "ausgewogen": "Ausgewogen", "genau": "Genau",
@@ -272,6 +281,13 @@ def validate(key: str, raw) -> str:
         if value not in (definition.options or []):
             raise ValueError(f"{definition.label}: '{value}' steht nicht zur Auswahl")
         return value
+
+    if definition.kind == "choices":
+        # Namen durch Komma; Schreibweise der Namen prüft der anbietende Dienst (hier die Leitstelle)
+        names = [n.strip() for n in value.split(",") if n.strip()]
+        if any(len(n) > 200 or any(c in n for c in "\r\n") for n in names):
+            raise ValueError(f"{definition.label}: ungültiger Name")
+        return ",".join(dict.fromkeys(names))
 
     # text
     if key in ("ai.url", "ai.leitstelle_url"):

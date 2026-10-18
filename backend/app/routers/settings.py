@@ -38,6 +38,15 @@ async def get_settings_schema():
     return [d.model_dump() for d in settings_schema.SETTINGS]
 
 
+@router.get("/options/{key}")
+async def get_setting_options(key: str):
+    """Live-Auswahl einer Einstellung der Art choices (zum Beispiel die externen Modelle der Leitstelle)."""
+    if key == "ai.leitstelle_extern":
+        from app.services import ai_chat
+        return await ai_chat.extern_choices()
+    raise HTTPException(status_code=404, detail=f"Für '{key}' gibt es keine Auswahl")
+
+
 @router.get("/{key}")
 async def get_setting(key: str):
     """Einzelne Einstellung abrufen."""

@@ -3,9 +3,11 @@ TubeVault - Lokale KI: Sprachmodell für Textaufgaben
 
 Derselbe KI-Dienst wie die Bedeutungssuche (Einstellung ai.url, OpenAI-
 kompatibel) beantwortet auch Textaufgaben, z.B. Themen benennen. Welches
-Sprachmodell, legt TubeVault nicht fest: genommen wird ein Modell, das der
-Dienst gerade geladen hat - so lädt nie ein zweites großes Modell nach.
-Kennt der Dienst keinen Ladezustand, gilt das erste Sprachmodell seiner Liste.
+Sprachmodell, legt TubeVault nicht fest. Direkt: genommen wird ein Modell, das
+der Dienst gerade geladen hat - so lädt nie ein zweites großes Modell nach;
+kennt der Dienst keinen Ladezustand, gilt das erste Sprachmodell seiner Liste.
+Über die Leitstelle wählt sie (Kette der Anwendung TubeVault); externe Modelle
+nur über die Erlaubnisliste ai.leitstelle_extern, nie durch eigene Wahl.
 
 Antworten kommen als JSON nach Schema; Prosa wird vor dem Speichern auf
 gerade Zeichen gebracht (Modelle halten sich nicht verlässlich daran).
@@ -18,7 +20,7 @@ from typing import Optional
 
 import httpx
 
-from app.services import semantic_index
+from app.services import semantic_index, setting_values
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ _MODEL_TTL_S = 60
 _LIST_TIMEOUT_S = 5
 _ANSWER_TIMEOUT_S = 300
 _model: tuple[float, Optional[str]] = (0.0, None)
+LEITSTELLE_WAEHLT = "leitstelle"     # Modellname, mit dem die Leitstelle selbst nach der Kette wählt
 
 
 class ChatUnavailable(Exception):
@@ -38,6 +41,14 @@ def _is_text_model(entry: dict) -> bool:
 
 
 async def _list_models(url: str) -> Optional[str]:
+    if await semantic_index.via_leitstelle():
+        # Die Leitstelle entscheidet; hier nur, ob sie TubeVault ein Sprachmodell im Heimnetz anbietet
+        async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
+            response = await client.get(f"{url}/models")
+            response.raise_for_status()
+        eigene = [e for e in response.json().get("data", [])
+                  if not (e.get("x-leitstelle") or {}).get("extern") and "text" in ((e.get("x-leitstelle") or {}).get("faehigkeiten") or [])]
+        return LEITSTELLE_WAEHLT if eigene else None
     root = re.sub(r"/v1$", "", url)
     async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
         # Dienste mit Ladezustand (/api/v0/models): ein geladenes Sprachmodell
@@ -53,6 +64,32 @@ async def _list_models(url: str) -> Optional[str]:
         response.raise_for_status()
         entries = [e for e in response.json().get("data", []) if _is_text_model(e)]
         return entries[0]["id"] if entries else None
+
+
+async def extern_choices() -> dict:
+    """Auswahl für die Erlaubnisliste: die externen Sprachmodelle, die die Leitstelle TubeVault anbietet."""
+    if not await semantic_index.via_leitstelle():
+        return {"options": [], "state": "Gilt nur über die Leitstelle (Weg zum KI-Dienst)"}
+    url = (await setting_values.get("ai.leitstelle_url")).strip().rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
+            response = await client.get(f"{url}/models")
+            response.raise_for_status()
+    except httpx.HTTPError as e:
+        return {"options": [], "state": f"Leitstelle antwortet nicht ({e.__class__.__name__})"}
+    options = []
+    for e in response.json().get("data", []):
+        x = e.get("x-leitstelle") or {}
+        if not x.get("extern") or "text" not in (x.get("faehigkeiten") or []):
+            continue
+        brief = x.get("steckbrief") or {}
+        hint = brief.get("zweck") or "extern"
+        if brief.get("anfragen_je_minute"):
+            hint += f", höchstens {brief['anfragen_je_minute']} je Minute"
+        options.append({"value": e["id"], "label": x.get("name") or e["id"], "hint": hint})
+    state = f"gefunden: {len(options)} externe Modelle" if options else \
+        "Die Leitstelle erlaubt TubeVault keine externen Modelle (Leitstelle, Anwendungen, Zone extern)"
+    return {"options": options, "state": state}
 
 
 async def pick_model() -> Optional[str]:
