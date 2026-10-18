@@ -28,6 +28,11 @@ export async function loadQueue(listId, shuffle = false) {
   return cache.get(key);
 }
 
+/** Neuer Name einer Playlist: auch die gemerkten Folgen tragen ihn */
+export function renameQueue(listId, name) {
+  for (const [key, queue] of cache) if (key.startsWith(`${listId}|`)) cache.set(key, { ...queue, name });
+}
+
 /** Eine neue gemischte Folge erzwingen (beim Start von "Zufällig"). */
 export function forgetQueue(listId) {
   cache.delete(`${listId}|1`);

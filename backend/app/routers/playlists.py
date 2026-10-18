@@ -7,7 +7,7 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.database import db
 from app.services import drip, loadable, music_files, playlist_items, watch_state
@@ -26,6 +26,16 @@ class PlaylistUpdate(BaseModel):
     description: Optional[str] = None
     drip_enabled: Optional[bool] = None      # fehlende Videos nach und nach laden
     drip_count: Optional[int] = None         # je Lauf (einmal am Tag), siehe drip.PLAYLIST_DRIP_COUNTS
+
+    @field_validator("name")
+    @classmethod
+    def _name_filled(cls, value: Optional[str]) -> Optional[str]:
+        """Umbenennen ja, leer nein (gleich, was die Oberfläche schickt)."""
+        if value is None:
+            return None
+        if not value.strip():
+            raise ValueError("Der Name darf nicht leer sein")
+        return value.strip()
 
 
 class PlaylistAddVideo(BaseModel):

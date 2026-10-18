@@ -1,6 +1,9 @@
-<!-- Listen: alle Playlists; eine Playlist zeigt ihre Videos und spielt sie am Stück. -->
+<!-- Listen: alle Playlists; eine Playlist zeigt ihre Videos und spielt sie am Stück.
+     Umbenennen in der Playlist steht sofort auch hier. -->
 <script>
+  import { onMount } from 'svelte';
   import { api } from '../../lib/api/client.js';
+  import { onPlaylistRenamed } from '../../lib/utils/playlistRename.js';
   import { formatDuration } from '../../lib/utils/format.js';
   import { go } from '../router.js';
 
@@ -14,6 +17,10 @@
     catch { failed = true; }
     loading = false;
   }
+
+  onMount(() => onPlaylistRenamed(({ id, name }) => {
+    playlists = playlists.map((p) => (String(p.id) === id ? { ...p, name } : p));
+  }));
 
   load();
 </script>

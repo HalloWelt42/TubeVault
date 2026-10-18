@@ -97,3 +97,14 @@ async def test_liste_spielt_unabhaengig_von_der_quelle(test_db, bestand, set_set
         everything = (await client.get("/api/music/tracks", params={"source": "alle"})).json()
         assert (only_files["total"], everything["total"]) == (2, 3)
         assert (await client.get("/api/music/tracks", params={"source": "quatsch"})).status_code == 422
+
+
+async def test_liste_umbenennen(test_db, bestand, async_client_factory):
+    """Umbenennen im Baukasten und am Handy: der neue Name gilt überall, leer geht nicht."""
+    list_id = await music_library.create_music_playlist("Autofahrt")
+    async with await async_client_factory(music.router, playlists.router) as client:
+        assert (await client.put(f"/api/playlists/{list_id}", json={"name": "  Lange Fahrt "})).status_code == 200
+        names = [g["name"] for g in (await client.get("/api/music/playlists")).json()]
+        assert names == ["Lange Fahrt"]
+        assert (await client.put(f"/api/playlists/{list_id}", json={"name": "   "})).status_code == 422
+        assert (await client.get(f"/api/playlists/{list_id}")).json()["name"] == "Lange Fahrt"

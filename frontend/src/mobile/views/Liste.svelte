@@ -1,13 +1,15 @@
 <!--
   Eine Playlist: am Stück abspielen (in Reihenfolge oder gemischt) oder bei
-  einem bestimmten Video einsteigen.
+  einem bestimmten Video einsteigen. Der Stift am Namen benennt sie um.
 -->
 <script>
   import { api } from '../../lib/api/client.js';
   import { formatDuration } from '../../lib/utils/format.js';
   import { go, back } from '../router.js';
-  import { loadQueue, forgetQueue } from '../playQueue.js';
+  import { loadQueue, forgetQueue, renameQueue } from '../playQueue.js';
+  import { renamePlaylist } from '../../lib/utils/playlistRename.js';
   import VideoRow from '../parts/VideoRow.svelte';
+  import NameEdit from '../../lib/components/common/NameEdit.svelte';
 
   let { id } = $props();
 
@@ -30,6 +32,12 @@
     if (mixed.videos.length) go(`/video/${mixed.videos[0].id}`, { liste: id, zufall: 1 });
   }
 
+  async function rename(name) {
+    const saved = await renamePlaylist(id, name);
+    renameQueue(id, saved);
+    queue = { ...queue, name: saved };
+  }
+
   load();
 </script>
 
@@ -47,7 +55,7 @@
     <div class="m-spin"><i class="fa-solid fa-spinner fa-spin"></i></div>
   {:else}
     <section class="head">
-      <h1 class="m-h1">{queue.name}</h1>
+      <h1 class="m-h1"><NameEdit name={queue.name} onSave={rename} /></h1>
       <p class="meta">{queue.videos.length} Videos{#if total} · {formatDuration(total)}{/if}</p>
       {#if queue.videos.length > 0}
         <div class="actions">

@@ -6,7 +6,7 @@
   Abspielen geht jederzeit, ganz oder je Titel (Cover oder Titel: spielt die
   Liste ab dort, beim laufenden Titel anhalten und fortsetzen). Videos und Dateien der Sammlung mischen sich
   (backend/app/services/playlist_items.py). Die gewählte Liste steht in der
-  Adresse (?liste=).
+  Adresse (?liste=). Der Stift am Namen benennt die Liste um.
 -->
 <script>
   import { onMount } from 'svelte';
@@ -21,6 +21,8 @@
   import TrackPool from './TrackPool.svelte';
   import CoverPlay from './CoverPlay.svelte';
   import ConfirmDialog from '../common/ConfirmDialog.svelte';
+  import NameEdit from '../common/NameEdit.svelte';
+  import { renamePlaylist } from '../../utils/playlistRename.js';
 
   let lists = $state([]);
   let chosenId = $state(get(route).params?.liste || null);
@@ -66,6 +68,12 @@
       await loadLists();
       choose(group.key.split(':')[1]);
     } catch (err) { toast.error(err.message); }
+  }
+
+  async function rename(name) {
+    const id = chosenId;
+    const saved = await renamePlaylist(id, name);
+    if (id === chosenId && current) current = { ...current, title: saved };
   }
 
   async function removeList() {
@@ -189,7 +197,7 @@
     {#if current}
       <div class="listenkopf">
         <div class="name">
-          <h2>{current.title}</h2>
+          <h2><NameEdit name={current.title} onSave={rename} /></h2>
           <span class="tv-leise tv-klein zahl">{current.tracks.length} Titel · {formatDurationLong(duration)}</span>
         </div>
         <button class="tv-knopf haupt klein" onclick={() => play()} disabled={!current.tracks.length}><i class="fa-solid fa-play"></i> Abspielen</button>
@@ -242,7 +250,7 @@
   .listen .zahl { color: var(--tv-text-3); font-size: var(--tv-gr-marke); }
   .listenkopf { flex: none; display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; }
   .name { flex: 1 1 100%; min-width: 0; display: flex; align-items: baseline; gap: var(--tv-a3); }
-  .name h2 { min-width: 0; margin: 0; font-size: var(--tv-gr-titel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .name h2 { flex: 1; min-width: 0; margin: 0; font-size: var(--tv-gr-titel); }
   .name span { flex: none; }
   .ablage { flex: 1; min-height: 120px; overflow-y: auto; padding: var(--tv-a2); border-radius: var(--tv-ecke);
             background: var(--tv-mulde); outline: 2px dashed transparent; outline-offset: -2px; }
