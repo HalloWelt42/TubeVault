@@ -47,6 +47,7 @@ log = logging.getLogger("nachvertoner")
 OHNE_FRIST = httpx.Timeout(None, connect=30)
 UNTERTITEL_ARTEN = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch", "ai": "KI-Transkript"}
 WARTEN_TRANSKRIPT_S = 6 * 3600
+ORIGINALSTIMMEN = "Originalstimmen"   # Wahl in TubeVault: je Sprecher seine eigene Stimme, die Vorgabestimme als Ersatz
 AUSFALL_S = 15 * 60          # so lange gilt ein Dienst als kurz weg (Neustart, Ausrollen), bevor ein Auftrag scheitert
 
 
@@ -202,9 +203,12 @@ class Vertonung:
         return aus
 
     async def vertonen(self, ton: Path, name: str, ausgang: str | None, ziel: str, stimme_id: str,
-                       segmente: list[dict] | None) -> str:
+                       segmente: list[dict] | None, original: bool = False) -> str:
+        """`original`: je Sprecher seine Stimme aus dem Video (die Vertonung transkribiert dann selbst), `stimme_id`
+        als Ersatz."""
         daten = {"name": name[:200], "sprache": ziel, "format": "m4a", "behalten": "false",
-                 "stimme": json.dumps({"art": "klon", "knoten_id": stimme_id})}
+                 "stimme": json.dumps({"art": "klon", "knoten_id": stimme_id}),
+                 "stimmen": "original" if original else "fest"}
         if ausgang:
             daten["ausgangssprache"] = ausgang
         if segmente:
@@ -274,14 +278,15 @@ class Nachvertoner:
             # Sprache des Originals: vom Auftrag, sonst von den Untertiteln, sonst erkennt die Transkription sie
             ausgang = (job.get("source_language") or (untertitel or {}).get("language") or "").lower() or None
             ziel = job["target_language"].lower()
-            name, stimme_id = stimme_waehlen(await self.vt.stimmen(), job.get("voice"), self.s.stimme)
+            original = (job.get("voice") or "").strip().lower() == ORIGINALSTIMMEN.lower()
+            name, stimme_id = stimme_waehlen(await self.vt.stimmen(), None if original else job.get("voice"), self.s.stimme)
             await melden(0.03, "Video laden")
             video = ordner / "video"
             await self.tv.laden(abgeholt["media_url"], video)
             ton = await ton_herausloesen(video, ordner)
             video.unlink(missing_ok=True)
             await melden(0.06, "An die Vertonung")
-            auftrag = await self.vt.vertonen(ton, titel, ausgang, ziel, stimme_id, (untertitel or {}).get("segments"))
+            auftrag = await self.vt.vertonen(ton, titel, ausgang, ziel, stimme_id, (untertitel or {}).get("segments"), original)
             ergebnis = await self._verfolgen(auftrag, melden)
             await melden(0.96, "Tonspur abliefern")
             spur = ordner / f"{ziel}.m4a"
@@ -289,7 +294,8 @@ class Nachvertoner:
             erkannt = ergebnis.get("ausgangssprache") or ausgang or ""
             with spur.open("rb") as datei:
                 r = await self.tv.c.post(abgeholt["result_url"], files={"file": (spur.name, datei, "audio/mp4")},
-                                         data={"source_language": erkannt, "voice": name}, timeout=OHNE_FRIST)
+                                         data={"source_language": erkannt, "voice": ORIGINALSTIMMEN if original else name},
+                                         timeout=OHNE_FRIST)
             r.raise_for_status()
             await geduldig(lambda: self.vt.abgeholt(auftrag), was="Vertonung")
             log.info("Vertonung %s fertig (%s, Stimme %s)", nr, erkannt or "Sprache unbekannt", name)
@@ -388,7 +394,7 @@ class Nachvertoner:
             log.info("Pause: %s", problem)
             return False
         try:
-            await self.tv.stimmen_melden(sorted(await self.vt.stimmen()))
+            await self.tv.stimmen_melden([ORIGINALSTIMMEN, *sorted(await self.vt.stimmen())])
             abgeholt = await self.tv.abholen(self.s.name)
             if abgeholt and abgeholt.get("request"):
                 await self.vertonen(abgeholt)

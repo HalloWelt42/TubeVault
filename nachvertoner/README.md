@@ -8,6 +8,10 @@ Nachvertoner holt Aufträge ab und gibt sie an die Apps, die die Arbeit tun:
   des Sprachmodells werden nie angeboten. Zurück an TubeVault geht nur die
   neue Tonspur; in der Kellerwolke bleibt nichts liegen (der Auftrag geht mit
   "nicht behalten" an die Vertonung und wird nach dem Abliefern abgeholt).
+- **Originalstimmen**: wer beim Vormerken die Stimme "Originalstimmen" wählt,
+  bekommt je Sprecher seine eigene Stimme aus dem Video (eine früher
+  gewonnene wird wiederverwendet, sonst schneidet die Vertonung die beste
+  Stelle aus); wer keine brauchbare Stelle hat, spricht mit der Vorgabestimme.
 - **KI-Transkripte** über die Transkription: der Ton kommt in den eigenen
   Zweig der Kellerwolke und geht als Weitergabe (mit der Sprache des Videos)
   an die Transkription; das Transkript wird an TubeVault geliefert, danach

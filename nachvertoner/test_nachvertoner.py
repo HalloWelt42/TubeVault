@@ -121,9 +121,10 @@ def bauen(tmp_path):
 async def test_vollstaendiger_ablauf(bauen, tmp_path):
     n, b = bauen([{"zustand": "laeuft", "fortschritt": 0.5, "schritt": "Übersetzen"}, FERTIG])
     assert await n.schritt() is True
-    assert b.gemeldet_stimmen == ["Kerstin", "Zeit Stimme"], "nur Klonstimmen, nie der Katalog des Sprachmodells"
+    assert b.gemeldet_stimmen == ["Originalstimmen", "Kerstin", "Zeit Stimme"], "nur Klonstimmen, nie der Katalog"
     daten = b.vertonen_daten.decode("latin-1")
     assert ZEIT in daten and 'name="behalten"\r\n\r\nfalse' in daten and "ausgangssprache" not in daten
+    assert 'name="stimmen"\r\n\r\nfest' in daten
     assert {"progress": 0.515, "note": "Übersetzen"} in [{"progress": round(f["progress"], 3), "note": f["note"]}
                                                           for f in b.fortschritt if f["progress"] is not None]
     assert b"M4A-ERGEBNIS" in b.ergebnis_tv and b'name="source_language"\r\n\r\nen' in b.ergebnis_tv
@@ -179,6 +180,14 @@ async def test_entfernter_auftrag_bricht_in_der_vertonung_ab(bauen):
     await n.schritt()
     # schon das erste Lebenszeichen trifft auf 409: noch nichts hochgeladen, nichts abzubrechen
     assert b.vertonen_daten is None and b.ergebnis_tv is None and b.gescheitert is None
+
+
+async def test_originalstimmen_mit_der_vorgabe_als_ersatz(bauen):
+    n, b = bauen([FERTIG], stimme="Originalstimmen")
+    await n.schritt()
+    daten = b.vertonen_daten.decode("latin-1")
+    assert 'name="stimmen"\r\n\r\noriginal' in daten and ZEIT in daten and b.gescheitert is None
+    assert b'name="voice"\r\n\r\nOriginalstimmen' in b.ergebnis_tv
 
 
 def test_stimme_waehlen():
