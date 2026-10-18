@@ -1,0 +1,2 @@
+appkern @ https://github.com/HalloWelt42/appkern/archive/3d25d115547d3bbeb6f85513918018795c37178a.tar.gz
+httpx>=0.27

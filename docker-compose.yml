@@ -114,6 +114,45 @@ services:
         limits:
           memory: 512M
 
+  # ==========================================
+  # NACHVERTONER – holt Vertonungen und KI-Transkripte ab und gibt sie an
+  # die Vertonung und die Transkription (eigenes Programm, nachvertoner/README.md)
+  # ==========================================
+  tubevault-nachvertoner:
+    build:
+      context: ./nachvertoner
+    container_name: tubevault-nachvertoner
+    restart: unless-stopped
+    user: "1000:1000"
+    depends_on:
+      - tubevault-backend
+    environment:
+      NACHVERTONER_TUBEVAULT: http://tubevault-backend:8031
+      NACHVERTONER_SCHLUESSEL_DATEI: /geheim/schluessel
+      NACHVERTONER_CA_DATEI: /zertifikate/rootCA.pem
+      NACHVERTONER_ARBEIT: /arbeit
+    # weitere Angaben (Adressen, Vorgabestimme) wahlweise in nachvertoner/.env, nur auf dem Pi
+    env_file:
+      - path: ./nachvertoner/.env
+        required: false
+    volumes:
+      # App-Schlüssel des Zugangs "Nachvertoner" der Kellerwolke (Datei, 600) und die Hausstelle der Vertonung
+      - ${NACHVERTONER_SCHLUESSEL:-/home/pi/.nachvertoner_schluessel}:/geheim/schluessel:ro
+      - ${NACHVERTONER_CA:-/mnt/data/vertonung/zertifikate/rootCA.pem}:/zertifikate/rootCA.pem:ro
+      # Arbeitsdateien (Video und Ton eines Auftrags, danach wieder weg)
+      - /mnt/data/tubevault/nachvertoner:/arbeit
+      - /etc/localtime:/etc/localtime:ro
+      # ffmpeg und ffprobe vom Pi, nur lesend
+      - /usr/bin/ffmpeg:/host/usr/bin/ffmpeg:ro
+      - /usr/bin/ffprobe:/host/usr/bin/ffprobe:ro
+      - /usr/lib/aarch64-linux-gnu:/host/usr/lib/aarch64-linux-gnu:ro
+    networks:
+      - tubevault-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
 networks:
   tubevault-net:
     name: tubevault-net

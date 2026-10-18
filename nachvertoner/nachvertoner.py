@@ -1,548 +1,442 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["httpx>=0.27"]
-# ///
 """
-TubeVault – Nachvertoner
+TubeVault - Nachvertoner
 
-Eigenes Programm für den Rechner, der vertonen kann (Mac). Es verbindet zwei
-Dienste, die nichts voneinander wissen:
+Eigenes Programm (Regel: Anbindungen an fremde Dienste sind eigene Programme). Es verbindet Dienste, die nichts
+voneinander wissen, und läuft als Container auf dem Pi neben TubeVault:
 
-    TubeVault (Pi)        führt die Warteliste und speichert die Tonspuren
-    Vertonungsdienst      transkribiert, übersetzt und spricht (lokal)
+    TubeVault       führt die Warteliste (Vertonungen, KI-Transkripte) und speichert Tonspuren und Transkripte
+    Vertonung       vertont über ihren Dienst (POST /api/v1/dienst/vertonen); transkribiert bei Bedarf selbst
+    Kellerwolke     Ablage für den Ton eines KI-Transkripts; die Transkription bekommt ihn als Weitergabe
 
-Ablauf je Auftrag:
-    1. Warten, bis der Vertonungsdienst frei ist (kein laufender Auftrag).
-    2. Auftrag bei TubeVault abholen, Video laden.
-    3. Leichte Arbeitskopie bauen (Originalton + winziges Bild) - der Dienst
-       braucht ein Video, das volle Bild wäre unnötige Last.
-    4. Vertonung anstossen: eine feste Stimme, ein Sprecher.
-    5. Fortschritt als Lebenszeichen an TubeVault melden.
-    6. Deutsche Tonspur aus dem Ergebnis lösen und bei TubeVault abliefern.
-    7. Arbeitsdateien hier und im Vertonungsdienst wieder entfernen.
+Vertonen (je Auftrag):
+    1. Auftrag bei TubeVault abholen, Untertitel der Quelle erfragen, Video laden, nur den Ton herauslösen.
+    2. Ton an den Dienst der Vertonung (Stimme aus Privat oder Fremd, nie eine eingebaute des Sprachmodells; die
+       Dateien bleiben nicht in der Kellerwolke: behalten=false).
+    3. Fortschritt als Lebenszeichen an TubeVault; zieht TubeVault den Auftrag zurück, wird abgebrochen.
+    4. Tonspur abliefern, der Vertonung "abgeholt" melden (dann liegt dort alles im Papierkorb).
 
-Aufruf:
-    ./nachvertoner.py                 läuft dauerhaft
-    ./nachvertoner.py --einmal        höchstens ein Auftrag, dann Ende
-    ./nachvertoner.py --pruefen       nur Erreichbarkeit und Stimme prüfen
+KI-Transkript (nur wenn nichts zu vertonen ist):
+    Ton in den eigenen Zweig der Kellerwolke, Weitergabe an die Transkription mit der Sprache des Videos, Transkript
+    lesen, an TubeVault liefern, Ton samt Transkript in den Papierkorb der Kellerwolke.
 
-Einstellungen: nachvertoner.toml neben diesem Skript (Vorlage:
-nachvertoner.beispiel.toml).
+Einstellungen aus der Umgebung (NACHVERTONER_...), der Schlüssel der Kellerwolke nur aus einer Datei.
+
+    python nachvertoner.py              läuft dauerhaft
+    python nachvertoner.py --einmal     höchstens ein Auftrag
+    python nachvertoner.py --pruefen    Erreichbarkeit und Stimmen
 """
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
+import os
 import shutil
-import socket
-import subprocess
+import ssl
 import sys
-import time
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
-HERE = Path(__file__).resolve().parent
+from appkern.kellerwolke import Kellerwolke, pfad_aus
+
 log = logging.getLogger("nachvertoner")
-
-# Sprachkürzel von TubeVault → Sprachnamen des Vertonungsdienstes
-LANGUAGE_NAMES = {"en": "english", "de": "german", "fr": "french", "es": "spanish", "it": "italian"}
-LANGUAGE_CODES = {name: code for code, name in LANGUAGE_NAMES.items()}
-PHASE_LABELS = {
-    "audio": "Ton auslesen", "transcribe": "Transkribieren", "speakers": "Sprecher erkennen",
-    "translate": "Übersetzen", "voices": "Stimme vorbereiten", "speak": "Sprechen", "mux": "Zusammenfügen",
-}
-NO_TIMEOUT = httpx.Timeout(None, connect=30)
-# Herkunft eines Transkripts von TubeVault, so wie sie am Auftrag erscheint
-TRANSCRIPT_KINDS = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch",
-                    "ai": "KI-Transkript"}
-# Ton für die Spracherkennung: unkomprimiert, eine Spur, 16 kHz - genau das,
-# womit die Erkennung rechnet; jedes andere Format würde dort erst umgerechnet
-RECOGNITION_AUDIO = ("-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le")
-# Eigene Dateien im Vertonungsdienst tragen dieses Namensvorzeichen. Nur sie
-# räumt der Nachvertoner weg - nie Stimmen, Projekte oder Dateien des Nutzers.
-OWN_PREFIX = "tubevault_"
-
-
-@dataclass(frozen=True)
-class RemoteFile:
-    """Eine Datei im Vertonungsdienst; ours: von uns angelegt, darf wieder weg."""
-    id: str
-    ours: bool = True
-
-
-def is_leftover(entry: dict) -> bool:
-    """Eine Datei im Dienst, die von einem früheren Auftrag liegen blieb."""
-    return (str(entry.get("name") or "").startswith(OWN_PREFIX)
-            and not entry.get("voice_id") and not entry.get("project_id"))
+OHNE_FRIST = httpx.Timeout(None, connect=30)
+UNTERTITEL_ARTEN = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch", "ai": "KI-Transkript"}
+WARTEN_TRANSKRIPT_S = 6 * 3600
 
 
 class Abbruch(Exception):
     """Der Auftrag wurde bei TubeVault entfernt oder neu vergeben."""
 
 
-class Uebersprungen(Exception):
-    """Es gibt nichts zu tun (z.B. Material ist schon in der Zielsprache)."""
-
-
-@dataclass
-class Settings:
-    tubevault_url: str
-    dub_url: str
-    worker_name: str
-    work_dir: Path
-    poll_seconds: int
-    progress_seconds: int
+@dataclass(frozen=True)
+class Einstellungen:
+    tubevault: str
+    vertonung: str
+    kellerwolke: str
+    schluessel: str
+    ca_datei: str | None
+    stimme: str
+    transkription: str
+    arbeit: Path
+    name: str
+    abfrage_s: int
+    fortschritt_s: int
 
     @classmethod
-    def load(cls, path: Path) -> "Settings":
-        if not path.exists():
-            raise SystemExit(
-                f"Einstellungen fehlen: {path}\n"
-                f"Vorlage kopieren: cp {HERE / 'nachvertoner.beispiel.toml'} {path}")
-        raw = tomllib.loads(path.read_text(encoding="utf-8"))
-        work_dir = Path(raw.get("arbeitsordner") or HERE / "arbeit").expanduser()
+    def aus_umgebung(cls) -> Einstellungen:
+        e = os.environ
+        datei = Path(e.get("NACHVERTONER_SCHLUESSEL_DATEI", "/geheim/schluessel"))
+        if not datei.is_file():
+            raise SystemExit(f"Schlüssel der Kellerwolke fehlt: {datei}")
         return cls(
-            tubevault_url=raw["tubevault"]["url"].rstrip("/"),
-            dub_url=raw["vertonungsdienst"]["url"].rstrip("/"),
-            worker_name=raw.get("name") or socket.gethostname().split(".")[0],
-            work_dir=work_dir,
-            poll_seconds=int(raw.get("abfrage_sekunden", 60)),
-            progress_seconds=int(raw.get("fortschritt_sekunden", 15)),
+            tubevault=e.get("NACHVERTONER_TUBEVAULT", "http://tubevault-backend:8031").rstrip("/"),
+            vertonung=e.get("NACHVERTONER_VERTONUNG", "https://192.168.178.49:8641").rstrip("/"),
+            kellerwolke=e.get("NACHVERTONER_KELLERWOLKE", "http://192.168.178.49:39278").rstrip("/"),
+            schluessel=datei.read_text().strip(),
+            ca_datei=e.get("NACHVERTONER_CA_DATEI") or None,
+            stimme=e.get("NACHVERTONER_STIMME", "Zeit Stimme"),
+            transkription=e.get("NACHVERTONER_TRANSKRIPTION", "Transkription"),
+            arbeit=Path(e.get("NACHVERTONER_ARBEIT", "/arbeit")),
+            name=e.get("NACHVERTONER_NAME", "pi"),
+            abfrage_s=int(e.get("NACHVERTONER_ABFRAGE_S", "60")),
+            fortschritt_s=int(e.get("NACHVERTONER_FORTSCHRITT_S", "15")),
         )
 
 
-# Ohne Angabe am Auftrag spricht die Stimme, deren Name so beginnt
-DEFAULT_VOICE = "zeit"
+async def ffmpeg(*argumente: str) -> None:
+    prozess = await asyncio.create_subprocess_exec("ffmpeg", "-nostdin", "-y", "-loglevel", "error", *argumente,
+                                                   stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+    _, fehler = await prozess.communicate()
+    if prozess.returncode != 0:
+        raise RuntimeError(f"ffmpeg: {fehler.decode(errors='replace').strip()[-300:]}")
 
 
-class Nachvertoner:
-    def __init__(self, settings: Settings):
-        self.s = settings
-        self.pi = httpx.Client(base_url=settings.tubevault_url, timeout=NO_TIMEOUT)
-        self.dub = httpx.Client(base_url=settings.dub_url, timeout=NO_TIMEOUT)
+async def ton_herausloesen(video: Path, ziel_ordner: Path) -> Path:
+    """Nur die Tonspur, unverändert (AAC bleibt AAC in .m4a); andere Kodierungen verlustarm als AAC 192 kbit/s."""
+    ziel = ziel_ordner / "ton.m4a"
+    try:
+        await ffmpeg("-i", str(video), "-vn", "-map", "0:a:0", "-c:a", "copy", str(ziel))
+    except RuntimeError:
+        await ffmpeg("-i", str(video), "-vn", "-map", "0:a:0", "-c:a", "aac", "-b:a", "192k", str(ziel))
+    return ziel
 
-    # ─── Vertonungsdienst ────────────────────────────────────────────
 
-    def service_problem(self) -> str | None:
-        """None, wenn der Dienst arbeitsbereit ist; sonst der Grund."""
+class TubeVault:
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self.c = client
+
+    async def abholen(self, name: str) -> dict | None:
+        r = await self.c.post("/api/dubbing/claim", json={"worker": name}, timeout=30)
+        return r.json() if r.status_code == 200 else None
+
+    async def transkript_abholen(self, name: str) -> dict | None:
+        r = await self.c.post("/api/transcripts/ai/claim", json={"worker": name}, timeout=30)
+        return r.json() if r.status_code == 200 else None
+
+    async def lebenszeichen(self, url: str, daten: dict) -> None:
+        """409 heißt: Auftrag zurückgezogen. Ist TubeVault kurz nicht erreichbar (Neustart), läuft die Arbeit weiter."""
         try:
-            health = self.dub.get("/api/system/health", timeout=10).json()
-        except httpx.HTTPError as e:
-            return f"Vertonungsdienst nicht erreichbar ({e.__class__.__name__})"
-        if not health.get("worker_online"):
-            return "Sprach-Worker des Vertonungsdienstes läuft nicht"
-        if not health.get("llm_online"):
-            return "Sprachmodell für die Übersetzung ist nicht erreichbar"
-        return None
-
-    def service_busy(self) -> bool:
-        return bool(self.dub.get("/api/jobs", timeout=10).json().get("active"))
-
-    def voices(self) -> list[dict]:
-        voices = self.dub.get("/api/voices", timeout=30).json()
-        return voices.get("voices", voices) if isinstance(voices, dict) else voices
-
-    def report_voices(self) -> None:
-        """TubeVault mitteilen, welche Stimmen es gerade gibt - daraus wird
-        dort die Auswahl beim Vormerken. Ein Fehlschlag hält nichts auf."""
-        try:
-            names = [str(v.get("name")) for v in self.voices() if v.get("name")]
-            self.pi.post("/api/dubbing/voices", json={"voices": names}, timeout=15)
-        except httpx.HTTPError as e:
-            log.debug("Stimmen nicht gemeldet (%s)", e.__class__.__name__)
-
-    def voice_id(self, name: str) -> str:
-        voices = self.voices()
-        wanted = name.strip().lower()
-        exact = [v for v in voices if str(v.get("name", "")).strip().lower() == wanted]
-        partial = [v for v in voices if wanted in str(v.get("name", "")).lower()]
-        match = (exact or partial or [None])[0]
-        if not match:
-            known = ", ".join(sorted(str(v.get("name")) for v in voices)) or "keine"
-            raise RuntimeError(f"Stimme '{name}' gibt es im Vertonungsdienst nicht (vorhanden: {known})")
-        return match["id"]
-
-    def upload(self, path: Path, mime: str = "video/mp4") -> RemoteFile:
-        with path.open("rb") as fh:
-            r = self.dub.post("/api/files/upload", files={"files": (path.name, fh, mime)})
-        body = r.json()
-        if r.status_code == 409:   # inhaltsgleiche Datei liegt schon dort
-            existing = body["detail"]["existing_file"]
-            # Nur eine eigene liegengebliebene Datei darf danach weg, nie eine des Nutzers
-            return RemoteFile(existing["id"], ours=is_leftover(existing))
-        r.raise_for_status()
-        first = body[0] if isinstance(body, list) else (body.get("files") or [body])[0]
-        return RemoteFile(first["id"])
-
-    def remove_remote(self, *files: RemoteFile | None) -> None:
-        """Eigene Dateien im Dienst löschen; Transkription und Exporte räumt der
-        Dienst dabei mit ab. force: Rohdaten schützt der Dienst sonst mit 409 -
-        ohne force blieben bis 15.10.2026 alle Uploads liegen (68 GB)."""
-        for remote in files:
-            if not remote or not remote.ours:
-                continue
-            try:
-                self.dub.delete(f"/api/files/{remote.id}", params={"force": "true"}, timeout=60).raise_for_status()
-            except httpx.HTTPError as e:
-                log.warning("Datei %s blieb im Vertonungsdienst liegen: %s", remote.id, e)
-
-    def clean_leftovers(self) -> int:
-        """Reste früherer Aufträge im Dienst löschen (Absturz, Abbruch, früher
-        nicht gelöschte Uploads). Nur beim Start, wenn kein eigener Auftrag läuft.
-        Rohdaten zuerst: ihr Löschen nimmt Transkription und Exporte mit."""
-        entries = [e for e in self.dub.get("/api/files", timeout=120).json() if is_leftover(e)]
-        if not entries:
-            return 0
-        entries.sort(key=lambda e: not str(e.get("file_type") or "").endswith("_raw"))
-        size = sum(e.get("file_size") or 0 for e in entries)
-        self.remove_remote(*(RemoteFile(e["id"]) for e in entries))
-        log.info("Vertonungsdienst aufgeräumt: %d liegengebliebene Dateien, %.1f GB",
-                 len(entries), size / 1e9)
-        return len(entries)
-
-    # ─── TubeVault ───────────────────────────────────────────────────
-
-    def claim(self) -> dict | None:
-        return self.pi.post("/api/dubbing/claim", json={"worker": self.s.worker_name}, timeout=30).json()
-
-    def heartbeat(self, url: str, payload: dict) -> None:
-        """Lebenszeichen an TubeVault. 409 heißt: Auftrag zurückgezogen -
-        abbrechen. Ist TubeVault kurz nicht erreichbar (Neustart), läuft die
-        Arbeit weiter; das nächste Lebenszeichen kommt ja gleich."""
-        try:
-            r = self.pi.post(url, json=payload, timeout=30)
-        except httpx.HTTPError as e:
-            log.info("TubeVault gerade nicht erreichbar (%s) - Arbeit läuft weiter", e.__class__.__name__)
+            r = await self.c.post(url, json=daten, timeout=30)
+        except httpx.HTTPError as f:
+            log.info("TubeVault gerade nicht erreichbar (%s), Arbeit läuft weiter", type(f).__name__)
             return
         if r.status_code == 409:
             raise Abbruch()
 
-    def report(self, request_id: int, progress: float | None, note: str | None) -> None:
-        self.heartbeat(f"/api/dubbing/requests/{request_id}/progress", {"progress": progress, "note": note})
+    async def scheitern(self, url: str, notiz: str, uebersprungen: bool = False) -> None:
+        await self.c.post(url, json={"note": notiz[:480], "skipped": uebersprungen}, timeout=30)
 
-    def fail(self, request_id: int, note: str, skipped: bool = False) -> None:
-        self.pi.post(f"/api/dubbing/requests/{request_id}/fail",
-                     json={"note": note[:480], "skipped": skipped}, timeout=30)
-
-    def source_transcript(self, claimed: dict, request_id: int) -> dict | None:
-        """Fertiges Transkript von TubeVault (Untertitel der Quelle):
-        {language, kind, segments}. Gibt es keines, transkribiert der Dienst
-        selbst - der Grund wird am Auftrag sichtbar gemeldet."""
-        url = claimed.get("transcript_url")
+    async def untertitel(self, url: str | None) -> tuple[dict | None, str]:
+        """Untertitel der Quelle ({language, kind, segments}) oder None samt Grund."""
         if not url:
-            return None
+            return None, "keine Untertitel angeboten"
         try:
-            response = self.pi.get(url, timeout=180)
-            response.raise_for_status()
-            answer = response.json()
-        except Exception as e:
-            answer = {"reason": f"Transkript nicht erhalten ({e.__class__.__name__})"}
-        transcript = answer.get("transcript")
-        if not transcript or not transcript.get("segments"):
-            reason = answer.get("reason") or "kein Transkript vorhanden"
-            log.info("Kein Transkript von TubeVault: %s - der Dienst transkribiert selbst", reason)
-            self.report(request_id, 0.03, f"Ohne Untertitel: {reason}")
-            return None
-        kind = TRANSCRIPT_KINDS.get(transcript.get("kind"), "vorhandenes Transkript")
-        log.info("Transkript von TubeVault (%s): %d Sätze", kind, len(transcript["segments"]))
-        self.report(request_id, 0.03, f"Vorhandenes Transkript verwendet ({kind})")
-        return transcript
+            r = await self.c.get(url, timeout=180)
+            r.raise_for_status()
+            antwort = r.json()
+        except Exception as f:  # noqa: BLE001 - dann transkribiert die Vertonung selbst
+            return None, f"Untertitel nicht erhalten ({type(f).__name__})"
+        t = antwort.get("transcript")
+        if not t or not t.get("segments"):
+            return None, antwort.get("reason") or "keine Untertitel vorhanden"
+        return t, UNTERTITEL_ARTEN.get(t.get("kind"), "vorhandenes Transkript")
 
-    # ─── Ein Auftrag ─────────────────────────────────────────────────
+    async def laden(self, url: str, ziel: Path) -> None:
+        async with self.c.stream("GET", url) as r:
+            r.raise_for_status()
+            with ziel.open("wb") as datei:
+                async for stueck in r.aiter_bytes(1024 * 1024):
+                    datei.write(stueck)
 
-    def process(self, claimed: dict) -> None:
-        job = claimed["request"]
-        request_id, video_id = job["id"], job["video_id"]
-        title = job.get("title") or video_id
-        folder = self.s.work_dir / video_id
-        folder.mkdir(parents=True, exist_ok=True)
-        uploaded = result = dub_job_id = None
-        log.info("Auftrag %s: %s", request_id, title)
+    async def stimmen_melden(self, namen: list[str]) -> None:
         try:
-            # Untertitel der Quelle ersparen dem Dienst das Transkribieren und
-            # sagen zugleich, in welcher Sprache das Original gesprochen ist
-            transcript = self.source_transcript(claimed, request_id)
-            # Sprache des Originals: vom Auftrag, sonst vom Transkript, sonst
-            # erkennt der Dienst sie selbst ("auto"). Raten wäre falsch: ein
-            # deutsches Video als Englisch transkribiert ergibt Unsinn.
-            source = (job.get("source_language") or (transcript or {}).get("language") or "auto").lower()
-            target = job["target_language"].lower()
-            # source == target ist gewollt: neu sprechen mit anderer Stimme.
-            # Der Dienst übersetzt dann nicht.
-            voice_id = self.voice_id(job.get("voice") or DEFAULT_VOICE)
+            await self.c.post("/api/dubbing/voices", json={"voices": namen}, timeout=15)
+        except httpx.HTTPError as f:
+            log.debug("Stimmen nicht gemeldet (%s)", type(f).__name__)
 
-            self.report(request_id, 0.02, "Video laden")
-            original = folder / "original.mp4"
-            with self.pi.stream("GET", claimed["media_url"]) as r:
-                r.raise_for_status()
-                with original.open("wb") as fh:
-                    for chunk in r.iter_bytes(1024 * 1024):
-                        fh.write(chunk)
 
-            self.report(request_id, 0.05, "Arbeitskopie bauen")
-            proxy = folder / f"tubevault_{video_id}.mp4"
-            build_proxy(original, proxy)
-            original.unlink(missing_ok=True)
+class Vertonung:
+    """Der Dienst der Vertonung (App-Schlüssel der Kellerwolke)."""
 
-            payload = {
-                "source_language": LANGUAGE_NAMES.get(source, source),   # "auto" bleibt "auto"
-                "target_language": LANGUAGE_NAMES.get(target, target),
-                "mode": "fixed", "voice_id": voice_id,
-                "num_speakers": 1,   # eine Stimme, keine Aufteilung nach Sprechern
-            }
-            if transcript:
-                payload["source_segments"] = transcript["segments"]
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self.c = client
 
-            uploaded = self.upload(proxy)
-            payload["file_id"] = uploaded.id
-            created = self.dub.post("/api/jobs", json={
-                "type": "video_dub", "label": f"TubeVault: {title[:80]}",
-                "payload": payload,
-            })
-            created.raise_for_status()
-            dub_job_id = created.json()["id"]
+    async def problem(self) -> str | None:
+        try:
+            r = await self.c.get("/api/v1/verbindungen", timeout=15)
+            r.raise_for_status()
+        except httpx.HTTPError as f:
+            return f"Vertonung nicht erreichbar ({type(f).__name__})"
+        schlecht = [v["name"] for v in r.json() if not v.get("ok")]
+        return f"Vertonung ohne {', '.join(schlecht)}" if schlecht else None
 
-            outcome = self.wait_for(dub_job_id, request_id)
-            result = RemoteFile(outcome["video_id"]) if outcome.get("video_id") else None
-            self.report(request_id, 0.96, "Tonspur abliefern")
-            dubbed = folder / "vertont.mp4"
-            if not result:
-                raise RuntimeError("Der Dienst lieferte kein vertontes Video")
-            with self.dub.stream("GET", f"/api/files/{result.id}/download") as r:
-                r.raise_for_status()
-                with dubbed.open("wb") as fh:
-                    for chunk in r.iter_bytes(1024 * 1024):
-                        fh.write(chunk)
-            track = folder / f"{target}.m4a"
-            run_ffmpeg("-i", str(dubbed), "-vn", "-c:a", "copy", str(track))
+    async def stimmen(self) -> dict[str, str]:
+        """Name -> Kennung der Klonstimmen (Privat, soweit erlaubt, und Fremd); nie der Katalog des Sprachmodells."""
+        aus: dict[str, str] = {}
+        for bereich in ("privat", "fremd"):
+            r = await self.c.get("/api/v1/stimmen", params={"bereich": bereich}, timeout=60)
+            if r.status_code == 200:
+                aus |= {s["name"]: s["id"] for s in r.json()}
+        return aus
 
-            if source == "auto":
-                # Der Dienst hat die Sprache erkannt; TubeVault bekommt das Kürzel
-                source = LANGUAGE_CODES.get(str(outcome.get("source_language") or "").lower(), "")
-            with track.open("rb") as fh:
-                done = self.pi.post(
-                    claimed["result_url"], files={"file": (track.name, fh, "audio/mp4")},
-                    data={"source_language": source, "voice": job.get("voice") or ""})
-            done.raise_for_status()
-            missing = outcome.get("coverage_failed") or 0
-            log.info("Auftrag %s fertig%s", request_id,
-                     f" ({missing} Abschnitte ohne Ton)" if missing else "")
+    async def vertonen(self, ton: Path, name: str, ausgang: str | None, ziel: str, stimme_id: str,
+                       segmente: list[dict] | None) -> str:
+        daten = {"name": name[:200], "sprache": ziel, "format": "m4a", "behalten": "false",
+                 "stimme": json.dumps({"art": "klon", "knoten_id": stimme_id})}
+        if ausgang:
+            daten["ausgangssprache"] = ausgang
+        if segmente:
+            daten["segmente"] = json.dumps([{"start": s["start"], "ende": s["end"], "text": s["text"]} for s in segmente],
+                                           ensure_ascii=False)
+        with ton.open("rb") as datei:
+            r = await self.c.post("/api/v1/dienst/vertonen", data=daten, files={"datei": (ton.name, datei, "audio/mp4")})
+        r.raise_for_status()
+        return r.json()["id"]
+
+    async def stand(self, auftrag: str) -> dict:
+        r = await self.c.get(f"/api/v1/auftraege/{auftrag}", timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    async def abbrechen(self, auftrag: str) -> None:
+        await self.c.post(f"/api/v1/auftraege/{auftrag}/abbrechen", timeout=30)
+
+    async def ergebnis(self, plan_id: str, ziel: Path) -> None:
+        async with self.c.stream("GET", f"/api/v1/inhalt/plaene/{plan_id}/ergebnis") as r:
+            r.raise_for_status()
+            with ziel.open("wb") as datei:
+                async for stueck in r.aiter_bytes(1024 * 1024):
+                    datei.write(stueck)
+
+    async def abgeholt(self, auftrag: str) -> None:
+        await self.c.post(f"/api/v1/dienst/{auftrag}/abgeholt", timeout=60)
+
+
+def stimme_waehlen(stimmen: dict[str, str], gewuenscht: str | None, vorgabe: str) -> tuple[str, str]:
+    """(Name, Kennung): gleicher Name, sonst Teil des Namens (ohne Groß- und Kleinschreibung), sonst die Vorgabe."""
+    for wunsch in (gewuenscht, vorgabe):
+        if not wunsch:
+            continue
+        w = wunsch.strip().lower()
+        gleich = [n for n in stimmen if n.lower() == w]
+        teil = [n for n in stimmen if w in n.lower() or n.lower() in w]
+        if gleich or teil:
+            name = (gleich or teil)[0]
+            return name, stimmen[name]
+    raise RuntimeError(f"Stimme '{gewuenscht or vorgabe}' gibt es in der Vertonung nicht "
+                       f"(vorhanden: {', '.join(sorted(stimmen)) or 'keine'})")
+
+
+class Nachvertoner:
+    def __init__(self, s: Einstellungen, tubevault: TubeVault, vertonung: Vertonung, kellerwolke: Kellerwolke) -> None:
+        self.s, self.tv, self.vt, self.kw = s, tubevault, vertonung, kellerwolke
+
+    # --- Vertonen -----------------------------------------------------------------------------------------------
+
+    async def vertonen(self, abgeholt: dict) -> None:
+        job = abgeholt["request"]
+        nr, video_id = job["id"], job["video_id"]
+        titel = job.get("title") or video_id
+        fortschritt_url = f"/api/dubbing/requests/{nr}/progress"
+        ordner = self.s.arbeit / f"vertonen-{video_id}"
+        ordner.mkdir(parents=True, exist_ok=True)
+        auftrag = None
+
+        async def melden(anteil: float | None, notiz: str) -> None:
+            await self.tv.lebenszeichen(fortschritt_url, {"progress": anteil, "note": notiz})
+
+        log.info("Vertonung %s: %s", nr, titel)
+        try:
+            untertitel, herkunft = await self.tv.untertitel(abgeholt.get("transcript_url"))
+            await melden(0.02, f"Untertitel: {herkunft}" if untertitel else f"Ohne Untertitel: {herkunft}")
+            # Sprache des Originals: vom Auftrag, sonst von den Untertiteln, sonst erkennt die Transkription sie
+            ausgang = (job.get("source_language") or (untertitel or {}).get("language") or "").lower() or None
+            ziel = job["target_language"].lower()
+            name, stimme_id = stimme_waehlen(await self.vt.stimmen(), job.get("voice"), self.s.stimme)
+            await melden(0.03, "Video laden")
+            video = ordner / "video"
+            await self.tv.laden(abgeholt["media_url"], video)
+            ton = await ton_herausloesen(video, ordner)
+            video.unlink(missing_ok=True)
+            await melden(0.06, "An die Vertonung")
+            auftrag = await self.vt.vertonen(ton, titel, ausgang, ziel, stimme_id, (untertitel or {}).get("segments"))
+            ergebnis = await self._verfolgen(auftrag, melden)
+            await melden(0.96, "Tonspur abliefern")
+            spur = ordner / f"{ziel}.m4a"
+            await self.vt.ergebnis(ergebnis["plan_id"], spur)
+            erkannt = ergebnis.get("ausgangssprache") or ausgang or ""
+            with spur.open("rb") as datei:
+                r = await self.tv.c.post(abgeholt["result_url"], files={"file": (spur.name, datei, "audio/mp4")},
+                                         data={"source_language": erkannt, "voice": name}, timeout=OHNE_FRIST)
+            r.raise_for_status()
+            await self.vt.abgeholt(auftrag)
+            log.info("Vertonung %s fertig (%s, Stimme %s)", nr, erkannt or "Sprache unbekannt", name)
         except Abbruch:
-            log.info("Auftrag %s wurde bei TubeVault entfernt - abgebrochen", request_id)
-            if dub_job_id:
-                self.dub.post(f"/api/jobs/{dub_job_id}/cancel", timeout=30)
-        except Uebersprungen as e:
-            log.info("Auftrag %s übersprungen: %s", request_id, e)
-            self.fail(request_id, str(e), skipped=True)
-        except Exception as e:   # jeder Fehler geht sichtbar an TubeVault zurück
-            log.exception("Auftrag %s fehlgeschlagen", request_id)
-            self.fail(request_id, f"{e.__class__.__name__}: {e}")
+            log.info("Vertonung %s wurde bei TubeVault entfernt, abgebrochen", nr)
+            if auftrag:
+                await self.vt.abbrechen(auftrag)
+        except Exception as f:  # noqa: BLE001 - jeder Fehler geht sichtbar an TubeVault zurück
+            log.exception("Vertonung %s fehlgeschlagen", nr)
+            await self.tv.scheitern(f"/api/dubbing/requests/{nr}/fail", f"{type(f).__name__}: {f}")
         finally:
-            shutil.rmtree(folder, ignore_errors=True)
-            self.remove_remote(uploaded, result)
+            shutil.rmtree(ordner, ignore_errors=True)
 
-    def wait_for(self, dub_job_id: str, request_id: int) -> dict:
-        """Auf das Ende der Vertonung warten und den Fortschritt weitermelden."""
+    async def _verfolgen(self, auftrag: str, melden) -> dict:
+        """Bis der Auftrag der Vertonung endet; der Fortschritt belegt 8 bis 95 Prozent des Ganzen."""
         while True:
-            state = self.dub.get(f"/api/jobs/{dub_job_id}", timeout=30).json()
-            status = state.get("status")
-            if status == "done":
-                return state.get("result") or {}
-            if status in ("error", "cancelled"):
-                reason = (state.get("error") or "Vertonung abgebrochen").strip().splitlines()[0]
-                raise RuntimeError(reason)
-            label = PHASE_LABELS.get(state.get("phase"), state.get("progress_label") or "Vertonen")
-            # Vertonung belegt den Bereich 8 % bis 95 % des gesamten Auftrags
-            self.report(request_id, 0.08 + 0.87 * float(state.get("progress") or 0), label)
-            time.sleep(self.s.progress_seconds)
+            st = await self.vt.stand(auftrag)
+            if st["zustand"] == "fertig":
+                return st.get("ergebnis") or {}
+            if st["zustand"] in ("fehler", "abgebrochen"):
+                raise RuntimeError((st.get("fehler") or "Vertonung abgebrochen").strip().splitlines()[0])
+            await melden(0.08 + 0.87 * float(st.get("fortschritt") or 0), st.get("schritt") or "Vertonen")
+            await asyncio.sleep(self.s.fortschritt_s)
 
-    # ─── KI-Transkript ───────────────────────────────────────────────
-    #
-    # Videos ohne Transkript: TubeVault vergibt immer das zuletzt geladene.
-    # Abgeholt wird nur, wenn der Vertonungsdienst frei ist und nichts zu
-    # vertonen ansteht - Vertonungen sind ausdrückliche Wünsche, Transkripte
-    # füllen die Suche im Hintergrund mit freier Rechenzeit.
+    # --- KI-Transkript ------------------------------------------------------------------------------------------
 
-    def claim_transcript(self) -> dict | None:
-        return self.pi.post("/api/transcripts/ai/claim",
-                            json={"worker": self.s.worker_name}, timeout=30).json()
-
-    def process_transcript(self, claimed: dict) -> None:
-        job = claimed["request"]
+    async def transkribieren(self, abgeholt: dict) -> None:
+        job = abgeholt["request"]
         video_id = job["video_id"]
-        title = job.get("title") or video_id
-        folder = self.s.work_dir / f"ki_{video_id}"
-        folder.mkdir(parents=True, exist_ok=True)
-        uploaded = dub_job_id = None
-        log.info("KI-Transkript: %s", title)
+        ordner = self.s.arbeit / f"transkript-{video_id}"
+        ordner.mkdir(parents=True, exist_ok=True)
+        knoten = None
 
-        def note(text: str) -> None:
-            self.heartbeat(claimed["progress_url"], {"note": text})
+        async def notiz(text: str) -> None:
+            await self.tv.lebenszeichen(abgeholt["progress_url"], {"note": text})
 
+        log.info("KI-Transkript: %s", job.get("title") or video_id)
         try:
-            note("Ton laden")
-            original = folder / "original.mp4"
-            with self.pi.stream("GET", claimed["media_url"]) as r:
-                r.raise_for_status()
-                with original.open("wb") as fh:
-                    for chunk in r.iter_bytes(1024 * 1024):
-                        fh.write(chunk)
-            # Nur der Ton geht zum Dienst, klein als Mono mit 16 kHz
-            audio = folder / f"tubevault_{video_id}.wav"
-            run_ffmpeg("-i", str(original), *RECOGNITION_AUDIO, str(audio))
-            original.unlink(missing_ok=True)
-            uploaded = self.upload(audio, mime="audio/wav")
-
-            # Bekannte Sprache vorgeben, sonst erkennt der Dienst sie selbst
-            language = LANGUAGE_NAMES.get((job.get("language") or "").lower(), "auto")
-            created = self.dub.post("/api/jobs", json={
-                "type": "transcribe", "label": f"TubeVault-Transkript: {title[:80]}",
-                "payload": {"file_id": uploaded.id, "language": language},
-            })
-            created.raise_for_status()
-            dub_job_id = created.json()["id"]
-            note("Transkribieren")
-            while True:
-                state = self.dub.get(f"/api/jobs/{dub_job_id}", timeout=30).json()
-                if state.get("status") == "done":
-                    result = state.get("result") or {}
-                    break
-                if state.get("status") in ("error", "cancelled"):
-                    raise RuntimeError((state.get("error") or "Transkription abgebrochen").strip().splitlines()[0])
-                note(state.get("progress_label") or "Transkribieren")
-                time.sleep(self.s.progress_seconds)
-
-            transcription = self.dub.get(f"/api/transcribe/{result['transcription_id']}", timeout=30).json()
-            raw = transcription.get("segments") or []
-            if isinstance(raw, str):
-                raw = json.loads(raw or "[]")
-            segments = [{"start": float(s["start"]), "end": float(s["end"]), "text": str(s.get("text", "")).strip()}
-                        for s in raw if str(s.get("text", "")).strip()]
-            detected = LANGUAGE_CODES.get(str(transcription.get("language") or "").lower()) \
-                or (job.get("language") or "")
-            if not segments or not detected:
-                raise RuntimeError("Die Spracherkennung lieferte keinen Text oder keine Sprache")
-            done = self.pi.post(claimed["result_url"], json={"language": detected, "segments": segments}, timeout=60)
-            if done.status_code == 409:
+            await notiz("Ton laden")
+            video = ordner / "video"
+            await self.tv.laden(abgeholt["media_url"], video)
+            ton = await ton_herausloesen(video, ordner)
+            video.unlink(missing_ok=True)
+            zweig = (await self.kw.ich()).zweig
+            ziel = await self.kw.ordner(pfad_aus(zweig, "Transkripte"))
+            knoten = await self.kw.schreiben(pfad_aus(ziel.pfad, f"{video_id}.m4a"), ton, inhaltstyp="audio/mp4")
+            sprache = (job.get("language") or "auto").lower()
+            neu = await self.kw.weitergeben(self.s.transkription, "transkribieren", knoten.id, {"sprache": sprache})
+            await notiz("Transkribieren")
+            transkript = await self._transkript_abwarten(neu.anfrage.id, knoten.id, notiz)
+            segmente = [{"start": s["start"], "end": s["ende"], "text": s["text"].strip()}
+                        for s in transkript.get("segmente") or [] if s.get("text", "").strip()]
+            erkannt = transkript.get("sprache") if transkript.get("sprache") not in (None, "", "auto") else job.get("language")
+            if not segmente or not erkannt:
+                raise RuntimeError("Die Transkription lieferte keinen Text oder keine Sprache")
+            r = await self.tv.c.post(abgeholt["result_url"], json={"language": erkannt, "segments": segmente}, timeout=60)
+            if r.status_code == 409:
                 raise Abbruch()
-            done.raise_for_status()
-            log.info("KI-Transkript fertig: %s (%d Sätze, %s)", title, len(segments), detected)
+            r.raise_for_status()
+            log.info("KI-Transkript fertig: %s (%d Sätze, %s)", video_id, len(segmente), erkannt)
         except Abbruch:
             log.info("KI-Transkript für %s wurde bei TubeVault zurückgezogen", video_id)
-            if dub_job_id:
-                self.dub.post(f"/api/jobs/{dub_job_id}/cancel", timeout=30)
-        except Exception as e:   # jeder Fehler geht sichtbar an TubeVault zurück
+        except Exception as f:  # noqa: BLE001
             log.exception("KI-Transkript für %s fehlgeschlagen", video_id)
-            self.pi.post(claimed["fail_url"], json={"note": f"{e.__class__.__name__}: {e}"[:480]}, timeout=30)
+            await self.tv.c.post(abgeholt["fail_url"], json={"note": f"{type(f).__name__}: {f}"[:480]}, timeout=30)
         finally:
-            shutil.rmtree(folder, ignore_errors=True)
-            # Löscht im Dienst auch die zugehörige Transkription mit
-            self.remove_remote(uploaded)
+            shutil.rmtree(ordner, ignore_errors=True)
+            if knoten is not None:
+                try:
+                    await self.kw.loeschen(knoten.id)       # Papierkorb, samt Transkript (Begleiter)
+                except Exception:  # noqa: BLE001
+                    log.warning("Ton %s blieb in der Kellerwolke liegen", knoten.pfad)
 
-    # ─── Dauerbetrieb ────────────────────────────────────────────────
+    async def _transkript_abwarten(self, anfrage_id, knoten_id, notiz) -> dict:
+        warten = 0
+        while warten < WARTEN_TRANSKRIPT_S:
+            a = await self.kw.anfrage(anfrage_id)
+            if a.zustand == "fertig":
+                b = next((x for x in await self.kw.begleiter(knoten_id) if x.rolle == "transkript"), None)
+                if b is None:
+                    raise RuntimeError("Die Transkription meldete fertig, aber kein Transkript liegt neben dem Ton")
+                return json.loads(await self.kw.lesen_ganz(b.id))
+            if a.zustand in ("fehler", "abgebrochen"):
+                raise RuntimeError(f"Transkription: {a.meldung or a.zustand}")
+            await notiz(a.meldung or "Transkribieren")
+            await asyncio.sleep(self.s.fortschritt_s)
+            warten += self.s.fortschritt_s
+        raise RuntimeError("Die Transkription hat in sechs Stunden kein Transkript geliefert")
 
-    def step(self) -> bool:
-        """Einen Durchgang. True, wenn ein Auftrag bearbeitet wurde."""
-        problem = self.service_problem()
+    # --- Dauerbetrieb -------------------------------------------------------------------------------------------
+
+    async def schritt(self) -> bool:
+        """Ein Durchgang; True, wenn etwas bearbeitet wurde. Vertonungen gehen vor KI-Transkripten."""
+        problem = await self.vt.problem()
         if problem:
             log.info("Pause: %s", problem)
             return False
-        self.report_voices()
-        if self.service_busy():
-            log.debug("Vertonungsdienst ist beschäftigt")
-            return False
         try:
-            claimed = self.claim()
-            if not claimed or not claimed.get("request"):
-                # Nichts zu vertonen: ein KI-Transkript abarbeiten
-                transcript = self.claim_transcript()
-                if transcript and transcript.get("request"):
-                    self.process_transcript(transcript)
-                    return True
-                return False
-        except httpx.HTTPError as e:
-            log.info("TubeVault nicht erreichbar (%s)", e.__class__.__name__)
-            return False
-        self.process(claimed)
-        return True
+            await self.tv.stimmen_melden(sorted(await self.vt.stimmen()))
+            abgeholt = await self.tv.abholen(self.s.name)
+            if abgeholt and abgeholt.get("request"):
+                await self.vertonen(abgeholt)
+                return True
+            transkript = await self.tv.transkript_abholen(self.s.name)
+            if transkript and transkript.get("request"):
+                await self.transkribieren(transkript)
+                return True
+        except httpx.HTTPError as f:
+            log.info("TubeVault oder Vertonung nicht erreichbar (%s)", type(f).__name__)
+        return False
 
-    def check(self) -> int:
-        problem = self.service_problem()
-        print("Vertonungsdienst:", problem or "bereit")
+    async def pruefen(self) -> int:
+        problem = await self.vt.problem()
+        print("Vertonung:", problem or "bereit")
+        stimmen = await self.vt.stimmen() if not problem else {}
+        print(f"Stimmen: {len(stimmen)}; Vorgabe {self.s.stimme}:",
+              "vorhanden" if any(self.s.stimme.lower() in n.lower() for n in stimmen) else "fehlt")
         try:
-            status = self.pi.get("/api/dubbing/status", timeout=10).json()
-            print("TubeVault: erreichbar, Nachvertonung",
-                  "eingeschaltet" if status["enabled"] else "ausgeschaltet",
-                  f"- {status['counts']['queued']} warten")
-            if not problem:
-                self.report_voices()
-                choice = self.pi.get("/api/dubbing/voices", timeout=10).json()
-                print(f"Stimmen an TubeVault gemeldet: {len(choice['voices'])}, "
-                      f"Vorauswahl: {choice['default'] or 'keine'}")
-        except Exception as e:
-            print("TubeVault:", f"{e.__class__.__name__}: {e}")
+            r = await self.tv.c.get("/api/dubbing/status", timeout=10)
+            status = r.json()
+            print("TubeVault: erreichbar, Nachvertonung", "eingeschaltet" if status.get("enabled") else "ausgeschaltet")
+        except Exception as f:  # noqa: BLE001
+            print("TubeVault:", f"{type(f).__name__}: {f}")
             return 1
         return 1 if problem else 0
 
 
-def run_ffmpeg(*args: str) -> None:
-    result = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *args], capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg: {result.stderr.strip()[-300:]}")
+def ssl_kontext(ca_datei: str | None) -> ssl.SSLContext | bool:
+    return ssl.create_default_context(cafile=ca_datei) if ca_datei else True
 
 
-def build_proxy(original: Path, proxy: Path) -> None:
-    """Originalton plus winziges schwarzes Bild. Der Vertonungsdienst verlangt
-    eine Bildspur; das echte Bild würde nur Platz und Rechenzeit kosten."""
-    run_ffmpeg(
-        "-i", str(original), "-f", "lavfi", "-i", "color=c=black:s=64x36:r=5",
-        "-map", "1:v:0", "-map", "0:a:0", "-shortest",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "160k", str(proxy))
+async def haupt(args) -> int:
+    s = Einstellungen.aus_umgebung()
+    s.arbeit.mkdir(parents=True, exist_ok=True)
+    async with httpx.AsyncClient(base_url=s.tubevault, timeout=OHNE_FRIST) as tv, \
+            httpx.AsyncClient(base_url=s.vertonung, timeout=OHNE_FRIST, verify=ssl_kontext(s.ca_datei),
+                              headers={"Authorization": f"Bearer {s.schluessel}"}) as vt:
+        kw = Kellerwolke(s.kellerwolke, s.schluessel)
+        try:
+            n = Nachvertoner(s, TubeVault(tv), Vertonung(vt), kw)
+            if args.pruefen:
+                return await n.pruefen()
+            log.info("Nachvertoner '%s' bereit: TubeVault %s, Vertonung %s", s.name, s.tubevault, s.vertonung)
+            while True:
+                gearbeitet = await n.schritt()
+                if args.einmal:
+                    return 0
+                if not gearbeitet:
+                    await asyncio.sleep(s.abfrage_s)
+        finally:
+            await kw.schliessen()
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Nachvertoner für TubeVault")
-    parser.add_argument("--einstellungen", type=Path, default=HERE / "nachvertoner.toml")
-    parser.add_argument("--einmal", action="store_true", help="höchstens ein Auftrag, dann Ende")
-    parser.add_argument("--pruefen", action="store_true", help="nur Erreichbarkeit und Stimme prüfen")
-    parser.add_argument("--aufraeumen", action="store_true",
-                        help="nur liegengebliebene eigene Dateien im Vertonungsdienst löschen")
-    parser.add_argument("--ausfuehrlich", action="store_true")
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.DEBUG if args.ausfuehrlich else logging.INFO,
-                        format="%(asctime)s %(message)s", datefmt="%d.%m. %H:%M:%S")
+    p = argparse.ArgumentParser(description="Nachvertoner für TubeVault")
+    p.add_argument("--einmal", action="store_true", help="höchstens ein Auftrag, dann Ende")
+    p.add_argument("--pruefen", action="store_true", help="nur Erreichbarkeit und Stimmen prüfen")
+    p.add_argument("--ausfuehrlich", action="store_true")
+    args = p.parse_args()
+    logging.basicConfig(level=logging.DEBUG if args.ausfuehrlich else logging.INFO, format="%(asctime)s %(message)s",
+                        datefmt="%d.%m. %H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     if not shutil.which("ffmpeg"):
-        raise SystemExit("ffmpeg fehlt (brew install ffmpeg)")
-
-    settings = Settings.load(args.einstellungen)
-    worker = Nachvertoner(settings)
-    if args.pruefen:
-        return worker.check()
-    # Beim Start läuft kein eigener Auftrag: was jetzt noch von uns im Dienst
-    # liegt, ist Rest eines früheren Laufs und belegt nur Platz auf dem Rechner
-    try:
-        worker.clean_leftovers()
-    except httpx.HTTPError as e:
-        log.warning("Aufräumen im Vertonungsdienst nicht möglich: %s", e)
-    if args.aufraeumen:
-        return 0
-
-    log.info("Nachvertoner '%s' bereit - TubeVault %s, Vertonungsdienst %s",
-             settings.worker_name, settings.tubevault_url, settings.dub_url)
-    while True:
-        worked = worker.step()
-        if args.einmal:
-            return 0
-        if not worked:
-            time.sleep(settings.poll_seconds)
+        raise SystemExit("ffmpeg fehlt")
+    return asyncio.run(haupt(args))
 
 
 if __name__ == "__main__":

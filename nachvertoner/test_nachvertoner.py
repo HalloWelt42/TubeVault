@@ -1,17 +1,16 @@
 """
-Nachvertoner: Ablauf gegen nachgestellte Dienste.
+Nachvertoner: Ablauf gegen nachgestellte Dienste (TubeVault, Vertonung, Kellerwolke); ffmpeg arbeitet echt. Geprüft
+wird die Vermittlung: richtige Reihenfolge und Angaben, Stimmen nur aus Privat und Fremd, sichtbare Fehler, Abbruch,
+Abholen, Aufräumen.
 
-Beide Gegenstellen (TubeVault, Vertonungsdienst) sind hier Attrappen; ffmpeg
-arbeitet echt. Geprüft wird die Vermittlung: richtige Reihenfolge, richtige
-Angaben, sichtbare Fehler, Aufräumen.
-
-    backend/.venv/bin/python -m pytest nachvertoner -q
+    nachvertoner/.venv/bin/python -m pytest nachvertoner -q
 """
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -20,367 +19,209 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nachvertoner as nv   # noqa: E402
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg fehlt")
+ZEIT = "7ce9880d-9f61-4220-ae2b-648076764afd"
 
 
 def _clip(path: Path) -> bytes:
-    subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error",
-         "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=10",
-         "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(path)], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=10",
+                    "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-shortest", str(path)], check=True)
     return path.read_bytes()
 
 
-class Stage:
-    """Merkt sich, was die beiden Attrappen gesehen haben."""
+class Buehne:
+    """Merkt sich, was die Attrappen gesehen haben."""
 
-    def __init__(self, clip: bytes, job_states: list[dict], source_language="en"):
-        self.clip = clip
-        self.job_states = job_states
-        self.source_language = source_language
-        self.pi_calls: list[tuple[str, str]] = []
-        self.dub_calls: list[tuple[str, str]] = []
-        self.created_payload = None
-        self.progress: list[dict] = []
-        self.result_upload = None
-        self.failed = None
-        self.claimable = True
-        self.progress_status = 200
-        self.deleted: list[str] = []
-        self.remote_files: list[dict] = []
+    def __init__(self, clip: bytes, staende: list[dict], untertitel: dict | None = None, stimme: str = "Zeit Stimme"):
+        self.clip, self.staende, self.untertitel, self.stimme = clip, staende, untertitel, stimme
+        self.fortschritt: list[dict] = []
+        self.ergebnis_tv = None
+        self.gescheitert = None
+        self.vertonen_daten = None
+        self.abgebrochen = self.abgeholt = False
+        self.gemeldet_stimmen = None
+        self.fortschritt_status = 200
+        self.offen = True
 
-    def pi(self, request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        self.pi_calls.append((request.method, path))
-        if path == "/api/dubbing/claim":
-            if not self.claimable:
+    def tubevault(self, r: httpx.Request) -> httpx.Response:
+        p = r.url.path
+        if p == "/api/dubbing/claim":
+            if not self.offen:
                 return httpx.Response(200, json={"request": None})
-            self.claimable = False
+            self.offen = False
             return httpx.Response(200, json={
-                "request": {"id": 7, "video_id": "abc", "title": "Ein Titel", "voice": "Zeit Stimme",
-                            "source_language": self.source_language, "target_language": "de"},
-                "media_url": "/api/player/abc", "result_url": "/api/dubbing/requests/7/result"})
-        if path == "/api/player/abc":
+                "request": {"id": 7, "video_id": "abc", "title": "Ein Titel", "voice": self.stimme,
+                            "source_language": None, "target_language": "de"},
+                "media_url": "/api/player/abc", "result_url": "/api/dubbing/requests/7/result",
+                "transcript_url": "/api/dubbing/requests/7/transcript"})
+        if p == "/api/dubbing/requests/7/transcript":
+            return httpx.Response(200, json={"transcript": self.untertitel} if self.untertitel else
+                                  {"transcript": None, "reason": "Für dieses Video gibt es noch kein Transkript"})
+        if p == "/api/player/abc":
             return httpx.Response(200, content=self.clip)
-        if path.endswith("/progress"):
-            self.progress.append(json.loads(request.content))
-            return httpx.Response(self.progress_status, json={"ok": True})
-        if path.endswith("/result"):
-            self.result_upload = request.content
+        if p.endswith("/progress"):
+            self.fortschritt.append(json.loads(r.content))
+            return httpx.Response(self.fortschritt_status, json={})
+        if p.endswith("/result"):
+            self.ergebnis_tv = r.content
             return httpx.Response(200, json={"ok": True})
-        if path.endswith("/fail"):
-            self.failed = json.loads(request.content)
-            return httpx.Response(200, json={"ok": True})
+        if p.endswith("/fail"):
+            self.gescheitert = json.loads(r.content)
+            return httpx.Response(200, json={})
+        if p == "/api/dubbing/voices":
+            self.gemeldet_stimmen = json.loads(r.content)["voices"]
+            return httpx.Response(200, json={})
+        if p == "/api/transcripts/ai/claim":
+            return httpx.Response(200, json={"request": None})
         return httpx.Response(404)
 
-    def dub(self, request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        self.dub_calls.append((request.method, path))
-        if path == "/api/system/health":
-            return httpx.Response(200, json={"worker_online": True, "llm_online": True})
-        if path == "/api/jobs" and request.method == "GET":
-            return httpx.Response(200, json={"active": []})
-        if path == "/api/voices":
-            return httpx.Response(200, json=[{"id": "v-zeit", "name": "Zeit Stimme"}, {"id": "v-x", "name": "Andere"}])
-        if path == "/api/files/upload":
-            return httpx.Response(200, json={"id": "f-quelle"})
-        if path == "/api/files" and request.method == "GET":
-            return httpx.Response(200, json=self.remote_files)
-        if request.method == "DELETE" and path.startswith("/api/files/"):
-            # wie der echte Dienst: Löschen nur mit force, sonst 409
-            if request.url.params.get("force") != "true":
-                return httpx.Response(409, json={"detail": {"message": "Rohdaten"}})
-            self.deleted.append(path.rsplit("/", 1)[-1])
-            return httpx.Response(200, json={"status": "deleted"})
-        if path == "/api/jobs" and request.method == "POST":
-            self.created_payload = json.loads(request.content)
-            return httpx.Response(200, json={"id": "j-1"})
-        if path == "/api/jobs/j-1":
-            state = self.job_states.pop(0) if len(self.job_states) > 1 else self.job_states[0]
-            return httpx.Response(200, json=state)
-        if path == "/api/files/f-ergebnis/download":
-            return httpx.Response(200, content=self.clip)
-        if request.method == "DELETE" or path.endswith("/cancel"):
+    def vertonung(self, r: httpx.Request) -> httpx.Response:
+        p = r.url.path
+        if p == "/api/v1/verbindungen":
+            return httpx.Response(200, json=[{"name": "Kellerwolke", "ok": True}, {"name": "Leitstelle", "ok": True}])
+        if p == "/api/v1/stimmen":
+            if r.url.params["bereich"] == "privat":
+                return httpx.Response(200, json=[{"id": ZEIT, "name": "Zeit Stimme", "bereich": "privat"}])
+            return httpx.Response(200, json=[{"id": "f1", "name": "Kerstin", "bereich": "fremd"}])
+        if p == "/api/v1/dienst/vertonen":
+            self.vertonen_daten = r.content
+            return httpx.Response(201, json={"id": "a1", "zustand": "wartet"})
+        if p == "/api/v1/auftraege/a1":
+            st = self.staende.pop(0) if len(self.staende) > 1 else self.staende[0]
+            return httpx.Response(200, json=st)
+        if p == "/api/v1/auftraege/a1/abbrechen":
+            self.abgebrochen = True
             return httpx.Response(200, json={})
+        if p == "/api/v1/inhalt/plaene/p1/ergebnis":
+            return httpx.Response(200, content=b"M4A-ERGEBNIS")
+        if p == "/api/v1/dienst/a1/abgeholt":
+            self.abgeholt = True
+            return httpx.Response(200, json={"behalten": False})
         return httpx.Response(404)
+
+
+FERTIG = {"zustand": "fertig", "ergebnis": {"plan_id": "p1", "ausgangssprache": "en"}}
 
 
 @pytest.fixture
-def make(tmp_path):
+def bauen(tmp_path):
     clip = _clip(tmp_path / "clip.mp4")
 
-    def _make(job_states, **kwargs):
-        stage = Stage(clip, job_states, **kwargs)
-        settings = nv.Settings(
-            tubevault_url="http://pi", dub_url="http://dub", worker_name="testmac",
-            work_dir=tmp_path / "arbeit",
-            poll_seconds=0, progress_seconds=0)
-        worker = nv.Nachvertoner(settings)
-        worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(stage.pi))
-        worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(stage.dub))
-        return worker, stage
-    return _make
+    def _bauen(staende, **weiter):
+        b = Buehne(clip, staende, **weiter)
+        s = nv.Einstellungen(tubevault="http://tv", vertonung="https://vt", kellerwolke="http://kw", schluessel="k",
+                             ca_datei=None, stimme="Zeit Stimme", transkription="Transkription", arbeit=tmp_path / "arbeit",
+                             name="pi", abfrage_s=0, fortschritt_s=0)
+        tv = nv.TubeVault(httpx.AsyncClient(base_url="http://tv", transport=httpx.MockTransport(b.tubevault)))
+        vt = nv.Vertonung(httpx.AsyncClient(base_url="https://vt", transport=httpx.MockTransport(b.vertonung)))
+        return nv.Nachvertoner(s, tv, vt, kellerwolke=None), b
+    return _bauen
 
 
-DONE = {"status": "done", "result": {"video_id": "f-ergebnis", "coverage_failed": 0}}
+async def test_vollstaendiger_ablauf(bauen, tmp_path):
+    n, b = bauen([{"zustand": "laeuft", "fortschritt": 0.5, "schritt": "Übersetzen"}, FERTIG])
+    assert await n.schritt() is True
+    assert b.gemeldet_stimmen == ["Kerstin", "Zeit Stimme"], "nur Klonstimmen, nie der Katalog des Sprachmodells"
+    daten = b.vertonen_daten.decode("latin-1")
+    assert ZEIT in daten and 'name="behalten"\r\n\r\nfalse' in daten and "ausgangssprache" not in daten
+    assert {"progress": 0.515, "note": "Übersetzen"} in [{"progress": round(f["progress"], 3), "note": f["note"]}
+                                                          for f in b.fortschritt if f["progress"] is not None]
+    assert b"M4A-ERGEBNIS" in b.ergebnis_tv and b'name="source_language"\r\n\r\nen' in b.ergebnis_tv
+    assert b.abgeholt and b.gescheitert is None
+    assert not any((tmp_path / "arbeit").iterdir()), "Arbeitsordner ist aufgeräumt"
 
 
-def test_vollstaendiger_ablauf(make, tmp_path):
-    worker, stage = make([{"status": "running", "progress": 0.5, "phase": "translate"}, DONE])
-
-    assert worker.step() is True
-
-    payload = stage.created_payload["payload"]
-    assert stage.created_payload["type"] == "video_dub"
-    assert payload == {"file_id": "f-quelle", "source_language": "english", "target_language": "german",
-                       "mode": "fixed", "voice_id": "v-zeit", "num_speakers": 1}
-    assert {"progress": 0.515, "note": "Übersetzen"} in [
-        {"progress": round(p["progress"], 3), "note": p["note"]} for p in stage.progress]
-    assert stage.result_upload and b"de.m4a" in stage.result_upload, "nur die Tonspur geht zurück"
-    assert stage.failed is None
-    assert stage.deleted == ["f-quelle", "f-ergebnis"], "eigene Dateien im Dienst wirklich gelöscht"
-    assert not (tmp_path / "arbeit" / "abc").exists(), "Arbeitsordner ist aufgeräumt"
+async def test_untertitel_gehen_als_segmente_mit(bauen):
+    untertitel = {"language": "en", "kind": "manual", "segments": [{"start": 0.0, "end": 1.5, "text": "Hello there."}]}
+    n, b = bauen([FERTIG], untertitel=untertitel)
+    await n.schritt()
+    daten = b.vertonen_daten.decode("utf-8", "replace")
+    assert '"ende": 1.5' in daten and 'name="ausgangssprache"\r\n\r\nen' in daten
+    assert b.fortschritt[0]["note"] == "Untertitel: Untertitel vom Autor"
 
 
-def test_fehler_wird_sichtbar_gemeldet(make):
-    worker, stage = make([{"status": "error", "error": "RuntimeError: Worker weg\nTraceback ..."}])
-    worker.step()
-    assert stage.failed == {"note": "RuntimeError: RuntimeError: Worker weg", "skipped": False}
-    assert stage.result_upload is None
+async def test_fehler_wird_sichtbar_gemeldet(bauen):
+    n, b = bauen([{"zustand": "fehler", "fehler": "Sprechdienst weg\nTraceback ..."}])
+    await n.schritt()
+    assert b.gescheitert == {"note": "RuntimeError: Sprechdienst weg", "skipped": False} and b.ergebnis_tv is None
 
 
-def test_gleiche_sprache_wird_neu_gesprochen(make):
-    """Ein deutsches Video nach Deutsch: kein Überspringen, sondern Vertonung
-    ohne Übersetzung (Quell- und Zielsprache gleich)."""
-    worker, stage = make([DONE], source_language="de")
-    assert worker.step() is True
-    payload = stage.created_payload["payload"]
-    assert payload["source_language"] == payload["target_language"] == "german"
-    assert stage.failed is None and stage.result_upload
+async def test_unbekannte_stimme_scheitert_mit_auswahl(bauen):
+    n, b = bauen([FERTIG], stimme="Gibtsnicht")
+    n.s = nv.Einstellungen(**{**n.s.__dict__, "stimme": "Auch nicht"})
+    await n.schritt()
+    assert "Kerstin, Zeit Stimme" in b.gescheitert["note"] and b.vertonen_daten is None
 
 
-def test_entfernter_auftrag_bricht_ab(make):
-    worker, stage = make([{"status": "running", "progress": 0.1, "phase": "speak"}])
-    stage.progress_status = 409
-    worker.step()
-    assert stage.created_payload is None and stage.result_upload is None and stage.failed is None
+async def test_entfernter_auftrag_bricht_in_der_vertonung_ab(bauen):
+    n, b = bauen([{"zustand": "laeuft", "fortschritt": 0.1, "schritt": "Sprechen"}])
+    b.fortschritt_status = 409
+    await n.schritt()
+    # schon das erste Lebenszeichen trifft auf 409: noch nichts hochgeladen, nichts abzubrechen
+    assert b.vertonen_daten is None and b.ergebnis_tv is None and b.gescheitert is None
 
 
-def test_beschaeftigter_dienst_holt_nichts_ab(make):
-    worker, stage = make([DONE])
-    original = stage.dub
-
-    def busy(request):
-        if request.url.path == "/api/jobs" and request.method == "GET":
-            return httpx.Response(200, json={"active": [{"id": "anderer"}]})
-        return original(request)
-    worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(busy))
-
-    assert worker.step() is False
-    claims = [call for call in stage.pi_calls if call[1].endswith("/claim")]
-    assert claims == [], "ohne freie Kapazität wird nichts reserviert"
+def test_stimme_waehlen():
+    stimmen = {"Zeit Stimme": "z", "Kerstin": "k"}
+    assert nv.stimme_waehlen(stimmen, "zeit", "Kerstin") == ("Zeit Stimme", "z")
+    assert nv.stimme_waehlen(stimmen, None, "Kerstin") == ("Kerstin", "k")
 
 
-def test_arbeitskopie_ist_klein_und_hat_ton(tmp_path):
-    original = tmp_path / "o.mp4"
-    _clip(original)
-    proxy = tmp_path / "p.mp4"
-    nv.build_proxy(original, proxy)
-    probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width", "-of", "json", str(proxy)],
-        capture_output=True, text=True, check=True)
-    streams = json.loads(probe.stdout)["streams"]
-    assert {s["codec_type"] for s in streams} == {"video", "audio"}
-    assert next(s for s in streams if s["codec_type"] == "video")["width"] == 64
+class KellerwolkeAttrappe:
+    def __init__(self, zustaende: list[str], transkript: dict):
+        self.zustaende, self.transkript = zustaende, transkript
+        self.weitergegeben = None
+        self.geloescht: list[str] = []
+
+    async def ich(self):
+        return SimpleNamespace(zweig="Apps/Nachvertoner")
+
+    async def ordner(self, pfad):
+        return SimpleNamespace(id="o1", pfad=pfad)
+
+    async def schreiben(self, pfad, inhalt, **_):
+        assert Path(inhalt).is_file()
+        return SimpleNamespace(id="t1", pfad=pfad)
+
+    async def weitergeben(self, app, aktion, knoten_id, optionen=None):
+        self.weitergegeben = (app, aktion, knoten_id, optionen)
+        return SimpleNamespace(anfrage=SimpleNamespace(id="an1"))
+
+    async def anfrage(self, anfrage_id):
+        z = self.zustaende.pop(0) if len(self.zustaende) > 1 else self.zustaende[0]
+        return SimpleNamespace(zustand=z, meldung="Hören")
+
+    async def begleiter(self, knoten_id):
+        return [SimpleNamespace(id="b1", rolle="transkript")]
+
+    async def lesen_ganz(self, knoten_id):
+        return json.dumps(self.transkript).encode()
+
+    async def loeschen(self, knoten_id):
+        self.geloescht.append(knoten_id)
 
 
-def test_untertitel_der_quelle_ersparen_das_transkribieren(make):
-    """Bietet TubeVault ein Transkript an, geht es mit dem Auftrag an den
-    Dienst; seine Sprache gilt, wenn TubeVault die des Videos nicht kennt."""
-    worker, stage = make([DONE], source_language=None)
-    segments = [{"start": 0.0, "end": 4.0, "text": "Bonjour à tous."}]
-    original = stage.pi
+async def test_ki_transkript_ueber_die_transkription(bauen):
+    n, b = bauen([FERTIG])
+    kw = KellerwolkeAttrappe(["laeuft", "fertig"], {"sprache": "en", "segmente": [
+        {"start": 0.0, "ende": 1.2, "text": " Hello. "}, {"start": 1.2, "ende": 1.4, "text": "  "}]})
+    n.kw = kw
+    geliefert = {}
 
-    def with_transcript(request):
-        if request.url.path == "/api/dubbing/claim":
-            answer = original(request)
-            body = json.loads(answer.content)
-            if body.get("request"):
-                body["transcript_url"] = "/api/dubbing/requests/7/transcript"
-            return httpx.Response(200, json=body)
-        if request.url.path.endswith("/transcript"):
-            return httpx.Response(200, json={"transcript": {"language": "fr", "kind": "manual", "segments": segments}})
-        return original(request)
-    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(with_transcript))
-
-    assert worker.step() is True
-    payload = stage.created_payload["payload"]
-    assert payload["source_segments"] == segments
-    assert payload["source_language"] == "french"
-    assert any("Vorhandenes Transkript" in (p.get("note") or "") for p in stage.progress)
-
-
-def test_ohne_untertitel_wird_der_grund_gemeldet(make):
-    worker, stage = make([DONE])
-    original = stage.pi
-
-    def without_transcript(request):
-        if request.url.path == "/api/dubbing/claim":
-            body = json.loads(original(request).content)
-            if body.get("request"):
-                body["transcript_url"] = "/api/dubbing/requests/7/transcript"
-            return httpx.Response(200, json=body)
-        if request.url.path.endswith("/transcript"):
-            return httpx.Response(200, json={"transcript": None, "reason": "Die Quelle hat keine Untertitel"})
-        return original(request)
-    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(without_transcript))
-
-    assert worker.step() is True
-    assert "source_segments" not in stage.created_payload["payload"]
-    assert any("Die Quelle hat keine Untertitel" in (p.get("note") or "") for p in stage.progress)
-
-
-def test_unbekannte_sprache_erkennt_der_dienst(make):
-    """Kennt weder TubeVault noch ein Transkript die Sprache, rät der
-    Nachvertoner nicht, sondern lässt den Dienst sie erkennen; das Ergebnis
-    meldet sie als Kürzel an TubeVault zurück."""
-    done = {"status": "done", "result": {"video_id": "f-ergebnis", "coverage_failed": 0,
-                                         "source_language": "german"}}
-    worker, stage = make([done], source_language=None)
-    assert worker.step() is True
-    assert stage.created_payload["payload"]["source_language"] == "auto"
-    assert b'name="source_language"\r\n\r\nde' in stage.result_upload
-
-
-def test_ki_transkript_wenn_nichts_zu_vertonen(make, tmp_path):
-    """Keine Vertonung offen: der Nachvertoner holt ein KI-Transkript, schickt
-    nur den Ton zum Dienst, lässt die Sprache erkennen und liefert die Sätze ab."""
-    worker, stage = make([DONE])
-    delivered = {}
-    calls = []
-
-    def pi(request):
-        path = request.url.path
-        calls.append(path)
-        if path == "/api/dubbing/claim":
+    def tv(r: httpx.Request) -> httpx.Response:
+        p = r.url.path
+        if p == "/api/transcripts/ai/claim":
+            return httpx.Response(200, json={"request": {"video_id": "abc", "title": "T", "language": "en"},
+                                             "media_url": "/api/player/abc", "result_url": "/api/transcripts/ai/abc/result",
+                                             "progress_url": "/api/transcripts/ai/abc/progress", "fail_url": "/api/transcripts/ai/abc/fail"})
+        if p == "/api/transcripts/ai/abc/result":
+            geliefert.update(json.loads(r.content))
+            return httpx.Response(200, json={})
+        if p == "/api/dubbing/claim":
             return httpx.Response(200, json={"request": None})
-        if path == "/api/transcripts/ai/claim":
-            return httpx.Response(200, json={
-                "request": {"video_id": "ohneuntert1", "title": "Ohne Untertitel", "language": None},
-                "media_url": "/api/player/ohneuntert1",
-                "progress_url": "/api/transcripts/ai/ohneuntert1/progress",
-                "result_url": "/api/transcripts/ai/ohneuntert1/result",
-                "fail_url": "/api/transcripts/ai/ohneuntert1/fail"})
-        if path == "/api/player/ohneuntert1":
-            return httpx.Response(200, content=stage.clip)
-        if path.endswith("/progress"):
-            return httpx.Response(200, json={"ok": True})
-        if path.endswith("/result"):
-            delivered.update(json.loads(request.content))
-            return httpx.Response(200, json={"ok": True})
-        return stage.pi(request)
-
-    created = {}
-
-    def dub(request):
-        path = request.url.path
-        if path == "/api/jobs" and request.method == "POST":
-            created.update(json.loads(request.content))
-            return httpx.Response(200, json={"id": "t-1"})
-        if path == "/api/jobs/t-1":
-            return httpx.Response(200, json={"status": "done", "result": {"transcription_id": "tr-1"}})
-        if path == "/api/transcribe/tr-1":
-            return httpx.Response(200, json={"language": "german", "segments": [
-                {"start": 0.0, "end": 2.5, "text": " Guten Tag. "}, {"start": 2.5, "end": 3.0, "text": " "}]})
-        return stage.dub(request)
-
-    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(pi))
-    worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(dub))
-
-    assert worker.step() is True
-    assert created["type"] == "transcribe" and created["payload"]["language"] == "auto"
-    assert delivered == {"language": "de", "segments": [{"start": 0.0, "end": 2.5, "text": "Guten Tag."}]}
-    assert not (tmp_path / "arbeit" / "ki_ohneuntert1").exists()
-
-
-def test_kurzer_ausfall_von_tubevault_bricht_nichts_ab(make):
-    """Während TubeVault neu startet, scheitern Lebenszeichen - die Arbeit
-    läuft weiter, statt stundenlange Vertonung zu verwerfen."""
-    worker, stage = make([{"status": "running", "progress": 0.5, "phase": "speak"}, DONE])
-    original = stage.pi
-    outage = {"left": 2}
-
-    def flaky(request):
-        if request.url.path.endswith("/progress") and outage["left"] > 0:
-            outage["left"] -= 1
-            raise httpx.ConnectError("Neustart")
-        return original(request)
-    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(flaky))
-
-    assert worker.step() is True
-    assert stage.failed is None and stage.result_upload
-
-
-def test_reste_frueherer_auftraege_werden_aufgeraeumt(make):
-    """Wunsch 15.10.2026: Ton, der nur fürs Transkript hochging, darf sich im
-    Dienst nicht sammeln. Weg kommen nur eigene Dateien, nie Stimmen oder
-    Dateien des Nutzers; Rohdaten zuerst (ihr Löschen nimmt Exporte mit)."""
-    worker, stage = make([DONE])
-    stage.remote_files = [
-        {"id": "export", "name": "tubevault_abc.srt", "file_type": "transcription_export", "file_size": 10},
-        {"id": "ton", "name": "tubevault_abc.wav", "file_type": "audio_raw", "file_size": 80_000_000},
-        {"id": "stimme", "name": "tubevault_abc.wav", "file_type": "audio_raw", "voice_id": "v-zeit"},
-        {"id": "nutzer", "name": "Interview.wav", "file_type": "audio_raw"},
-    ]
-    assert worker.clean_leftovers() == 2
-    assert stage.deleted == ["ton", "export"]
-
-
-def test_fremde_gleiche_datei_bleibt_liegen(make):
-    """Liegt inhaltsgleich schon eine Datei des Nutzers im Dienst, wird sie
-    benutzt, aber danach nicht gelöscht."""
-    worker, stage = make([DONE])
-    original = stage.dub
-
-    def dub(request):
-        if request.url.path == "/api/files/upload":
-            return httpx.Response(409, json={"detail": {"existing_file": {"id": "f-nutzer", "name": "Mein Ton.wav"}}})
-        return original(request)
-    worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(dub))
-    stage.claimable = True
-    assert worker.step() is True
-    assert "f-nutzer" not in stage.deleted and "f-ergebnis" in stage.deleted
-
-
-
-def test_ki_transkript_raeumt_den_ton_im_dienst_weg(make):
-    """Der Ton fürs KI-Transkript geht als Mono-WAV zum Dienst; nach dem
-    Abliefern ist er dort samt Transkription wieder gelöscht."""
-    worker, stage = make([{"status": "done", "result": {"transcription_id": "t-1"}}])
-    stage.claimable = False
-    delivered = {}
-    pi_original, dub_original = stage.pi, stage.dub
-
-    def pi(request):
-        path = request.url.path
-        if path == "/api/transcripts/ai/claim":
-            return httpx.Response(200, json={
-                "request": {"video_id": "abc", "title": "Ein Titel", "language": "de"},
-                "media_url": "/api/player/abc", "progress_url": "/api/transcripts/ai/abc/progress",
-                "result_url": "/api/transcripts/ai/abc/result", "fail_url": "/api/transcripts/ai/abc/fail"})
-        if path == "/api/transcripts/ai/abc/result":
-            delivered.update(json.loads(request.content))
-            return httpx.Response(200, json={"ok": True})
-        return pi_original(request)
-
-    def dub(request):
-        if request.url.path == "/api/transcribe/t-1":
-            return httpx.Response(200, json={"language": "german",
-                                             "segments": [{"start": 0, "end": 1.5, "text": "Hallo"}]})
-        return dub_original(request)
-
-    worker.pi = httpx.Client(base_url="http://pi", transport=httpx.MockTransport(pi))
-    worker.dub = httpx.Client(base_url="http://dub", transport=httpx.MockTransport(dub))
-    assert worker.step() is True
-    assert delivered == {"language": "de", "segments": [{"start": 0.0, "end": 1.5, "text": "Hallo"}]}
-    assert stage.deleted == ["f-quelle"]
+        return b.tubevault(r)
+    n.tv = nv.TubeVault(httpx.AsyncClient(base_url="http://tv", transport=httpx.MockTransport(tv)))
+    assert await n.schritt() is True
+    assert kw.weitergegeben == ("Transkription", "transkribieren", "t1", {"sprache": "en"})
+    assert geliefert == {"language": "en", "segments": [{"start": 0.0, "end": 1.2, "text": "Hello."}]}
+    assert kw.geloescht == ["t1"], "Ton samt Transkript in den Papierkorb"

@@ -1,0 +1,11 @@
+#!/bin/sh
+# ffmpeg und ffprobe des Pi im Container nutzen, ohne sie ins Abbild zu packen: Programm und Bibliotheken des Pi sind
+# nur lesend unter /host eingehängt (compose.pi.yml) und laufen mit dem Lader des Pi, so passen sie immer zusammen.
+# Dieselbe Datei heißt im Abbild ffmpeg und ffprobe; der Name sagt, welches Programm gemeint ist.
+L=/host/usr/lib/aarch64-linux-gnu
+PROGRAMM="/host/usr/bin/$(basename "$0")"
+if [ ! -x "$PROGRAMM" ] || [ ! -x "$L/ld-linux-aarch64.so.1" ]; then
+  echo "$(basename "$0") vom Pi ist nicht eingehängt (compose.pi.yml, Abschnitt volumes)" >&2
+  exit 127
+fi
+exec "$L/ld-linux-aarch64.so.1" --library-path "$L:$L/blas:$L/lapack:$L/pulseaudio" "$PROGRAMM" "$@"

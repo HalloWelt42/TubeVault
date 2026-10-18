@@ -1,53 +1,58 @@
 # Nachvertoner
 
-Eigenes Programm für den Rechner, der vertonen kann. TubeVault auf dem Pi
-führt nur die Warteliste; dieses Programm holt Aufträge ab, wenn der
-Vertonungsdienst frei ist, und liefert die fertige Tonspur zurück. In
-TubeVault lässt sie sich dann in der Wiedergabe umschalten.
+Eigenes Programm neben TubeVault. TubeVault führt nur die Warteliste; der
+Nachvertoner holt Aufträge ab und gibt sie an die Apps, die die Arbeit tun:
 
-## Einrichten
+- **Vertonen** über den Dienst der Vertonung. Die Stimme kommt aus deren
+  Stimmen (Privat und Fremd, Vorgabe "Zeit Stimme"); die eingebauten Stimmen
+  des Sprachmodells werden nie angeboten. Zurück an TubeVault geht nur die
+  neue Tonspur; in der Kellerwolke bleibt nichts liegen (der Auftrag geht mit
+  "nicht behalten" an die Vertonung und wird nach dem Abliefern abgeholt).
+- **KI-Transkripte** über die Transkription: der Ton kommt in den eigenen
+  Zweig der Kellerwolke und geht als Weitergabe (mit der Sprache des Videos)
+  an die Transkription; das Transkript wird an TubeVault geliefert, danach
+  liegt der Ton samt Transkript im Papierkorb der Kellerwolke.
 
-1. In TubeVault unter Einstellungen - Erweiterungen die Nachvertonung
-   einschalten. Vorgemerkt wird je Video in der Wiedergabe; Stimme und
-   Zielsprache wählt man dort. Die Auswahl der Stimmen meldet der
-   Nachvertoner selbst, sobald er läuft.
-2. Einstellungen anlegen:
-
-   ```bash
-   cp nachvertoner.beispiel.toml nachvertoner.toml
-   ```
-
-3. Prüfen, ob beide Seiten erreichbar sind (meldet dabei die Stimmen):
-
-   ```bash
-   ./nachvertoner.py --pruefen
-   ```
+Vertonungen gehen vor KI-Transkripten. Untertitel der Quelle werden
+mitgeschickt, wenn TubeVault sie anbietet; sonst transkribiert die
+Vertonung selbst (über die Transkription).
 
 ## Betrieb
 
+Als Container `tubevault-nachvertoner` in `docker-compose.yml`, auf dem Pi
+mit TubeVault ausgerollt. Er braucht:
+
+- den App-Schlüssel des Zugangs "Nachvertoner" der Kellerwolke als Datei
+  (`/home/pi/.nachvertoner_schluessel`, nur für pi lesbar),
+- die Hausstelle der Vertonung (`/mnt/data/vertonung/zertifikate/rootCA.pem`),
+- den Arbeitsordner `/mnt/data/tubevault/nachvertoner` (gehört pi).
+
+ffmpeg kommt vom Pi (nur lesend eingehängt, `ffmpeg-vom-pi`).
+
+Einstellungen (Umgebung, wahlweise in `nachvertoner/.env` auf dem Pi):
+
+| Name | Vorgabe |
+|---|---|
+| `NACHVERTONER_VERTONUNG` | `https://192.168.178.49:8641` |
+| `NACHVERTONER_KELLERWOLKE` | `http://192.168.178.49:39278` |
+| `NACHVERTONER_STIMME` | `Zeit Stimme` (wenn der Auftrag keine nennt) |
+| `NACHVERTONER_TRANSKRIPTION` | `Transkription` (Name der App in der Kellerwolke) |
+| `NACHVERTONER_ABFRAGE_S` | `60` (Pause, wenn nichts zu tun war) |
+| `NACHVERTONER_FORTSCHRITT_S` | `15` (Takt der Lebenszeichen) |
+
+Prüfen, ob alles erreichbar ist und die Stimmen da sind:
+
 ```bash
-./nachvertoner.py            # läuft dauerhaft, fragt regelmäßig nach Arbeit
-./nachvertoner.py --einmal   # höchstens ein Auftrag
-./nachvertoner.py --aufraeumen   # nur eigene Reste im Vertonungsdienst löschen
+docker exec tubevault-nachvertoner python nachvertoner.py --pruefen
 ```
 
-Was der Nachvertoner im Vertonungsdienst ablegt (Ton fürs Transkript,
-Arbeitskopie, Ergebnis), löscht er nach jedem Auftrag wieder, samt
-Transkription und Exporten. Beim Start räumt er außerdem Reste früherer Läufe
-weg (Absturz, Abbruch). Gelöscht werden nur Dateien mit dem Namensvorzeichen
-`tubevault_`, die keiner Stimme und keinem Projekt gehören.
+## Entwicklung
 
-Das Programm arbeitet nur, wenn der Vertonungsdienst bereit ist und dort
-gerade kein anderer Auftrag läuft. Es bearbeitet einen Auftrag nach dem
-anderen. Wird ein Auftrag in TubeVault entfernt, bricht die Vertonung ab.
-Stürzt der Rechner ab, kehrt der Auftrag nach 30 Minuten ohne Lebenszeichen
-in die Warteliste zurück.
+```bash
+python3 -m venv nachvertoner/.venv
+nachvertoner/.venv/bin/pip install -r nachvertoner/requirements.txt pytest pytest-asyncio
+cd nachvertoner && .venv/bin/python -m pytest -q
+```
 
-Voraussetzungen: `uv` und `ffmpeg`.
-
-## Was übertragen wird
-
-Zum Vertonen genügt der Ton. Das Programm baut deshalb eine leichte
-Arbeitskopie (Originalton plus winziges schwarzes Bild) und gibt nur diese
-an den Vertonungsdienst. Zurück an TubeVault geht ausschließlich die neue
-Tonspur; Arbeitsdateien werden auf beiden Seiten wieder entfernt.
+Die Tests stellen TubeVault, Vertonung und Kellerwolke nach; ffmpeg arbeitet
+echt.
