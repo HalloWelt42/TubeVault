@@ -18,6 +18,7 @@ import { normalizeRate } from '../utils/playbackRate.js';
 import { afterMinutes, afterTrack, frozen, isDue, remainingMs, running } from '../utils/sleepTimer.js';
 import { nextSegmentStart, previousSegmentStart, segmentIndexAt, toSegments } from '../utils/segments.js';
 import { createVolume, volumeMode } from '../utils/softVolume.js';
+import { knownSeconds } from '../utils/mediaTime.js';
 
 const BOOK_PREFIX = 'hoerbuch:';
 const RATE_KEY = 'musik.tempo';             // Tempo je Hörbuch: { <Buch>: 1.25 }
@@ -124,7 +125,9 @@ class MusicPlayer {
     audio.addEventListener('pause', () => { this.playing = false; this.sleep = frozen(this.sleep, Date.now()); this.#save(); });
     audio.addEventListener('waiting', () => { this.loading = true; });
     audio.addEventListener('playing', () => { this.loading = false; });
-    audio.addEventListener('loadedmetadata', () => { this.duration = audio.duration || this.current?.duration || 0; });
+    // durationchange kommt beim ersten Bekanntwerden der Länge und bei jeder Nachbesserung
+    // (z.B. Ogg ohne Index, MP3 mit variabler Bitrate); bis dahin gilt die Länge aus der Sammlung
+    audio.addEventListener('durationchange', () => { this.duration = knownSeconds(audio.duration, this.current?.duration); });
     audio.addEventListener('timeupdate', () => this.#onTime());
     audio.addEventListener('ended', () => this.#onEnded());
     audio.addEventListener('error', () => { if (audio.src !== SILENCE && this.active) this.next(); });

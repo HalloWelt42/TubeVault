@@ -4,6 +4,7 @@
  * Wiedergabestand als Meldung). Genutzt von stores/remote.svelte.js und
  * den Ansichten; getestet in tests/remoteDevices.test.js.
  */
+import { knownSeconds } from './mediaTime.js';
 
 export const KIND_NAMES = { rechner: 'Rechner', handy: 'Handy', tablet: 'Tablet' };
 export const KIND_ICONS = { rechner: 'fa-display', handy: 'fa-mobile-screen', tablet: 'fa-tablet-screen-button' };
@@ -68,8 +69,8 @@ export function musicState(player, canVolume) {
     untertitel: track.artist || '',
     quelle: book ? `Teil ${player.index + 1} von ${player.queue.length}`
       : player.segment ? `${player.segment.index + 1}/${player.segment.count} ${player.segment.title}` : (player.title || ''),
-    stelle: player.time || 0,
-    dauer: player.duration || track.duration || 0,
+    stelle: knownSeconds(player.time),
+    dauer: knownSeconds(player.duration, track.duration),
     laeuft: !!player.playing,
     lautstaerke: canVolume ? player.volume : null,
     zufall: book ? null : !!player.shuffle,
@@ -90,8 +91,8 @@ export function videoState(session, canVolume) {
     titel: session.video.title || '',
     untertitel: session.video.channel_name || '',
     quelle: '',
-    stelle: el.currentTime || 0,
-    dauer: el.duration || session.video.duration || 0,
+    stelle: knownSeconds(el.currentTime),
+    dauer: knownSeconds(el.duration, session.video.duration),
     laeuft: !el.paused,
     lautstaerke: canVolume ? el.volume : null,
     tonspuren: session.tracks.map((t) => ({ id: t.id, label: t.label })),

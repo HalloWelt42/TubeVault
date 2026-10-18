@@ -70,4 +70,22 @@ describe('Fernsteuerung: gemeldeter Stand', () => {
     });
     expect(videoState({ el: null }, true)).toBeNull();
   });
+
+  // Je nach Format und Browser kennt das Medienelement die Länge noch nicht (NaN) oder
+  // meldet Infinity; JSON macht daraus null, und der Server versteht die Meldung nicht
+  it('meldet nur endliche Zahlen, auch wenn das Element die Länge nicht kennt', () => {
+    const player = { current: { id: 'a', title: 'Titel', duration: 231 }, queue: [], index: 0,
+                     time: 12, duration: Infinity, playing: true, volume: 1, repeat: 'off', audiobook: null };
+    expect(musicState(player, true).dauer).toBe(231);
+    for (const unknown of [Infinity, NaN, undefined, -1]) {
+      const sent = JSON.parse(JSON.stringify(musicState({ ...player, current: { id: 'a' }, duration: unknown, time: NaN }, true)));
+      expect(sent).toMatchObject({ dauer: 0, stelle: 0 });
+    }
+
+    const session = { el: { currentTime: 5, duration: Infinity, paused: false, volume: 1 },
+                      video: { id: 'v', title: 'Video', duration: 853 }, tracks: [], trackId: null };
+    expect(videoState(session, true).dauer).toBe(853);
+    const stream = JSON.parse(JSON.stringify(videoState({ ...session, el: { ...session.el, duration: NaN }, video: { id: 'v' } }, true)));
+    expect(stream).toMatchObject({ dauer: 0, stelle: 5 });
+  });
 });
