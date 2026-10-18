@@ -8,7 +8,9 @@
   sucht in der Musik (?suche=1), Ausgeblendetes holt ?ausgeblendet=1 zurück;
   alles liegt über der Übersicht, die so ihre Stelle behält. Ein geöffnetes
   Album lässt sich ganz ausschließen. Gespielt wird über den Musikspieler;
-  Änderungen von überall kommen über utils/musicChanges.js.
+  Änderungen von überall kommen über utils/musicChanges.js. "Zur Stelle" in
+  "Läuft gerade" öffnet die Gruppe des Titels und zeigt ihn dort, auch weit
+  hinten (die Liste beginnt dann bei ihm, frühere Titel holt ein Knopf).
 -->
 <script>
   import { onMount, untrack } from 'svelte';
@@ -24,6 +26,7 @@
   import Ausgeblendet from '../parts/Ausgeblendet.svelte';
   import { excludeAlbum, restoreHidden } from '../../lib/utils/musicHiding.js';
   import { isRemoved, onMusicChange } from '../../lib/utils/musicChanges.js';
+  import { claimTrackSpot, offerTrackSpot, prependInPlace, scrollToTrack } from '../../lib/utils/trackSpot.js';
 
   const MIXES = [
     { key: 'all', name: 'Alles zufällig', icon: 'fa-shuffle', shuffle: true },
@@ -152,22 +155,45 @@
   // ─── Geöffnete Gruppe und Suche: die Adresse ist die Wahrheit ───
   let openKey = $state(null);    // Gruppe laut Adresse (wird nur in untrack verglichen)
   let opened = $state(null);     // { source, title, tracks }
+  let openedFrom = $state(0);    // erste gezeigte Zeile (Zur Stelle weit hinten)
   let openedShown = $state(STEP);
+  let openedBox = $state(null);  // Rollbereich der Gruppe
+  let marked = $state(null);     // Kennung des Titels, den "Zur Stelle" zeigt
   let searching = $state(false);
   let hiddenOpen = $state(false);
 
   async function openGroup(key) {
     openKey = key;
     opened = null;
+    openedFrom = 0;
     openedShown = STEP;
+    marked = null;
     if (!key) return;
     try {
       const list = await api.musicPlay(key);
-      if (openKey === key) opened = list;
+      if (openKey === key) {
+        opened = list;
+        offerTrackSpot();          // wartet "Zur Stelle" auf diese Gruppe?
+      }
     } catch (e) {
       if (openKey === key) toast.error(e.message);
     }
   }
+
+  // ─── Zur Stelle: in der offenen Gruppe hinrollen; steht er noch nicht da, beginnt die Liste kurz vor ihm ───
+  const showsTrack = (track) => !searching && !hiddenOpen && !!opened?.tracks.some((t) => t.id === track.id);
+
+  async function revealTrack(track) {
+    const index = opened.tracks.findIndex((t) => t.id === track.id);
+    if (index < openedFrom || index >= openedShown) {
+      openedFrom = Math.max(0, index - 2);
+      openedShown = index + STEP;
+    }
+    marked = track.id;
+    await scrollToTrack(openedBox, track.id);
+  }
+
+  const earlier = () => prependInPlace(openedBox, () => { openedFrom = Math.max(0, openedFrom - STEP); });
 
   $effect(() => {
     const current = $route;
@@ -233,6 +259,7 @@
     } catch { /* bleibt beim bisherigen Stand */ }
   }
   onMount(() => onMusicChange(onChange));
+  onMount(() => claimTrackSpot({ accepts: showsTrack, reveal: revealTrack }));
 
   loadOverview();
 </script>
@@ -380,7 +407,8 @@
           <button class="m-rund" onclick={excludeOpened} aria-label="Album ausschließen"><i class="fa-solid fa-ban"></i></button>
         {/if}
       </header>
-      <div class="rollfeld" use:nearEnd={{ onNearEnd: () => { openedShown += STEP; }, canLoad: () => !!opened && openedShown < opened.tracks.length }}>
+      <div class="rollfeld" bind:this={openedBox}
+           use:nearEnd={{ onNearEnd: () => { openedShown += STEP; }, canLoad: () => !!opened && openedShown < opened.tracks.length }}>
         {#if !opened}
           <div class="m-spin"><i class="fa-solid fa-spinner fa-spin"></i></div>
         {:else}
@@ -389,7 +417,10 @@
             <button class="m-btn" onclick={() => play(opened.source, { shuffle: true })}><i class="fa-solid fa-shuffle"></i> Zufällig</button>
           </div>
           <div class="liste">
-            {#each opened.tracks.slice(0, openedShown) as track (track.id)}
+            {#if openedFrom > 0}
+              <button class="frueher" onclick={earlier}><i class="fa-solid fa-angles-up"></i> Frühere Titel</button>
+            {/if}
+            {#each opened.tracks.slice(openedFrom, openedShown) as track (track.id)}
               {@render titelZeile(track, () => play(opened.source, { start: track.id }))}
             {/each}
             <p class="mehr">
@@ -403,7 +434,8 @@
 </div>
 
 {#snippet titelZeile(track, onplay)}
-  <button class="zeile" class:laeuft={player.current?.id === track.id} onclick={onplay}>
+  <button class="zeile" data-titel={track.id} class:laeuft={player.current?.id === track.id} class:markiert={marked === track.id}
+          onclick={onplay}>
     <img src={coverUrl(track)} alt="" loading="lazy" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
     <span class="text"><span class="t">{track.title}</span><span class="w">{track.artist}</span></span>
     <span class="zahl dauer">{formatDuration(track.duration || 0)}</span>
@@ -482,5 +514,8 @@
   .zeile .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .zeile .w { font-size: 15px; color: var(--m-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .zeile.laeuft .t { color: var(--m-accent); }
+  .zeile.markiert { background: rgba(var(--tv-akzent-rgb), 0.14); }
+  .frueher { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px;
+             color: var(--m-dim); font-size: 15px; font-weight: 600; }
   .dauer { font-size: 15px; color: var(--m-dim); }
 </style>

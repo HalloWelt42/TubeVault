@@ -1,7 +1,8 @@
 <!--
   Titelliste der Musik: dicht, ein Klick spielt ab dieser Stelle (onPlay
   bekommt den Index), Herz und Menü je Zeile. Mit stickyTop (CSS-Länge) bleiben die
-  Spaltenköpfe beim Rollen stehen, unter einem ebenfalls stehenden Kopf.
+  Spaltenköpfe beim Rollen stehen, unter einem ebenfalls stehenden Kopf. marked:
+  Kennung des Titels, den "Zur Stelle" hervorhebt (Zeilen tragen data-titel).
 -->
 <script>
   import { api } from '../../api/client.js';
@@ -10,7 +11,7 @@
   import { formatDuration } from '../../utils/format.js';
   import ArtistLink from './ArtistLink.svelte';
 
-  let { tracks = [], numbered = true, showPlays = false, stickyTop = null,
+  let { tracks = [], numbered = true, showPlays = false, stickyTop = null, marked = null,
         onPlay = () => {}, onMenu = () => {}, onFavorite = () => {} } = $props();
 </script>
 
@@ -22,7 +23,8 @@
   </div>
   {#each tracks as track, i (track.id)}
     {@const current = player.current?.id === track.id}
-    <div class="zeile" class:laeuft={current} class:mit-zahl={showPlays} role="button" tabindex="0"
+    <div class="zeile" data-titel={track.id} class:laeuft={current} class:markiert={marked === track.id} class:mit-zahl={showPlays}
+         role="button" tabindex="0"
          onclick={() => current ? player.toggle() : onPlay(i)} onkeydown={(e) => e.key === 'Enter' && onPlay(i)}
          oncontextmenu={(e) => onMenu(e, track)}>
       <span class="nr">
@@ -47,6 +49,7 @@
            align-items: center; padding: 6px var(--tv-a2); border-radius: var(--tv-ecke); cursor: pointer; }
   .zeile.mit-zahl { grid-template-columns: 32px 48px minmax(0, 2fr) minmax(0, 1fr) 70px 64px 34px 34px; }
   .zeile:hover { background: var(--tv-flaeche); }
+  .zeile.markiert { background: rgba(var(--tv-akzent-rgb), 0.14); }
   .zeile:focus-visible { outline: 2px solid var(--tv-akzent); }
   .zeile.laeuft .t, .zeile.laeuft .nr { color: var(--tv-akzent); }
   .kopfzeile { cursor: default; font-size: var(--tv-gr-marke); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;

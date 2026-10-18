@@ -32,6 +32,10 @@
  * `id`). Seitenweises Blättern kann denselben Eintrag zweimal liefern, wenn
  * sich der Bestand zwischen zwei Seiten verschiebt; ein doppelter Schlüssel
  * bricht sonst das Rendern der ganzen Liste ab.
+ *
+ * Mitten in der Liste beginnen (z.B. "Zur Stelle"): load(true, { from: seite })
+ * lädt ab dieser Seite; die davor holt loadEarlier() einzeln nach vorn
+ * (hasEarlier sagt, ob es welche gibt).
  */
 export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {}) {
   let items = $state([]);
@@ -41,22 +45,27 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
   let loading = $state(true);
   let loadingMore = $state(false);
   let hasMore = $state(false);
+  let hasEarlier = $state(false);
 
   let page = 1;   // ABSICHTLICH nicht reaktiv (siehe Kopf-Kommentar)
+  let firstPage = 1;   // erste geladene Seite, ebenso nicht reaktiv
   let runId = 0;  // Stale-Guard: nur die jüngste Antwort zählt
 
-  function applyResult(res, reset) {
-    const incoming = res?.items || [];
-    const base = reset ? [] : items;
+  function unseen(incoming, base) {
     const seen = new Set(base.map(keyOf));
-    const fresh = incoming.filter((item) => {
+    return incoming.filter((item) => {
       const key = keyOf(item);
       if (key === undefined || key === null) return true;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-    items = [...base, ...fresh];
+  }
+
+  function applyResult(res, reset) {
+    const incoming = res?.items || [];
+    const base = reset ? [] : items;
+    items = [...base, ...unseen(incoming, base)];
     if (typeof res?.total === 'number') total = res.total;
     if (typeof res?.hasMore === 'boolean') hasMore = res.hasMore;
     // Eine leere Seite beendet das Nachladen auch dann, wenn total mehr verspricht
@@ -64,10 +73,12 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
     else hasMore = false;
   }
 
-  async function load(reset = true) {
+  async function load(reset = true, { from = 1 } = {}) {
     const myRun = ++runId;
     if (reset) {
-      page = 1;
+      page = from;
+      firstPage = from;
+      hasEarlier = from > 1;
       loading = true;
     } else {
       loadingMore = true;
@@ -87,6 +98,22 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
     return load(false);
   }
 
+  /** Die Seite vor der ersten geladenen vorn anfügen */
+  async function loadEarlier() {
+    if (loading || loadingMore || firstPage <= 1) return;
+    const myRun = ++runId;
+    loadingMore = true;
+    try {
+      const res = await fetchPage(firstPage - 1);
+      if (myRun !== runId) return;
+      firstPage -= 1;
+      hasEarlier = firstPage > 1;
+      items = [...unseen(res?.items || [], items), ...items];
+    } finally {
+      if (myRun === runId) loadingMore = false;
+    }
+  }
+
   return {
     get items() { return items; },
     set items(v) { items = v; },   // für lokale Mutationen (Karte entfernen etc.)
@@ -95,8 +122,10 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
     get loading() { return loading; },
     get loadingMore() { return loadingMore; },
     get hasMore() { return hasMore; },
+    get hasEarlier() { return hasEarlier; },
     load,
     loadMore,
+    loadEarlier,
     canLoad: () => hasMore && !loading && !loadingMore,
   };
 }

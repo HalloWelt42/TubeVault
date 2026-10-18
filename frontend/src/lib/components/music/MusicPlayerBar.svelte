@@ -3,10 +3,13 @@
   über allen Seiten, solange etwas in der Warteschlange ist; steuert nur den
   Musikspieler (lib/stores/musicPlayer.svelte.js). Das Minus blendet den Titel
   überall in der Musik aus (utils/musicHiding.js), der Papierkorb löscht ein Video.
+  "Zur Stelle" zeigt den Titel in der Titelliste (utils/trackSpot.js), "Zur Liste"
+  legt ihn in eine Wiedergabeliste.
 -->
 <script>
   import { coverUrl, downloadUrl, isFile } from '../../utils/musicTrack.js';
   import { hideTrack } from '../../utils/musicHiding.js';
+  import { showTrack, spotSource } from '../../utils/trackSpot.js';
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
@@ -16,6 +19,7 @@
   import { remote } from '../../stores/remote.svelte.js';
   import DeviceButton from '../remote/DeviceButton.svelte';
   import ArtistLink from './ArtistLink.svelte';
+  import ListButton from './ListButton.svelte';
   import { playerBar } from '../../stores/playerBar.svelte.js';
 
   let track = $derived(player.current);
@@ -24,6 +28,13 @@
 
   // "OPUS · 160 kbit/s · 48 kHz" oder "FLAC · 16 Bit · 44,1 kHz" - was die Datei hergibt
   let quality = $derived(audioQuality(player.audioInfo));
+
+  // Zur Stelle: in der Liste auf dem Schirm, sonst auf der Musikseite (die Gruppe, aus der er läuft, oder "Titel")
+  function toSpot() {
+    if (showTrack(track)) return;
+    const group = spotSource(player.source);
+    navigate('/music', group ? { quelle: group } : { tab: 'titel' });
+  }
 
   async function hide() {
     try { await hideTrack(track); } catch (e) { toast.error(e.message); }
@@ -39,104 +50,115 @@
 
 <!-- Eingeklappt steht die Steuerung schlank in der Fußleiste (CompactPlayer) -->
 {#if track && !playerBar.compact}
-  <div class="spieler" use:playerBarHeight>
-    <div class="links">
-      <button class="cover" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Läuft gerade">
-        <img src={coverUrl(track)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
-      </button>
-      <div class="text">
-        <div class="t" title={track.title}>{track.title}</div>
-        <div class="tv-leise tv-klein w"><ArtistLink {track} />{#if player.title}{' · '}{player.title}{/if}</div>
-      </div>
-      <button class="taste" class:an={track.favorite} onclick={favorite} title="Lieblingssong">
-        <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
-      <!-- Hörbücher haben ihre Teile fest: dort kein Ausblenden -->
-      {#if !player.audiobook}
-        <button class="taste weg" onclick={hide} title="Überall in der Musik ausblenden und weiter (nichts wird gelöscht)">
-          <i class="fa-solid fa-circle-minus"></i></button>
-      {/if}
-      {#if !isFile(track)}
-        <button class="taste weg" onclick={() => player.deleteTrack()}
-                title="Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück">
-          <i class="fa-solid fa-trash-can"></i></button>
-      {/if}
-    </div>
-
-    <div class="mitte">
-      <div class="tasten">
-        <button class="taste" class:an={player.shuffle} onclick={() => player.toggleShuffle()} disabled={!!player.audiobook}
-                title={player.audiobook ? 'Hörbücher laufen in ihrer Reihenfolge' : 'Zufällige Reihenfolge'}>
-          <i class="fa-solid fa-shuffle"></i></button>
-        <button class="taste" onclick={() => player.prev()} title="Zurück"><i class="fa-solid fa-backward-step"></i></button>
-        <button class="taste gross" onclick={() => player.toggle()} title={player.playing ? 'Pause' : 'Abspielen'}>
-          <i class="fa-solid {player.loading ? 'fa-spinner fa-spin' : player.playing ? 'fa-pause' : 'fa-play'}"></i></button>
-        <button class="taste" onclick={() => player.next()} title="Weiter"><i class="fa-solid fa-forward-step"></i></button>
-        <button class="taste wiederholen" class:an={player.repeat !== 'off'} onclick={() => player.cycleRepeat()}
-                title={REPEAT_TITLES[player.repeat]}>
-          <i class="fa-solid fa-repeat"></i>{#if player.repeat === 'one'}<b>1</b>{/if}</button>
-      </div>
-      <div class="zeitleiste">
-        <span class="zahl">{formatDuration(Math.floor(player.time))}</span>
-        <div class="spur" use:dragValue={(v) => player.seek(v * player.duration)} role="slider" tabindex="0"
-             aria-label="Stelle im Titel" aria-valuemin="0" aria-valuemax={Math.round(player.duration)} aria-valuenow={Math.round(player.time)}>
-          <b style:width="{progress * 100}%"></b>
-          {#each player.segments.slice(1).filter((segment) => segment.start < player.duration) as segment (segment.start)}
-            <i class="marke" style:left="{(segment.start / (player.duration || 1)) * 100}%" title={segment.title}></i>
-          {/each}
+  <div class="rahmen" use:playerBarHeight>
+    <div class="spieler">
+      <div class="links">
+        <button class="cover" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Läuft gerade">
+          <img src={coverUrl(track)} alt="" onerror={(e) => e.currentTarget.style.visibility = 'hidden'} />
+        </button>
+        <div class="text">
+          <div class="t" title={track.title}>{track.title}</div>
+          <div class="tv-leise tv-klein w"><ArtistLink {track} />{#if player.title}{' · '}{player.title}{/if}</div>
         </div>
-        <span class="zahl">{formatDuration(Math.floor(player.duration))}</span>
+        <div class="titel-tasten">
+          <button class="taste" class:an={track.favorite} onclick={favorite} title="Lieblingssong">
+            <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
+          <!-- Hörbücher haben ihre Teile fest: dort weder Zur Stelle, Zur Liste noch Ausblenden -->
+          {#if !player.audiobook}
+            <button class="taste" onclick={toSpot} title="Zur Stelle: in der Titelliste zeigen">
+              <i class="fa-solid fa-location-crosshairs"></i></button>
+            <ListButton {track} />
+            <button class="taste weg" onclick={hide} title="Überall in der Musik ausblenden und weiter (nichts wird gelöscht)">
+              <i class="fa-solid fa-circle-minus"></i></button>
+          {/if}
+          {#if !isFile(track)}
+            <button class="taste weg" onclick={() => player.deleteTrack()}
+                    title="Gefällt nicht: Video löschen und weiter. Kurz rückgängig zu machen; kommt nie automatisch zurück">
+              <i class="fa-solid fa-trash-can"></i></button>
+          {/if}
+        </div>
       </div>
-      <!-- Feste Zeile: Rückgängig nach dem Löschen, sonst die Tonqualität -->
-      <div class="info">
-        {#if player.pendingDelete}
-          <div class="rueckgaengig">
-            <i class="fa-solid fa-trash-can"></i>
-            <span class="was" title={player.pendingDelete.track.title}>Gelöscht: {player.pendingDelete.track.title}</span>
-            <button onclick={() => player.undoDelete()}>Rückgängig</button>
-          </div>
-        {:else if player.segment}
-          <div class="abschnitt-zeile" title={player.segment.title}>
-            <span class="zahl">{player.segment.index + 1}/{player.segment.count}</span> {player.segment.title}</div>
-        {:else if remote.steering}
-          <div class="gesteuert"><i class="fa-solid fa-tower-broadcast"></i> {remote.steering} steuert mit</div>
-        {:else if quality}
-          <div class="qualitaet zahl" title="Tonspur der Datei">{quality}</div>
-        {/if}
-      </div>
-    </div>
 
-    <div class="rechts">
-      <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt', ansicht: 'liedtext' })} title="Liedtext">
-        <i class="fa-solid fa-align-left"></i></button>
-      <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Warteschlange">
-        <i class="fa-solid fa-list-ol"></i></button>
-      <a class="taste" href={downloadUrl(track)} download title="Ton herunterladen (wie geladen, ohne Neukodierung)">
-        <i class="fa-solid fa-download"></i></a>
-      <button class="taste" onclick={() => { player.pause(); navigate(`/watch/${track.id}`); }} title="Als Video ansehen">
-        <i class="fa-solid fa-display"></i></button>
-      <button class="taste" onclick={() => player.toggleMute()} title={player.muted ? 'Ton an' : 'Stumm'}>
-        <i class="fa-solid {player.muted || player.volume === 0 ? 'fa-volume-xmark' : 'fa-volume-high'}"></i></button>
-      <div class="lautstaerke" use:dragValue={(v) => player.setVolume(v)} role="slider" tabindex="0" aria-label="Lautstärke"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(player.volume * 100)}>
-        <b style:width="{player.volume * 100}%"></b>
+      <div class="mitte">
+        <div class="tasten">
+          <button class="taste" class:an={player.shuffle} onclick={() => player.toggleShuffle()} disabled={!!player.audiobook}
+                  title={player.audiobook ? 'Hörbücher laufen in ihrer Reihenfolge' : 'Zufällige Reihenfolge'}>
+            <i class="fa-solid fa-shuffle"></i></button>
+          <button class="taste" onclick={() => player.prev()} title="Zurück"><i class="fa-solid fa-backward-step"></i></button>
+          <button class="taste gross" onclick={() => player.toggle()} title={player.playing ? 'Pause' : 'Abspielen'}>
+            <i class="fa-solid {player.loading ? 'fa-spinner fa-spin' : player.playing ? 'fa-pause' : 'fa-play'}"></i></button>
+          <button class="taste" onclick={() => player.next()} title="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+          <button class="taste wiederholen" class:an={player.repeat !== 'off'} onclick={() => player.cycleRepeat()}
+                  title={REPEAT_TITLES[player.repeat]}>
+            <i class="fa-solid fa-repeat"></i>{#if player.repeat === 'one'}<b>1</b>{/if}</button>
+        </div>
+        <div class="zeitleiste">
+          <span class="zahl">{formatDuration(Math.floor(player.time))}</span>
+          <div class="spur" use:dragValue={(v) => player.seek(v * player.duration)} role="slider" tabindex="0"
+               aria-label="Stelle im Titel" aria-valuemin="0" aria-valuemax={Math.round(player.duration)} aria-valuenow={Math.round(player.time)}>
+            <b style:width="{progress * 100}%"></b>
+            {#each player.segments.slice(1).filter((segment) => segment.start < player.duration) as segment (segment.start)}
+              <i class="marke" style:left="{(segment.start / (player.duration || 1)) * 100}%" title={segment.title}></i>
+            {/each}
+          </div>
+          <span class="zahl">{formatDuration(Math.floor(player.duration))}</span>
+        </div>
+        <!-- Feste Zeile: Rückgängig nach dem Löschen, sonst die Tonqualität -->
+        <div class="info">
+          {#if player.pendingDelete}
+            <div class="rueckgaengig">
+              <i class="fa-solid fa-trash-can"></i>
+              <span class="was" title={player.pendingDelete.track.title}>Gelöscht: {player.pendingDelete.track.title}</span>
+              <button onclick={() => player.undoDelete()}>Rückgängig</button>
+            </div>
+          {:else if player.segment}
+            <div class="abschnitt-zeile" title={player.segment.title}>
+              <span class="zahl">{player.segment.index + 1}/{player.segment.count}</span> {player.segment.title}</div>
+          {:else if remote.steering}
+            <div class="gesteuert"><i class="fa-solid fa-tower-broadcast"></i> {remote.steering} steuert mit</div>
+          {:else if quality}
+            <div class="qualitaet zahl" title="Tonspur der Datei">{quality}</div>
+          {/if}
+        </div>
       </div>
-      <DeviceButton up />
-      <button class="taste" onclick={() => playerBar.setCompact(true)} title="Leiste verkleinern: nur die Steuerung, unten in der Fußleiste">
-        <i class="fa-solid fa-chevron-down"></i></button>
-      <button class="taste" onclick={() => player.stop()} title="Musik beenden"><i class="fa-solid fa-xmark"></i></button>
+
+      <div class="rechts">
+        <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt', ansicht: 'liedtext' })} title="Liedtext">
+          <i class="fa-solid fa-align-left"></i></button>
+        <button class="taste" onclick={() => navigate('/music', { tab: 'jetzt' })} title="Warteschlange">
+          <i class="fa-solid fa-list-ol"></i></button>
+        <a class="taste" href={downloadUrl(track)} download title="Ton herunterladen (wie geladen, ohne Neukodierung)">
+          <i class="fa-solid fa-download"></i></a>
+        <button class="taste" onclick={() => { player.pause(); navigate(`/watch/${track.id}`); }} title="Als Video ansehen">
+          <i class="fa-solid fa-display"></i></button>
+        <button class="taste" onclick={() => player.toggleMute()} title={player.muted ? 'Ton an' : 'Stumm'}>
+          <i class="fa-solid {player.muted || player.volume === 0 ? 'fa-volume-xmark' : 'fa-volume-high'}"></i></button>
+        <div class="lautstaerke" use:dragValue={(v) => player.setVolume(v)} role="slider" tabindex="0" aria-label="Lautstärke"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(player.volume * 100)}>
+          <b style:width="{player.volume * 100}%"></b>
+        </div>
+        <DeviceButton up />
+        <button class="taste" onclick={() => playerBar.setCompact(true)} title="Leiste verkleinern: nur die Steuerung, unten in der Fußleiste">
+          <i class="fa-solid fa-chevron-down"></i></button>
+        <button class="taste" onclick={() => player.stop()} title="Musik beenden"><i class="fa-solid fa-xmark"></i></button>
+      </div>
     </div>
   </div>
 {/if}
 
 <style>
-  .spieler { flex: none; display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 320px);
+  /* Die Breite der Leiste (nicht des Fensters) entscheidet die Anordnung: die Seitenleiste nimmt ihr Platz */
+  .rahmen { flex: none; container: musikleiste / inline-size; }
+  /* Links Titel und seine Tasten, Mitte die Steuerung (behält ihren Platz), rechts der Rest */
+  .spieler { display: grid; grid-template-columns: minmax(0, 420px) minmax(260px, 1fr) auto;
              align-items: center; gap: var(--tv-a5); height: 108px; padding: 0 var(--tv-a4);
              background: var(--tv-karte); border-top: 1px solid var(--tv-rand-stark); }
   .links { display: flex; align-items: center; gap: var(--tv-a3); min-width: 0; }
   .cover { flex: none; width: 56px; height: 56px; padding: 0; border: 0; border-radius: var(--tv-ecke-klein); overflow: hidden;
            cursor: pointer; background: var(--tv-mulde); }
   .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .text { min-width: 0; }
+  .text { min-width: 0; flex: 1; }
+  .titel-tasten { flex: none; display: flex; align-items: center; gap: 2px; }
   .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .w { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mitte { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
@@ -172,9 +194,16 @@
   .lautstaerke b { background: var(--tv-text-2); }
   .rechts { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 0; }
 
-  @media (max-width: 900px) {
+  /* Zu schmal für alle drei Teile nebeneinander: Titel und Steuerung oben, die übrigen Tasten darunter */
+  @container musikleiste (max-width: 1150px) {
     .spieler { grid-template-columns: minmax(0, 1fr) auto; height: auto; padding: var(--tv-a2) var(--tv-a3); gap: var(--tv-a2); }
-    .zeitleiste, .rechts .lautstaerke { display: none; }
     .rechts { grid-column: 1 / -1; justify-content: space-between; }
+  }
+  /* Noch schmaler (Telefon in der vollen Ansicht): Titel, Steuerung und Tasten untereinander */
+  @container musikleiste (max-width: 660px) {
+    .spieler { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .zeitleiste, .rechts .lautstaerke { display: none; }
   }
 </style>

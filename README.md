@@ -64,6 +64,7 @@
   - Ein Album sind die Titel mit gleichem Cover, auch ein Sampler mit vielen Interpreten.
   - Das Minus blendet einen Titel überall in der Musik aus, mit Rückgängig; gelöscht wird nichts.
   - "Gefällt nicht" löscht ein Video, ebenfalls mit Rückgängig.
+  - "Zur Stelle" zeigt den laufenden Titel in seiner Liste, "Zur Liste" legt ihn in eine Wiedergabeliste.
 - **Mitnehmen:** einzelne Tondateien oder ganze Listen als ZIP, im Original oder umgewandelt.
 - **Hörbücher getrennt von Musik:**
   - Hörbücher und Hörspiele landen nie in Musiklisten oder Mixen.

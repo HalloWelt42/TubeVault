@@ -161,7 +161,7 @@
     return onMusicChange((change) => {
       const gone = isRemoved(change);
       if (current) current = { ...current, tracks: current.tracks.filter((t) => !gone(t)) };
-      if (change.reload) { loadLists(); if (change.restored) loadCurrent(); }
+      if (change.reload) { loadLists(); if (change.restored || change.playlist === key) loadCurrent(); }
     });
   });
 </script>

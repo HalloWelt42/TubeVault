@@ -503,6 +503,14 @@ export const api = {
     if (favorites) params.set('favorites', 'true');
     return request(`/api/music/tracks?${params}`);
   },
+  // Zur Stelle: wo ein Titel in derselben Liste wie musicTracks steht ({ position } oder position null)
+  musicTrackPosition: (id, { sort = 'added', q = '', favorites = false, source = null } = {}) => {
+    const params = new URLSearchParams({ id, sort });
+    if (q) params.set('q', q);
+    if (source) params.set('source', source);
+    if (favorites) params.set('favorites', 'true');
+    return request(`/api/music/tracks/position?${params}`);
+  },
   musicArtists: () => request('/api/music/artists'),
   musicAlbums: () => request('/api/music/albums'),
   musicChannels: () => request('/api/music/channels'),

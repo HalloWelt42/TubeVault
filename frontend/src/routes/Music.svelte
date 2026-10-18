@@ -8,13 +8,15 @@
   entstehen im Listen-Baukasten (links alle Titel, rechts die Liste). Ganze Alben
   lassen sich ausschließen; Ausgeblendetes hat einen eigenen Bereich zum
   Zurückholen. Änderungen von überall (Spieler, Menü) kommen über
-  utils/musicChanges.js und frischen Listen und Zahlen auf.
+  utils/musicChanges.js und frischen Listen und Zahlen auf. "Zur Stelle" im
+  Spieler zeigt den laufenden Titel in der offenen Liste oder unter "Titel"
+  (utils/trackSpot.js).
   © HalloWelt42 – Private Nutzung
 -->
 <script>
   import HiddenArea from '../lib/components/music/HiddenArea.svelte';
   import PlaylistBuilder from '../lib/components/music/PlaylistBuilder.svelte';
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { api } from '../lib/api/client.js';
   import { coverUrl } from '../lib/utils/musicTrack.js';
@@ -32,6 +34,7 @@
   import ArtistLink from '../lib/components/music/ArtistLink.svelte';
   import { excludeAlbum, restoreHidden } from '../lib/utils/musicHiding.js';
   import { isRemoved, onMusicChange } from '../lib/utils/musicChanges.js';
+  import { claimTrackSpot, loadAround, offerTrackSpot, prependInPlace, scrollToTrack } from '../lib/utils/trackSpot.js';
 
   const TABS = [
     { id: 'start', label: 'Start', icon: 'fa-house' },
@@ -67,6 +70,8 @@
   let groupHeadHeight = $state(0);                     // Höhe des stehenden Gruppenkopfs (Spaltenköpfe darunter)
   let books = $state([]);                              // Hörbücher (eigener Bereich)
   let loading = $state(false);
+  let marked = $state(null);                           // Kennung des Titels, den "Zur Stelle" zeigt
+  let scrollBox = $state(null);                        // Rollbereich der Seite
   let menu;
 
   // Klick auf eine Musik-Adresse, während die Seite schon offen ist
@@ -142,6 +147,7 @@
       }
     } catch (e) { toast.error(e.message); }
     loading = false;
+    offerTrackSpot();     // wartet "Zur Stelle" auf diese Liste?
   }
 
   $effect(() => { loadOverview(); });
@@ -159,11 +165,13 @@
   function chooseTab(id) {
     tab = id;
     source = null;
+    marked = null;
     updateParams({ tab: id === 'start' ? null : id, quelle: null });
   }
 
   function openGroup(key) {
     source = key;
+    marked = null;
     updateParams({ quelle: key });
   }
 
@@ -217,6 +225,39 @@
     } catch { /* bleibt beim bisherigen Stand */ }
   }
   onMount(() => onMusicChange(onChange));
+
+  // ─── Zur Stelle: in der offenen Gruppe bzw. im Verlauf, sonst unter "Titel" (Lieblingssongs, wenn er einer ist) ───
+  async function revealTrack(track) {
+    marked = track.id;
+    if ((source || tab === 'verlauf') && groupTracks?.tracks.some((t) => t.id === track.id)) {
+      await scrollToTrack(scrollBox, track.id);
+      return;
+    }
+    const into = tab === 'lieblingssongs' && track.favorite ? 'lieblingssongs' : 'titel';
+    if (source || tab !== into) {
+      tab = into;
+      source = null;
+      updateParams({ tab: into, quelle: null });
+      await tick();         // der Wechsel lädt die erste Seite; die mit dem Titel kommt danach und gilt
+    }
+    try {
+      const found = await loadAround({
+        list, pageSize: PAGE,
+        locate: async () => (await api.musicTrackPosition(track.id, { sort, q: query.trim(), favorites: tab === 'lieblingssongs' })).position,
+        clearFilters: () => {
+          if (!query.trim()) return false;
+          query = '';
+          updateParams({ q: null });
+          return true;
+        },
+      });
+      if (!found) return toast.info('Der Titel steht nicht unter den Titeln der gewählten Quelle');
+      await scrollToTrack(scrollBox, track.id);
+    } catch (e) { toast.error(e.message); }
+  }
+
+  // Die Seite zeigt eine Titelliste, außer im Listen-Baukasten (dort zeigt ihn dessen Titelquelle)
+  onMount(() => claimTrackSpot({ accepts: () => !loading && !(tab === 'wiedergabelisten' && !source), reveal: revealTrack }));
 
   // Ein ganzes Album ausschließen: verschwindet überall, Zurückholen im Bereich Ausgeblendet
   async function excludeOpenAlbum() {
@@ -274,7 +315,7 @@
 
   <!-- Der Listen-Baukasten braucht beide Hälften: dort ohne die Spalte "Läuft gerade" -->
   <div class="musik" class:breit={tab === 'wiedergabelisten' && !source}>
-    <div class="tv-rollfeld" data-scroll-root>
+    <div class="tv-rollfeld" data-scroll-root bind:this={scrollBox}>
       {#if source}
         <!-- Geöffnete Gruppe: Interpret, Album, Kanal, Wiedergabeliste, Mix -->
         <div class="gruppenkopf" bind:clientHeight={groupHeadHeight}>
@@ -302,7 +343,7 @@
           {/if}
         </div>
         {#if groupTracks}
-          <TrackTable tracks={groupTracks.tracks} onMenu={openMenu} onFavorite={favorite} stickyTop={`calc(${groupHeadHeight}px - var(--tv-a2))`}
+          <TrackTable tracks={groupTracks.tracks} {marked} onMenu={openMenu} onFavorite={favorite} stickyTop={`calc(${groupHeadHeight}px - var(--tv-a2))`}
                       onPlay={(i) => playFrom(groupTracks.tracks, i, groupName, source)} />
         {:else if loading}
           <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
@@ -401,14 +442,18 @@
         {:else if !list.items.length}
           <div class="tv-leer">{tab === 'lieblingssongs' ? 'Noch keine Lieblingssongs - das Herz an einem Titel setzt einen.' : 'Keine Titel gefunden.'}</div>
         {:else}
-          <TrackTable tracks={list.items} onMenu={openMenu} onFavorite={favorite}
+          {#if list.hasEarlier}
+            <button class="tv-knopf ohne klein frueher" onclick={() => prependInPlace(scrollBox, list.loadEarlier)} disabled={list.loadingMore}>
+              <i class="fa-solid fa-angles-up"></i> Frühere Titel</button>
+          {/if}
+          <TrackTable tracks={list.items} {marked} onMenu={openMenu} onFavorite={favorite}
                       onPlay={(i) => playFrom(list.items, i, tab === 'titel' ? 'Titel' : 'Lieblingssongs')} />
           <div use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}></div>
         {/if}
 
       {:else if tab === 'verlauf'}
         {#if groupTracks?.tracks.length}
-          <TrackTable tracks={groupTracks.tracks} onMenu={openMenu} onFavorite={favorite}
+          <TrackTable tracks={groupTracks.tracks} {marked} onMenu={openMenu} onFavorite={favorite}
                       onPlay={(i) => playFrom(groupTracks.tracks, i, 'Zuletzt gehört')} />
         {:else if !loading}
           <div class="tv-leer">Noch nichts gehört.</div>
@@ -553,6 +598,7 @@
   .gruppenkopf .tasten { margin-left: auto; display: flex; gap: var(--tv-a2); }
   .leiste { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; margin-bottom: var(--tv-a3); }
   .anzahl { margin-left: auto; }
+  .frueher { width: 100%; justify-content: center; }
   .start-leer { max-width: 760px; }
   .start-leer p { margin: 0; }
   .jetzt-schmal { max-width: 520px; }

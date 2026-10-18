@@ -2,16 +2,19 @@
   Läuft gerade (Musik): großes Cover (Wischen nach links oder rechts: weiter
   oder zurück), Titel mit Ausblenden (Minus: überall in der Musik, nichts wird
   gelöscht) und Herz, woher der Ton kommt und in
-  welcher Güte; die Steuerung (Spur, Tasten, Lautstärke, Liedtext und
-  Warteschlange) steht unten fest, das Cover gibt nach. Gestaltung nach
+  welcher Güte; die Steuerung (Spur, Tasten, Lautstärke, Liedtext,
+  Warteschlange, Zur Stelle, Zur Liste) steht unten fest, das Cover gibt nach. Gestaltung nach
   mockups/mobil-musik.html. Gesteuert wird nur der Musikspieler.
 -->
 <script>
+  import { tick } from 'svelte';
   import { musicPlayer as player, UNDO_MS } from '../../../lib/stores/musicPlayer.svelte.js';
   import { coverUrl, downloadUrl, isFile } from '../../../lib/utils/musicTrack.js';
   import { audioDetails, codecName, trackOrigin } from '../../../lib/utils/audioTech.js';
   import { toast } from '../../../lib/stores/notifications.js';
   import { excludeAlbum, hideTrack, restoreHidden } from '../../../lib/utils/musicHiding.js';
+  import { showTrack, spotSource } from '../../../lib/utils/trackSpot.js';
+  import ListChooser from '../../../lib/components/music/ListChooser.svelte';
   import { back, go } from '../../router.js';
   import Spur from '../../parts/Spur.svelte';
   import Lautstaerke from '../../parts/Lautstaerke.svelte';
@@ -32,6 +35,7 @@
   let hasNext = $derived(player.index + 1 < player.queue.length || (player.repeat === 'all' && player.queue.length > 1)
                          || (!!player.segment && player.segment.index + 1 < player.segment.count));
   let menu = $state(false);
+  let listSheet = $state(false);    // Zur Liste: Wahl der Wiedergabeliste
 
   // ─── Wischen am Cover (parts/wischen.js): nach links weiter, nach rechts zurück ───
   let swipeDx = $state(null);       // Versatz, solange gewischt wird
@@ -59,6 +63,14 @@
     menu = false;
     player.pause();
     go(`/video/${track.id}`);
+  }
+
+  // Zur Stelle: die Gruppe, aus der er läuft (sonst sein Album oder Interpret), dort zeigt die Musik ihn
+  async function toSpot() {
+    const shown = track;
+    go('/musik', { quelle: spotSource(player.source) || shown.album_source || shown.artist_source });
+    await tick();
+    showTrack(shown);
   }
 
   // Ausblenden: überall in der Musik, es geht mit dem nächsten weiter (Rückgängig im Hinweis)
@@ -154,9 +166,18 @@
         <button onclick={() => go('/jetzt', { ansicht: 'liedtext' })}><i class="fa-solid fa-align-left"></i>Liedtext</button>
       {/if}
       <button onclick={() => go('/jetzt', { ansicht: 'schlange' })}><i class="fa-solid fa-list-ol"></i>Warteschlange</button>
+      <button onclick={toSpot}><i class="fa-solid fa-location-crosshairs"></i>Zur Stelle</button>
+      <button onclick={() => listSheet = true}><i class="fa-solid fa-square-plus"></i>Zur Liste</button>
       {@render extra?.()}
     </div>
   </div>
+
+  {#if listSheet}
+    <div class="schleier" role="presentation" onclick={() => listSheet = false}></div>
+    <div class="blatt listen-blatt" role="dialog" aria-label="Zur Liste">
+      <ListChooser {track} onDone={() => listSheet = false} />
+    </div>
+  {/if}
 
   {#if menu}
     <div class="schleier" role="presentation" onclick={() => menu = false}></div>
@@ -196,7 +217,8 @@
   .technik b { color: var(--tv-erfolg); }
   .spur { margin-top: 10px; flex: none; }
   .eins { position: absolute; right: 8px; bottom: 8px; font-size: 13px; }
-  .unten { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding-top: 8px; flex: none; }
+  /* Je Knopf so breit wie seine Beschriftung, der Rest gleich verteilt; nie seitlich hinaus */
+  .unten { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding-top: 8px; flex: none; overflow: hidden; }
   .unten > :global(button) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
                              height: 56px; color: var(--m-dim); font-size: 13px; font-weight: 600; }
   .unten > :global(button i) { font-size: 19px; }
@@ -209,4 +231,5 @@
   .blatt i { width: 22px; text-align: center; color: var(--m-dim); }
   .blatt :is(button, a):active { background: var(--tv-karte-3); }
   .blatt .gefahr, .blatt .gefahr i { color: var(--tv-gefahr); }
+  .listen-blatt { max-height: 70%; padding: 12px 12px calc(var(--m-safe-bottom) + 12px); }
 </style>

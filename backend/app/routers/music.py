@@ -56,6 +56,10 @@ class TrackPage(BaseModel):
     total: int
 
 
+class TrackPosition(BaseModel):
+    position: Optional[int] = None   # Stelle in der sortierten Liste; None: nicht darin (Suche, Filter, Quelle)
+
+
 @router.get("/overview", response_model=Overview)
 async def overview():
     items = await music_library.tracks()
@@ -78,19 +82,39 @@ async def overview():
         channels=sorted(channels, key=lambda g: g.count, reverse=True))
 
 
-@router.get("/tracks", response_model=TrackPage)
-async def track_list(sort: str = Query("added", pattern="^(added|title|artist|plays|duration|last_played)$"),
-                     q: Optional[str] = None, favorites: bool = False,
-                     offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
-                     source: Optional[str] = Query(None, pattern="^(alle|sammlung|videos)$")):
-    """source: statt der gewählten Quelle (z.B. der Listen-Baukasten: aus allem)."""
+SORT_PATTERN = "^(added|title|artist|plays|duration|last_played)$"
+SOURCE_PATTERN = "^(alle|sammlung|videos)$"
+
+
+async def _sorted_tracks(sort: str, q: Optional[str], favorites: bool, source: Optional[str]) -> list[Track]:
+    """Die Titelliste wie angezeigt: Quelle, Lieblingssongs, Suche, Sortierung."""
     items = await music_library.tracks(source)
     if favorites:
         items = [t for t in items if t.favorite]
     if q:
         items = music_library.search(items, q)
     items.sort(key=music_library.SORTS[sort], reverse=sort in music_library.DESCENDING)
+    return items
+
+
+@router.get("/tracks", response_model=TrackPage)
+async def track_list(sort: str = Query("added", pattern=SORT_PATTERN),
+                     q: Optional[str] = None, favorites: bool = False,
+                     offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
+                     source: Optional[str] = Query(None, pattern=SOURCE_PATTERN)):
+    """source: statt der gewählten Quelle (z.B. der Listen-Baukasten: aus allem)."""
+    items = await _sorted_tracks(sort, q, favorites, source)
     return TrackPage(items=items[offset:offset + limit], total=len(items))
+
+
+@router.get("/tracks/position", response_model=TrackPosition)
+async def track_position(id: str, sort: str = Query("added", pattern=SORT_PATTERN),
+                         q: Optional[str] = None, favorites: bool = False,
+                         source: Optional[str] = Query(None, pattern=SOURCE_PATTERN)):
+    """Zur Stelle: wo ein Titel in derselben Liste wie /tracks steht, damit die
+    Oberfläche gleich die Seite mit ihm laden kann."""
+    items = await _sorted_tracks(sort, q, favorites, source)
+    return TrackPosition(position=next((i for i, t in enumerate(items) if t.id == id), None))
 
 
 @router.get("/artists", response_model=list[Group])

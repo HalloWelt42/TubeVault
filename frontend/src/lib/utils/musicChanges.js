@@ -10,6 +10,7 @@
  *     removedAlbums: ['album:...']     ebenso alle Titel dieser Alben
  *     reload: true                     Zahlen und Gruppen beim Server neu holen
  *     restored: true                   etwas kam zurück: auch einfache Listen neu holen
+ *     playlist: 'playlist:12'          diese Wiedergabeliste hat jetzt mehr Titel (Zur Liste)
  *   onMusicChange((change) => ...)     gibt die Abmeldung zurück
  *   isRemoved(change)(track)           trifft ein Titel die Meldung?
  */

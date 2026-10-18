@@ -5,7 +5,8 @@
   ziehen, doppelt klicken oder +. Klick wählt aus (Umschalt: von bis), dann
   wandert die ganze Auswahl auf einmal. Klick aufs Cover hört hinein (ab
   dort läuft die Titelquelle weiter, nochmals Klick hält an). Was schon in der
-  Liste steht, ist markiert.
+  Liste steht, ist markiert. "Zur Stelle" im Spieler springt zum laufenden Titel
+  und wählt ihn aus (utils/trackSpot.js), auch mitten in langen Listen.
 -->
 <script>
   import { onMount } from 'svelte';
@@ -15,6 +16,7 @@
   import { infiniteScroll } from '../../utils/infiniteScroll.js';
   import { setDraggedTracks } from '../../utils/trackDrag.js';
   import { isRemoved, onMusicChange } from '../../utils/musicChanges.js';
+  import { claimTrackSpot, loadAround, prependInPlace, scrollToTrack } from '../../utils/trackSpot.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import CoverPlay from './CoverPlay.svelte';
@@ -33,6 +35,7 @@
   let chosen = $state(new Set());
   let anchor = -1;                 // letzter Klick, für Umschalt-Klick
   let timer;
+  let box = $state(null);          // Rollbereich der Titel
 
   const list = createListLoader(async (page) => {
     const r = await api.musicTracks({ sort, source, q: query.trim(), offset: (page - 1) * PAGE, limit: PAGE });
@@ -81,6 +84,26 @@
   // Hineinhören, ohne die Auswahl zu ändern; Weiter springt zum nächsten Titel der Quelle
   const listen = (index) => player.playTracks(list.items, index, 'Listen-Baukasten');
 
+  // Zur Stelle: die Seite mit dem Titel laden (Suche und Filter weichen, wenn sie ihn verdecken), hinrollen, auswählen
+  async function reveal(track) {
+    try {
+      const found = await loadAround({
+        list, pageSize: PAGE,
+        locate: async () => (await api.musicTrackPosition(track.id, { sort, source, q: query.trim() })).position,
+        clearFilters: () => {
+          if (!query.trim() && source === 'alle') return false;
+          query = '';
+          source = 'alle';
+          return true;
+        },
+      });
+      if (!found) return toast.info('Der Titel steht nicht unter den Titeln der Musik');
+      chosen = new Set([track.id]);
+      anchor = list.items.findIndex((t) => t.id === track.id);
+      await scrollToTrack(box, track.id);
+    } catch (e) { toast.error(e.message); }
+  }
+
   function add(tracks) {
     if (!canAdd) return toast.info('Rechts erst eine Liste wählen oder anlegen');
     onAdd(tracks);
@@ -89,11 +112,13 @@
 
   onMount(() => {
     list.load(true).catch((e) => toast.error(e.message));
-    return onMusicChange((change) => {
+    const unclaim = claimTrackSpot({ accepts: () => true, reveal });
+    const unlisten = onMusicChange((change) => {
       const gone = isRemoved(change);
       list.items = list.items.filter((t) => !gone(t));
       if (change.restored) reload();
     });
+    return () => { unclaim(); unlisten(); };
   });
 </script>
 
@@ -121,12 +146,16 @@
     </div>
   </div>
 
-  <div class="titel" data-scroll-root>
+  <div class="titel" data-scroll-root bind:this={box}>
     {#if list.loading}
       <div class="tv-leer"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
     {:else}
+      {#if list.hasEarlier}
+        <button class="tv-knopf ohne klein frueher" onclick={() => prependInPlace(box, list.loadEarlier)} disabled={list.loadingMore}>
+          <i class="fa-solid fa-angles-up"></i> Frühere Titel</button>
+      {/if}
       {#each list.items as track, i (track.id)}
-        <div class="zeile" class:gewaehlt={chosen.has(track.id)} class:drin={inList.has(track.id)}
+        <div class="zeile" data-titel={track.id} class:gewaehlt={chosen.has(track.id)} class:drin={inList.has(track.id)}
              class:laeuft={player.current?.id === track.id} role="button" tabindex="0"
              draggable="true" ondragstart={(e) => setDraggedTracks(e, cargo(track))}
              onclick={(e) => click(e, i)} ondblclick={() => add([track])}
@@ -156,6 +185,7 @@
   h2 { margin: 0; font-size: var(--tv-gr-titel); }
   .leiste { display: flex; align-items: center; gap: var(--tv-a2); flex-wrap: wrap; min-height: 34px; }
   .titel { flex: 1; min-height: 0; overflow-y: auto; }
+  .frueher { width: 100%; justify-content: center; }
   .zeile { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto 32px; gap: var(--tv-a2); align-items: center;
            padding: 4px 6px; border-radius: var(--tv-ecke); cursor: grab; user-select: none; }
   .zeile:hover { background: var(--tv-flaeche); }

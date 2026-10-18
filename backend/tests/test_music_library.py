@@ -57,3 +57,20 @@ async def test_jede_gruppe_ist_eine_wiedergabeliste(test_db):
     similar = await music_library.play_list("similar:abba0000002")
     assert similar.tracks[0].id == "abba0000002" and {t.id for t in similar.tracks} == {
         "abba0000001", "abba0000002", "abba0000003"}
+
+
+async def test_stelle_eines_titels_in_der_liste(test_db, async_client_factory):
+    """Zur Stelle: dieselbe Liste wie /tracks (Sortierung, Suche, Lieblingssongs);
+    fehlt der Titel dort, ist die Stelle leer."""
+    await _bestand(test_db)
+    await test_db.execute("INSERT INTO favorites (video_id, list_name) VALUES ('abba0000003', 'Standard')")
+    async with await async_client_factory(music.router) as client:
+        async def position(**params):
+            return (await client.get("/api/music/tracks/position", params=params)).json()["position"]
+        listed = [t["id"] for t in (await client.get("/api/music/tracks?sort=title")).json()["items"]]
+        assert await position(id="abba0000001", sort="title") == listed.index("abba0000001")
+        assert await position(id="gall0000001", sort="title", q="abba") is None
+        assert await position(id="abba0000003", sort="title", q="abba") == 1           # Fernando, Super Trouper, Waterloo
+        assert await position(id="abba0000003", favorites=True) == 0
+        assert await position(id="abba0000001", favorites=True) is None
+        assert await position(id="keinemusik1") is None
