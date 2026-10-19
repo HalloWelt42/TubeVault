@@ -1,6 +1,8 @@
 <!--
-  Listen-Baukasten der Musik (Rechner): links alle Titel (TrackPool), rechts
-  die gewählte Wiedergabeliste. Titel von links an jede Stelle der Liste
+  Listen-Baukasten der Musik (Rechner): links die Titelquelle (TrackPool: alle
+  Titel, Alben, Interpreten, Lieblingssongs, andere Listen, Verlauf), rechts
+  die gewählte Wiedergabeliste. Eine ganze Gruppe kommt mit "Alle hinzufügen"
+  auf einmal (ohne Doppel, Hinweis mit Anzahl). Titel von links an jede Stelle der Liste
   ziehen, in der Liste per Ziehen umordnen, mit x herausnehmen; eine neue
   Liste entsteht mit einem Namen und Eingabetaste und ist sofort gewählt.
   Abspielen geht jederzeit, ganz oder je Titel (Cover oder Titel: spielt die
@@ -23,6 +25,7 @@
   import ConfirmDialog from '../common/ConfirmDialog.svelte';
   import NameEdit from '../common/NameEdit.svelte';
   import { renamePlaylist } from '../../utils/playlistRename.js';
+  import { addedText, planAdd } from '../../utils/poolSources.js';
 
   let lists = $state([]);
   let chosenId = $state(get(route).params?.liste || null);
@@ -101,9 +104,12 @@
     loadLists();
   }
 
-  function add(tracks, at = current.tracks.length) {
-    const fresh = tracks.filter((t) => !inList.has(t.id));
-    if (!fresh.length) return toast.info(tracks.length === 1 ? 'Steht schon in der Liste' : 'Stehen schon in der Liste');
+  // whole: eine ganze Gruppe ("Alle hinzufügen") - der Hinweis nennt, wie viele dazukamen
+  function add(tracks, at = current.tracks.length, { whole = false } = {}) {
+    const { fresh, skipped } = planAdd(tracks, inList);
+    if (whole) toast[fresh.length ? 'success' : 'info'](addedText({ fresh, skipped }));
+    else if (!fresh.length) toast.info(tracks.length === 1 ? 'Steht schon in der Liste' : 'Stehen schon in der Liste');
+    if (!fresh.length) return;
     const next = [...current.tracks];
     next.splice(at, 0, ...fresh);
     save(next, (id) => api.musicAddToPlaylist(id, fresh.map((t) => t.id)));
@@ -175,7 +181,7 @@
 </script>
 
 <div class="baukasten">
-  <TrackPool {inList} canAdd={!!current} onAdd={(tracks) => add(tracks)} />
+  <TrackPool {inList} canAdd={!!current} target={key} onAdd={(tracks, options) => add(tracks, undefined, options)} />
 
   <section class="ziel">
     <div class="wahl">

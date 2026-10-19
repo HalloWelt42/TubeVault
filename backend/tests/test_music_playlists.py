@@ -122,3 +122,28 @@ async def test_eintraege_in_reihenfolge_fuer_das_rueckgaengig(test_db, bestand, 
         await client.put(f"/api/playlists/{list_id}/reorder", json={"video_ids": before})
         assert (await client.get(f"/api/playlists/{list_id}/entries")).json()["ids"] == before
         assert (await client.get("/api/playlists/999/entries")).status_code == 404
+
+
+async def test_ganze_gruppe_in_die_liste_ohne_doppel(test_db, async_client_factory):
+    """Baukasten "Alle hinzufügen": die Titel eines Albums bzw. Interpreten, wie
+    die Gruppe sie spielt, kommen in ihrer Reihenfolge ans Ende; was schon in der
+    Liste steht, kommt nicht doppelt hinein - auch ein Titel, der in Album und
+    Interpret zugleich steht."""
+    for n in range(1, 5):
+        await test_db.execute(
+            """INSERT INTO music_files (id, path, title, artist, album, duration, added_at, category)
+               VALUES (?, ?, ?, ?, 'Curtis', 200, ?, 'musik')""",
+            (f"f{n:015x}", f"Curtis/{n:02}.flac", f"Lied {n}", "50 Cent" if n < 4 else "50 Cent, Nate Dogg",
+             f"2026-10-0{n}"))
+    async with await async_client_factory(music.router) as client:
+        list_id = int((await client.post("/api/music/playlists", json={"name": "Auswahl"})).json()["key"].split(":")[1])
+        await client.post(f"/api/music/playlists/{list_id}/items", json={"ids": ["f" + "0" * 14 + "2"]})
+        album_key = (await client.get("/api/music/albums")).json()[0]["key"]
+        album = [t["id"] for t in (await client.get("/api/music/play", params={"source": album_key})).json()["tracks"]]
+        added = (await client.post(f"/api/music/playlists/{list_id}/items", json={"ids": album})).json()
+        assert added == {"added": 3, "count": 4}
+        artist = [t["id"] for t in (await client.get("/api/music/play", params={"source": "artist:nate dogg"})).json()["tracks"]]
+        assert (await client.post(f"/api/music/playlists/{list_id}/items", json={"ids": artist})).json() == {"added": 0, "count": 4}
+    entries = await playlist_items.entries(list_id)
+    assert entries == ["f" + "0" * 14 + "2"] + [i for i in album if i != "f" + "0" * 14 + "2"]
+    assert len(set(entries)) == len(entries)
