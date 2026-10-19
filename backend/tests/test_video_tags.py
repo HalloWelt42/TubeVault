@@ -44,7 +44,7 @@ def test_suchschluessel():
     assert video_tags.search_key(composed) == video_tags.search_key(decomposed) == "körper"
     assert video_tags.search_key("  Einfach   Erklärt ") == "einfach erklärt"
     assert video_tags.search_key("ТЕХНО") == "техно"
-    assert video_tags.rows_of("v", json.dumps(["Körper", "KÖRPER", " "])) == [("v", "körper", "Körper")]
+    assert video_tags.keyed(json.dumps(["Körper", "KÖRPER", " "])) == {"körper": "Körper"}
     assert video_tags.parse("kaputt") == [] and video_tags.parse(None) == []
 
 
@@ -117,7 +117,7 @@ async def test_bestand_in_portionen_unterbrechbar(test_db, monkeypatch):
     assert await video_tags.flush(limit=50) == 50
     assert await video_tags.pending() == 70                       # "Neustart": der Rest bleibt vorgemerkt
     assert (await background_work._video_tags()).done == 50
-    monkeypatch.setattr(video_tags, "BATCH", 30)
+    monkeypatch.setattr(video_tags.INDEX, "batch", 30)
     await video_tags.background_catch_up()
     assert await video_tags.pending() == 0
     assert await test_db.fetch_val("SELECT COUNT(DISTINCT video_id) FROM video_tags WHERE tag_suche = 'gemeinsam'") == 120

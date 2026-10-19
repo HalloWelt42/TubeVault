@@ -1252,17 +1252,17 @@ class RSSService:
             channel_filter = "AND r.channel_id = ?"
             channel_params = [channel_id]
 
-        # Keyword/Tag-Filter (OR: mindestens einer der Tags muss enthalten sein)
+        # Keyword/Tag-Filter (OR: mindestens einer der Tags); genau, Schreibweise egal,
+        # über den eigenen Index (feed_keywords)
         keyword_filter = ""
         keyword_params = []
         if keywords:
             kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
             if kw_list:
-                conditions = []
-                for kw in kw_list:
-                    conditions.append("r.keywords LIKE ?")
-                    keyword_params.append(f'%"{kw}"%')
-                keyword_filter = f"AND ({' OR '.join(conditions)})"
+                from app.services import feed_keywords
+                await feed_keywords.INDEX.refresh_before_query()
+                keyword_sql, keyword_params = feed_keywords.INDEX.condition(kw_list, "r")
+                keyword_filter = f"AND {keyword_sql}"
 
         # Dauer-Filter
         duration_filter = ""

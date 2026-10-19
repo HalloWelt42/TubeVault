@@ -12,7 +12,7 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 59
+SCHEMA_VERSION = 60
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1019,6 +1019,9 @@ class Database:
         # mit Umlauten und fremden Schriften; der Bestand wird im Hintergrund aufgenommen
         from app.services import video_tags
         await video_tags.install_schema(self._connection, backfill=current_version < 59)
+        # v60: derselbe Index für die Schlagwörter des Feeds (feed_keywords)
+        from app.services import feed_keywords
+        await feed_keywords.INDEX.install_schema(self._connection, backfill=current_version < 60)
 
         # v33: Kanalname am Video per Trigger erzwingen, Bestand auffüllen
         # (siehe channel_identity). Füllt nur Leeres, überschreibt nichts.

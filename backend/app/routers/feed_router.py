@@ -7,7 +7,6 @@ Extrahiert aus subscriptions.py für bessere Modularität.
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,32 +43,16 @@ async def get_feed_channels(feed_tab: str = Query("active")):
 
 @router.get("/feed/tags")
 async def get_feed_tags(feed_tab: str = Query("active")):
-    """Alle einzigartigen Tags/Keywords aus RSS-Entries zurueckgeben."""
-    status_filter = ""
+    """Schlagwörter der Feed-Einträge eines Reiters mit Anzahl ({tag, key, count}):
+    je Schlüssel jeder Eintrag einmal, Schreibweise egal (feed_keywords, tag_index)."""
+    status_filter = "1 = 1"
     if feed_tab == "active":
-        status_filter = f"AND {feed_scope.new_entry('r')}"
+        status_filter = feed_scope.new_entry('r')
     elif feed_tab in ("later", "dismissed", "archived"):
-        status_filter = f"AND r.feed_status = '{feed_tab}'"
-
-    rows = await db.fetch_all(
-        f"""SELECT r.keywords FROM rss_entries r
-            JOIN subscriptions s ON r.channel_id = s.channel_id
-            WHERE r.keywords IS NOT NULL AND r.keywords != '[]'
-            {status_filter}"""
-    )
-    tag_counts = {}
-    for row in rows:
-        try:
-            kws = json.loads(row["keywords"]) if isinstance(row["keywords"], str) else row["keywords"]
-            if isinstance(kws, list):
-                for kw in kws:
-                    kw = str(kw).strip()
-                    if kw:
-                        tag_counts[kw] = tag_counts.get(kw, 0) + 1
-        except (json.JSONDecodeError, TypeError):
-            pass
-    sorted_tags = sorted(tag_counts.items(), key=lambda x: -x[1])
-    return [{"tag": t, "count": c} for t, c in sorted_tags]
+        status_filter = f"r.feed_status = '{feed_tab}'"
+    from app.services import feed_keywords
+    return await feed_keywords.INDEX.counts(
+        "rss_entries r JOIN subscriptions s ON r.channel_id = s.channel_id", "r", status_filter, [])
 
 
 @router.get("/feed")

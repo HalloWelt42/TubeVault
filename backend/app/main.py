@@ -272,6 +272,9 @@ async def lifespan(app: FastAPI):
     from app.services import video_tags
     task_manager.register("video_tags", "Schlagwort-Index nachziehen",
                           video_tags.background_catch_up, auto_restart=False, essential=False)
+    from app.services import feed_keywords
+    task_manager.register("feed_keywords", "Schlagwort-Index des Feeds nachziehen",
+                          feed_keywords.INDEX.background_catch_up, auto_restart=False, essential=False)
     from app.services import language_assign
     task_manager.register("languages", "Sprache von Videos, Feed und Kanälen zuordnen",
                           language_assign.worker, auto_restart=True, essential=False)

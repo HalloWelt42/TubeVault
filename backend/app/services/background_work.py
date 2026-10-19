@@ -96,17 +96,27 @@ async def _search_index() -> Optional[WorkItem]:
                     done=done, total=total, progress=done / total if total else None, since=since)
 
 
-async def _video_tags() -> Optional[WorkItem]:
-    """Schlagwort-Index (video_tags): der Bestand nach der Einführung, sonst nur Einzelnes."""
-    from app.services import video_tags
-    remaining = await video_tags.pending()
+async def _tag_index(key: str, index, label: str, detail: str) -> Optional[WorkItem]:
+    """Ein Schlagwort-Index (tag_index): der Bestand nach der Einführung, sonst nur Einzelnes."""
+    remaining = await index.pending()
     if remaining < 50:   # einzelne Änderungen zieht die nächste Abfrage nach
-        _forget("video_tags")
+        _forget(key)
         return None
-    done, total, since = _countdown("video_tags", remaining)
-    return WorkItem(key="video_tags", label="Schlagwörter werden erfasst",
-                    detail="Schlagwortfilter, Zählung und Kategorie-Regeln finden bis dahin noch nicht alle Videos.",
+    done, total, since = _countdown(key, remaining)
+    return WorkItem(key=key, label=label, detail=detail,
                     done=done, total=total, progress=done / total if total else None, since=since)
+
+
+async def _video_tags() -> Optional[WorkItem]:
+    from app.services import video_tags
+    return await _tag_index("video_tags", video_tags.INDEX, "Schlagwörter werden erfasst",
+                            "Schlagwortfilter, Zählung und Kategorie-Regeln finden bis dahin noch nicht alle Videos.")
+
+
+async def _feed_keywords() -> Optional[WorkItem]:
+    from app.services import feed_keywords
+    return await _tag_index("feed_keywords", feed_keywords.INDEX, "Schlagwörter im Feed werden erfasst",
+                            "Der Schlagwortfilter des Feeds findet bis dahin noch nicht alle Einträge.")
 
 
 async def _type_check() -> Optional[WorkItem]:
@@ -308,8 +318,8 @@ async def _own_videos() -> Optional[WorkItem]:
 
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _ai_transcripts, _channel_scan, _subtitle_import, _own_videos, _search_index, _video_tags, _semantic_index,
-    _passage_index, _type_check, _languages, _content_files, _cover_hashes]
+    _dubbing, _ai_transcripts, _channel_scan, _subtitle_import, _own_videos, _search_index, _video_tags, _feed_keywords,
+    _semantic_index, _passage_index, _type_check, _languages, _content_files, _cover_hashes]
 
 
 SLOW_OVERVIEW_S = 1.0      # dauert die Übersicht länger, steht im Live-Log, was wie lange brauchte

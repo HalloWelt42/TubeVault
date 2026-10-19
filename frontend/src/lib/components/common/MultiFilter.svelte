@@ -9,6 +9,7 @@
   import { settings } from '../../stores/settings.js';
   import { languageCatalog, languageChoices, languageInfo, loadLanguages, parseLanguageList } from '../../utils/language.js';
   import { clickedInside } from '../../utils/clickOutside.js';
+  import { sameTag, tagKey } from '../../utils/tagKey.js';
 
   // Props
   let {
@@ -169,12 +170,14 @@
     emitChange();
   }
 
+  // Schreibweise egal (utils/tagKey.js, Server: tag_index): "Militär" und "militär" sind ein Schlagwort
   function toggleTag(tag) {
-    selectedTags = selectedTags.includes(tag)
-      ? selectedTags.filter(t => t !== tag)
+    selectedTags = selectedTags.some(t => sameTag(t, tag))
+      ? selectedTags.filter(t => !sameTag(t, tag))
       : [...selectedTags, tag];
     emitChange();
   }
+  let selectedTagKeys = $derived(new Set(selectedTags.map(tagKey)));
 
   function toggleLanguage(code) {
     selectedLanguages = selectedLanguages.includes(code)
@@ -431,10 +434,10 @@
             <input class="dd-search" type="text" placeholder="Tag suchen… ({tags.length} gesamt)"
                    value={tagSearch} oninput={(e) => tagSearch = e.target.value} />
             <div class="dd-list">
-              {#each filteredTags as t (t.tag)}
-                <div class="dd-option" class:selected={selectedTags.includes(t.tag)}
+              {#each filteredTags as t (t.key ?? t.tag)}
+                <div class="dd-option" class:selected={selectedTagKeys.has(tagKey(t.key ?? t.tag))}
                      onclick={() => toggleTag(t.tag)} role="option" tabindex="-1">
-                  <input type="checkbox" checked={selectedTags.includes(t.tag)} tabindex="-1" />
+                  <input type="checkbox" checked={selectedTagKeys.has(tagKey(t.key ?? t.tag))} tabindex="-1" />
                   <span class="dd-name">{t.tag}</span>
                   <span class="dd-count">{(t.count ?? 0).toLocaleString('de-DE')}</span>
                 </div>
