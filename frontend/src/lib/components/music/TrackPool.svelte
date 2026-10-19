@@ -359,6 +359,13 @@
           display: grid; place-items: center; color: var(--tv-art-musik); }
   .bild img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .weiter { color: var(--tv-text-3); justify-self: center; }
+  /* Niedriges Fenster: Leisten rücken zusammen, der Hinweis steht an jeder Zeile (title) */
+  @media (max-height: 900px) {
+    .kopf { gap: 6px; }
+    .quellen, .leiste { gap: 4px; }
+    .quellen .tv-chip, .leiste .tv-chip { padding: 0 9px; }
+    .auswahl:has(.hinweis) { display: none; }
+  }
   /* Schmale Spalte (Baukasten um 1000 px): Quellen ohne Zeichen, der Hinweis steht an jeder Zeile (title) */
   @container (max-width: 440px) {
     .quellen { gap: 4px; }

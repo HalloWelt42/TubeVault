@@ -85,6 +85,7 @@
   });
 
   const counts = $derived(overview?.counts || {});
+  const summary = $derived(`${counts.tracks} Titel · ${counts.artists} Interpreten · ${formatDurationLong(counts.duration)}`);
 
   // Quelle der Musik (gilt global für Seite und Spieler): alle | sammlung | videos
   const SOURCES = [
@@ -275,11 +276,11 @@
 </script>
 
 <div class="tv-seite">
-  <div class="tv-seitenkopf">
+  <div class="tv-seitenkopf kopf">
     <div class="kopfzeile">
-      <h1>Musik</h1>
+      <h1 title={overview ? summary : ''}>Musik</h1>
       {#if overview}
-        <span class="tv-schwach zahl">{counts.tracks} Titel · {counts.artists} Interpreten · {formatDurationLong(counts.duration)}</span>
+        <span class="tv-schwach zahl zusammenfassung">{summary}</span>
         <div class="quellen" role="group" aria-label="Quelle der Musik">
           {#each SOURCES as q (q.key)}
             <button class:an={overview.source === q.key} onclick={() => chooseSource(q.key)}
@@ -598,4 +599,22 @@
   .start-leer { max-width: 760px; }
   .start-leer p { margin: 0; }
   .jetzt-schmal { max-width: 520px; }
+
+  /* Niedriges Fenster (1280x720, 1000x800): der Kopf rückt zusammen, damit Listen
+     und Listen-Baukasten Zeilen behalten. Alle Bedienelemente bleiben; die
+     Zusammenfassung steht dann im Hinweis des Titels (und in den Zählern der Reiter). */
+  @media (max-height: 900px) {
+    .kopf { padding-top: var(--tv-a3); padding-bottom: var(--tv-a2); }
+    .kopfzeile { margin-bottom: var(--tv-a2); gap: var(--tv-a3); align-items: center; }
+    .kopfzeile h1 { font-size: 24px; }
+    .zusammenfassung { display: none; }
+    .suche { width: 190px; }
+    .tv-reiter { gap: 2px; }
+    .tv-reiter button { height: 34px; padding: 0 var(--tv-a3); gap: 6px; }
+  }
+  /* niedrig und schmal: Reiter nur mit Namen und Zähler, so passen sie in zwei Zeilen */
+  @media (max-height: 900px) and (max-width: 1100px) {
+    .tv-reiter button > i { display: none; }
+    .tv-reiter button { padding: 0 10px; }
+  }
 </style>
