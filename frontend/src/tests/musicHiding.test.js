@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { musicPlayer as player, UNDO_MS } from '../lib/stores/musicPlayer.svelte.js';
 import { toast } from '../lib/stores/notifications.js';
-import { hideTrack } from '../lib/utils/musicHiding.js';
+import { excludeAlbum, hideTrack } from '../lib/utils/musicHiding.js';
 import { setHidden } from '../lib/utils/musicTrack.js';
 import { onMusicChange } from '../lib/utils/musicChanges.js';
 
@@ -106,5 +106,23 @@ describe('Gefällt nicht', () => {
     player.undoDelete();
     expect(ids()).toEqual([OTHER.id, VIDEO.id, NEXT.id]);
     expect(calls()).not.toContain(`DELETE /api/videos/${VIDEO.id}`);
+  });
+});
+
+describe('Album ausschließen', () => {
+  it('nimmt den heutigen Schlüssel des Servers, auch wenn ein früherer kam', async () => {
+    const SPACE = { ...OTHER, album_source: 'album:cover:aaa' };
+    player.queue = [SPACE, VIDEO, NEXT];
+    fetch.mockImplementation(() => ok({ source: 'album:cover:aaa', name: 'Space Night', count: 2 }));
+    const changes = [];
+    const stop = onMusicChange((change) => changes.push(change));
+    const undo = vi.spyOn(toast, 'undo');
+    await excludeAlbum('album:cover:bbb');
+    stop();
+    expect(ids()).toEqual([VIDEO.id, NEXT.id]);
+    expect(changes).toEqual([{ removedAlbums: ['album:cover:aaa'], reload: true }]);
+    expect(undo.mock.calls.at(-1)[0]).toBe('Album "Space Night" ausgeschlossen');
+    await undo.mock.calls.at(-1)[1]();
+    expect(JSON.parse(fetch.mock.calls.at(-1)[1].body)).toEqual({ tracks: [], albums: ['album:cover:aaa'] });
   });
 });

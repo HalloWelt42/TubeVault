@@ -11,10 +11,11 @@ Kontrakt:
 - Ausgeblendet (Wünsche 16.10.2026): ausgeblendete Dateien und ausgeschlossene
   Alben fallen überall heraus, ein leeres Album verschwindet, ihr Video-Doppel
   rückt nicht nach; zurückholen einzeln oder mehrere.
-- Alben nach Cover (Wunsch 19.10.2026): Dateien mit genau gleichem Cover sind
-  ein Album, gleich welcher Interpret und Albumname; ohne Cover gilt Interpret
-  und Album, Videos behalten music_album. Die Prüfsummen des Bestands trägt ein
-  Hintergrundlauf nach.
+- Alben der Sammlung (entschieden 19.10.2026, "Cover oder Ordner und Name"):
+  Dateien mit genau gleichem Cover oder im selben Ordner mit gleichem
+  Albumnamen sind ein Album, fortgesetzt; Videos behalten Interpret und
+  music_album. Die Regel selbst prüft test_music_albums.py. Die Prüfsummen des
+  Bestands trägt ein Hintergrundlauf nach.
 """
 import hashlib
 import os
@@ -331,17 +332,19 @@ async def test_gleiches_cover_ist_ein_album(test_db, sampler):
     assert sorted(t.artist for t in members) == ["Alphaville", "Falco", "Nena"]
 
 
-async def test_ohne_cover_interpret_und_album(test_db, sampler):
-    """Ohne Cover: Interpret und Album wie bisher, auch zusammen mit einem Video
-    gleichen Albums. Ein Ordnerbild zählt als Cover (Prüfsumme seiner Bytes)."""
+async def test_ohne_cover_ordner_und_album(test_db, sampler):
+    """Ohne Cover: Ordner und Albumname. Ein Video gleichen Albums bleibt in
+    seinem eigenen (Interpret und Album). Ein Ordnerbild zählt als Cover
+    (Prüfsumme seiner Bytes)."""
     await music_files.scan()
     await test_db.execute(
         """INSERT INTO videos (id, title, music_artist, music_title, music_album, channel_id, channel_name, is_music, status,
                                download_date)
            VALUES ('mobyvideo01', 'Moby - Natural Blues', 'Moby', 'Natural Blues', 'Play', 'UCmoby', 'Moby', 1,
                    'ready', '2026-10-01')""")
-    play = (await _albums())["album:moby|play"]
-    assert (play.name, play.subtitle, play.count, play.kinds) == ("Play", "Moby", 2, ["datei", "video"])
+    plays = {g.kinds[0]: g for g in (await _albums()).values() if g.name == "Play"}
+    assert plays["video"].key == "album:moby|play" and plays["video"].count == 1
+    assert plays["datei"].key.startswith("album:ordner:") and (plays["datei"].subtitle, plays["datei"].count) == ("Moby", 1)
     nocturne = next(f for f in await music_files.all_files() if f.title == "Nocturne")
     folder_image = music_files.root() / "Sammler" / "folder.jpg"
     assert nocturne.cover_hash == hashlib.sha1(folder_image.read_bytes()).hexdigest()

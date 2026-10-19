@@ -4,6 +4,7 @@ TubeVault Backend – Datenbank v1.5.1
 """
 
 import aiosqlite
+import itertools
 import logging
 import os
 from pathlib import Path
@@ -402,6 +403,9 @@ from app.settings_schema import default_rows as _default_setting_rows, REMOVED_K
 
 DEFAULT_SETTINGS = _default_setting_rows()
 
+# Jedes Verbinden bekommt eine neue Nummer (Teil des Datenstands, data_version)
+_CONNECTIONS = itertools.count(1)
+
 
 class Database:
     """Async SQLite Database Manager."""
@@ -409,10 +413,12 @@ class Database:
     def __init__(self, db_path: Path = DB_PATH):
         self.db_path = db_path
         self._connection: aiosqlite.Connection | None = None
+        self._generation = 0
 
     async def connect(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = await aiosqlite.connect(str(self.db_path))
+        self._generation = next(_CONNECTIONS)
         self._connection.row_factory = aiosqlite.Row
         # Wer hält die eine Verbindung wie lange? Langsame Schritte ins Live-Log
         from app.services import db_watch
@@ -1314,6 +1320,16 @@ class Database:
     async def fetch_val(self, sql: str, params=None):
         row = await self.fetch_one(sql, params)
         return row[0] if row else None
+
+    async def data_version(self) -> tuple[int, int, int]:
+        """Datenstand: ändert sich mit jeder Schreibung über diese Verbindung
+        (total_changes), mit jeder einer anderen Verbindung (PRAGMA data_version)
+        und mit jedem neuen Verbinden (Wiederherstellen). Gleicher Stand heißt
+        gleicher Inhalt - für Zwischenergebnisse, die so lange gelten
+        (shared_cache.for_version). Kostet zwei Abfragen ohne Tabellenzugriff."""
+        changes = await self.fetch_val("SELECT total_changes()")
+        others = await self.fetch_val("PRAGMA data_version")
+        return self._generation, changes, others
 
     # ─── Suchindex (Delegation) ─────────────────────────────────────
     # Aufbau, Pflege und Abfrage liegen in app.services.search_index. Die

@@ -12,7 +12,7 @@
   import { coverUrl, downloadUrl, isFile } from '../../../lib/utils/musicTrack.js';
   import { audioDetails, codecName, trackOrigin } from '../../../lib/utils/audioTech.js';
   import { toast } from '../../../lib/stores/notifications.js';
-  import { excludeAlbum, hideTrack, restoreHidden } from '../../../lib/utils/musicHiding.js';
+  import { excludeAlbum, hideTrack } from '../../../lib/utils/musicHiding.js';
   import { showTrack, spotSource } from '../../../lib/utils/trackSpot.js';
   import ListChooser from '../../../lib/components/music/ListChooser.svelte';
   import { back, go } from '../../router.js';
@@ -90,11 +90,7 @@
   // Das ganze Album aus der Musik nehmen; es geht mit dem nächsten übrigen Titel weiter
   async function excludeTrackAlbum() {
     menu = false;
-    const album = track.album_source;
-    try {
-      const entry = await excludeAlbum(album);
-      toast.undo(`Album "${entry.name}" ausgeschlossen`, () => restoreHidden({ albums: [album] }).catch((e) => toast.error(e.message)));
-    } catch (e) { toast.error(e.message); }
+    try { await excludeAlbum(track.album_source); } catch (e) { toast.error(e.message); }
   }
 
   // Gefällt nicht: das Video wird gelöscht (Dateien der Sammlung blendet das Minus aus)

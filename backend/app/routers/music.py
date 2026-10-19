@@ -337,6 +337,7 @@ class HiddenArea(BaseModel):
 
 class ExcludeRequest(BaseModel):
     source: str                                  # Gruppe wie Track.album_source, z.B. album:cover:<prüfsumme>
+                                                 # (auch ein früherer Schlüssel; gemerkt wird der heutige)
 
 
 class RestoreRequest(BaseModel):
@@ -358,7 +359,8 @@ async def exclude_group(req: ExcludeRequest):
     album = await music_library.album(req.source)
     if not album:
         raise HTTPException(status_code=404, detail="Album nicht gefunden")
-    entry = music_exclusions.Exclusion(source=req.source, name=album.name, subtitle=album.subtitle, count=album.count)
+    # gemerkt wird der heutige Schlüssel des Albums, auch wenn ein früherer kam
+    entry = music_exclusions.Exclusion(source=album.key, name=album.name, subtitle=album.subtitle, count=album.count)
     await music_exclusions.exclude(entry.source, entry.name, entry.subtitle, entry.count)
     return entry
 

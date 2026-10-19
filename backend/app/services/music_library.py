@@ -16,11 +16,12 @@ music_video_hiding) und ausgeschlossene Alben (music_exclusions) fallen
 überall heraus; ein Album ohne sichtbare Titel gibt es dann nicht mehr. Das
 Video-Doppel einer ausgeblendeten Datei rückt nicht nach.
 
-Ein Album sind die Dateien mit genau gleichem Cover (Wunsch 19.10.2026), gleich
-welcher Interpret und welche Schreibweise des Albums - so bleiben Sampler und
-Ordner wie Playlisten beisammen. Ohne Cover gilt Interpret und Albumname, für
-Videos immer (music_album). Welches Album ein Titel hat, steht allein in
-Track.album_source; Albenliste, Abspielen und Ausschließen fragen nur dort.
+Alben der Dateien: gleiches Cover oder gleicher Ordner mit gleichem
+Albumnamen, fortgesetzt (music_albums, entschieden 19.10.2026); Videos bilden
+ihre Alben aus Interpret und music_album. Welches Album ein Titel hat, steht
+allein in Track.album_source; Albenliste, Abspielen und Ausschließen fragen nur
+dort. Ein früherer Schlüssel eines Albums führt über music_albums.resolve zum
+heutigen.
 
 Interpret und Songtitel: was am Video festgelegt ist (music_artist,
 music_title), sonst aus "Interpret - Titel" im Videotitel, sonst der Kanal.
@@ -30,13 +31,15 @@ allein music_flag.
 import random
 import re
 from collections import defaultdict
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import music_exclusions, music_files, music_video_hiding, playlist_items, setting_values
+from app.services import (music_albums, music_exclusions, music_files, music_video_hiding, playlist_items,
+                          setting_values)
 from app.services.lyrics_service import suggest_artist_title
+from app.services.music_keys import group_key
 
 MUSIC_SOURCE = "music.source"
 MUSIC_LIST = "musik"                 # playlists.source einer in der Musik angelegten Liste
@@ -108,16 +111,23 @@ def names_of(row) -> tuple[str, str]:
     return artist.strip(), title.strip()
 
 
-def group_key(name: str) -> str:
-    return re.sub(r"\s+", " ", name.casefold()).strip()
+def video_album(artist: str, album: Optional[str]) -> Optional[str]:
+    """Album eines Videos: Interpret und Albumname; ohne Albumnamen keins."""
+    return f"album:{group_key(f'{artist}|{album}')}" if album else None
 
 
-def album_source(artist: str, album: Optional[str], cover_hash: Optional[str] = None) -> Optional[str]:
-    """Gruppe des Albums: gleiches Cover ist ein Album, sonst Interpret und
-    Albumname. Ohne Albumnamen gehört ein Titel zu keinem Album."""
-    if not album:
-        return None
-    return f"album:cover:{cover_hash}" if cover_hash else f"album:{group_key(f'{artist}|{album}')}"
+class Context(NamedTuple):
+    """Was das Einordnen eines Titels braucht, einmal je Datenstand gerechnet."""
+    albums: music_albums.AlbumIndex
+
+
+async def context() -> Context:
+    return Context(albums=await music_albums.index())
+
+
+async def excluded_albums(ctx: Context) -> set[str]:
+    """Ausgeschlossene Alben unter ihrem heutigen Schlüssel."""
+    return {ctx.albums.resolve(source) for source in await music_exclusions.sources()}
 
 
 TRACK_SELECT = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_album, v.channel_id, v.channel_name,
@@ -139,17 +149,17 @@ def video_track(row) -> Track:
     else:
         artist, title = clean_channel(row["channel_name"]) or "Unbekannt", row["title"] or row["id"]
     return Track(id=row["id"], title=title, artist=artist, artist_source=f"artist:{group_key(artist)}",
-                 album=row["music_album"] or None, album_source=album_source(artist, row["music_album"]),
+                 album=row["music_album"] or None, album_source=video_album(artist, row["music_album"]),
                  channel_id=row["channel_id"], channel_name=row["channel_name"],
                  duration=row["duration"], play_count=row["play_count"], last_played=row["last_played"],
                  added=row["download_date"], favorite=bool(row["favorite"]),
                  has_lyrics=bool(row["has_lyrics"]))
 
 
-def file_track(f: music_files.FileInfo) -> Track:
+def file_track(f: music_files.FileInfo, ctx: Context) -> Track:
     artist = (f.artist or f.album_artist or "Unbekannt").strip()
     return Track(id=f.id, title=f.title, artist=artist, artist_source=f"artist:{group_key(artist)}",
-                 album=f.album, album_source=album_source(artist, f.album, f.cover_hash),
+                 album=f.album, album_source=ctx.albums.of(f.id),
                  duration=int(f.duration) if f.duration else None, play_count=f.play_count,
                  last_played=f.last_played, added=f.added_at, favorite=f.favorite, has_lyrics=f.has_lyrics, kind=FILE,
                  codec=f.codec, cover_hash=f.cover_hash)
@@ -170,15 +180,17 @@ async def tracks(source: Optional[str] = None) -> list[Track]:
     """Alle Musiktitel einer Quelle (alle, sammlung, videos), neueste zuerst;
     ohne Angabe die gewählte (music.source)."""
     source = source or await source_setting()
+    ctx = await context()
     videos = await video_tracks() if source != "sammlung" else []
     every_file = await music_files.all_files(visible_only=False) if source != "videos" else []
-    files = [file_track(f) for f in every_file if not f.hidden]
+    file_tracks = [(f, file_track(f, ctx)) for f in every_file]
+    files = [t for f, t in file_tracks if not f.hidden]
     if videos and every_file:
         # Doppelte Songs: die Datei gilt (bessere Tonqualität) - auch eine
         # ausgeblendete, sonst käme der Song als Video zurück
-        have = {(group_key(t.artist), group_key(t.title)) for t in map(file_track, every_file)}
+        have = {(group_key(t.artist), group_key(t.title)) for _, t in file_tracks}
         videos = [t for t in videos if (group_key(t.artist), group_key(t.title)) not in have]
-    excluded = await music_exclusions.sources()
+    excluded = await excluded_albums(ctx)
     merged = [t for t in (*videos, *files) if t.album_source not in excluded]
     merged.sort(key=lambda t: t.added or "", reverse=True)
     return merged
@@ -195,7 +207,8 @@ async def tracks_of(video_ids: list[str]) -> list[Track]:
 
 async def hidden_tracks() -> list[Track]:
     """Abgewählte Titel beider Arten für den Bereich "Ausgeblendet", zuletzt abgewählte zuerst."""
-    files = [(f.hidden_at or "", file_track(f)) for f in await music_files.hidden_files()]
+    ctx = await context()
+    files = [(f.hidden_at or "", file_track(f, ctx)) for f in await music_files.hidden_files()]
     rows = await db.fetch_all(f"{TRACK_SELECT} AND {music_video_hiding.HIDDEN}")
     videos = [(row["music_hidden_at"] or "", video_track(row)) for row in rows]
     return [track for _, track in sorted((*files, *videos), key=lambda pair: pair[0], reverse=True)]
@@ -266,9 +279,11 @@ def channels(items: list[Track]) -> list[Group]:
 
 
 async def album(source: str) -> Optional[Group]:
-    """Ein Album mit Name und Unterzeile wie in der Albenliste; None, wenn es keine sichtbaren Titel hat."""
-    members = [t for t in await tracks() if t.album_source == source]
-    return _group(source, members, _album_name, album_subtitle) if members else None
+    """Ein Album mit Name und Unterzeile wie in der Albenliste, unter seinem
+    heutigen Schlüssel (source darf ein früherer sein); None ohne sichtbare Titel."""
+    wanted = (await context()).albums.resolve(source)
+    members = [t for t in await tracks() if t.album_source == wanted]
+    return _group(wanted, members, _album_name, album_subtitle) if members else None
 
 
 SORTS = {
@@ -321,7 +336,8 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
         chosen.sort(key=SORTS["title"])
         title = chosen[0].artist if chosen else "Interpret"
     elif kind == "album":
-        chosen = [t for t in items if t.album_source == source]
+        wanted = (await context()).albums.resolve(source)
+        chosen = [t for t in items if t.album_source == wanted]
         title = _most_common(chosen, _album_name) if chosen else "Album"
     elif kind == "channel":
         chosen = [t for t in items if t.channel_id == value]
@@ -359,9 +375,10 @@ async def _list_tracks(ids: list[str]) -> dict[str, Track]:
     spielt, was in ihr steht - geladene Videos (auch ohne Musik-Kennzeichen)
     und sichtbare Dateien. Ausgeschlossene Alben bleiben auch hier draußen."""
     wanted = set(ids)
+    ctx = await context()
     found = {t.id: t for t in await tracks_of([i for i in ids if not music_files.is_file_id(i)])}
-    found.update({f.id: file_track(f) for f in await music_files.all_files() if f.id in wanted})
-    excluded = await music_exclusions.sources()
+    found.update({f.id: file_track(f, ctx) for f in await music_files.all_files() if f.id in wanted})
+    excluded = await excluded_albums(ctx)
     return {i: t for i, t in found.items() if t.album_source not in excluded}
 
 

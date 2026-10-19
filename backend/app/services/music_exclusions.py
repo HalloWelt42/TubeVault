@@ -7,9 +7,11 @@ Videos. Gemerkt wird die Gruppe, nicht die einzelnen Titel - was später zum
 Album hinzukommt, bleibt ebenso draußen. Zurückholen geht im Bereich
 "Ausgeblendet" der Musikseite, zusammen mit den ausgeblendeten Dateien.
 
-Eine Gruppe heißt hier wie überall in der Musik, z.B. "album:cover:<prüfsumme>"
-oder "album:abba|gold" (music_library.Track.album_source). Name und
-Unterzeile werden beim Ausschließen festgehalten, damit die Liste sie auch
+Eine Gruppe heißt hier wie überall in der Musik, z.B. "album:cover:<prüfsumme>",
+"album:ordner:<prüfsumme>" oder "album:abba|gold" (music_library.Track.album_source).
+Wechselt der Schlüssel eines Albums der Sammlung, weil es gewachsen ist, führt
+music_albums.resolve den gemerkten zum heutigen; das Album bleibt draußen. Name
+und Unterzeile werden beim Ausschließen festgehalten, damit die Liste sie auch
 ohne die Titel zeigen kann.
 """
 from typing import Optional

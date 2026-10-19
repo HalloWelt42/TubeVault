@@ -32,7 +32,7 @@
   import TrackMenu from '../lib/components/music/TrackMenu.svelte';
   import NowPlaying from '../lib/components/music/NowPlaying.svelte';
   import ArtistLink from '../lib/components/music/ArtistLink.svelte';
-  import { excludeAlbum, restoreHidden } from '../lib/utils/musicHiding.js';
+  import { excludeAlbum } from '../lib/utils/musicHiding.js';
   import { isRemoved, onMusicChange } from '../lib/utils/musicChanges.js';
   import { claimTrackSpot, loadAround, offerTrackSpot, prependInPlace, scrollToTrack } from '../lib/utils/trackSpot.js';
 
@@ -261,11 +261,7 @@
 
   // Ein ganzes Album ausschließen: verschwindet überall, Zurückholen im Bereich Ausgeblendet
   async function excludeOpenAlbum() {
-    const album = source;
-    try {
-      const entry = await excludeAlbum(album);
-      toast.undo(`Album "${entry.name}" ausgeschlossen`, () => restoreHidden({ albums: [album] }).catch((e) => toast.error(e.message)));
-    } catch (e) { toast.error(e.message); }
+    try { await excludeAlbum(source); } catch (e) { toast.error(e.message); }
   }
 
   async function favorite(track) {

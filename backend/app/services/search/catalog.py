@@ -94,8 +94,9 @@ async def music(query: Query) -> list[MusicHit]:
             if hit[0] in places:
                 places[hit[0]].append(label)
     found = []
+    ctx = await music_library.context()
     for row in rows:
-        track = music_library.file_track(music_files.info_of(row))
+        track = music_library.file_track(music_files.info_of(row), ctx)
         labels = places[row["doc"]]           # leer: Wörter auf mehrere Felder verteilt
         found.append(((not labels or labels[0] != "titel", track.artist.lower(), track.title.lower()),
                       MusicHit(track=track, year=row["year"], genre=row["genre"], found=labels)))

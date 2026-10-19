@@ -10,7 +10,7 @@
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
-  import { excludeAlbum, hideTrack, restoreHidden } from '../../utils/musicHiding.js';
+  import { excludeAlbum, hideTrack } from '../../utils/musicHiding.js';
   import { setVideoMusic } from '../../utils/videoMusic.js';
 
   // onChanged(track, { favorite })
@@ -57,11 +57,7 @@
       } },
     { icon: 'fa-display', label: 'Als Video ansehen', video: true, run: (t) => { player.pause(); navigate(`/watch/${t.id}`); } },
     { icon: 'fa-circle-minus', label: 'Ausblenden', run: (t) => hideTrack(t) },
-    { icon: 'fa-compact-disc', label: 'Album ausschließen', album: true, run: async (t) => {
-        const entry = await excludeAlbum(t.album_source);
-        toast.undo(`Album "${entry.name}" ausgeschlossen`,
-                   () => restoreHidden({ albums: [t.album_source] }).catch((e) => toast.error(e.message)));
-      } },
+    { icon: 'fa-compact-disc', label: 'Album ausschließen', album: true, run: (t) => excludeAlbum(t.album_source) },
     { icon: 'fa-ban', label: 'Keine Musik', video: true, run: (t) => setVideoMusic(t.id, false) },
   ];
 </script>

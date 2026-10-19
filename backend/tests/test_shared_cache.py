@@ -46,3 +46,27 @@ async def test_abbruch_eines_aufrufers_trifft_die_anderen_nicht():
     await asyncio.sleep(0.01)
     first.cancel()
     assert await second == "fertig"
+
+
+async def test_je_stand_einmal_gerechnet():
+    """for_version: gleicher Stand, gleiches Ergebnis ohne neue Rechnung;
+    gleichzeitige Aufrufer teilen eine; ein neuer Stand rechnet neu."""
+    calls = []
+
+    async def compute():
+        calls.append(1)
+        await asyncio.sleep(0.02)
+        return len(calls)
+    results = await asyncio.gather(*(shared_cache.for_version("v", (1, 5), compute) for _ in range(4)))
+    assert results == [1] * 4 and len(calls) == 1
+    assert await shared_cache.for_version("v", (1, 5), compute) == 1
+    assert await shared_cache.for_version("v", (1, 6), compute) == 2
+
+
+async def test_datenstand_folgt_jeder_schreibung(test_db):
+    """Database.data_version: Lesen ändert ihn nicht, jede Schreibung schon."""
+    before = await test_db.data_version()
+    await test_db.fetch_all("SELECT * FROM settings")
+    assert await test_db.data_version() == before
+    await test_db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('probe', '1')")
+    assert await test_db.data_version() != before

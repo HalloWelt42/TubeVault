@@ -88,9 +88,10 @@ async def _file_books() -> dict[str, _Group]:
             key, title = _key(folder), PurePosixPath(folder).name or f.title
         books.setdefault(key, (title, author, []))[2].append(f)
     result = {}
+    ctx = await music_library.context()
     for key, (title, author, files) in books.items():
         files.sort(key=lambda f: (f.disc_no or 0, f.track_no or 0, _natural(f.path)))
-        result[key] = _Group(title, author, "datei", [music_library.file_track(f) for f in files],
+        result[key] = _Group(title, author, "datei", [music_library.file_track(f, ctx) for f in files],
                              next((f.id for f in files if f.has_cover), None))
     return result
 

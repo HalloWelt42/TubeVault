@@ -33,11 +33,16 @@ async function undoHide(track, putBack) {
   } catch (e) { toast.error(e.message); }
 }
 
-/** Ganzes Album ausschließen, auch was später dazukommt; liefert den Eintrag ({ source, name, ... }) */
+/** Ganzes Album ausschließen, auch was später dazukommt; kurz lässt es sich
+ *  zurückholen (Hinweis). source darf ein früherer Schlüssel des Albums sein:
+ *  es gilt der heutige, den der Server nennt. Liefert den Eintrag ({ source, name, ... }). */
 export async function excludeAlbum(source) {
   const entry = await api.musicExclude(source);
-  musicPlayer.dropWhere((t) => t.album_source === source);
-  emitMusicChange({ removedAlbums: [source], reload: true });
+  const album = entry.source || source;
+  musicPlayer.dropWhere((t) => t.album_source === album);
+  emitMusicChange({ removedAlbums: [album], reload: true });
+  toast.undo(`Album "${entry.name}" ausgeschlossen`,
+             () => restoreHidden({ albums: [album] }).catch((e) => toast.error(e.message)));
   return entry;
 }
 

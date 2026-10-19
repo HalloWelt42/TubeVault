@@ -24,7 +24,7 @@
   import { route, go, back } from '../router.js';
   import { nearEnd } from '../parts/nearEnd.js';
   import Ausgeblendet from '../parts/Ausgeblendet.svelte';
-  import { excludeAlbum, restoreHidden } from '../../lib/utils/musicHiding.js';
+  import { excludeAlbum } from '../../lib/utils/musicHiding.js';
   import { isRemoved, onMusicChange } from '../../lib/utils/musicChanges.js';
   import { claimTrackSpot, offerTrackSpot, prependInPlace, scrollToTrack } from '../../lib/utils/trackSpot.js';
 
@@ -234,11 +234,7 @@
 
   // ─── Herausnehmen und Zurückholen, gleich wo (Spieler, Ausgeblendet, Album) ───
   async function excludeOpened() {
-    const album = opened.source;
-    try {
-      const entry = await excludeAlbum(album);
-      toast.undo(`Album "${entry.name}" ausgeschlossen`, () => restoreHidden({ albums: [album] }).catch((e) => toast.error(e.message)));
-    } catch (e) { toast.error(e.message); }
+    try { await excludeAlbum(opened.source); } catch (e) { toast.error(e.message); }
   }
 
   // Herausgenommenes verschwindet sofort; Zahlen, Kacheln und die offene Gruppe kommen leise neu
