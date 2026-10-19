@@ -6,7 +6,12 @@
   © HalloWelt42 – Private Nutzung
 -->
 <script>
+  import { tagKey } from '../../utils/tagKey.js';
+
+  // allTags: [{ tag, key, count }] vom Server (key: Schlüssel des Schlagworts, Schreibweise egal)
   let { allTags = [], activeTags = [], onToggle = () => {} } = $props();
+
+  let activeKeys = $derived(new Set(activeTags.map(tagKey)));
 
   let tagSearch = $state('');
   let showAllTags = $state(false);
@@ -26,7 +31,7 @@
       {#if tagSearch}<button class="tag-search-clear" onclick={() => tagSearch = ''} title="Leeren"><i class="fa-solid fa-xmark"></i></button>{/if}
     </label>
     {#each visibleTags as t}
-      <button class="tv-chip" class:aktiv={activeTags.includes(t.tag)} onclick={() => onToggle(t.tag)}>
+      <button class="tv-chip" class:aktiv={activeKeys.has(tagKey(t.key ?? t.tag))} onclick={() => onToggle(t.tag)}>
         {t.tag} <span class="tv-zaehler">{(t.count ?? 0).toLocaleString('de-DE')}</span>
       </button>
     {/each}

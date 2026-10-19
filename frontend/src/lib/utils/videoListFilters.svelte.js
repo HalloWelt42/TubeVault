@@ -23,6 +23,7 @@
 import { get } from 'svelte/store';
 import { route, updateParams } from '../router/router.js';
 import { getFilter, saveFilters } from '../stores/filterPersist.js';
+import { sameTag } from './tagKey.js';
 
 const DEFAULT_SORT = 'upload_date';
 const DEFAULT_ORDER = 'desc';
@@ -79,8 +80,9 @@ export function createVideoListFilters(routeKey) {
                                 || multi.extra_audio || multi.languages)
   );
 
+  // Schreibweise egal (utils/tagKey.js): "Körper" und "körper" sind ein Schlagwort
   function toggleTag(tag) {
-    activeTags = activeTags.includes(tag) ? activeTags.filter(t => t !== tag) : [...activeTags, tag];
+    activeTags = activeTags.some(t => sameTag(t, tag)) ? activeTags.filter(t => !sameTag(t, tag)) : [...activeTags, tag];
   }
 
   function changeSort(field) {
@@ -119,13 +121,17 @@ export function createVideoListFilters(routeKey) {
     return params;
   }
 
-  /** Filter-Teil für /api/videos/tags (Tag-Leiste passend zur Liste). */
+  /** Filter-Teil für /api/videos/tags: dieselben Filter wie die Liste (ohne Schlagwörter),
+   *  so zählt die Leiste genau, was die Liste mit einem Schlagwort zeigt. */
   function tagParams() {
     return {
       video_types: multi.types || undefined,
       channel_ids: multi.channels || undefined,
       category_ids: multi.categories || undefined,
       language: multi.languages || undefined,
+      search: multi.search || undefined,
+      is_music: multi.is_music ? true : undefined,
+      has_extra_audio: multi.extra_audio ? true : undefined,
     };
   }
 

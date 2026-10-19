@@ -96,6 +96,19 @@ async def _search_index() -> Optional[WorkItem]:
                     done=done, total=total, progress=done / total if total else None, since=since)
 
 
+async def _video_tags() -> Optional[WorkItem]:
+    """Schlagwort-Index (video_tags): der Bestand nach der Einführung, sonst nur Einzelnes."""
+    from app.services import video_tags
+    remaining = await video_tags.pending()
+    if remaining < 50:   # einzelne Änderungen zieht die nächste Abfrage nach
+        _forget("video_tags")
+        return None
+    done, total, since = _countdown("video_tags", remaining)
+    return WorkItem(key="video_tags", label="Schlagwörter werden erfasst",
+                    detail="Schlagwortfilter, Zählung und Kategorie-Regeln finden bis dahin noch nicht alle Videos.",
+                    done=done, total=total, progress=done / total if total else None, since=since)
+
+
 async def _type_check() -> Optional[WorkItem]:
     from app.services import video_classifier
     remaining = await video_classifier.pending()
@@ -295,8 +308,8 @@ async def _own_videos() -> Optional[WorkItem]:
 
 
 SOURCES: list[Callable[[], Awaitable[Optional[WorkItem]]]] = [
-    _dubbing, _ai_transcripts, _channel_scan, _subtitle_import, _own_videos, _search_index, _semantic_index, _passage_index,
-    _type_check, _languages, _content_files, _cover_hashes]
+    _dubbing, _ai_transcripts, _channel_scan, _subtitle_import, _own_videos, _search_index, _video_tags, _semantic_index,
+    _passage_index, _type_check, _languages, _content_files, _cover_hashes]
 
 
 SLOW_OVERVIEW_S = 1.0      # dauert die Übersicht länger, steht im Live-Log, was wie lange brauchte

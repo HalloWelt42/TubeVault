@@ -61,9 +61,9 @@ export function formatDescription(text, links = {}) {
     }
   );
 
-  // Hashtags klickbar
+  // Hashtags klickbar (Buchstaben jeder Schrift: der Klick filtert nach dem Schlagwort, video_tags)
   html = html.replace(
-    /#([\wäöüÄÖÜß]{2,})/g,
+    /#([\p{L}\p{N}_]{2,})/gu,
     '<a href="#" class="desc-tag" data-tag="$1">#$1</a>'
   );
   return html.replace(/\n/g, '<br>');

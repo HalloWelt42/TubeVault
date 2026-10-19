@@ -72,9 +72,13 @@ async def get_all_tags(
     category_ids: str = None,
     archived: bool = False,
     language: Optional[list[str]] = Query(None),
+    search: Optional[str] = None,
+    is_music: Optional[bool] = None,
+    has_extra_audio: Optional[bool] = None,
 ):
-    """Tags mit Anzahl — identische Filter wie /api/videos, damit der Tag-Filter
-    nur die Tags der aktuell angezeigten Videos listet (nicht alle globalen)."""
+    """Schlagwörter mit Anzahl ({tag, key, count}) — identische Filter wie
+    /api/videos, damit die Leiste nur die Schlagwörter der angezeigten Videos
+    listet; count = so viele Videos zeigt die Liste mit diesem Schlagwort."""
     from app.services import language as language_service
     return await metadata_service.get_all_tags(
         video_type=video_type,
@@ -83,6 +87,9 @@ async def get_all_tags(
         category_ids=category_ids,
         is_archived=archived,
         languages=language_service.parse_filter(language),
+        search=search,
+        is_music=is_music,
+        has_extra_audio=has_extra_audio,
     )
 
 

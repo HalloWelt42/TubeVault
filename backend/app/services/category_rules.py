@@ -12,6 +12,9 @@ es zurück. Erst erneutes Hineinlegen von Hand hebt das auf.
 Regeln (category_rules), nur fertig geladene Videos zählen:
   channel    Kanal ist            value = Kanal-Kennung
   tag        Schlagwort enthält   value = Wort; ohne Groß/Klein, auch als Teil eines Schlagworts
+             (auf dem Schlüssel des Schlagwort-Index video_tags; solange dieser
+             für die betrachteten Videos nicht aktuell ist, gilt die Regel als
+             ruhend: wer über sie hineinkam, bleibt)
   semantic   Inhaltlich wie       value = Beschreibung, precision = Stufe der Bedeutungssuche.
              Vektor und Schwelle stehen abgeleitet in category_rule_vectors
              (beim Speichern gerechnet). So ordnen sich neue Videos ein, ohne
@@ -22,15 +25,13 @@ sobald ein Video seinen Vektor bekommt; der Hintergrundlauf ordnet sie ein.
 Eigene Reihenfolge: kleinste position steht oben, Neues kommt oben dazu.
 """
 import asyncio
-import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from app.database import db
 from app.models.categories import ApplyResult, Membership, PreviewVideo, RuleIn, RulePreview
-from app.services import semantic_index, setting_values
+from app.services import semantic_index, setting_values, video_tags
 
 logger = logging.getLogger(__name__)
 
@@ -180,23 +181,6 @@ async def _rows_for(sql: str, params: tuple, ids: Optional[list[str]], column: s
     for chunk in _chunks(ids):
         rows += await db.fetch_all(f"{sql} AND {column} IN ({_marks(chunk)})", (*params, *chunk))
     return rows
-
-
-def tag_matches(raw_tags, needle: str) -> bool:
-    """Enthält eines der Schlagwörter das Wort? (ohne Groß/Klein)"""
-    try:
-        tags = json.loads(raw_tags) if isinstance(raw_tags, str) else (raw_tags or [])
-    except (ValueError, TypeError):
-        return False
-    folded = needle.casefold()
-    return isinstance(tags, list) and any(folded in str(tag).casefold() for tag in tags)
-
-
-def _like_prefilter(needle: str) -> Optional[str]:
-    """LIKE-Muster zum Vorsortieren - nur bei einfachen Wörtern, denn
-    Schlagwörter stehen teils mit \\u-Umschreibung im JSON."""
-    folded = needle.casefold()
-    return f"%{folded}%" if re.fullmatch(r"[a-z0-9 \-]+", folded) else None
 
 
 async def default_precision() -> str:
@@ -359,12 +343,11 @@ async def _match(rule: _Rule, subset: Optional[list[str]]) -> set[str]:
         rows = await _rows_for("SELECT id FROM videos WHERE status = 'ready' AND channel_id = ?", (rule.value,), subset)
         return {row["id"] for row in rows}
     if rule.kind == "tag":
-        sql, params = "SELECT id, tags FROM videos WHERE status = 'ready' AND tags IS NOT NULL AND tags != '[]'", ()
-        pattern = _like_prefilter(rule.value)
-        if pattern:
-            sql, params = f"{sql} AND tags LIKE ?", (pattern,)
-        rows = await _rows_for(sql, params, subset)
-        return {row["id"] for row in rows if tag_matches(row["tags"], rule.value)}
+        contains, params = video_tags.contains_condition(rule.value, "t")
+        rows = await _rows_for(
+            f"""SELECT DISTINCT t.video_id FROM video_tags t JOIN videos v ON v.id = t.video_id
+                WHERE v.status = 'ready' AND {contains}""", tuple(params), subset, column="t.video_id")
+        return {row["video_id"] for row in rows}
     if rule.kind == "semantic":
         return await _semantic_hits(rule, subset)
     return set()
@@ -382,13 +365,20 @@ async def _evaluate(rules: list[_Rule], subset: Optional[list[str]] = None) -> t
 
 # ─── Zugehörigkeit abgleichen ─────────────────────────────────────────
 
-async def _idle_rule_ids(rules: list[_Rule]) -> set[int]:
-    """Gespeicherte "Inhaltlich wie", die gerade nichts treffen können (kein
-    Vektor des aktuellen Modells, KI aus). Wer über sie hineinkam, bleibt."""
+async def _idle_rule_ids(rules: list[_Rule], subset: Optional[list[str]] = None) -> set[int]:
+    """Gespeicherte Regeln, die gerade nicht sicher treffen können: "Inhaltlich
+    wie" ohne Vektor des aktuellen Modells (KI aus), "Schlagwort enthält",
+    solange der Schlagwort-Index für die betrachteten Videos nicht aktuell ist
+    (nach der Einführung; einzelne Videos zieht ensure gleich nach). Wer über
+    sie hineinkam, bleibt. Vor dem Auswerten fragen: so rechnet die Auswertung
+    mit dem Stand, der hier als aktuell galt."""
     cfg = await semantic_index.config()
     model = cfg[1] if cfg else None
-    return {rule.rule_id for rule in rules
+    idle = {rule.rule_id for rule in rules
             if rule.kind == "semantic" and rule.rule_id and (rule.vector is None or rule.model != model)}
+    if any(rule.kind == "tag" for rule in rules) and not await video_tags.ensure(subset):
+        idle |= {rule.rule_id for rule in rules if rule.kind == "tag" and rule.rule_id}
+    return idle
 
 
 async def _top_positions(category_id: int, video_ids: list[str]) -> dict[str, int]:
@@ -440,9 +430,9 @@ async def _sync(category_id: int, target_rules: dict[str, int], subset: Optional
 
 async def _apply_category(category_id: int) -> ApplyResult:
     rules = await _saved_rules(category_id)
+    idle = frozenset(await _idle_rule_ids(rules))
     matched, _ = await _evaluate(rules)
-    return await _sync(category_id, {vid: rules[i].rule_id for vid, i in matched.items()}, None,
-                       frozenset(await _idle_rule_ids(rules)))
+    return await _sync(category_id, {vid: rules[i].rule_id for vid, i in matched.items()}, None, idle)
 
 
 async def apply_category(category_id: int) -> ApplyResult:
@@ -456,9 +446,9 @@ async def _apply_videos(video_ids: list[str]) -> int:
     changed = 0
     for row in await db.fetch_all("SELECT DISTINCT category_id FROM category_rules"):
         rules = await _saved_rules(row["category_id"])
+        idle = frozenset(await _idle_rule_ids(rules, ids))
         matched, _ = await _evaluate(rules, ids)
-        result = await _sync(row["category_id"], {vid: rules[i].rule_id for vid, i in matched.items()}, ids,
-                             frozenset(await _idle_rule_ids(rules)))
+        result = await _sync(row["category_id"], {vid: rules[i].rule_id for vid, i in matched.items()}, ids, idle)
         changed += result.added + result.removed
     return changed
 
@@ -495,11 +485,11 @@ async def _newest(video_ids: set[str], limit: int) -> list[PreviewVideo]:
 async def preview(category_id: Optional[int], rules: list[RuleIn]) -> RulePreview:
     """Was die Regeln ergäben, ohne etwas zu ändern."""
     resolved = await _resolve(category_id, await normalize(rules))
+    idle = await _idle_rule_ids(resolved.rules)
     matched, hits = await _evaluate(resolved.rules)
     members, rule_members, excluded = await _members(category_id)
     matching = set(matched) - excluded
     new = matching - members
-    idle = await _idle_rule_ids(resolved.rules)
     leaving = {vid for vid, rid in rule_members.items() if vid not in matching and rid not in idle}
     return RulePreview(matching=len(matching), new=len(new), leaving=len(leaving),
                        per_rule=[len(found - excluded) for found in hits],
@@ -630,9 +620,9 @@ async def restore(category_id: int, entries: list[Membership]) -> int:
         by_rule = [e.video_id for e in entries if e.origin == "rule" and e.video_id in ready]
         if by_rule:
             rules = await _saved_rules(category_id)
+            idle = frozenset(await _idle_rule_ids(rules, by_rule))
             matched, _ = await _evaluate(rules, by_rule)
-            await _sync(category_id, {vid: rules[i].rule_id for vid, i in matched.items()}, by_rule,
-                        frozenset(await _idle_rule_ids(rules)))
+            await _sync(category_id, {vid: rules[i].rule_id for vid, i in matched.items()}, by_rule, idle)
     return len(ready)
 
 

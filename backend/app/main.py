@@ -269,6 +269,9 @@ async def lifespan(app: FastAPI):
                           music_files.background_scan, auto_restart=True, essential=False)
     task_manager.register("search_index", "Suchindex nachziehen",
                           search_index.background_catch_up, auto_restart=False, essential=False)
+    from app.services import video_tags
+    task_manager.register("video_tags", "Schlagwort-Index nachziehen",
+                          video_tags.background_catch_up, auto_restart=False, essential=False)
     from app.services import language_assign
     task_manager.register("languages", "Sprache von Videos, Feed und Kanälen zuordnen",
                           language_assign.worker, auto_restart=True, essential=False)

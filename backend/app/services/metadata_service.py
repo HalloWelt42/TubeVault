@@ -69,75 +69,10 @@ class MetadataService:
         languages: Sprachkürzel (language.parse_filter), "und" = ohne Sprache.
         with_language_counts: Zähler je Sprache mit allen Filtern außer der Sprache.
         """
-        conditions = []
-        params = []
-
-        # Archiv-Filter (Standard: nicht-archiviert)
-        if is_archived is True:
-            conditions.append("COALESCE(v.is_archived, 0) = 1")
-        elif is_archived is False:
-            conditions.append("COALESCE(v.is_archived, 0) = 0")
-
-        if status:
-            conditions.append("v.status = ?")
-            params.append(status)
-        else:
-            # Standard: nur 'ready' Videos anzeigen (keine Stubs/Bookmarks/Pending)
-            conditions.append("v.status = 'ready'")
-
-        if search and search.strip():
-            # Gleiche Regeln wie die globale Suche (eine Wahrheit, siehe search_index)
-            from app.services import search_index
-            await search_index.refresh_before_query()
-            search_sql, search_params = search_index.condition(search, "v")
-            conditions.append(search_sql)
-            params.extend(search_params)
-
-        # Kategorie-Filter: Mehrfach (category_ids) hat Vorrang vor Einzel (category_id)
-        cat_ids = self._parse_multi_int(category_ids) if category_ids else ([category_id] if category_id else [])
-        if cat_ids:
-            placeholders = ",".join("?" * len(cat_ids))
-            conditions.append(f"v.id IN (SELECT video_id FROM video_categories WHERE category_id IN ({placeholders}))")
-            params.extend(cat_ids)
-
-        # Kanal-Filter: Mehrfach (channel_ids) hat Vorrang vor Einzel (channel_id)
-        ch_ids = self._parse_multi_str(channel_ids) if channel_ids else ([channel_id] if channel_id else [])
-        if ch_ids:
-            placeholders = ",".join("?" * len(ch_ids))
-            conditions.append(f"v.channel_id IN ({placeholders})")
-            params.extend(ch_ids)
-
-        # Video-Typ-Filter: Mehrfach (video_types) hat Vorrang vor Einzel (video_type)
-        vtypes = self._parse_multi_str(video_types) if video_types else ([video_type] if video_type else [])
-        if vtypes:
-            placeholders = ",".join("?" * len(vtypes))
-            conditions.append(f"COALESCE(v.video_type, 'video') IN ({placeholders})")
-            params.extend(vtypes)
-
-        # Tag-Filter: Mehrfach (tags) hat Vorrang vor Einzel (tag), OR-verknüpft
-        tag_list = self._parse_multi_str(tags) if tags else ([tag] if tag else [])
-        if tag_list:
-            tag_conditions = []
-            for t in tag_list:
-                tag_conditions.append("v.tags LIKE ?")
-                params.append(f'%"{t}"%')
-            conditions.append(f"({' OR '.join(tag_conditions)})")
-
-        # Shorts global ausgeschlossen?
-        from app.services import video_classifier
-        shorts_clause = await video_classifier.without_shorts("v")
-        if shorts_clause:
-            conditions.append(shorts_clause.removeprefix(" AND "))
-
-        # Musik-Filter
-        if is_music is True:
-            conditions.append("v.is_music = 1")
-        elif is_music is False:
-            conditions.append("COALESCE(v.is_music, 0) = 0")
-
-        # Nur Videos mit zusätzlicher Tonspur (z.B. nachvertont)
-        if has_extra_audio:
-            conditions.append("EXISTS (SELECT 1 FROM audio_tracks a WHERE a.video_id = v.id)")
+        conditions, params = await self._filters(
+            status=status, search=search, category_id=category_id, category_ids=category_ids,
+            channel_id=channel_id, channel_ids=channel_ids, tag=tag, tags=tags, video_type=video_type,
+            video_types=video_types, is_archived=is_archived, is_music=is_music, has_extra_audio=has_extra_audio)
 
         # Zähler je Sprache: alle Filter außer der Sprache selbst
         language_counts = None
@@ -210,6 +145,97 @@ class MetadataService:
             "total_pages": total_pages,
             "language_counts": language_counts,
         }
+
+    async def _filters(
+        self,
+        status: str | None = None,
+        search: str | None = None,
+        category_id: int | None = None,
+        category_ids: str | None = None,
+        channel_id: str | None = None,
+        channel_ids: str | None = None,
+        tag: str | None = None,
+        tags: str | None = None,
+        video_type: str | None = None,
+        video_types: str | None = None,
+        is_archived: bool | None = None,
+        is_music: bool | None = None,
+        has_extra_audio: bool | None = None,
+    ) -> tuple[list[str], list]:
+        """Bedingungen der Videoliste auf videos v (ohne Sprache): die eine
+        Wahrheit für die Liste (get_videos) und ihre Schlagwortleiste (get_all_tags)."""
+        conditions = []
+        params = []
+
+        # Archiv-Filter (Standard: nicht-archiviert)
+        if is_archived is True:
+            conditions.append("COALESCE(v.is_archived, 0) = 1")
+        elif is_archived is False:
+            conditions.append("COALESCE(v.is_archived, 0) = 0")
+
+        if status:
+            conditions.append("v.status = ?")
+            params.append(status)
+        else:
+            # Standard: nur 'ready' Videos anzeigen (keine Stubs/Bookmarks/Pending)
+            conditions.append("v.status = 'ready'")
+
+        if search and search.strip():
+            # Gleiche Regeln wie die globale Suche (eine Wahrheit, siehe search_index)
+            from app.services import search_index
+            await search_index.refresh_before_query()
+            search_sql, search_params = search_index.condition(search, "v")
+            conditions.append(search_sql)
+            params.extend(search_params)
+
+        # Kategorie-Filter: Mehrfach (category_ids) hat Vorrang vor Einzel (category_id)
+        cat_ids = self._parse_multi_int(category_ids) if category_ids else ([category_id] if category_id else [])
+        if cat_ids:
+            placeholders = ",".join("?" * len(cat_ids))
+            conditions.append(f"v.id IN (SELECT video_id FROM video_categories WHERE category_id IN ({placeholders}))")
+            params.extend(cat_ids)
+
+        # Kanal-Filter: Mehrfach (channel_ids) hat Vorrang vor Einzel (channel_id)
+        ch_ids = self._parse_multi_str(channel_ids) if channel_ids else ([channel_id] if channel_id else [])
+        if ch_ids:
+            placeholders = ",".join("?" * len(ch_ids))
+            conditions.append(f"v.channel_id IN ({placeholders})")
+            params.extend(ch_ids)
+
+        # Video-Typ-Filter: Mehrfach (video_types) hat Vorrang vor Einzel (video_type)
+        vtypes = self._parse_multi_str(video_types) if video_types else ([video_type] if video_type else [])
+        if vtypes:
+            placeholders = ",".join("?" * len(vtypes))
+            conditions.append(f"COALESCE(v.video_type, 'video') IN ({placeholders})")
+            params.extend(vtypes)
+
+        # Tag-Filter: Mehrfach (tags) hat Vorrang vor Einzel (tag), OR-verknüpft; genau,
+        # Schreibweise egal, über den eigenen Index (video_tags)
+        tag_list = self._parse_multi_str(tags) if tags else ([tag] if tag else [])
+        if tag_list:
+            from app.services import video_tags
+            await video_tags.refresh_before_query()
+            tag_sql, tag_params = video_tags.condition(tag_list, "v")
+            conditions.append(tag_sql)
+            params.extend(tag_params)
+
+        # Shorts global ausgeschlossen?
+        from app.services import video_classifier
+        shorts_clause = await video_classifier.without_shorts("v")
+        if shorts_clause:
+            conditions.append(shorts_clause.removeprefix(" AND "))
+
+        # Musik-Filter
+        if is_music is True:
+            conditions.append("v.is_music = 1")
+        elif is_music is False:
+            conditions.append("COALESCE(v.is_music, 0) = 0")
+
+        # Nur Videos mit zusätzlicher Tonspur (z.B. nachvertont)
+        if has_extra_audio:
+            conditions.append("EXISTS (SELECT 1 FROM audio_tracks a WHERE a.video_id = v.id)")
+
+        return conditions, params
 
     @staticmethod
     def _with_extra_audio(video: dict) -> dict:
@@ -309,6 +335,7 @@ class MetadataService:
         ("text_files", "video_id"),
         ("audio_tracks", "video_id"),
         ("dub_requests", "video_id"),
+        ("video_tags", "video_id"),
     )
 
     @staticmethod
@@ -556,78 +583,37 @@ class MetadataService:
         category_ids: str = None,
         is_archived: bool = False,
         languages: list[str] | None = None,
+        search: str | None = None,
+        is_music: bool | None = None,
+        has_extra_audio: bool | None = None,
     ) -> list[dict]:
-        """Tags aggregieren — optional gefiltert auf dieselben Kriterien
-        wie /api/videos. Damit zeigt der Tag-Filter nur Tags der aktuell
-        sichtbaren Liste (keine globalen 64k Tags mehr).
+        """Schlagwörter der Videos, die die Liste mit denselben Filtern zeigt
+        (gleicher Filteraufbau wie get_videos, ohne Schlagwortfilter), mit
+        Anzahl: so viele Videos findet die Liste mit diesem Schlagwort. Gezählt
+        wird über den eigenen Index (video_tags): je Schlüssel jedes Video
+        einmal, angezeigt die häufigste Schreibweise, key ist der Schlüssel.
 
         Args:
-          video_type:   'video' | 'short' | 'live' | 'music' | None
+          video_type:   'video' | 'short' | 'live' | 'music' (= is_music) | None
           video_types:  komma-getrennte Typ-Liste (hat Vorrang vor video_type)
           channel_ids:  komma-getrennte channel_id-Liste
           category_ids: komma-getrennte category_id-Liste (M2M über video_categories)
           is_archived:  True → nur archivierte, False → nur nicht-archivierte
           languages:    Sprachkürzel (language.parse_filter), "und" = ohne Sprache
+          search, is_music, has_extra_audio: wie in der Liste
         """
-        conditions = ["status = 'ready'", "tags != '[]'"]
-        params: list = []
-
-        if is_archived:
-            conditions.append("COALESCE(is_archived, 0) = 1")
-        else:
-            conditions.append("COALESCE(is_archived, 0) = 0")
-
-        if video_types:
-            vtypes = [v.strip() for v in video_types.split(",") if v.strip()]
-            if vtypes:
-                placeholders = ",".join("?" * len(vtypes))
-                conditions.append(f"COALESCE(video_type, 'video') IN ({placeholders})")
-                params.extend(vtypes)
-        elif video_type == "music":
-            conditions.append("is_music = 1")
-        elif video_type in ("video", "short", "live"):
-            conditions.append("COALESCE(video_type, 'video') = ?")
-            params.append(video_type)
-
-        if channel_ids:
-            cids = [c.strip() for c in channel_ids.split(",") if c.strip()]
-            if cids:
-                placeholders = ",".join("?" * len(cids))
-                conditions.append(f"channel_id IN ({placeholders})")
-                params.extend(cids)
-
-        if category_ids:
-            catids = [c.strip() for c in category_ids.split(",") if c.strip()]
-            if catids:
-                placeholders = ",".join("?" * len(catids))
-                conditions.append(
-                    f"id IN (SELECT video_id FROM video_categories WHERE category_id IN ({placeholders}))"
-                )
-                params.extend(catids)
-
+        if video_type == "music":
+            video_type, is_music = None, True
+        conditions, params = await self._filters(
+            search=search, category_ids=category_ids, channel_ids=channel_ids, video_type=video_type,
+            video_types=video_types, is_archived=bool(is_archived), is_music=is_music, has_extra_audio=has_extra_audio)
         if languages:
             from app.services import language
-            language_sql, language_params = language.filter_sql("language", languages)
+            language_sql, language_params = language.filter_sql("v.language", languages)
             conditions.append(language_sql)
             params.extend(language_params)
-
-        from app.services import video_classifier
-        where = " AND ".join(conditions) + await video_classifier.without_shorts()
-        rows = await db.fetch_all(f"SELECT tags FROM videos WHERE {where}", tuple(params))
-
-        tag_count = {}
-        for row in rows:
-            try:
-                tags = json.loads(row["tags"]) if isinstance(row["tags"], str) else row["tags"]
-                for t in tags:
-                    tag_count[t] = tag_count.get(t, 0) + 1
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return sorted(
-            [{"tag": t, "count": c} for t, c in tag_count.items()],
-            key=lambda x: x["count"],
-            reverse=True,
-        )
+        from app.services import video_tags
+        return await video_tags.counts(" AND ".join(conditions), params)
 
     async def get_stats(self) -> dict:
         """Statistiken abrufen. Zählungen zentral aus counts_service

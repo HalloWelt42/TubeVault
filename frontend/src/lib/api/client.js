@@ -179,6 +179,9 @@ export const api = {
     if (filters.channel_ids) p.set('channel_ids', filters.channel_ids);
     if (filters.category_ids) p.set('category_ids', filters.category_ids);
     if (filters.language) p.set('language', filters.language);   // kommagetrennt, "und" = ohne Sprache
+    if (filters.search) p.set('search', filters.search);
+    if (filters.is_music) p.set('is_music', 'true');
+    if (filters.has_extra_audio) p.set('has_extra_audio', 'true');
     if (filters.archived) p.set('archived', 'true');
     const qs = p.toString();
     return request(`/api/videos/tags${qs ? '?' + qs : ''}`);
