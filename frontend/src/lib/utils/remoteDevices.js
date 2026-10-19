@@ -76,8 +76,10 @@ export function musicState(player, canVolume) {
     zufall: book ? null : !!player.shuffle,
     wiederholen: book ? null : player.repeat,
     liebling: !!track.favorite,
+    // minus: überall ausblenden (nicht bei Hörbüchern, sie behalten ihre Teile)
     kann: ['sprung', ...(player.index + 1 < player.queue.length || player.repeat === 'all'
-                         || (player.segment && player.segment.index + 1 < player.segment.count) ? ['weiter'] : []), 'zurueck'],
+                         || (player.segment && player.segment.index + 1 < player.segment.count) ? ['weiter'] : []), 'zurueck',
+           ...(book ? [] : ['minus'])],
   };
 }
 
@@ -97,6 +99,8 @@ export function videoState(session, canVolume) {
     lautstaerke: canVolume ? el.volume : null,
     tonspuren: session.tracks.map((t) => ({ id: t.id, label: t.label })),
     tonspur: session.trackId,
-    kann: ['sprung', ...(session.canNext ? ['weiter'] : []), ...(session.canPrev ? ['zurueck'] : [])],
+    // minus: nur bei einem Video aus einer Playlist (es verlässt die Playlist)
+    kann: ['sprung', ...(session.canNext ? ['weiter'] : []), ...(session.canPrev ? ['zurueck'] : []),
+           ...(session.canRemove ? ['minus'] : [])],
   };
 }

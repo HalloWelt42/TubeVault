@@ -17,6 +17,7 @@
   import { loadSkipRanges, skipTarget } from '../../lib/utils/adSkip.js';
   import { untrack } from 'svelte';
   import { videoSession } from '../../lib/stores/videoSession.svelte.js';
+  import { removeFromPlaylist } from '../../lib/utils/playlistRemoval.js';
   import DeviceSheet from '../parts/DeviceSheet.svelte';
 
   /** handoff: von einem anderen Gerät übernommen, an der Stelle startAt sofort weiter */
@@ -59,6 +60,9 @@
     hasNext: () => !!next,
     hasPrev: () => !!previous,
     queue: () => (listId ? { liste: `playlist:${listId}`, idx: Math.max(0, place) } : {}),
+    // Minus der Fernbedienung: aus dieser Playlist nehmen, weiter mit dem nächsten
+    canRemove: () => !!listId,
+    remove: () => removeFromPlaylist(listId, video, () => playFromQueue(next)),
   };
   $effect(() => {
     const el = player;

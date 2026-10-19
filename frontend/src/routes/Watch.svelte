@@ -33,6 +33,7 @@
   import { scrollWithin } from '../lib/utils/scrollRoot.js';
   import { untrack } from 'svelte';
   import { videoSession } from '../lib/stores/videoSession.svelte.js';
+  import { playlistIdOf, removeFromPlaylist } from '../lib/utils/playlistRemoval.js';
   import DeviceButton from '../lib/components/remote/DeviceButton.svelte';
 
   marked.setOptions({ breaks: true, gfm: true });
@@ -115,13 +116,17 @@
   let plStripIdx = $state(0);  // Welche Playlist im Strip angezeigt wird
   let neighbors = $state({ prev: null, next: null });  // Bibliothek-Nachbarn
 
-  // Fernsteuerung (stores/remote.svelte.js): dieses Video ist von anderen Geräten bedienbar
+  // Fernsteuerung (stores/remote.svelte.js): dieses Video ist von anderen Geräten bedienbar;
+  // läuft es aus einer Playlist, nimmt das Minus es dort heraus
+  const queuePlaylist = () => ($playlistQueue.active ? playlistIdOf($playlistQueue.source) : null);
   const remoteNav = {
     next: () => skipNext(),
     prev: () => skipPrev(),
     hasNext: () => ($playlistQueue.active ? hasNext() : !!neighbors.next),
     hasPrev: () => ($playlistQueue.active ? hasPrev() : !!neighbors.prev),
     queue: () => ($playlistQueue.active ? { liste: $playlistQueue.source, idx: $playlistQueue.currentIndex } : {}),
+    canRemove: () => !!queuePlaylist(),
+    remove: () => removeFromPlaylist(queuePlaylist(), video, skipNext),
   };
   $effect(() => {
     const el = videoEl;

@@ -27,9 +27,12 @@ MAX_QUEUE = 5000
 
 Kind = Literal["rechner", "handy", "tablet"]
 Media = Literal["musik", "hoerbuch", "video"]
+# minus: Musik überall ausblenden bzw. das Video aus seiner Playlist nehmen;
+# zurueckholen (wert: Kennung) macht das letzte Minus rückgängig
 Action = Literal[
     "umschalten", "abspielen", "pause", "weiter", "zurueck", "stelle", "sprung",
     "lautstaerke", "zufall", "wiederholen", "liebling", "tonspur", "uebergeben",
+    "minus", "zurueckholen",
 ]
 
 

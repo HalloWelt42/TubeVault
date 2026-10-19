@@ -262,6 +262,15 @@ async def add_video_to_playlist(playlist_id: int, data: PlaylistAddVideo):
     return {"added": True, "position": position, "video_count": count}
 
 
+@router.get("/{playlist_id}/entries")
+async def playlist_entries(playlist_id: int):
+    """Alle Einträge in ihrer Reihenfolge, auch Dateien und noch nicht geladene
+    (z.B. damit ein Rückgängig ein Video genau an seine Stelle zurücksetzt)."""
+    if not await db.fetch_val("SELECT 1 FROM playlists WHERE id = ?", (playlist_id,)):
+        raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
+    return {"ids": await playlist_items.entries(playlist_id)}
+
+
 @router.delete("/{playlist_id}/videos/{video_id}")
 async def remove_video_from_playlist(playlist_id: int, video_id: str):
     """Video (oder Titel der Sammlung) aus Playlist entfernen."""

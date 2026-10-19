@@ -139,3 +139,13 @@ def test_websocket_ende_zu_ende(make_test_app, monkeypatch):
             assert (befehl["aktion"], befehl["wert"], befehl["von_name"]) == ("sprung", 30, "Handy")
             assert [d["name"] for d in client.get("/api/remote/devices").json()] == ["Rechner", "Handy"]
         assert [d["id"] for d in rechner.receive_json()["geraete"]] == ["fenster-rechner"]
+
+
+async def test_minus_und_zurueckholen_gehen_ans_ziel():
+    """Minus der Fernbedienung (Musik ausblenden, Video aus der Playlist) und sein Rückgängig."""
+    hub = Hub()
+    rechner, handy = await _two(hub)
+    await hub.handle("fenster-handy", {"typ": "befehl", "an": "fenster-rechner", "aktion": "minus"})
+    await hub.handle("fenster-handy", {"typ": "befehl", "an": "fenster-rechner", "aktion": "zurueckholen", "wert": "abc"})
+    assert [(b["aktion"], b["wert"]) for b in rechner.of("befehl")] == [("minus", None), ("zurueckholen", "abc")]
+    assert not handy.of("fehler")

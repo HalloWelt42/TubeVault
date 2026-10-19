@@ -16,6 +16,7 @@ import { wsBaseUrl } from '../api/client.js';
 import { musicPlayer } from './musicPlayer.svelte.js';
 import { videoSession } from './videoSession.svelte.js';
 import { rememberLanguage } from '../utils/audioTrackSync.js';
+import { hideTrack } from '../utils/musicHiding.js';
 import { elementVolumeWorks } from '../utils/softVolume.js';
 import {
   KIND_NAMES, deviceKind, musicState, playingElsewhere, positionOf, randomId, videoState, visibleDevices,
@@ -211,8 +212,25 @@ class Remote {
   }
 
   // ─── Befehle anderer Geräte ───
+  #undo = null;                  // { id, run }: was das letzte Minus von einem anderen Gerät rückgängig macht
+
+  /** Minus merken, damit "zurueckholen" vom anderen Gerät es rückgängig machen kann */
+  #remember(id, work) {
+    Promise.resolve(work)
+      .then((run) => { if (run) this.#undo = { id, run }; })
+      .catch((e) => this.#hooks.notify?.(e.message));
+  }
+
+  #restore(id) {
+    if (!this.#undo || this.#undo.id !== id) return;
+    const { run } = this.#undo;
+    this.#undo = null;
+    run();
+  }
+
   #execute(aktion, wert, from) {
     if (aktion === 'uebergeben') return this.#handOver(wert?.an);
+    if (aktion === 'zurueckholen') return this.#restore(wert);
     const media = this.#localMedia();
     if (!media) return;
     const wasPlaying = media === 'video' ? videoSession.playing : musicPlayer.playing;
@@ -240,6 +258,7 @@ class Remote {
       case 'zufall': return p.audiobook || p.toggleShuffle();
       case 'wiederholen': return p.audiobook || p.cycleRepeat();
       case 'liebling': return p.toggleFavorite();
+      case 'minus': return p.current && !p.audiobook && this.#remember(p.current.id, hideTrack(p.current));
     }
   }
 
@@ -256,6 +275,7 @@ class Remote {
       case 'sprung': el.currentTime = Math.max(0, el.currentTime + number); return;
       case 'lautstaerke': el.volume = Math.min(1, Math.max(0, number)); return;
       case 'tonspur': return videoSession.chooseTrack(wert);
+      case 'minus': return this.#remember(videoSession.video?.id, videoSession.remove());
     }
   }
 

@@ -48,6 +48,12 @@ describe('Minus-Knopf', () => {
     expect(undo).toHaveBeenCalledWith('Ausgeblendet: Video-Titel', expect.any(Function), UNDO_MS);
   });
 
+  it('liefert dasselbe Rückgängig, das der Hinweis anbietet (für die Fernbedienung)', async () => {
+    const offer = vi.spyOn(toast, 'undo');
+    const undo = await hideTrack(VIDEO);
+    expect(offer.mock.calls.at(-1)[1]).toBe(undo);
+  });
+
   it('holt beim Rückgängig zurück, an die alte Stelle', async () => {
     const undo = vi.spyOn(toast, 'undo');
     await hideTrack(VIDEO);

@@ -71,6 +71,18 @@ describe('Fernsteuerung: gemeldeter Stand', () => {
     expect(videoState({ el: null }, true)).toBeNull();
   });
 
+  // Minus der Fernbedienung (Wunsch 19.10.2026): Musik immer, Hörbücher nie, Videos nur aus einer Playlist
+  it('meldet das Minus je nach Art', () => {
+    const player = { current: titel('a'), queue: [titel('a')], index: 0, time: 0, duration: 100, playing: true,
+                     volume: 1, repeat: 'off', audiobook: null };
+    expect(musicState(player, true).kann).toContain('minus');
+    expect(musicState({ ...player, audiobook: 'buch' }, true).kann).not.toContain('minus');
+    const session = { el: { currentTime: 0, duration: 60, paused: false, volume: 1 }, video: { id: 'v', title: 'Video' },
+                      tracks: [], trackId: null, canNext: true, canPrev: false };
+    expect(videoState({ ...session, canRemove: true }, true).kann).toContain('minus');
+    expect(videoState({ ...session, canRemove: false }, true).kann).not.toContain('minus');
+  });
+
   // Je nach Format und Browser kennt das Medienelement die Länge noch nicht (NaN) oder
   // meldet Infinity; JSON macht daraus null, und der Server versteht die Meldung nicht
   it('meldet nur endliche Zahlen, auch wenn das Element die Länge nicht kennt', () => {

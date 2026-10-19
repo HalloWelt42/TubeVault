@@ -1,12 +1,16 @@
 <!--
   Fernbedienung am Handy: steuert, was auf einem anderen Gerät läuft (Musik,
   Hörbuch oder Video), und holt es auf Wunsch hierher. Die Steuerung steht
-  unten fest, Bild oder Cover nehmen den übrigen Platz. Gestaltung nach
+  unten fest, Bild oder Cover nehmen den übrigen Platz. Das Minus blendet
+  Musik dort überall aus bzw. nimmt ein Video aus seiner Playlist; kurz
+  rückgängig zu machen, ausgeführt auf dem anderen Gerät. Gestaltung nach
   mockups/fernsteuerung.html; Kennfarbe Blau für "läuft woanders".
 -->
 <script>
   import { onDestroy, onMount } from 'svelte';
   import { remote } from '../../lib/stores/remote.svelte.js';
+  import { UNDO_MS } from '../../lib/stores/musicPlayer.svelte.js';
+  import { toast } from '../../lib/stores/notifications.js';
   import { coverUrl } from '../../lib/utils/musicTrack.js';
   import { formatDuration } from '../../lib/utils/format.js';
   import { KIND_ICONS } from '../../lib/utils/remoteDevices.js';
@@ -32,6 +36,14 @@
   let trackLabel = $derived(state?.tonspuren?.find((t) => t.id === state.tonspur)?.label || null);
 
   const send = (aktion, wert = null) => remote.send(device.id, aktion, wert);
+
+  // Minus: dort ausführen, hier kurz rückgängig zu machen
+  function minus() {
+    const { kennung, titel } = state;
+    send('minus');
+    toast.undo(video ? `Aus der Playlist genommen: ${titel}` : `Ausgeblendet: ${titel}`,
+               () => send('zurueckholen', kennung), UNDO_MS);
+  }
 </script>
 
 <div class="fern">
@@ -65,9 +77,15 @@
         {/if}
       </div>
       {#if video}
-        <div>
-          <h1 class="vtitel">{state.titel}</h1>
-          {#if state.untertitel}<div class="leise">{state.untertitel}</div>{/if}
+        <div class="titelzeile">
+          <div class="text">
+            <h1 class="vtitel">{state.titel}</h1>
+            {#if state.untertitel}<div class="leise">{state.untertitel}</div>{/if}
+          </div>
+          <button class="rund" disabled={!can.has('minus')} onclick={minus}
+                  aria-label={can.has('minus') ? 'Aus der Playlist nehmen und weiter' : 'Nur bei Videos aus einer Playlist'}
+                  title={can.has('minus') ? 'Aus der Playlist nehmen und weiter' : 'Nur bei Videos aus einer Playlist'}>
+            <i class="fa-solid fa-circle-minus"></i></button>
         </div>
       {:else}
         <div class="titelzeile">
@@ -75,10 +93,16 @@
             <h1 class="titel">{state.titel}</h1>
             <div class="leise">{state.untertitel}{#if state.quelle}{' · '}{state.quelle}{/if}</div>
           </div>
-          {#if state.liebling !== null && state.liebling !== undefined}
-            <button class="herz" class:an={state.liebling} onclick={() => send('liebling')} aria-label="Lieblingssong">
-              <i class="fa-{state.liebling ? 'solid' : 'regular'} fa-heart"></i></button>
-          {/if}
+          <div class="knoepfe">
+            {#if !book}
+              <button class="rund" disabled={!can.has('minus')} onclick={minus} aria-label="Überall in der Musik ausblenden und weiter">
+                <i class="fa-solid fa-circle-minus"></i></button>
+            {/if}
+            {#if state.liebling !== null && state.liebling !== undefined}
+              <button class="rund herz" class:an={state.liebling} onclick={() => send('liebling')} aria-label="Lieblingssong">
+                <i class="fa-{state.liebling ? 'solid' : 'regular'} fa-heart"></i></button>
+            {/if}
+          </div>
         </div>
       {/if}
 
@@ -165,7 +189,9 @@
   .titelzeile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
   .titel { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
   .leise { color: var(--m-dim); font-size: var(--tv-gr-klein); }
-  .herz { width: var(--m-touch); height: var(--m-touch); font-size: 1.3rem; color: var(--m-dim); }
+  .knoepfe { display: flex; }
+  .rund { width: var(--m-touch); height: var(--m-touch); font-size: 1.3rem; color: var(--m-dim); }
+  .rund:disabled { opacity: 0.35; }
   .herz.an { color: #EF5350; }
   .spur { position: relative; height: 26px; touch-action: none; }
   .spur::before { content: ''; position: absolute; left: 0; right: 0; top: 11px; height: 4px; background: var(--m-line); border-radius: 2px; }

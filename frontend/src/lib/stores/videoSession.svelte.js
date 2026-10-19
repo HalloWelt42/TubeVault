@@ -6,7 +6,9 @@
  * ihre Spuren. So kann die Fernsteuerung (stores/remote.svelte.js) ein Video
  * bedienen, ohne die Seiten zu kennen.
  *
- *   videoSession.attach(el, { id, title, channel_name, duration }, { next, prev, hasNext, hasPrev, queue })
+ *   videoSession.attach(el, { id, title, channel_name, duration }, { next, prev, hasNext, hasPrev, queue, canRemove, remove })
+ *     canRemove/remove: läuft das Video aus einer Playlist, nimmt remove() es dort heraus
+ *     (utils/playlistRemoval.js) und liefert das Rückgängig
  *   videoSession.detach(el)
  *   videoSession.setTracks(tracks, activeId, (id) => ...)   // null = Original
  */
@@ -76,8 +78,11 @@ class VideoSession {
 
   get canNext() { return !!this.#nav?.hasNext?.(); }
   get canPrev() { return !!this.#nav?.hasPrev?.(); }
+  get canRemove() { return !!this.#nav?.canRemove?.(); }
   next() { this.#nav?.next?.(); }
   prev() { this.#nav?.prev?.(); }
+  /** Aus der Playlist nehmen, aus der es läuft; liefert das Rückgängig (oder null) */
+  remove() { return this.canRemove ? this.#nav.remove() : Promise.resolve(null); }
 
   /** Warteschlange, aus der das Video läuft: { liste, idx } oder leer */
   queue() { return this.#nav?.queue?.() || {}; }

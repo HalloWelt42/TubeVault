@@ -15,12 +15,15 @@ import { emitMusicChange } from './musicChanges.js';
 
 /** Titel aus der ganzen Musik nehmen. Er verlässt sofort die Warteschlange
  *  (läuft er, geht es weiter); kurz lässt er sich zurückholen, dann auch
- *  wieder an seine Stelle in der Warteschlange */
+ *  wieder an seine Stelle in der Warteschlange. Liefert dieses Rückgängig
+ *  (z.B. für die Fernbedienung, die es von einem anderen Gerät auslöst). */
 export async function hideTrack(track) {
   await setHidden(track, true);
   const putBack = musicPlayer.takeOut(track);
   emitMusicChange({ removed: [track.id], reload: true });
-  toast.undo(`Ausgeblendet: ${track.title}`, () => undoHide(track, putBack), UNDO_MS);
+  const undo = () => undoHide(track, putBack);
+  toast.undo(`Ausgeblendet: ${track.title}`, undo, UNDO_MS);
+  return undo;
 }
 
 async function undoHide(track, putBack) {

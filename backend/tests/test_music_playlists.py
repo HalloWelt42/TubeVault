@@ -108,3 +108,17 @@ async def test_liste_umbenennen(test_db, bestand, async_client_factory):
         assert names == ["Lange Fahrt"]
         assert (await client.put(f"/api/playlists/{list_id}", json={"name": "   "})).status_code == 422
         assert (await client.get(f"/api/playlists/{list_id}")).json()["name"] == "Lange Fahrt"
+
+
+async def test_eintraege_in_reihenfolge_fuer_das_rueckgaengig(test_db, bestand, async_client_factory):
+    """Rückgängig nach dem Minus der Fernbedienung: Einträge samt Dateien in ihrer Reihenfolge."""
+    list_id = await music_library.create_music_playlist("Mix")
+    await playlist_items.add(list_id, [FILE_A, "musikvideo1", FILE_B])
+    async with await async_client_factory(playlists.router) as client:
+        before = (await client.get(f"/api/playlists/{list_id}/entries")).json()["ids"]
+        assert before == [FILE_A, "musikvideo1", FILE_B]
+        await client.delete(f"/api/playlists/{list_id}/videos/musikvideo1")
+        await client.post(f"/api/playlists/{list_id}/videos", json={"video_id": "musikvideo1"})
+        await client.put(f"/api/playlists/{list_id}/reorder", json={"video_ids": before})
+        assert (await client.get(f"/api/playlists/{list_id}/entries")).json()["ids"] == before
+        assert (await client.get("/api/playlists/999/entries")).status_code == 404
