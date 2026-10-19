@@ -4,7 +4,8 @@
    *
    * Bild mit dünner Kante, darunter Titel und eine Zeile Angaben. Auf dem
    * Bild nur Abweichendes: Art (Short, Live), Sprache (außer der
-   * Hauptsprache), zusätzliche Tonspuren, Dauer und wie weit schon gesehen. Beim Überfahren: in Playlist, archivieren.
+   * Hauptsprache), zusätzliche Tonspuren, Dauer und wie weit schon gesehen. Beim Überfahren: in Playlist,
+   * als Musik bzw. keine Musik (leuchtet, wenn es Musik ist), archivieren.
    * © HalloWelt42 – Private Nutzung
    */
   import { api } from '../../api/client.js';
@@ -16,10 +17,13 @@
   import HoverActionOverlay from '../common/HoverActionOverlay.svelte';
   import HoverActionBtn from '../common/HoverActionBtn.svelte';
   import LanguageLabel from '../common/LanguageLabel.svelte';
+  import { setVideoMusic } from '../../utils/videoMusic.js';
 
   // onPlay: statt einfach zu öffnen, z.B. in einer Warteschlange abspielen
   let { video, showArchiveBtn = true, onUpdate = null, onPlay = null } = $props();
   let hidden = $state(false);
+  let musicChoice = $state(null);  // hier umgeschaltet; sonst gilt, was das Video mitbringt
+  let isMusic = $derived(musicChoice ?? !!video.is_music);
 
   // Gesehener Anteil: erst ab ein paar Sekunden, damit Antippen nicht zählt
   const SEEN_FROM_SECONDS = 5;
@@ -40,6 +44,10 @@
       toast.success('Archiviert');
       onUpdate?.();   // die Liste des Aufrufers neu laden
     } catch (err) { toast.error(err.message); }
+  }
+
+  async function toggleMusic() {
+    try { musicChoice = await setVideoMusic(video.id, !isMusic); } catch (err) { toast.error(err.message); }
   }
 
   function openChannel(e) {
@@ -95,6 +103,9 @@
     <HoverActionOverlay>
       <QuickPlaylistBtn videoId={video.id} title={video.title}
                         channelName={video.channel_name} channelId={video.channel_id} size="sm" />
+      <HoverActionBtn variant={isMusic ? 'accent' : null} onclick={toggleMusic} title={isMusic ? 'Keine Musik' : 'Als Musik'}>
+        <i class="fa-solid fa-music"></i>
+      </HoverActionBtn>
       {#if showArchiveBtn && !video.is_archived}
         <HoverActionBtn variant="warn" onclick={archiveVideo} title="Archivieren">
           <i class="fa-solid fa-box-archive"></i>

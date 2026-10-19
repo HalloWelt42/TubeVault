@@ -25,6 +25,7 @@
   import PageHeader from '../lib/components/common/PageHeader.svelte';
   import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
   import ActionMenu from '../lib/components/common/ActionMenu.svelte';
+  import { musicMenuItem } from '../lib/utils/videoMusic.js';
   import ConfirmDialog from '../lib/components/common/ConfirmDialog.svelte';
   import CollectionBar from '../lib/components/collection/CollectionBar.svelte';
   import VideoRow from '../lib/components/collection/VideoRow.svelte';
@@ -352,6 +353,7 @@
       item.state === 'finished'
         ? { icon: 'fa-eye-slash', label: 'Als neu markieren', run: () => setWatched(ids, false) }
         : { icon: 'fa-check', label: 'Als gesehen markieren', run: () => setWatched(ids, true) },
+      musicMenuItem(item, (isMusic) => { item.is_music = isMusic; }),
       { trenner: true },
       { icon: 'fa-xmark', label: 'Aus der Kategorie nehmen', hint: 'bleibt draußen', danger: true, run: () => removeItems(ids) },
     ]);

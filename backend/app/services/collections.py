@@ -42,6 +42,7 @@ class Item(BaseModel):
     reason: Optional[Reason] = None   # nur Kategorien: warum das Video drin ist
     language: Optional[str] = None          # Sprache (services/language) für das Label
     language_source: Optional[str] = None
+    is_music: bool = False            # gilt als Musik (Menü: "Als Musik" / "Keine Musik")
 
 
 class Collection(BaseModel):
@@ -55,7 +56,7 @@ class Collection(BaseModel):
 
 _FIELDS = """v.id, v.title, v.channel_id, v.channel_name, v.duration, v.video_type, v.upload_date,
              COALESCE(v.last_position, 0) AS position, v.last_played, COALESCE(v.play_count, 0) AS play_count,
-             v.status = 'ready' AS loaded, v.language, v.language_source"""
+             v.status = 'ready' AS loaded, v.language, v.language_source, COALESCE(v.is_music, 0) AS is_music"""
 
 
 async def _rows(kind: str, value: str):

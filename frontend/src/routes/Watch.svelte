@@ -10,6 +10,8 @@
   let confirmRef;
   import { route, navigate, updateParams } from '../lib/router/router.js';
   import { toast } from '../lib/stores/notifications.js';
+  import { onMusicChange } from '../lib/utils/musicChanges.js';
+  import { setVideoMusic } from '../lib/utils/videoMusic.js';
   import { getSettingNum, getSettingBool } from '../lib/stores/settings.js';
   import { formatDuration, formatSize, formatDate, formatViews, formatStreamSize, truncate, streamUnavailableLabel } from '../lib/utils/format.js';
   import { formatDescription, parseDescClick } from '../lib/utils/description.js';
@@ -567,6 +569,15 @@
     } catch (e) { toast.error(e.message); }
   }
 
+  // Musik oder nicht, von Hand (auch das Liedtext-Fenster kann es umstellen: beide folgen einander)
+  async function toggleMusic() {
+    if (!video) return;
+    try { video.is_music = await setVideoMusic(video.id, !video.is_music); } catch (e) { toast.error(e.message); }
+  }
+  $effect(() => onMusicChange((change) => {
+    if (video && change.music?.id === video.id) video.is_music = change.music.is_music;
+  }));
+
   async function archiveFromWatch() {
     if (!video) return;
     try {
@@ -872,8 +883,13 @@
             title={video?.suggest_override === 'exclude' ? 'Aus Vorschlägen ausgeschlossen' : video?.suggest_override === 'include' ? 'Explizit eingeschlossen' : 'Standard (Kanal-Einstellung)'}>
             <i class="fa-solid fa-dice"></i>
           </button>
-          <button class="action-btn" class:active={activeSidePanel === 'lyrics'} onclick={() => toggleSidebar('lyrics')} title="Lyrics">
+          <button class="action-btn" class:musik={!!video?.is_music} onclick={toggleMusic}
+                  title={video?.is_music ? 'Gilt als Musik - klicken: keine Musik' : 'Als Musik festlegen'}
+                  aria-pressed={!!video?.is_music}>
             <i class="fa-solid fa-music"></i>
+          </button>
+          <button class="action-btn" class:active={activeSidePanel === 'lyrics'} onclick={() => toggleSidebar('lyrics')} title="Liedtext">
+            <i class="fa-solid fa-align-left"></i>
           </button>
           <button class="action-btn" class:active={activeSidePanel === 'subtitles'} onclick={() => toggleSidebar('subtitles')} title="Untertitel">
             <i class="fa-solid fa-closed-captioning"></i>
@@ -1585,6 +1601,7 @@
   .action-btn:hover { border-color: var(--accent-primary); color: var(--text-primary); }
   .action-btn.active { border-color: var(--status-error); }
   .action-btn.danger:hover { border-color: var(--status-error); color: var(--status-error); }
+  .action-btn.musik { border-color: var(--tv-art-musik); color: var(--tv-art-musik); }
   .action-btn.suggest-exclude { text-decoration: line-through; opacity: 0.5; border-color: var(--status-warning); color: var(--status-warning); }
   .action-btn.suggest-include { border-color: var(--status-success); color: var(--status-success); }
   .btn-badge { position: absolute; top: -4px; right: -4px; font-size: 0.55rem; background: var(--accent-primary); color: var(--accent-text); padding: 0 4px; border-radius: 6px; line-height: 1.4; pointer-events: none; }

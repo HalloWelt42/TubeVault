@@ -11,6 +11,7 @@
  *     reload: true                     Zahlen und Gruppen beim Server neu holen
  *     restored: true                   etwas kam zurück: auch einfache Listen neu holen
  *     playlist: 'playlist:12'          diese Wiedergabeliste hat jetzt mehr Titel (Zur Liste)
+ *     music: { id, is_music }          dieses Video ist jetzt Musik bzw. nicht mehr (utils/videoMusic.js)
  *   onMusicChange((change) => ...)     gibt die Abmeldung zurück
  *   isRemoved(change)(track)           trifft ein Titel die Meldung?
  */

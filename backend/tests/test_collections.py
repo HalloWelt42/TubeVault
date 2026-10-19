@@ -179,3 +179,21 @@ async def test_playlist_mit_vorgemerkten_und_drip(test_db, monkeypatch):
     await drip.run_due()
     row = await test_db.fetch_one("SELECT drip_enabled, drip_completed_at FROM playlists WHERE id = ?", (pl,))
     assert row["drip_enabled"] == 0 and row["drip_completed_at"]
+
+
+async def test_sammlung_nennt_musik_je_video(test_db, async_client_factory):
+    """Menü der Videolisten (Wunsch 19.10.2026): "Als Musik" bzw. "Keine Musik" je Video;
+    die Wahl gilt als Nutzerwahl und steht danach an der Sammlung."""
+    from app.routers import videos
+    await _video(test_db, "musik000001", "Lied", is_music=1)
+    await _video(test_db, "vortrag0001", "Vortrag")
+    for vid in ("musik000001", "vortrag0001"):
+        await test_db.execute("INSERT INTO favorites (video_id, list_name) VALUES (?, 'Standard')", (vid,))
+    music = {i.id: i.is_music for i in (await collections.load("favorites:Standard")).items}
+    assert music == {"musik000001": True, "vortrag0001": False}
+    async with await async_client_factory(videos.router) as client:
+        listed = {v["id"]: v["is_music"] for v in (await client.get("/api/videos?per_page=10")).json()["videos"]}
+        assert listed == {"musik000001": True, "vortrag0001": False}      # Kacheln der Bibliothek
+        await client.post("/api/videos/music/batch", json={"video_ids": ["vortrag0001"], "is_music": True})
+    assert all(i.is_music for i in (await collections.load("favorites:Standard")).items)
+    assert await test_db.fetch_val("SELECT music_source FROM videos WHERE id = 'vortrag0001'") == "user"

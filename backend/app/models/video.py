@@ -59,6 +59,7 @@ class VideoResponse(VideoBase):
     extra_audio: list[str] = []     # zusätzliche Tonspuren: Sprachkürzel oder "neu" (neu gesprochen)
     language: Optional[str] = None          # Sprache des Videos (ISO 639-1), siehe services/language
     language_source: Optional[str] = None   # Herkunft: hand | quelle | untertitel | text | kanal
+    is_music: Optional[bool] = False        # gilt als Musik (Kachel: "Als Musik" / "Keine Musik")
 
     class Config:
         from_attributes = True

@@ -6,13 +6,12 @@
   Nutzung: <TrackMenu bind:this={menu} onChanged={...} />, menu.open(event, track)
 -->
 <script>
-  import { api } from '../../api/client.js';
   import { downloadUrl, isFile } from '../../utils/musicTrack.js';
   import { navigate } from '../../router/router.js';
   import { toast } from '../../stores/notifications.js';
   import { musicPlayer as player } from '../../stores/musicPlayer.svelte.js';
   import { excludeAlbum, hideTrack, restoreHidden } from '../../utils/musicHiding.js';
-  import { emitMusicChange } from '../../utils/musicChanges.js';
+  import { setVideoMusic } from '../../utils/videoMusic.js';
 
   // onChanged(track, { favorite })
   let { onChanged = () => {} } = $props();
@@ -63,11 +62,7 @@
         toast.undo(`Album "${entry.name}" ausgeschlossen`,
                    () => restoreHidden({ albums: [t.album_source] }).catch((e) => toast.error(e.message)));
       } },
-    { icon: 'fa-ban', label: 'Keine Musik', video: true, run: async (t) => {
-        await api.setMusicBatch([t.id], false);
-        emitMusicChange({ removed: [t.id], reload: true });
-        toast.success('Aus der Musik genommen (von Hand, bleibt so)');
-      } },
+    { icon: 'fa-ban', label: 'Keine Musik', video: true, run: (t) => setVideoMusic(t.id, false) },
   ];
 </script>
 

@@ -7,6 +7,8 @@
   import { api } from '../../api/client.js';
   import { parseLrc } from '../../utils/lrc.js';
   import { toast } from '../../stores/notifications.js';
+  import { onMusicChange } from '../../utils/musicChanges.js';
+  import { announceVideoMusic } from '../../utils/videoMusic.js';
 
   let {
     videoId,
@@ -38,6 +40,11 @@
 
   // Parsed synced lyrics: [{time: seconds, text: string}]
   let parsedLines = $derived(parseLrc(synced).map(l => ({ raw: l.time, text: l.text })));
+
+  // "Musik" anderswo umgeschaltet (Knopf der Videoansicht): der Haken hier folgt
+  $effect(() => onMusicChange((change) => {
+    if (change.music?.id === videoId) info.is_music = change.music.is_music;
+  }));
 
   // Auto-scroll synced lyrics
   $effect(() => {
@@ -229,6 +236,7 @@
         title: info.title,
         album: info.album,
       });
+      announceVideoMusic(videoId, info.is_music);
       toast.success('Musik-Info gespeichert');
     } catch (e) {
       toast.error('Speichern fehlgeschlagen');
