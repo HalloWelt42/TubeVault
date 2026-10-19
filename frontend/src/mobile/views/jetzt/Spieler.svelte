@@ -14,6 +14,7 @@
   import { toast } from '../../../lib/stores/notifications.js';
   import { excludeAlbum, hideTrack } from '../../../lib/utils/musicHiding.js';
   import { showTrack, spotSource } from '../../../lib/utils/trackSpot.js';
+  import { trackFollow } from '../../../lib/stores/trackFollow.svelte.js';
   import { artistRefs } from '../../../lib/utils/trackArtists.js';
   import ListChooser from '../../../lib/components/music/ListChooser.svelte';
   import { back, go } from '../../router.js';
@@ -163,7 +164,9 @@
         <button onclick={() => go('/jetzt', { ansicht: 'liedtext' })}><i class="fa-solid fa-align-left"></i>Liedtext</button>
       {/if}
       <button onclick={() => go('/jetzt', { ansicht: 'schlange' })}><i class="fa-solid fa-list-ol"></i>Warteschlange</button>
-      <button onclick={toSpot}><i class="fa-solid fa-location-crosshairs"></i>Zur Stelle</button>
+      <button class:an={trackFollow.on} aria-pressed={trackFollow.on} onclick={() => { if (trackFollow.toggle()) toSpot(); }}
+              aria-label={trackFollow.on ? 'Zur Stelle ist an: die Liste folgt dem laufenden Titel' : 'Zur Stelle: Liste folgt dem laufenden Titel'}>
+        <i class="fa-solid fa-location-crosshairs"></i>Zur Stelle</button>
       <button onclick={() => listSheet = true}><i class="fa-solid fa-square-plus"></i>Zur Liste</button>
       {@render extra?.()}
     </div>

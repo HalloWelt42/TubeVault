@@ -3,7 +3,8 @@
   über allen Seiten, solange etwas in der Warteschlange ist; steuert nur den
   Musikspieler (lib/stores/musicPlayer.svelte.js). Das Minus blendet den Titel
   überall in der Musik aus (utils/musicHiding.js), der Papierkorb löscht ein Video.
-  "Zur Stelle" zeigt den Titel in der Titelliste (utils/trackSpot.js), "Zur Liste"
+  "Zur Stelle" zeigt den Titel in der Titelliste (utils/trackSpot.js) und folgt
+  ihm eingeschaltet bei jedem Wechsel (stores/trackFollow.svelte.js), "Zur Liste"
   legt ihn in eine Wiedergabeliste.
 -->
 <script>
@@ -21,6 +22,7 @@
   import ArtistLink from './ArtistLink.svelte';
   import ListButton from './ListButton.svelte';
   import { playerBar } from '../../stores/playerBar.svelte.js';
+  import { trackFollow } from '../../stores/trackFollow.svelte.js';
 
   let track = $derived(player.current);
   let progress = $derived(player.duration ? player.time / player.duration : 0);
@@ -65,7 +67,10 @@
             <i class="fa-{track.favorite ? 'solid' : 'regular'} fa-heart"></i></button>
           <!-- Hörbücher haben ihre Teile fest: dort weder Zur Stelle, Zur Liste noch Ausblenden -->
           {#if !player.audiobook}
-            <button class="taste" onclick={toSpot} title="Zur Stelle: in der Titelliste zeigen">
+            <button class="taste" class:an={trackFollow.on} aria-pressed={trackFollow.on}
+                    onclick={() => { if (trackFollow.toggle()) toSpot(); }}
+                    title={trackFollow.on ? 'Zur Stelle ist an: die Liste folgt dem laufenden Titel. Klick schaltet aus'
+                                          : 'Zur Stelle: Liste folgt dem laufenden Titel. Klick schaltet ein'}>
               <i class="fa-solid fa-location-crosshairs"></i></button>
             <ListButton {track} />
             <button class="taste weg" onclick={hide} title="Überall in der Musik ausblenden und weiter (nichts wird gelöscht)">
