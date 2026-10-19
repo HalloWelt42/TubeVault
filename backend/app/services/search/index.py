@@ -12,8 +12,24 @@ Volltext über Kapitel und Feed-Einträge.
 
 Gleicher Tokenizer wie der Videoindex (search_index), damit ein Wort überall
 gleich trifft. Die Videos selbst pflegt search_index, das Gesagte transcripts.
+
+Schlagwörter des Feeds stehen als JSON-Liste mit \\u-Umschreibung in
+rss_entries.keywords; in den Volltext kommen sie entschlüsselt als Klartext
+(keywords_text). Bis v60 stand dort das rohe JSON: keywords:Militär fand am
+Bestand 93 Einträge, 742 tragen ein Schlagwort mit "militär". v61 schreibt
+die betroffenen Einträge neu (reindex_feed_keywords).
 """
-SCHEMA_SQL = """
+
+
+def keywords_text(ref: str) -> str:
+    """SQL-Ausdruck: Schlagwörter (JSON-Liste in ref) als Klartext, durch
+    Leerzeichen getrennt; kein JSON-Feld: der Text, wie er ist."""
+    return (f"CASE WHEN json_valid({ref}) AND json_type({ref}) = 'array' "
+            f"THEN COALESCE((SELECT group_concat(value, ' ') FROM json_each({ref})), '') "
+            f"ELSE COALESCE({ref}, '') END")
+
+
+SCHEMA_SQL = f"""
 CREATE VIRTUAL TABLE IF NOT EXISTS chapters_fts USING fts5(
     title, content='chapters', content_rowid='id',
     tokenize='unicode61 remove_diacritics 2', prefix='2 3 4'
@@ -42,7 +58,7 @@ BEGIN
     INSERT INTO feed_fts (rowid, title, channel_name, description, keywords)
     VALUES (new.id, COALESCE(new.title, ''),
             COALESCE((SELECT channel_name FROM subscriptions WHERE channel_id = new.channel_id), ''),
-            COALESCE(new.description, ''), COALESCE(new.keywords, ''));
+            COALESCE(new.description, ''), {keywords_text('new.keywords')});
 END;
 CREATE TRIGGER IF NOT EXISTS trg_feed_fts_update
 AFTER UPDATE OF title, description, keywords, channel_id ON rss_entries
@@ -51,7 +67,7 @@ BEGIN
     INSERT INTO feed_fts (rowid, title, channel_name, description, keywords)
     VALUES (new.id, COALESCE(new.title, ''),
             COALESCE((SELECT channel_name FROM subscriptions WHERE channel_id = new.channel_id), ''),
-            COALESCE(new.description, ''), COALESCE(new.keywords, ''));
+            COALESCE(new.description, ''), {keywords_text('new.keywords')});
 END;
 CREATE TRIGGER IF NOT EXISTS trg_feed_fts_delete AFTER DELETE ON rss_entries
 BEGIN
@@ -84,16 +100,17 @@ CREATE TRIGGER IF NOT EXISTS trg_feed_fts_channel AFTER UPDATE OF channel_name O
 BEGIN
     DELETE FROM feed_fts WHERE rowid IN (SELECT id FROM rss_entries WHERE channel_id = new.channel_id);
     INSERT INTO feed_fts (rowid, title, channel_name, description, keywords)
-    SELECT id, COALESCE(title, ''), COALESCE(new.channel_name, ''), COALESCE(description, ''), COALESCE(keywords, '')
+    SELECT id, COALESCE(title, ''), COALESCE(new.channel_name, ''), COALESCE(description, ''), {keywords_text('keywords')}
     FROM rss_entries WHERE channel_id = new.channel_id;
 END;
 """
 
-_FILL_FEED = """
+_FILL_FEED = f"""
 INSERT INTO feed_fts (rowid, title, channel_name, description, keywords)
-SELECT r.id, COALESCE(r.title, ''), COALESCE(s.channel_name, ''), COALESCE(r.description, ''), COALESCE(r.keywords, '')
+SELECT r.id, COALESCE(r.title, ''), COALESCE(s.channel_name, ''), COALESCE(r.description, ''), {keywords_text('r.keywords')}
 FROM rss_entries r LEFT JOIN subscriptions s ON s.channel_id = r.channel_id
 """
+_FEED_TRIGGERS = ("trg_feed_fts_insert", "trg_feed_fts_update", "trg_feed_fts_delete", "trg_feed_fts_channel")
 
 
 async def install_schema(connection, *, build: bool) -> None:
@@ -107,6 +124,22 @@ async def install_schema(connection, *, build: bool) -> None:
         await connection.execute("INSERT INTO music_fts (music_fts) VALUES ('rebuild')")
         await connection.execute(_FILL_FEED)
     await connection.commit()
+
+
+async def reindex_feed_keywords(connection) -> int:
+    """v61: Trigger dieser Fassung anlegen und die Feed-Einträge neu schreiben,
+    deren Schlagwörter mit Umschreibung (Rückstrich) im JSON stehen - nur bei
+    ihnen zerlegt der Tokenizer das rohe JSON anders als den Klartext (am
+    Bestand 4.075 von 157.137; alles neu zu bauen dauerte am Mac 8 s, auf dem
+    Pi rund dreimal so lang). Gibt die Zahl der neu geschriebenen zurück."""
+    for trigger in _FEED_TRIGGERS:
+        await connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    await connection.executescript(SCHEMA_SQL)
+    escaped = "instr(r.keywords, char(92)) > 0"
+    await connection.execute(f"DELETE FROM feed_fts WHERE rowid IN (SELECT r.id FROM rss_entries r WHERE {escaped})")
+    cursor = await connection.execute(f"{_FILL_FEED} WHERE {escaped}")
+    await connection.commit()
+    return cursor.rowcount
 
 
 async def after_vacuum(connection) -> None:

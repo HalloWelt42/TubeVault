@@ -7,12 +7,13 @@ import aiosqlite
 import itertools
 import logging
 import os
+import time
 from pathlib import Path
 from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 60
+SCHEMA_VERSION = 61
 
 SCHEMA_SQL = """
 -- Videos (YouTube + lokale eigene Videos)
@@ -1233,6 +1234,12 @@ class Database:
         # gemerkte Suchen; Transkripte merken sich, ob sie eingelesen wurden
         from app.services.search import index as search_extra_index, saved as saved_searches
         await search_extra_index.install_schema(self._connection, build=current_version < 54)
+        # v61: Schlagwörter des Feeds entschlüsselt im Volltext (vorher rohes JSON mit \u-Umschreibung)
+        if 54 <= current_version < 61:
+            started = time.monotonic()
+            rewritten = await search_extra_index.reindex_feed_keywords(self._connection)
+            logger.info(f"Migration v61: {rewritten} Feed-Einträge mit Schlagwörtern im Volltext neu geschrieben "
+                        f"({time.monotonic() - started:.1f} s)")
         await saved_searches.install_schema(self._connection)
         if current_version < 54:
             logger.info("Migration v54: Kapitel und Feed durchsuchbar, gemerkte Suchen")
