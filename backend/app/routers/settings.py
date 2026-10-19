@@ -40,11 +40,17 @@ async def get_settings_schema():
 
 @router.get("/options/{key}")
 async def get_setting_options(key: str):
-    """Live-Auswahl einer Einstellung der Art choices (zum Beispiel die externen Modelle der Leitstelle)."""
-    if key == "ai.leitstelle_extern":
-        from app.services import ai_chat
-        return await ai_chat.extern_choices()
-    raise HTTPException(status_code=404, detail=f"Für '{key}' gibt es keine Auswahl")
+    """Live-Auswahl einer Einstellung der Art choices (zum Beispiel die externen
+    Modelle der Leitstelle) bzw. Vorschläge einer der Art names (Interpreten)."""
+    from app.services import ai_chat, music_artists
+    providers = {
+        "ai.leitstelle_extern": ai_chat.extern_choices,
+        music_artists.WHOLE: lambda: music_artists.suggestions(music_artists.WHOLE),
+        music_artists.SPLIT: lambda: music_artists.suggestions(music_artists.SPLIT),
+    }
+    if key not in providers:
+        raise HTTPException(status_code=404, detail=f"Für '{key}' gibt es keine Auswahl")
+    return await providers[key]()
 
 
 @router.get("/{key}")

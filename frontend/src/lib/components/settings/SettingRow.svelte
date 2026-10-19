@@ -9,9 +9,12 @@
     text      Textfeld
     secret    verdecktes Textfeld mit Auge (Schlüssel)
     choices   Mehrfachwahl aus einer Auswahl, die options_from live liefert (gespeichert durch Komma getrennt)
+    names     Liste von Namen mit Vorschlägen aus options_from (NamesSetting, gespeichert als JSON-Liste),
+              über die ganze Breite unter der Bezeichnung
 -->
 <script>
   import { api } from '../../api/client.js';
+  import NamesSetting from './NamesSetting.svelte';
 
   let { def, value, onSave = () => {} } = $props();
 
@@ -45,7 +48,7 @@
   let fallback = $derived(Number(def.default) > 0 ? def.default : (def.min || 1));
 </script>
 
-<div class="einstellung">
+<div class="einstellung" class:breit={def.kind === 'names'}>
   <div class="name" title={def.description || ''}>
     {def.label}
     {#if def.description}<i class="fa-solid fa-circle-info info"></i>{/if}
@@ -92,6 +95,9 @@
         {#if angebot.state}<div class="stand">{angebot.state}</div>{/if}
       </div>
 
+    {:else if def.kind === 'names'}
+      <NamesSetting {def} {value} {onSave} />
+
     {:else if def.kind === 'secret'}
       <input class="tv-eingabe text" type={shown ? 'text' : 'password'} value={value} autocomplete="off"
              onchange={(e) => onSave(e.target.value)} />
@@ -110,6 +116,8 @@
     min-height: 56px; padding: var(--tv-a2) var(--tv-a4); border-top: 1px solid var(--tv-rand);
   }
   .einstellung:first-of-type { border-top: 0; }
+  .einstellung.breit { grid-template-columns: minmax(0, 1fr); gap: var(--tv-a2); padding-top: var(--tv-a3); padding-bottom: var(--tv-a3); }
+  .einstellung.breit .wert { display: block; }
   .name { font-weight: 600; }
   .info { margin-left: 6px; font-size: 14px; color: var(--tv-text-3); cursor: help; }
   .wert { display: flex; gap: var(--tv-a2); justify-content: flex-end; align-items: center; }

@@ -102,6 +102,7 @@ async def _video_books() -> dict[str, _Group]:
     if not rows:
         return {}
     by_id = {r["id"]: r for r in rows}
+    ctx = await music_library.context()
     result: dict[str, _Group] = {}
     in_series: set[str] = set()
     for series in series_detector.detect(
@@ -112,11 +113,11 @@ async def _video_books() -> dict[str, _Group]:
             continue
         in_series.update(ids)
         result[_key(f"video|{series.key}")] = _Group(series.name, series.channel_name, "video",
-                                                     [music_library.video_track(by_id[i]) for i in ids], ids[0])
+                                                     [music_library.video_track(by_id[i], ctx) for i in ids], ids[0])
     for row in rows:
         if row["id"] not in in_series:
             result[_key(f"video|{row['id']}")] = _Group(row["title"], row["channel_name"], "video",
-                                                        [music_library.video_track(row)], row["id"])
+                                                        [music_library.video_track(row, ctx)], row["id"])
     return result
 
 

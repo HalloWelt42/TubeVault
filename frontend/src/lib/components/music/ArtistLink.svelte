@@ -1,27 +1,31 @@
 <!--
-  Name des Interpreten als Verweis: ein Klick öffnet unter Musik alle seine
-  Titel, wie die Wahl im Bereich Interpreten. Klick und Eingabetaste gehen
-  nicht weiter an die umgebende Zeile oder Kachel (die sonst abspielte).
+  Die Interpreten eines Titels als Verweise: die Angabe steht, wie sie im Tag
+  steht ("50 Cent, Nate Dogg"), jeder Genannte ist für sich ein Verweis und
+  öffnet unter Musik alle seine Titel, wie die Wahl im Bereich Interpreten
+  (utils/trackArtists.js). Klick und Eingabetaste gehen nicht weiter an die
+  umgebende Zeile oder Kachel (die sonst abspielte).
 -->
 <script>
   import { navigate } from '../../router/router.js';
+  import { artistSegments } from '../../utils/trackArtists.js';
 
   let { track } = $props();
 
-  function open(e) {
+  let segments = $derived(artistSegments(track));
+
+  function open(e, source) {
+    e.preventDefault();
     e.stopPropagation();
-    navigate('/music', { quelle: track.artist_source });
+    navigate('/music', { quelle: source });
   }
 </script>
 
-{#if track.artist_source}
-  <button class="interpret" onclick={open} onkeydown={(e) => e.stopPropagation()}
-          title="Alle Titel von {track.artist}">{track.artist}</button>
-{:else}{track.artist}{/if}
+{#each segments as part, i (i)}{#if part.source}<a class="interpret" href="/music?quelle={encodeURIComponent(part.source)}"
+  onclick={(e) => open(e, part.source)} onkeydown={(e) => e.stopPropagation()}
+  title="Alle Titel von {part.text}">{part.text}</a>{:else}{part.text}{/if}{/each}
 
 <style>
-  .interpret { display: inline; max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit;
-               text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+  .interpret { color: inherit; text-decoration: none; cursor: pointer; }
   .interpret:hover { color: var(--tv-akzent); text-decoration: underline; }
   .interpret:focus-visible { outline: 2px solid var(--tv-akzent); outline-offset: 2px; }
 </style>

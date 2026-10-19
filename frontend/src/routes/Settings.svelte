@@ -25,6 +25,7 @@
     { id: 'channels', label: 'Kanäle', icon: 'fa-satellite-dish' },
     { id: 'downloads', label: 'Downloads', icon: 'fa-download' },
     { id: 'view', label: 'Ansicht', icon: 'fa-display' },
+    { id: 'music', label: 'Musik', icon: 'fa-music' },
     { id: 'extensions', label: 'Erweiterungen', icon: 'fa-puzzle-piece' },
     { id: 'system', label: 'System', icon: 'fa-server' },
   ];
@@ -158,6 +159,13 @@
           {@render rows('view')}
         </section>
 
+        <section class="gruppe" id="abschnitt-music">
+          <h2><i class="fa-solid fa-music"></i> Musik</h2>
+          <p class="einleitung tv-klein tv-leise">Interpreten trennen: nennt ein Titel mehrere ("50 Cent, Nate Dogg", "feat."), zählt er
+            bei jedem. Getrennt wird von selbst, wenn ein Teil auch allein vorkommt; die Listen legen es fest.</p>
+          {@render rows('music')}
+        </section>
+
         <section class="gruppe" id="abschnitt-extensions">
           <h2><i class="fa-solid fa-puzzle-piece"></i> Erweiterungen</h2>
           {@render rows('extensions')}
@@ -209,6 +217,7 @@
   .gruppe h2 i, .ueberschrift i { color: var(--tv-akzent); width: 22px; text-align: center; }
   .zusatz { display: flex; align-items: center; justify-content: space-between; gap: var(--tv-a3); padding: var(--tv-a3) var(--tv-a4); border-top: 1px solid var(--tv-rand); flex-wrap: wrap; }
   .zusatz .name { font-weight: 600; }
+  .einleitung { margin: 0; padding: var(--tv-a3) var(--tv-a4) 0; }
   .system { margin-bottom: var(--tv-a3); }
   .tv-kennzahl b.klein { font-size: 20px; }
   .dienste { margin-top: var(--tv-a3); }

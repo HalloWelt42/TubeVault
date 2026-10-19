@@ -26,18 +26,20 @@ heutigen.
 Interpret und Songtitel: was am Video festgelegt ist (music_artist,
 music_title), sonst aus "Interpret - Titel" im Videotitel, sonst der Kanal.
 Das dient nur der Anzeige und Gruppierung - ob etwas Musik ist, entscheidet
-allein music_flag.
+allein music_flag. Nennt die Angabe mehrere Interpreten ("50 Cent, Nate
+Dogg"), zählt der Titel bei jedem (Track.artists, music_artists, entschieden
+19.10.2026); angezeigt wird die Angabe, wie sie ist (Track.artist).
 """
 import random
 import re
-from collections import defaultdict
-from typing import NamedTuple, Optional
+from collections import Counter
+from typing import Iterable, NamedTuple, Optional
 
 from pydantic import BaseModel
 
 from app.database import db
-from app.services import (music_albums, music_exclusions, music_files, music_video_hiding, playlist_items,
-                          setting_values)
+from app.services import (music_albums, music_artists, music_exclusions, music_files, music_video_hiding,
+                          playlist_items, setting_values)
 from app.services.lyrics_service import suggest_artist_title
 from app.services.music_keys import group_key
 
@@ -56,11 +58,17 @@ _TITLE_NOISE = re.compile(
     re.IGNORECASE)
 
 
+class ArtistRef(BaseModel):
+    """Ein Genannter eines Titels: der Name, wie er in der Angabe steht, und seine Gruppe."""
+    name: str
+    source: str                      # artist:<schlüssel>, Quelle zum Abspielen aller seiner Titel
+
+
 class Track(BaseModel):
     id: str
     title: str
-    artist: str
-    artist_source: str               # Quelle zum Abspielen aller Titel des Interpreten
+    artist: str                      # die Angabe, wie sie im Tag bzw. am Video steht (so angezeigt)
+    artists: list[ArtistRef]         # jeder Genannte (music_artists): der Titel zählt bei jedem
     album: Optional[str] = None
     album_source: Optional[str] = None   # Gruppe des Albums: die eine Wahrheit, wer zu welchem Album gehört
     channel_id: Optional[str] = None
@@ -119,10 +127,16 @@ def video_album(artist: str, album: Optional[str]) -> Optional[str]:
 class Context(NamedTuple):
     """Was das Einordnen eines Titels braucht, einmal je Datenstand gerechnet."""
     albums: music_albums.AlbumIndex
+    naming: music_artists.Naming
 
 
 async def context() -> Context:
-    return Context(albums=await music_albums.index())
+    return Context(albums=await music_albums.index(), naming=await music_artists.naming())
+
+
+def artist_refs(artist: str, ctx: Context) -> list[ArtistRef]:
+    """Die Genannten einer Angabe mit ihren Gruppen (Namen: music_artists)."""
+    return [ArtistRef(name=name, source=f"artist:{group_key(name)}") for name in ctx.naming.names(artist)]
 
 
 async def excluded_albums(ctx: Context) -> set[str]:
@@ -141,14 +155,14 @@ TRACK_SELECT = """SELECT v.id, v.title, v.music_artist, v.music_title, v.music_a
 TRACK_SQL = f"{TRACK_SELECT} AND {music_video_hiding.VISIBLE}"
 
 
-def video_track(row) -> Track:
+def video_track(row, ctx: Context) -> Track:
     """Ein Video als Titel. Musik heißt "Interpret - Song", alles andere
     behält seinen Videotitel, der Kanal steht als Interpret."""
     if row["is_music"]:
         artist, title = names_of(row)
     else:
         artist, title = clean_channel(row["channel_name"]) or "Unbekannt", row["title"] or row["id"]
-    return Track(id=row["id"], title=title, artist=artist, artist_source=f"artist:{group_key(artist)}",
+    return Track(id=row["id"], title=title, artist=artist, artists=artist_refs(artist, ctx),
                  album=row["music_album"] or None, album_source=video_album(artist, row["music_album"]),
                  channel_id=row["channel_id"], channel_name=row["channel_name"],
                  duration=row["duration"], play_count=row["play_count"], last_played=row["last_played"],
@@ -158,7 +172,7 @@ def video_track(row) -> Track:
 
 def file_track(f: music_files.FileInfo, ctx: Context) -> Track:
     artist = (f.artist or f.album_artist or "Unbekannt").strip()
-    return Track(id=f.id, title=f.title, artist=artist, artist_source=f"artist:{group_key(artist)}",
+    return Track(id=f.id, title=f.title, artist=artist, artists=artist_refs(artist, ctx),
                  album=f.album, album_source=ctx.albums.of(f.id),
                  duration=int(f.duration) if f.duration else None, play_count=f.play_count,
                  last_played=f.last_played, added=f.added_at, favorite=f.favorite, has_lyrics=f.has_lyrics, kind=FILE,
@@ -169,7 +183,8 @@ async def video_tracks() -> list[Track]:
     # Hörbücher und Hörspiele sind keine Musik, auch wenn sie so gekennzeichnet sind
     rows = await db.fetch_all(
         f"{TRACK_SQL} AND v.is_music = 1 AND COALESCE(v.is_audiobook, 0) = 0 ORDER BY v.download_date DESC, v.id")
-    return [video_track(row) for row in rows]
+    ctx = await context()
+    return [video_track(row, ctx) for row in rows]
 
 
 async def source_setting() -> str:
@@ -201,7 +216,8 @@ async def tracks_of(video_ids: list[str]) -> list[Track]:
     if not video_ids:
         return []
     marks = ",".join("?" * len(video_ids))
-    by_id = {r["id"]: video_track(r) for r in await db.fetch_all(f"{TRACK_SQL} AND v.id IN ({marks})", video_ids)}
+    ctx = await context()
+    by_id = {r["id"]: video_track(r, ctx) for r in await db.fetch_all(f"{TRACK_SQL} AND v.id IN ({marks})", video_ids)}
     return [by_id[i] for i in video_ids if i in by_id]
 
 
@@ -210,15 +226,13 @@ async def hidden_tracks() -> list[Track]:
     ctx = await context()
     files = [(f.hidden_at or "", file_track(f, ctx)) for f in await music_files.hidden_files()]
     rows = await db.fetch_all(f"{TRACK_SELECT} AND {music_video_hiding.HIDDEN}")
-    videos = [(row["music_hidden_at"] or "", video_track(row)) for row in rows]
+    videos = [(row["music_hidden_at"] or "", video_track(row, ctx)) for row in rows]
     return [track for _, track in sorted((*files, *videos), key=lambda pair: pair[0], reverse=True)]
 
 
-def _most_common(members: list[Track], name_of) -> str:
+def _most_common(names: Iterable[str]) -> str:
     """Schreibweise, die am häufigsten vorkommt (bei Gleichstand die erste)."""
-    spellings = defaultdict(int)
-    for track in members:
-        spellings[name_of(track)] += 1
+    spellings = Counter(names)
     return max(spellings, key=spellings.get)
 
 
@@ -236,46 +250,65 @@ def _covers(members: list[Track]) -> list[str]:
     return chosen
 
 
-def _group(source: str, members: list[Track], name_of, subtitle_of=None) -> Group:
-    return Group(key=source, name=_most_common(members, name_of),
+def _group(source: str, members: list[Track], names: list[str], subtitle_of=None) -> Group:
+    return Group(key=source, name=_most_common(names),
                  subtitle=subtitle_of(members) if subtitle_of else None,
                  count=len(members), duration=sum(t.duration or 0 for t in members),
                  covers=_covers(members), kinds=sorted({t.kind for t in members}))
 
 
-def _groups(items: list[Track], source_of, name_of, subtitle_of=None) -> list[Group]:
-    """Titel nach ihrer Quelle (z.B. Track.album_source) zu Gruppen bündeln."""
-    buckets: dict[str, list[Track]] = defaultdict(list)
+def _groups(items: list[Track], entries_of, subtitle_of=None) -> list[Group]:
+    """Titel zu Gruppen bündeln. entries_of(titel) nennt die Gruppen eines
+    Titels als (Quelle, Name in diesem Titel) - einer kann in mehreren stehen."""
+    buckets: dict[str, tuple[list[Track], list[str]]] = {}
     for track in items:
-        source = source_of(track)
-        if source:
-            buckets[source].append(track)
-    groups = [_group(source, members, name_of, subtitle_of) for source, members in buckets.items()]
+        for source, name in entries_of(track):
+            members, names = buckets.setdefault(source, ([], []))
+            members.append(track)
+            names.append(name)
+    groups = [_group(source, members, names, subtitle_of) for source, (members, names) in buckets.items()]
     return sorted(groups, key=lambda g: g.name.casefold())
 
 
-def _album_name(track: Track) -> str:
-    return track.album
+def _album_of(track: Track) -> list[tuple[str, str]]:
+    return [(track.album_source, track.album)] if track.album_source else []
+
+
+def _artists_of(track: Track) -> list[tuple[str, str]]:
+    return [(a.source, a.name) for a in track.artists]
+
+
+def _channel_of(track: Track) -> list[tuple[str, str]]:
+    return [(f"channel:{track.channel_id}", track.channel_name or track.channel_id)] if track.channel_id else []
+
+
+def artist_name(members: list[Track], source: str) -> str:
+    """Häufigste Schreibweise eines Interpreten unter den Titeln, die ihn nennen."""
+    return _most_common(a.name for t in members for a in t.artists if a.source == source)
 
 
 def album_subtitle(members: list[Track]) -> str:
-    """Der Interpret, wenn alle Titel denselben haben, sonst "Verschiedene Interpreten"."""
-    if len({group_key(t.artist) for t in members}) > 1:
+    """Der Interpret, den alle Titel nennen, sonst "Verschiedene Interpreten".
+    Tragen alle dieselbe Angabe, steht sie da; sonst der gemeinsam Genannte
+    (ein Album von 50 Cent bleibt seins, auch mit "50 Cent, Nate Dogg")."""
+    shared = set.intersection(*({a.source for a in t.artists} for t in members))
+    if not shared:
         return VARIOUS_ARTISTS
-    return _most_common(members, lambda t: t.artist)
+    if len({group_key(t.artist) for t in members}) == 1:
+        return _most_common(t.artist for t in members)
+    return artist_name(members, next(a.source for a in members[0].artists if a.source in shared))
 
 
 def artists(items: list[Track]) -> list[Group]:
-    return _groups(items, lambda t: t.artist_source, lambda t: t.artist)
+    return _groups(items, _artists_of)
 
 
 def albums(items: list[Track]) -> list[Group]:
-    return _groups(items, lambda t: t.album_source, _album_name, subtitle_of=album_subtitle)
+    return _groups(items, _album_of, subtitle_of=album_subtitle)
 
 
 def channels(items: list[Track]) -> list[Group]:
-    return _groups(items, lambda t: f"channel:{t.channel_id}" if t.channel_id else None,
-                   lambda t: t.channel_name or t.channel_id)
+    return _groups(items, _channel_of)
 
 
 async def album(source: str) -> Optional[Group]:
@@ -283,7 +316,7 @@ async def album(source: str) -> Optional[Group]:
     heutigen Schlüssel (source darf ein früherer sein); None ohne sichtbare Titel."""
     wanted = (await context()).albums.resolve(source)
     members = [t for t in await tracks() if t.album_source == wanted]
-    return _group(wanted, members, _album_name, album_subtitle) if members else None
+    return _group(wanted, members, [t.album for t in members], album_subtitle) if members else None
 
 
 SORTS = {
@@ -332,13 +365,13 @@ async def play_list(source: str, shuffle: bool = False, start: Optional[str] = N
     if kind == "all":
         chosen = sorted(items, key=SORTS["artist"])
     elif kind == "artist":
-        chosen = [t for t in items if t.artist_source == source]
+        chosen = [t for t in items if any(a.source == source for a in t.artists)]
         chosen.sort(key=SORTS["title"])
-        title = chosen[0].artist if chosen else "Interpret"
+        title = artist_name(chosen, source) if chosen else "Interpret"
     elif kind == "album":
         wanted = (await context()).albums.resolve(source)
         chosen = [t for t in items if t.album_source == wanted]
-        title = _most_common(chosen, _album_name) if chosen else "Album"
+        title = _most_common(t.album for t in chosen) if chosen else "Album"
     elif kind == "channel":
         chosen = [t for t in items if t.channel_id == value]
         title = chosen[0].channel_name if chosen else "Kanal"
@@ -452,8 +485,9 @@ async def _similar(items: list[Track], video_id: str, limit: int = 50) -> list[T
     chosen = [seed] if seed else []
     chosen += [by_id[i] for i in ranked if i != video_id and i in by_id]
     if len(chosen) < 2 and seed:
+        named = {a.source for a in seed.artists}
         rest = [t for t in items if t.id != video_id and
-                (group_key(t.artist) == group_key(seed.artist) or t.channel_id == seed.channel_id)]
+                (named & {a.source for a in t.artists} or (seed.channel_id and t.channel_id == seed.channel_id))]
         random.shuffle(rest)
         chosen += rest[:limit]
     return chosen

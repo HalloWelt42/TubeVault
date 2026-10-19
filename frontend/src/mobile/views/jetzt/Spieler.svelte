@@ -14,6 +14,7 @@
   import { toast } from '../../../lib/stores/notifications.js';
   import { excludeAlbum, hideTrack } from '../../../lib/utils/musicHiding.js';
   import { showTrack, spotSource } from '../../../lib/utils/trackSpot.js';
+  import { artistRefs } from '../../../lib/utils/trackArtists.js';
   import ListChooser from '../../../lib/components/music/ListChooser.svelte';
   import { back, go } from '../../router.js';
   import Spur from '../../parts/Spur.svelte';
@@ -68,7 +69,7 @@
   // Zur Stelle: die Gruppe, aus der er läuft (sonst sein Album oder Interpret), dort zeigt die Musik ihn
   async function toSpot() {
     const shown = track;
-    go('/musik', { quelle: spotSource(player.source) || shown.album_source || shown.artist_source });
+    go('/musik', { quelle: spotSource(player.source) || shown.album_source || artistRefs(shown)[0]?.source });
     await tick();
     showTrack(shown);
   }

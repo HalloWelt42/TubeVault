@@ -12,10 +12,11 @@ Regeln:
   - Was hier steht, hat einen Verbraucher im Code. Kein Eintrag ohne Wirkung.
   - Standardwerte, Grenzen und Auswahllisten stehen nur hier; Datenbank
     (DEFAULT_SETTINGS), Prüfung beim Speichern und Oberfläche leiten sich ab.
-  - section = Block der Einstellungsseite (channels, downloads, view, extensions, system);
+  - section = Block der Einstellungsseite (channels, downloads, view, music, extensions, system);
     None = wird an anderer Stelle
     bedient (z.B. Drosselung auf der Jobs-Seite), aber hier geprüft.
 """
+import json
 from typing import Literal, Optional
 
 from pydantic import BaseModel
@@ -25,7 +26,9 @@ from app.services import language
 # Qualitäten, die Download und Auswahllisten kennen (höchste zuerst)
 VIDEO_QUALITIES = ["best", "2160p", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"]
 
-SettingKind = Literal["toggle", "number", "duration", "select", "text", "secret", "choices"]
+SettingKind = Literal["toggle", "number", "duration", "select", "text", "secret", "choices", "names"]
+NAMES_MAX = 2000                       # names: höchstens so viele Einträge
+NAME_MAX_LENGTH = 200
 
 
 class SettingDef(BaseModel):
@@ -43,7 +46,8 @@ class SettingDef(BaseModel):
     options: Optional[list[str]] = None
     option_labels: Optional[dict[str, str]] = None   # Anzeige je Auswahlwert
     zero_label: Optional[str] = None   # 0 bedeutet "ohne Grenze"; so heißt es in der Oberfläche
-    options_from: Optional[str] = None # choices: Adresse, die die Auswahl live liefert (GET, Liste aus value, label, hint)
+    options_from: Optional[str] = None # choices, names: Adresse, die Auswahl bzw. Vorschläge live liefert
+                                       # (GET, {options: [{value, label, hint}], state})
 
 
 SETTINGS: list[SettingDef] = [
@@ -197,6 +201,18 @@ SETTINGS: list[SettingDef] = [
                description="Was Musikseite und Musikspieler zeigen und spielen: die eigene Sammlung "
                            "(FLAC und andere Dateien), die Musikvideos oder beides. Gibt es einen Song "
                            "doppelt, gilt bei 'Alles' die Datei."),
+    # Interpreten trennen (entschieden 19.10.2026, music_artists): automatisch mit Bandschutz, dazu zwei Listen.
+    # Gespeichert als JSON-Liste, weil Namen selbst Kommas tragen ("Earth, Wind & Fire").
+    SettingDef(key="music.artists_whole", default="[]", kind="names", category="music", section="music",
+               options_from="/api/settings/options/music.artists_whole",
+               label="Nie trennen",
+               description="Diese Angaben bleiben ein Interpret, auch wenn ein Teil allein vorkommt - etwa eine "
+                           "Band mit Komma im Namen. Gilt vor 'Immer trennen'."),
+    SettingDef(key="music.artists_split", default="[]", kind="names", category="music", section="music",
+               options_from="/api/settings/options/music.artists_split",
+               label="Immer trennen",
+               description="Diese Angaben werden an Komma und feat. getrennt, auch wenn kein Teil allein als "
+                           "Interpret vorkommt. Der Titel zählt dann bei jedem Genannten."),
     SettingDef(key="history.paused", default="false", kind="toggle", category="history",
                label="Verlauf pausiert",
                description="Solange an, schreibt TubeVault keinen Verlauf mit. Gemerkte Stellen "
@@ -282,6 +298,9 @@ def validate(key: str, raw) -> str:
             raise ValueError(f"{definition.label}: '{value}' steht nicht zur Auswahl")
         return value
 
+    if definition.kind == "names":
+        return _names(definition, value)
+
     if definition.kind == "choices":
         # Namen durch Komma; Schreibweise der Namen prüft der anbietende Dienst (hier die Leitstelle)
         names = [n.strip() for n in value.split(",") if n.strip()]
@@ -304,3 +323,23 @@ def validate(key: str, raw) -> str:
             raise ValueError(f"{definition.label}: Sprachkürzel kommagetrennt angeben, z.B. de,en")
         return ",".join(langs)
     return value
+
+
+def _names(definition: SettingDef, value: str) -> str:
+    """Namen als JSON-Liste: ohne leere, ohne Doppel (Schreibweise egal, die erste gilt)."""
+    try:
+        names = json.loads(value or "[]")
+    except ValueError:
+        raise ValueError(f"{definition.label}: Liste von Namen erwartet")
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        raise ValueError(f"{definition.label}: Liste von Namen erwartet")
+    unique: dict[str, str] = {}
+    for name in names:
+        name = " ".join(name.split())
+        if len(name) > NAME_MAX_LENGTH:
+            raise ValueError(f"{definition.label}: Name zu lang (höchstens {NAME_MAX_LENGTH} Zeichen)")
+        if name:
+            unique.setdefault(name.casefold(), name)
+    if len(unique) > NAMES_MAX:
+        raise ValueError(f"{definition.label}: höchstens {NAMES_MAX} Namen")
+    return json.dumps(list(unique.values()), ensure_ascii=False)
