@@ -11,7 +11,7 @@
 #
 set -euo pipefail
 
-API="http://localhost:8031"
+API="http://127.0.0.1:8031"   # nicht localhost: das führt auf dem Pi zu ::1, dort lauscht der Container nicht
 BACKUP_DIR="/mnt/tb26/tubevault/exports/backups"   # exports liegt auf tb26 (nicht /mnt/data)
 LOG_DIR="/home/pi/tubevault/logs"
 KEEP=8                                              # letzte N Wochen-Backups behalten
