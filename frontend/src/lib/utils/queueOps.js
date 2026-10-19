@@ -2,6 +2,16 @@
 // verlieren: jede Rechnung liefert die neue Liste und die neue Stelle des
 // laufenden Titels. Dazu die Rechnung fürs Umordnen durch Ziehen.
 
+/** Gemerkte Warteschlange aus dem Browser: nur echte Titel, und die Stelle zeigt
+ *  immer auf einen davon (nach Ausblenden oder einer älteren Fassung kann sie
+ *  sonst ins Leere zeigen, dann gälte der Spieler als aktiv ohne Titel) */
+export function restoredQueue(queue, index) {
+  const items = (Array.isArray(queue) ? queue : []).filter((t) => t && typeof t.id === 'string');
+  if (!items.length) return { queue: [], index: -1 };
+  const at = Number.isInteger(index) ? index : 0;
+  return { queue: items, index: Math.min(Math.max(at, 0), items.length - 1) };
+}
+
 /** Eintrag von from nach to verschieben */
 export function moveItem(queue, index, from, to) {
   if (from === to) return { queue, index };

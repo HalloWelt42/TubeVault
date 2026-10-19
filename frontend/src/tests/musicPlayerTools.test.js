@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { audioDetails, audioQuality, codecName, trackFormat, trackOrigin } from '../lib/utils/audioTech.js';
 import { SLEEP_MINUTES, afterMinutes, afterTrack, frozen, isDue, remainingMs, running, sleepLabel } from '../lib/utils/sleepTimer.js';
-import { dragShift, dragTarget, insertItem, moveItem, removeItem } from '../lib/utils/queueOps.js';
+import { dragShift, dragTarget, insertItem, moveItem, removeItem, restoredQueue } from '../lib/utils/queueOps.js';
 import { PLAYBACK_RATES, formatRate, normalizeRate } from '../lib/utils/playbackRate.js';
 import { bookProgress, bookToResume } from '../lib/utils/bookProgress.js';
 import { tintFromPixels } from '../lib/utils/coverTint.js';
@@ -155,5 +155,23 @@ describe('Wischen am Handy', () => {
   it('entscheidet unterhalb der Schwelle noch nichts', () => {
     expect(swipeIntent(6, 3)).toBeNull();
     expect(swipeIntent(0, 0)).toBeNull();
+  });
+});
+
+describe('Gemerkte Warteschlange', () => {
+  const A = { id: 'a1' }, B = { id: 'b2' };
+  it('zieht eine Stelle hinter dem Ende auf den letzten Titel', () => {
+    expect(restoredQueue([A, B], 5)).toEqual({ queue: [A, B], index: 1 });
+  });
+  it('zieht eine negative oder fehlende Stelle auf den ersten Titel', () => {
+    expect(restoredQueue([A, B], -1)).toEqual({ queue: [A, B], index: 0 });
+    expect(restoredQueue([A, B], undefined)).toEqual({ queue: [A, B], index: 0 });
+  });
+  it('verwirft leere und kaputte Einträge', () => {
+    expect(restoredQueue([null, A, {}, 'x', B], 1)).toEqual({ queue: [A, B], index: 1 });
+  });
+  it('ohne Titel bleibt die Warteschlange leer', () => {
+    expect(restoredQueue([null], 0)).toEqual({ queue: [], index: -1 });
+    expect(restoredQueue(undefined, 0)).toEqual({ queue: [], index: -1 });
   });
 });

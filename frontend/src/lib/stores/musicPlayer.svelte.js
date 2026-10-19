@@ -13,7 +13,7 @@ import { audioSrc, coverUrl, discard, isFile, recordPlay, setFavorite } from '..
 import { loadSkipRanges, skipTarget } from '../utils/adSkip.js';
 import { emitVideoMutation } from '../utils/videoMutations.js';
 import { emitMusicChange } from '../utils/musicChanges.js';
-import { insertItem, moveItem, removeItem } from '../utils/queueOps.js';
+import { insertItem, moveItem, removeItem, restoredQueue } from '../utils/queueOps.js';
 import { normalizeRate } from '../utils/playbackRate.js';
 import { afterMinutes, afterTrack, frozen, isDue, remainingMs, running } from '../utils/sleepTimer.js';
 import { nextSegmentStart, previousSegmentStart, segmentIndexAt, toSegments } from '../utils/segments.js';
@@ -78,7 +78,8 @@ class MusicPlayer {
   get current() { return this.queue[this.index] || null; }
   /** Lässt sich die Lautstärke hier in der Seite stellen (iOS: über den Verstärker)? */
   get volumeAdjustable() { return this.#volumeMode !== null; }
-  get active() { return this.queue.length > 0; }
+  // Aktiv heißt: es gibt einen laufenden Titel (nie Warteschlange ohne gültige Stelle)
+  get active() { return this.current !== null; }
   get upcoming() { return this.queue.slice(this.index + 1); }
 
   /** Laufender Abschnitt { index, count, start, end, title } oder null */
@@ -90,8 +91,9 @@ class MusicPlayer {
   constructor() {
     if (typeof window === 'undefined') return;
     const saved = readJson(STATE_KEY);
-    if (saved?.queue?.length) {
-      Object.assign(this, { queue: saved.queue, index: saved.index ?? 0, title: saved.title || '',
+    const { queue, index } = restoredQueue(saved?.queue, saved?.index);
+    if (queue.length) {
+      Object.assign(this, { queue, index, title: saved.title || '',
                             source: saved.source || null, shuffle: !!saved.shuffle, repeat: saved.repeat || 'off',
                             time: saved.time || 0 });
       this.rate = this.#rateFor(this.source);
