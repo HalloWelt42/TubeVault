@@ -46,7 +46,6 @@ from appkern.kellerwolke import Kellerwolke, NichtErreichbar, pfad_aus
 log = logging.getLogger("nachvertoner")
 OHNE_FRIST = httpx.Timeout(None, connect=30)
 UNTERTITEL_ARTEN = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch", "ai": "KI-Transkript"}
-WARTEN_TRANSKRIPT_S = 6 * 3600
 ORIGINALSTIMMEN = "Originalstimmen"   # Wahl in TubeVault: je Sprecher seine eigene Stimme, die Vorgabestimme als Ersatz
 TRANSKRIPT_ORDNER = "Transkripte"   # Arbeitsordner im eigenen Zweig der Kellerwolke, nur Arbeitskopien
 AUSFALL_S = 15 * 60          # so lange gilt ein Dienst als kurz weg (Neustart, Ausrollen), bevor ein Auftrag scheitert
@@ -418,8 +417,10 @@ class Nachvertoner:
         return len(reste)
 
     async def _transkript_abwarten(self, anfrage_id, knoten_id, notiz) -> dict:
-        warten = 0
-        while warten < WARTEN_TRANSKRIPT_S:
+        """Wartet ohne eigene Frist, solange die Anfrage offen ist: die Transkription beendet sie selbst mit fehler oder
+        abgebrochen, wenn ihre Geduld bei Ausfall abläuft; schläft der Mac, wartet sie, bis er wach ist. Abbrechen geht
+        jederzeit über TubeVault (notiz meldet den entfernten Auftrag)."""
+        while True:
             a = await geduldig(lambda: self.kw.anfrage(anfrage_id), was="Kellerwolke")
             if a.zustand == "fertig":
                 b = next((x for x in await self.kw.begleiter(knoten_id) if x.rolle == "transkript"), None)
@@ -430,8 +431,6 @@ class Nachvertoner:
                 raise RuntimeError(f"Transkription: {a.meldung or a.zustand}")
             await notiz(a.meldung or "Transkribieren")
             await asyncio.sleep(self.s.fortschritt_s)
-            warten += self.s.fortschritt_s
-        raise RuntimeError("Die Transkription hat in sechs Stunden kein Transkript geliefert")
 
     # --- Dauerbetrieb -------------------------------------------------------------------------------------------
 
