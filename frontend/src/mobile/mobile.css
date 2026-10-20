@@ -20,7 +20,7 @@
   --m-tabbar: 58px;
   --m-radius: var(--tv-ecke);
   --m-safe-top: env(safe-area-inset-top, 0px);
-  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --m-safe-bottom: 0px; /* kein Abstand über dem Home-Balken (Nutzervorgabe 20.10.2026) */
   --m-safe-left: env(safe-area-inset-left, 0px);
   --m-safe-right: env(safe-area-inset-right, 0px);
   color-scheme: dark;
