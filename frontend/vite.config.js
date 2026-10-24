@@ -1,11 +1,15 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { readFileSync } from 'node:fs';
 import pkg from './package.json';
 
-// Ziel des Entwicklungs-Proxys. Für Tests gegen ein lokales Backend mit
-// Testdaten: TUBEVAULT_API=http://localhost:8033 npm run dev
-const API_TARGET = process.env.TUBEVAULT_API || 'http://192.168.178.49:8031';
+// Ziel des Entwicklungs-Proxys: TUBEVAULT_API aus der Umgebung oder aus
+// frontend/.env.local (nicht im Repo), etwa TUBEVAULT_API=http://<rechner>:8031 für
+// das Backend im Heimnetz oder http://localhost:8033 für ein lokales Backend mit
+// Testdaten. Ohne Angabe das Backend auf diesem Rechner.
+const API_TARGET = process.env.TUBEVAULT_API
+  || loadEnv('development', process.cwd(), 'TUBEVAULT_').TUBEVAULT_API
+  || 'http://127.0.0.1:8031';
 
 // Die Mobil-Ansicht ist eine zweite, eigenständige Seite (mobile.html) unter
 // /m. Im Betrieb liefert Nginx sie aus; für die Entwicklung leitet dieses

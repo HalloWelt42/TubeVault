@@ -110,9 +110,9 @@
   import { seite } from './gemeinsam.js';
   import { zustaende } from './sammlung.js';
   import { KANAELE, SUMMEN } from './kanaele-daten.js';
+  import { QUELLE } from './neutral.js';
   seite('kanaele');
 
-  const QUELLE = 'http://192.168.178.49:8031';
   const avatar = (id) => `${QUELLE}/api/subscriptions/avatar/${id}`;
   const banner = (id) => `${QUELLE}/api/subscriptions/banner/${id}`;
   const MEDAILLE = { gold: 'Gold', silver: 'Silber', bronze: 'Bronze' };

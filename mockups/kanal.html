@@ -138,10 +138,10 @@
 <script type="module">
   import { seite, vorschau, dauer } from './gemeinsam.js';
   import { zustaende } from './sammlung.js';
+  import { QUELLE } from './neutral.js';
   // Neue Version im Kopf (Hinweis für alle, die das Projekt selbst betreiben)
   seite('kanaele', { update: '2.68.0', laufend: '2.67.3' });
 
-  const QUELLE = 'http://192.168.178.49:8031';
   const KANAL_ID = 'UCMZgTsrg4GbC7meNeOL86fg';
   const avatar = `${QUELLE}/api/subscriptions/avatar/${KANAL_ID}`;
   const banner = `${QUELLE}/api/subscriptions/banner/${KANAL_ID}`;

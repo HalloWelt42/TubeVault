@@ -90,7 +90,7 @@
       <div class="rollfeld">
         <div class="etikett gruppe" style="margin-top:0">Läuft</div>
         <div class="auftrag gewaehlt">
-          <div class="bild"><img src="http://192.168.178.49:8031/api/subscriptions/rss-thumb/YvPgXKJ8Fzo" alt=""></div>
+          <div class="bild"><img src="http://tubevault.local:8031/api/subscriptions/rss-thumb/YvPgXKJ8Fzo" alt=""></div>
           <div>
             <div class="titel">Ultradünn ! - Bluetti FridgePower</div>
             <div class="zeile2"><span class="zustand laeuft">Lädt Video</span><span class="zahl">612 von 980 MB</span><span class="zahl">4,8 MB/s</span><span class="zahl">noch 1:17</span></div>
@@ -104,7 +104,7 @@
 
         <div class="etikett gruppe">Fehler</div>
         <div class="auftrag">
-          <div class="bild"><img src="http://192.168.178.49:8031/api/subscriptions/rss-thumb/_8GRQhoK3Bo" alt=""></div>
+          <div class="bild"><img src="http://tubevault.local:8031/api/subscriptions/rss-thumb/_8GRQhoK3Bo" alt=""></div>
           <div>
             <div class="titel">Video _8GRQhoK3Bo (Titel unbekannt)</div>
             <div class="zeile2"><span class="zustand fehler">Fehler</span><span>Die Quelle meldet: Video nicht verfügbar</span></div>
@@ -162,7 +162,7 @@
 <script type="module">
   import { seite } from './gemeinsam.js';
   seite('downloads');
-  const vorschau = (id) => `http://192.168.178.49:8031/api/subscriptions/rss-thumb/${id}`;
+  const vorschau = (id) => `http://tubevault.local:8031/api/subscriptions/rss-thumb/${id}`;
   const zeile = (id, titel, zustand, text, knoepfe) => `
     <div class="auftrag">
       <div class="bild"><img src="${vorschau(id)}" alt=""></div>

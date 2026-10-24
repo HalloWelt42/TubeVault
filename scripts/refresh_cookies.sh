@@ -11,26 +11,27 @@
 #   chromium --user-data-dir=$HOME/.config/chromium-yt-login   # einmal manuell
 #     auf youtube.com einloggen, danach läuft der Cron automatisch.
 #
-# Cron-Eintrag (alle 6h):
-#   0 */6 * * * /home/pi/tubevault/scripts/refresh_cookies.sh \
-#       >> /home/pi/tubevault/logs/cookies-refresh.log 2>&1
+# Cron-Eintrag (alle 6h), <klon> ist der Ordner des Klons:
+#   0 */6 * * * <klon>/scripts/refresh_cookies.sh \
+#       >> <klon>/logs/cookies-refresh.log 2>&1
 #
 set -euo pipefail
 
-CONFIG_DIR="/home/pi/tubevault/config"
-LOG_DIR="/home/pi/tubevault/logs"
+KLON="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_DIR="$KLON/config"
+LOG_DIR="$KLON/logs"
 COOKIES_ANON="$CONFIG_DIR/cookies.txt"
 COOKIES_LOGIN="$CONFIG_DIR/cookies-login.txt"
-YTDLP="/home/pi/.local/yt-dlp-venv/bin/yt-dlp"
+YTDLP="${YTDLP:-$HOME/.local/yt-dlp-venv/bin/yt-dlp}"
 
 # Login-Profile: Default-Pfad. Anderer Pfad per ENV überschreibbar.
-LOGIN_PROFILE_DIR="${LOGIN_PROFILE_DIR:-/home/pi/.config/chromium-yt-login}"
+LOGIN_PROFILE_DIR="${LOGIN_PROFILE_DIR:-$HOME/.config/chromium-yt-login}"
 
 mkdir -p "$CONFIG_DIR" "$LOG_DIR"
 
 if [ ! -x "$YTDLP" ]; then
     echo "[refresh_cookies] yt-dlp venv fehlt: $YTDLP"
-    echo "  Setup: python3 -m venv /home/pi/.local/yt-dlp-venv && $_/bin/pip install yt-dlp"
+    echo "  Setup: python3 -m venv $HOME/.local/yt-dlp-venv && $HOME/.local/yt-dlp-venv/bin/pip install yt-dlp"
     exit 1
 fi
 

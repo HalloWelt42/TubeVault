@@ -75,10 +75,18 @@ class Einstellungen:
         datei = Path(e.get("NACHVERTONER_SCHLUESSEL_DATEI", "/geheim/schluessel"))
         if not datei.is_file():
             raise SystemExit(f"Schlüssel der Kellerwolke fehlt: {datei}")
+
+        def adresse(name: str) -> str:
+            # Adressen im Heimnetz haben keine Vorgabe: sie stehen in der .env des Betriebs (docker-compose.yml)
+            wert = e.get(name, "").strip().rstrip("/")
+            if not wert:
+                raise SystemExit(f"{name} fehlt (Adresse, siehe .env.example)")
+            return wert
+
         return cls(
             tubevault=e.get("NACHVERTONER_TUBEVAULT", "http://tubevault-backend:8031").rstrip("/"),
-            vertonung=e.get("NACHVERTONER_VERTONUNG", "https://192.168.178.49:8641").rstrip("/"),
-            kellerwolke=e.get("NACHVERTONER_KELLERWOLKE", "http://192.168.178.49:39278").rstrip("/"),
+            vertonung=adresse("NACHVERTONER_VERTONUNG"),
+            kellerwolke=adresse("NACHVERTONER_KELLERWOLKE"),
             schluessel=datei.read_text().strip(),
             ca_datei=e.get("NACHVERTONER_CA_DATEI") or None,
             stimme=e.get("NACHVERTONER_STIMME", "Zeit Stimme"),

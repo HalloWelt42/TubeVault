@@ -5,6 +5,15 @@
 # Begründung: User-Anweisung, diese Begriffe dürfen NIE ins Repo.
 
 set -e
+# >>> handbuch: Seite und Einrichtungsskript prüfen (eingesetzt von "handbuch einbinden", nicht von Hand ändern)
+handbuch_befehl="$(command -v handbuch || true)"
+[ -n "$handbuch_befehl" ] || handbuch_befehl="$HOME/.local/bin/handbuch"
+if [ ! -x "$handbuch_befehl" ]; then
+  echo "Abbruch: das Werkzeug handbuch fehlt (Handbuch, Grundlage Mac)" >&2
+  exit 1
+fi
+"$handbuch_befehl" vor-commit "$(git rev-parse --show-toplevel)" || exit 1
+# <<< handbuch
 
 RED='\033[0;31m'
 YELLOW='\033[0;33m'

@@ -6,14 +6,21 @@
 # und behält die letzten 8 Wochen-Backups.
 # Verifiziert jedes frische Backup mit PRAGMA integrity_check.
 #
-# Cron (sonntags 03:00):
-#   0 3 * * 0 /home/pi/tubevault/scripts/backup_db.sh >> /home/pi/tubevault/logs/backup.log 2>&1
+# Cron (sonntags 03:00), <klon> ist der Ordner des Klons:
+#   0 3 * * 0 <klon>/scripts/backup_db.sh >> <klon>/logs/backup.log 2>&1
 #
 set -euo pipefail
 
+KLON="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=umgebung.sh
+. "$KLON/scripts/umgebung.sh"
+# Ordner der Medien wie in docker-compose.yml: TUBEVAULT_MEDIEN aus der .env des Klons
+MEDIEN="${TUBEVAULT_MEDIEN:-$(env_wert TUBEVAULT_MEDIEN)}"
+[ -n "$MEDIEN" ] || { echo "TUBEVAULT_MEDIEN fehlt in $KLON/.env"; exit 1; }
+
 API="http://127.0.0.1:8031"   # nicht localhost: das führt auf dem Pi zu ::1, dort lauscht der Container nicht
-BACKUP_DIR="/mnt/tb26/tubevault/exports/backups"   # exports liegt auf tb26 (nicht /mnt/data)
-LOG_DIR="/home/pi/tubevault/logs"
+BACKUP_DIR="$MEDIEN/exports/backups"   # exports liegt bei den Medien (große Platte)
+LOG_DIR="$KLON/logs"
 KEEP=8                                              # letzte N Wochen-Backups behalten
 
 mkdir -p "$LOG_DIR"

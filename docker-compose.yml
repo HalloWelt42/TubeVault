@@ -6,6 +6,13 @@
 #
 # Container sind 100% unabhängig voneinander.
 # Gemeinsamer Projektordner, aber eigene Builds.
+#
+# Ordner und Adressen des Betriebs stehen in der .env neben dieser Datei (nie im
+# Repo), Beispiele in .env.example:
+#   TUBEVAULT_INDEX    Index auf schneller Platte (data, thumbnails, avatars,
+#                      metadata, banners, nachvertoner)
+#   TUBEVAULT_MEDIEN   Medien auf großer Platte (videos, audio, subtitles, exports)
+#   NACHVERTONER_*     Schlüsseldatei, Hausstelle, Vertonung und Kellerwolke
 
 services:
   # ==========================================
@@ -19,26 +26,26 @@ services:
     ports:
       - "8031:8031"
     volumes:
-      # Basis: DB + temp auf NVMe
-      - /mnt/data/tubevault/data:/app/data
+      # Basis: DB + temp auf schneller Platte
+      - ${TUBEVAULT_INDEX:?TUBEVAULT_INDEX fehlt in .env (Index auf schneller Platte)}/data:/app/data
       - ./config:/app/config
-      # Metadaten auf NVMe (überlagern Basis-Mount)
-      - /mnt/data/tubevault/thumbnails:/app/data/thumbnails
-      - /mnt/data/tubevault/avatars:/app/data/avatars
-      - /mnt/data/tubevault/metadata:/app/data/metadata
-      - /mnt/data/tubevault/banners:/app/data/banners
-      # Medien auf USB-Platte (30TB)
-      - /mnt/tb26/tubevault/videos:/app/data/videos
-      - /mnt/tb26/tubevault/audio:/app/data/audio
-      - /mnt/tb26/tubevault/subtitles:/app/data/subtitles
-      - /mnt/tb26/tubevault/exports:/app/data/exports
+      # Metadaten auf schneller Platte (überlagern Basis-Mount)
+      - ${TUBEVAULT_INDEX:?}/thumbnails:/app/data/thumbnails
+      - ${TUBEVAULT_INDEX:?}/avatars:/app/data/avatars
+      - ${TUBEVAULT_INDEX:?}/metadata:/app/data/metadata
+      - ${TUBEVAULT_INDEX:?}/banners:/app/data/banners
+      # Medien auf großer Platte
+      - ${TUBEVAULT_MEDIEN:?TUBEVAULT_MEDIEN fehlt in .env (Medien auf großer Platte)}/videos:/app/data/videos
+      - ${TUBEVAULT_MEDIEN:?}/audio:/app/data/audio
+      - ${TUBEVAULT_MEDIEN:?}/subtitles:/app/data/subtitles
+      - ${TUBEVAULT_MEDIEN:?}/exports:/app/data/exports
       # Sammlung alter Videos für "Eigene Videos" (wahlweise): ohne Angabe der
       # leere Ordner scan im Datenverzeichnis, mit TUBEVAULT_SCAN_SOURCE in der
       # .env z.B. eine externe Platte. Ohne Sammlung bleibt die Seite einfach leer.
-      - ${TUBEVAULT_SCAN_SOURCE:-/mnt/data/tubevault/data/scan}:/app/data/scan
+      - ${TUBEVAULT_SCAN_SOURCE:-${TUBEVAULT_INDEX:?}/data/scan}:/app/data/scan
       # Eigene Musiksammlung (FLAC usw.) als zweite Quelle der Musik, nur lesend:
       # mit TUBEVAULT_MUSIC_SOURCE in der .env der Musikordner, sonst ein leerer Ordner.
-      - ${TUBEVAULT_MUSIC_SOURCE:-/mnt/data/tubevault/data/musik}:/app/data/musik:ro
+      - ${TUBEVAULT_MUSIC_SOURCE:-${TUBEVAULT_INDEX:?}/data/musik}:/app/data/musik:ro
     environment:
       - PYTHONUNBUFFERED=1
       # Zeitzone für Tageszähler und das nächtliche Drip-Fenster. Zeitstempel in
@@ -131,16 +138,18 @@ services:
       NACHVERTONER_SCHLUESSEL_DATEI: /geheim/schluessel
       NACHVERTONER_CA_DATEI: /zertifikate/rootCA.pem
       NACHVERTONER_ARBEIT: /arbeit
-    # weitere Angaben (Adressen, Vorgabestimme) wahlweise in nachvertoner/.env, nur auf dem Pi
+      NACHVERTONER_VERTONUNG: ${NACHVERTONER_VERTONUNG:?NACHVERTONER_VERTONUNG fehlt in .env (Adresse der Vertonung)}
+      NACHVERTONER_KELLERWOLKE: ${NACHVERTONER_KELLERWOLKE:?NACHVERTONER_KELLERWOLKE fehlt in .env (Adresse der Kellerwolke)}
+    # weitere Angaben (Vorgabestimme, Takt) wahlweise in nachvertoner/.env, nur auf dem Pi
     env_file:
       - path: ./nachvertoner/.env
         required: false
     volumes:
       # App-Schlüssel des Zugangs "Nachvertoner" der Kellerwolke (Datei, 600) und die Hausstelle der Vertonung
-      - ${NACHVERTONER_SCHLUESSEL:-/home/pi/.nachvertoner_schluessel}:/geheim/schluessel:ro
-      - ${NACHVERTONER_CA:-/mnt/data/vertonung/zertifikate/rootCA.pem}:/zertifikate/rootCA.pem:ro
+      - ${NACHVERTONER_SCHLUESSEL:?NACHVERTONER_SCHLUESSEL fehlt in .env (Datei mit dem App-Schlüssel)}:/geheim/schluessel:ro
+      - ${NACHVERTONER_CA:?NACHVERTONER_CA fehlt in .env (Zertifikat der Hausstelle)}:/zertifikate/rootCA.pem:ro
       # Arbeitsdateien (Video und Ton eines Auftrags, danach wieder weg)
-      - /mnt/data/tubevault/nachvertoner:/arbeit
+      - ${TUBEVAULT_INDEX:?}/nachvertoner:/arbeit
       - /etc/localtime:/etc/localtime:ro
       # ffmpeg und ffprobe vom Pi, nur lesend
       - /usr/bin/ffmpeg:/host/usr/bin/ffmpeg:ro

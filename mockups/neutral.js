@@ -1,8 +1,24 @@
-// Entwürfe ohne fremde Bilder: Mit ?neutral in der Adresse ersetzt diese Datei
-// alle Vorschaubilder vom Pi durch erzeugte Farbflächen. So entstehen die Bilder
-// für die README und für mockups/bilder (das Repo ist öffentlich).
-const AKTIV = new URLSearchParams(location.search).has('neutral');
-const QUELLE = '192.168.178.49';
+// Herkunft der Vorschaubilder in den Entwürfen. Die Entwürfe nennen nur die
+// Beispieladresse BEISPIEL (das Repo ist öffentlich). Mit ?quelle=http://<rechner>:8031
+// in der Adresse kommen die Bilder vom eigenen TubeVault (der Browser merkt sich
+// die Quelle); ohne Quelle oder mit ?neutral ersetzt diese Datei sie durch
+// erzeugte Farbflächen. So entstehen die Bilder für die README und mockups/bilder.
+export const BEISPIEL = 'http://tubevault.local:8031';
+const MERKER = 'tubevault-entwurf-quelle';
+
+function quelle() {
+  const angabe = new URLSearchParams(location.search).get('quelle');
+  try {
+    if (angabe) localStorage.setItem(MERKER, angabe.replace(/\/+$/, ''));
+    return localStorage.getItem(MERKER);
+  } catch {
+    return angabe ? angabe.replace(/\/+$/, '') : null;
+  }
+}
+
+const ECHT = new URLSearchParams(location.search).has('neutral') ? null : quelle();
+// Anfang der Bildadressen für Entwürfe, die sie selbst zusammensetzen
+export const QUELLE = ECHT || BEISPIEL;
 
 function farbton(text) {
   let h = 7;
@@ -23,14 +39,11 @@ export function flaeche(schluessel) {
 
 function tausche(bild) {
   const src = bild.getAttribute('src') || '';
-  if (bild.dataset.neutral || !src.includes(QUELLE)) return;
-  bild.dataset.neutral = '1';
-  bild.src = flaeche(src);
+  if (!src.startsWith(BEISPIEL)) return;
+  bild.src = ECHT ? ECHT + src.slice(BEISPIEL.length) : flaeche(src);
 }
 
-if (AKTIV) {
-  const alle = () => document.querySelectorAll('img').forEach(tausche);
-  new MutationObserver(alle).observe(document.documentElement,
-    { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
-  alle();
-}
+const alle = () => document.querySelectorAll('img').forEach(tausche);
+new MutationObserver(alle).observe(document.documentElement,
+  { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+alle();

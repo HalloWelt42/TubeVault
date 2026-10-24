@@ -465,14 +465,14 @@ Tonspur (`nachvertoner/`), "Shorts ausschließen", eine Versionsquelle
 
 ### [open] Hardcodierte IP-Adressen in der App
 - **Bereich:** frontend / config (genauer Ort noch zu inventarisieren)
-- **Symptom:** IPs wie `192.168.178.49` im Code statt aus einer Config-/Env-Variable.
+- **Symptom:** IPs wie `192.168.1.20` im Code statt aus einer Config-/Env-Variable.
 - **Risiko:** bei Netzwechsel / neuer Hardware müssen mehrere Dateien angefasst werden.
 - **Fix-Richtung:** Inventur (grep nach `192.168.` und `localhost:80*`), dann zentrale Config (`VITE_API_URL`, Nginx-Proxy-Variable, Backend-`PUBLIC_URL`).
 - **Prio:** 🟡 niedrig (läuft aktuell, Umbau ist Fleißarbeit)
 
 ### [open] Hardcodierte Datei-Pfade in Code & DB
 - **Bereich:** backend (config, DB-Einträge in `videos.file_path` etc.)
-- **Symptom:** Absolute Pfade wie `/mnt/tb26/tubevault/videos/…` oder `/app/data/videos/…` sowohl im Code als auch in DB-Zeilen. Bei Umzug oder Pfad-Umstrukturierung reißen Medien-Links.
+- **Symptom:** Absolute Pfade wie `/mnt/platte/tubevault/videos/…` oder `/app/data/videos/…` sowohl im Code als auch in DB-Zeilen. Bei Umzug oder Pfad-Umstrukturierung reißen Medien-Links.
 - **Risiko:** HOCH — wenn unsauber migriert, verlieren wir die Verbindung zwischen DB und Dateien. User-Zitat: "da kann viel kaputt gehen".
 - **Fix-Richtung (später):** Pfade in DB als *relativ* zum Mediendatengrundordner speichern, Basis-Pfad aus Env kommt bei Laufzeit dazu. Migrations-Script mit trockenem Lauf + Backup.
 - **Prio:** 🟡 niedrig (bewusst nicht jetzt — nur listen, damit's nicht vergessen wird)

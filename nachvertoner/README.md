@@ -36,18 +36,23 @@ Als Container `tubevault-nachvertoner` in `docker-compose.yml`, auf dem Pi
 mit TubeVault ausgerollt. Er braucht:
 
 - den App-Schlüssel des Zugangs "Nachvertoner" der Kellerwolke als Datei
-  (`/home/pi/.nachvertoner_schluessel`, nur für pi lesbar),
-- die Hausstelle der Vertonung (`/mnt/data/vertonung/zertifikate/rootCA.pem`),
-- den Arbeitsordner `/mnt/data/tubevault/nachvertoner` (gehört pi).
+  (`NACHVERTONER_SCHLUESSEL` in der .env, nur für den Benutzer des Pi lesbar),
+- die Hausstelle der Vertonung (`NACHVERTONER_CA` in der .env),
+- den Arbeitsordner `nachvertoner` unter `TUBEVAULT_INDEX` (gehört dem Benutzer des Pi).
 
 ffmpeg kommt vom Pi (nur lesend eingehängt, `ffmpeg-vom-pi`) und packt nur um.
 
-Einstellungen (Umgebung, wahlweise in `nachvertoner/.env` auf dem Pi):
+Adressen (Pflicht, in der .env neben `docker-compose.yml`, Beispiele in `.env.example`):
+
+| Name | Beispiel |
+|---|---|
+| `NACHVERTONER_VERTONUNG` | `https://192.168.1.20:8641` |
+| `NACHVERTONER_KELLERWOLKE` | `http://192.168.1.20:39278` |
+
+Weitere Einstellungen (Umgebung, wahlweise in `nachvertoner/.env` auf dem Pi):
 
 | Name | Vorgabe |
 |---|---|
-| `NACHVERTONER_VERTONUNG` | `https://192.168.178.49:8641` |
-| `NACHVERTONER_KELLERWOLKE` | `http://192.168.178.49:39278` |
 | `NACHVERTONER_STIMME` | `Zeit Stimme` (wenn der Auftrag keine nennt) |
 | `NACHVERTONER_TRANSKRIPTION` | `Transkription` (Name der App in der Kellerwolke) |
 | `NACHVERTONER_ABFRAGE_S` | `60` (Pause, wenn nichts zu tun war) |

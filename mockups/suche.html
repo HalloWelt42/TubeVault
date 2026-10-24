@@ -160,7 +160,7 @@
   import { zustaende } from './sammlung.js';
   seite('suche');
   const haupt = document.getElementById('haupt');
-  const feedBild = (id) => `http://192.168.178.49:8031/api/subscriptions/rss-thumb/${id}`;
+  const feedBild = (id) => `http://tubevault.local:8031/api/subscriptions/rss-thumb/${id}`;
   const m = (text) => text.replace(/(Kernfusion|Fusion)/g, '<mark>$1</mark>');
   const zahl = (n) => n.toLocaleString('de-DE');
   const datum = (d) => d.split('-').reverse().join('.');

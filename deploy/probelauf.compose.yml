@@ -1,0 +1,24 @@
+# Probelauf des Handbuchs (einrichten.sh --probe), zusätzlich zu docker-compose.yml: nur Backend und Oberfläche, mit
+# eigenen Namen und einem Backend ohne Weg nach draußen (das Netz "abgeschottet" hat keinen Ausgang; die Oberfläche
+# hängt zusätzlich am Netz des Projekts, damit ihr Port auf diesem Rechner erreichbar ist, nur an 127.0.0.1). Die
+# Ordner kommen wie im Betrieb aus der .env, die das Einrichtungsskript im Probeordner schreibt; PROBE_PORT steht dort
+# ebenfalls.
+services:
+  tubevault-backend:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-backend
+    ports: !reset []
+    networks: !override
+      - abgeschottet
+  tubevault-frontend:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-frontend
+    ports: !override
+      - "127.0.0.1:${PROBE_PORT:?}:80"
+    networks: !override
+      - abgeschottet
+      - tubevault-net
+
+networks:
+  tubevault-net:
+    name: ${COMPOSE_PROJECT_NAME:?}-net
+  abgeschottet:
+    internal: true

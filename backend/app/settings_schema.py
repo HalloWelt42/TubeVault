@@ -130,7 +130,7 @@ SETTINGS: list[SettingDef] = [
                            "die Suche als reine Wortsuche weiter."),
     SettingDef(key="ai.url", default="", kind="text", category="ai", section="extensions",
                label="Adresse des KI-Dienstes",
-               description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.178.20:1234/v1"),
+               description="OpenAI-kompatible Schnittstelle, z.B. http://192.168.1.30:1234/v1"),
     # Weg zum KI-Dienst (Wunsch 16.10.2026): direkt oder über die Leitstelle, jederzeit umschaltbar.
     # Nur die KI-Aufrufe gehen diesen Weg; Videoquelle, Bewertungen, Liedtexte, Werbeabschnitte und
     # alle anderen Anbindungen bleiben direkt.
@@ -143,7 +143,7 @@ SETTINGS: list[SettingDef] = [
                            "Bewertungen, Liedtexte und alle anderen Anbindungen bleiben direkt."),
     SettingDef(key="ai.leitstelle_url", default="", kind="text", category="ai", section="extensions",
                label="Adresse der Leitstelle",
-               description="Fassade der Leitstelle, z.B. http://192.168.178.49:8530/v1. Gilt, wenn der Weg "
+               description="Fassade der Leitstelle, z.B. http://192.168.1.20:8530/v1. Gilt, wenn der Weg "
                            "zum KI-Dienst auf Leitstelle steht."),
     SettingDef(key="ai.leitstelle_key", default="", kind="secret", category="ai", section="extensions",
                label="Schlüssel der Leitstelle",

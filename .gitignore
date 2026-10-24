@@ -28,7 +28,7 @@ config/cookies.txt
 config/cookies-login.txt
 config/cookies*.txt
 
-# Daten, die im Projektordner landen könnten (eigentlich alle unter /mnt/data und /mnt/tb26)
+# Daten, die im Projektordner landen könnten (eigentlich alle unter TUBEVAULT_INDEX und TUBEVAULT_MEDIEN)
 data/
 backend/data/
 *.db

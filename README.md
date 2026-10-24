@@ -128,21 +128,24 @@ Die Nachvertonung ist eine abschaltbare Erweiterung.
 ## Schnellstart
 
 ```bash
-docker compose up -d --build
+cp .env.example .env   # Ordner für Index und Medien sowie die Angaben des Nachvertoners eintragen
+./einrichten.sh        # legt die Ordner an, baut und startet (docker compose up -d --build)
 ```
 
 Danach ist die Oberfläche unter `http://<host>:8032` erreichbar, die API-Dokumentation unter `http://<host>:8031/docs`.
+Die ganze Einrichtung mit Zugängen, Zeitplänen und Sicherung beschreibt [HANDBUCH.md](HANDBUCH.md).
 
 ## Speicher
 
 TubeVault trennt Index und Medien bewusst auf zwei Platten:
 
-| Was | Wohin | Beispiel |
-|---|---|---|
-| Index: Datenbank, Vorschaubilder, Texte | schnelle Platte | `/mnt/data/tubevault/data` |
-| Medien: Videos, Ton, Untertitel, Sicherungen | große Platte | `/mnt/tb26/tubevault` |
+| Was | Wohin | Angabe in der `.env` | Beispiel |
+|---|---|---|---|
+| Index: Datenbank, Vorschaubilder, Texte | schnelle Platte | `TUBEVAULT_INDEX` | `/srv/tubevault` |
+| Medien: Videos, Ton, Untertitel, Sicherungen | große Platte | `TUBEVAULT_MEDIEN` | `/mnt/platte/tubevault` |
 
-Die Pfade setzen die Volumes in `docker-compose.yml`, feiner geht es mit den `TUBEVAULT_*`-Umgebungsvariablen. Die Datenbank ist nur der Index. Beschreibungen, Kapitel und Notizen liegen als Dateien im Texte-Verzeichnis, die Metadaten zusätzlich als `info.json` neben jedem Video.
+Beide Ordner sind Pflicht: `docker-compose.yml` hängt sie ein und startet ohne sie nicht. Vorlage ist `.env.example`
+(dort auch die Angaben des Nachvertoners); die `.env` liegt neben `docker-compose.yml` und nie im Repo. Die Datenbank ist nur der Index. Beschreibungen, Kapitel und Notizen liegen als Dateien im Texte-Verzeichnis, die Metadaten zusätzlich als `info.json` neben jedem Video.
 
 Zwei Quellen lassen sich wahlweise in der `.env` einbinden, beide nur lesend:
 
