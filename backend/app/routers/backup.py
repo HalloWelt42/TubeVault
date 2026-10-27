@@ -6,65 +6,30 @@ DB-Backup erstellen, herunterladen, wiederherstellen.
 
 import shutil
 import logging
-from pathlib import Path
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
-from app.config import DATA_DIR, DB_DIR, EXPORTS_DIR, VERSION
+from app.config import BACKUP_DIR, DB_DIR
 from app.database import db
+from app.models.sicherung import Anlass, SicherungsLauf
+from app.services import sicherung
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/backup", tags=["Backup"])
 
-BACKUP_DIR = EXPORTS_DIR / "backups"
 
-
-@router.post("/create")
-async def create_backup(frontend_version: str = None):
-    """SQLite-Datenbank sicher als Backup exportieren (VACUUM INTO)."""
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    be_ver = VERSION.replace(".", "-")
-    fe_ver = (frontend_version or VERSION).replace(".", "-")
-    filename = f"tubevault_backup_{ts}_be{be_ver}_fe{fe_ver}.db"
-    dest = BACKUP_DIR / filename
-
+@router.post("/create", response_model=SicherungsLauf)
+async def create_backup(anlass: Anlass = Anlass.HAND, frontend_version: str = None):
+    """Datenbank sichern nach der Sicherungsregel (services/sicherung.py): der Anlass entscheidet, ob eine neue
+    fällig ist, unverändert entsteht keine; jeder Lauf räumt auf höchstens sicherung_behalten Stände ab."""
     try:
-        # VACUUM INTO erstellt eine konsistente Kopie ohne WAL-Reste
-        await db.execute(f'VACUUM INTO "{str(dest)}"')
-        size = dest.stat().st_size
-        logger.info(f"[BACKUP] Erstellt: {filename} ({size} bytes)")
-
-        return {
-            "status": "ok",
-            "filename": filename,
-            "size": size,
-            "created_at": ts,
-        }
+        return await sicherung.sichern(anlass, BACKUP_DIR, frontend_version)
     except Exception as e:
-        # Fallback: Datei-Kopie
-        logger.warning(f"[BACKUP] VACUUM INTO fehlgeschlagen: {e}, nutze Datei-Kopie")
-        src = DB_DIR / "tubevault.db"
-        if not src.exists():
-            raise HTTPException(status_code=500, detail="Datenbank nicht gefunden")
-        try:
-            # WAL checkpoint bevor kopiert wird
-            await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            pass
-        shutil.copy2(str(src), str(dest))
-        size = dest.stat().st_size
-        return {
-            "status": "ok",
-            "filename": filename,
-            "size": size,
-            "created_at": ts,
-            "method": "file_copy",
-        }
+        logger.error(f"[BACKUP] Sicherung fehlgeschlagen: {e}")
+        raise HTTPException(status_code=500, detail=f"Sicherung fehlgeschlagen: {e}")
 
 
 @router.get("/list")

@@ -33,6 +33,16 @@ MUSIC_COVERS_DIR = DATA_DIR / "musik_cover"
 # Datenbank
 DB_PATH = DB_DIR / "tubevault.db"
 
+# Sicherungen der Datenbank (services/sicherung.py), auf dem Pi bei den Medien
+BACKUP_DIR = EXPORTS_DIR / "backups"
+# Sicherungsregel, die eine Stelle für App und scripts/backup_db.sh; überschreibbar über die Umgebung bzw. die .env
+# des Klons (docker-compose.yml reicht sie durch, leer heißt Vorgabe):
+# regelmäßig frühestens am sicherung_abstand_tage-ten Kalendertag nach der jüngsten Sicherung, vor dem Ausrollen nur,
+# wenn die jüngste älter ist als sicherung_vor_ausrollen_ab_stunden, höchstens sicherung_behalten Stände (mindestens 1)
+SICHERUNG_ABSTAND_TAGE = int(os.getenv("TUBEVAULT_SICHERUNG_ABSTAND_TAGE") or 7)
+SICHERUNG_VOR_AUSROLLEN_AB_STUNDEN = int(os.getenv("TUBEVAULT_SICHERUNG_VOR_AUSROLLEN_AB_STUNDEN") or 24)
+SICHERUNG_BEHALTEN = max(1, int(os.getenv("TUBEVAULT_SICHERUNG_BEHALTEN") or 3))
+
 # Server
 HOST = os.getenv("TUBEVAULT_HOST", "0.0.0.0")
 PORT = int(os.getenv("TUBEVAULT_PORT", "8031"))
@@ -44,7 +54,7 @@ DEFAULT_FORMAT = os.getenv("DEFAULT_FORMAT", "mp4")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", str(1024 * 1024)))  # 1MB
 
 # Versioning
-VERSION = "2.90.4"
+VERSION = "2.91.0"
 APP_NAME = "TubeVault"
 
 # CORS – immer offen, keine Einschränkungen

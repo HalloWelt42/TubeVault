@@ -23,9 +23,14 @@
   }
   $effect(() => { load(); });
 
+  // Ohne Änderung seit der jüngsten Sicherung entsteht keine neue; die Meldung sagt, was der Lauf getan hat
   async function create() {
     creating = true;
-    try { toast.success(`Gesichert: ${(await api.backupCreate()).filename}`); await load(); }
+    try {
+      const lauf = await api.backupCreate();
+      if (lauf.filename) toast.success(lauf.meldung); else toast.info(lauf.meldung);
+      await load();
+    }
     catch (e) { toast.error(e.message); }
     creating = false;
   }

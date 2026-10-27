@@ -59,6 +59,10 @@ services:
       # für Untertitel abgewiesen (429), über IPv6 kommt derselbe Abruf durch.
       # 6 = IPv6, 4 = IPv4, leer = das Betriebssystem entscheidet.
       - TUBEVAULT_SOURCE_IP=${TUBEVAULT_SOURCE_IP:-6}
+      # Sicherungsregel der Datenbank wahlweise aus der .env; leer gelten die Vorgaben in backend/app/config.py
+      - TUBEVAULT_SICHERUNG_ABSTAND_TAGE=${TUBEVAULT_SICHERUNG_ABSTAND_TAGE:-}
+      - TUBEVAULT_SICHERUNG_VOR_AUSROLLEN_AB_STUNDEN=${TUBEVAULT_SICHERUNG_VOR_AUSROLLEN_AB_STUNDEN:-}
+      - TUBEVAULT_SICHERUNG_BEHALTEN=${TUBEVAULT_SICHERUNG_BEHALTEN:-}
     restart: unless-stopped
     # Grenze offener Dateien/Verbindungen deutlich über dem Standard (1024)
     ulimits:

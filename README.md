@@ -111,7 +111,7 @@ Die Nachvertonung ist eine abschaltbare Erweiterung.
   - Was bei einem älteren Bestand noch fehlt, schreibt der Hintergrund von selbst nach.
   - Favoriten, Verlauf, Playlists, Kategorien und Abos gehen täglich als JSONL-Export auf die Platte.
 - **Wiederaufbau:** Unter Einstellungen > System lässt sich die Datenbank vollständig aus den Dateien neu aufbauen, mit Probelauf; Nutzerdaten lassen sich dort sichern und zurückspielen.
-- **Sicherung:** wöchentlich, mit Rotation und Prüfung der Unversehrtheit. Beim Start wird geprüft, ob die richtige Datenbank angebunden ist.
+- **Sicherung:** wöchentlich und vor dem Ausrollen, nur bei Änderung, höchstens drei Stände, mit Prüfung der Unversehrtheit. Beim Start wird geprüft, ob die richtige Datenbank angebunden ist.
 - **Sichtbare Arbeit:**
   - Lange Vorgänge zeigen Stand, Laufzeit und Restdauer in der Statusleiste.
   - Ein Live-Protokoll zeigt aufklappbare Fehlerdetails und die laufenden Dienste.

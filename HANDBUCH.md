@@ -7,14 +7,14 @@ daten:
   - "Pi: Medien unter `{{umgebung:TUBEVAULT_MEDIEN}}` (`videos/`, `audio/`, `subtitles/`, `exports/` mit den Sicherungen der Datenbank)"
   - "Pi: `{{wurzel}}/config` (Laufzeit-Konfiguration, Anmeldedaten der Videoplattform) und `{{wurzel}}/.env` (Ordner und Adressen des Betriebs)"
 sicherung:
-  - "die Datenbank sichert ein Zeitplan auf dem Pi sonntags um 3 Uhr über die Schnittstelle nach `{{umgebung:TUBEVAULT_MEDIEN}}/exports/backups` (die letzten acht); seit dem 11.10.2026 scheitert er (Stand 24.10.2026), die jüngste Sicherung dort stammt vom 19.10.2026"
+  - "die Datenbank sichert `scripts/backup_db.sh` über die Schnittstelle nach `{{umgebung:TUBEVAULT_MEDIEN}}/exports/backups`: ein Zeitplan auf dem Pi ruft es sonntags um 3 Uhr, eine neue entsteht frühestens am siebten Kalendertag nach der jüngsten; vor dem Ausrollen `scripts/backup_db.sh --vor-ausrollen`, das nur sichert, wenn die jüngste älter als 24 Stunden ist; nie ohne Änderung; höchstens drei Stände (Vorgaben in `backend/app/config.py`, in der `.env` überschreibbar)"
   - "das Werkzeug Sicherungen holt die Sicherungen aus `exports/backups` auf den Mac. Videos, Ton und Untertitel werden nicht gesichert"
 schluessel_orte:
   - "Pi: `{{wurzel}}/config/cookies.txt` (Anmeldung bei der Videoplattform, nicht im Repo)"
   - "Pi: `{{umgebung:NACHVERTONER_SCHLUESSEL}}`, Modus 0600 (App-Schlüssel des Nachvertoners bei der Kellerwolke)"
   - "Datenbank: Schlüssel der Leitstelle in den Einstellungen von TubeVault"
 einrichten: einrichten.sh
-stand: b601b3a
+stand: 6a1aa85
 ---
 
 # TubeVault
@@ -98,11 +98,23 @@ eine Antwort.
 
 ## Sicherung und Rückspielen
 
-Die Datenbank sichert `scripts/backup_db.sh` sonntags um 3 Uhr über die Schnittstelle (`VACUUM INTO`) nach
-`{{umgebung:TUBEVAULT_MEDIEN}}/exports/backups` und behält die letzten acht; den Ordner liest das Skript aus der `.env`.
-Seit dem 11.10.2026 scheitert dieser Lauf ("lieferte keinen Dateinamen", `logs/backup.log`); die jüngste Sicherung
-dort ist vom 19.10.2026 (Stand 24.10.2026). Das Werkzeug Sicherungen holt diesen Ordner auf den Mac. Videos, Ton und
-Untertitel auf der großen Platte werden nicht gesichert.
+Die Datenbank sichert `scripts/backup_db.sh` über die Schnittstelle (`VACUUM INTO`) nach
+`{{umgebung:TUBEVAULT_MEDIEN}}/exports/backups`; den Ordner liest das Skript aus der `.env`. Ob eine neue Sicherung
+entsteht, entscheidet TubeVault selbst nach dem Alter der jüngsten, nicht der Takt des Aufrufs:
+
+- regelmäßig (Zeitplan sonntags um 3 Uhr, Schritt 4): frühestens am siebten Kalendertag nach der jüngsten Sicherung;
+- vor dem Ausrollen: im Klon `scripts/backup_db.sh --vor-ausrollen`, solange die bisherige Fassung noch läuft; es
+  sichert nur, wenn die jüngste älter als 24 Stunden ist;
+- von Hand: Einstellungen, Abschnitt System, "Jetzt sichern";
+- nie ohne Änderung: sind Datenbank und `-wal` älter als die jüngste Sicherung, entsteht keine neue;
+- jeder Lauf behält höchstens drei Stände (`tubevault_backup_*.db`, nach Änderungszeit), auch wenn keine neue entsteht;
+  andere Dateien im Ordner fasst er nicht an.
+
+Die Werte stehen in `backend/app/config.py`; in der `.env` überschreiben sie `TUBEVAULT_SICHERUNG_ABSTAND_TAGE`,
+`TUBEVAULT_SICHERUNG_VOR_AUSROLLEN_AB_STUNDEN` und `TUBEVAULT_SICHERUNG_BEHALTEN` (danach `docker compose up -d`). Was
+ein Lauf getan hat, steht in `logs/backup.log`. Das Werkzeug Sicherungen holt den Ordner auf den Mac. Die Nutzerdaten
+schreibt TubeVault zusätzlich täglich als Dateien nach `exports/userdata`. Videos, Ton und Untertitel auf der großen
+Platte werden nicht gesichert.
 
 Zurückspielen: `docker compose stop tubevault-backend`, die Sicherung als Datenbank nach
 `{{umgebung:TUBEVAULT_INDEX}}/data` kopieren (Name wie die bisherige Datei), `docker compose start tubevault-backend`;
@@ -114,7 +126,8 @@ Probe wie in Schritt 3.
 - Downloads scheitern: die Anmeldedaten sind abgelaufen (`logs/cookies-refresh.log`), oder der Token-Dienst läuft nicht
   (`docker compose ps`).
 - Die wöchentliche Sicherung scheitert: `logs/backup.log`; die Schnittstelle unter Port
-  {{port:docker-compose.yml/tubevault-backend}} muss auf dem Pi unter 127.0.0.1 antworten.
+  {{port:docker-compose.yml/tubevault-backend}} muss auf dem Pi unter 127.0.0.1 antworten. Keine neue Sicherung ohne
+  Fehler: `logs/backup.log` nennt den Grund (nicht fällig oder unverändert).
 - Der Nachvertoner arbeitet nicht: Schlüsseldatei oder Zertifikat der Hausstelle fehlen (`docker logs tubevault-nachvertoner`),
   oder die Vertonung ist nicht erreichbar.
 - Neue Netze lassen sich nicht anlegen: siehe [[Grundlage Pi]], Adressbereiche für Docker-Netze.
