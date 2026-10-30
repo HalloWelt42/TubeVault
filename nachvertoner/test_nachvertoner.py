@@ -43,6 +43,9 @@ class Buehne:
         self.fortschritt_status = 200
         self.offen = True
         self.vertonung_laufend = 0
+        self.vorab: list[dict] = []          # vorab an TubeVault gelieferte Transkripte
+        self.transkript_da = True            # liegt das Transkript bei der Vertonung schon vor?
+        self.zustand = "wartet"              # zuletzt gemeldeter Zustand des Auftrags der Vertonung
 
     def tubevault(self, r: httpx.Request) -> httpx.Response:
         p = r.url.path
@@ -55,6 +58,9 @@ class Buehne:
                             "source_language": None, "target_language": "de"},
                 "media_url": "/api/player/abc", "result_url": "/api/dubbing/requests/7/result",
                 "transcript_url": "/api/dubbing/requests/7/transcript"})
+        if p == "/api/dubbing/requests/7/transcript" and r.method == "POST":
+            self.vorab.append(json.loads(r.content))
+            return httpx.Response(200, json={"ok": True, "transcript_chunks": 1})
         if p == "/api/dubbing/requests/7/transcript":
             return httpx.Response(200, json={"transcript": self.untertitel} if self.untertitel else
                                   {"transcript": None, "reason": "Für dieses Video gibt es noch kein Transkript"})
@@ -91,6 +97,7 @@ class Buehne:
             return httpx.Response(201, json={"id": "a1", "zustand": "wartet"})
         if p == "/api/v1/auftraege/a1":
             st = self.staende.pop(0) if len(self.staende) > 1 else self.staende[0]
+            self.zustand = st["zustand"]
             return httpx.Response(200, json=st)
         if p == "/api/v1/auftraege/a1/abbrechen":
             self.abgebrochen = True
@@ -99,10 +106,13 @@ class Buehne:
             return httpx.Response(200, content=b"M4A-ERGEBNIS")
         if p == "/api/v1/dienst/a1/texte":
             assert not self.abgeholt, "Texte vor dem Abholen (danach liegt alles im Papierkorb)"
+            # wie die Vertonung: das Transkript, sobald es da ist, den Text der Tonspur erst am Ende
             return httpx.Response(200, json={
                 "transkript": {"sprache": "en", "segmente": [{"start": 0.0, "ende": 1.0, "text": "Hello.", "sprecher": "A"},
-                                                             {"start": 1.0, "ende": 1.0, "text": "", "sprecher": "A"}]},
-                "uebersetzung": {"sprache": "de", "segmente": [{"start": 0.1, "ende": 1.2, "text": "Hallo.", "sprecher": "A"}]}})
+                                                             {"start": 1.0, "ende": 1.0, "text": "", "sprecher": "A"}]}
+                if self.transkript_da else None,
+                "uebersetzung": {"sprache": "de", "segmente": [{"start": 0.1, "ende": 1.2, "text": "Hallo.", "sprecher": "A"}]}
+                if self.zustand == "fertig" else None})
         if p == "/api/v1/dienst/a1/abgeholt":
             self.abgeholt = True
             return httpx.Response(200, json={"behalten": False})
@@ -137,9 +147,10 @@ async def test_vollstaendiger_ablauf(bauen, tmp_path):
     assert {"progress": 0.515, "note": "Übersetzen"} in [{"progress": round(f["progress"], 3), "note": f["note"]}
                                                           for f in b.fortschritt if f["progress"] is not None]
     assert b"M4A-ERGEBNIS" in b.ergebnis_tv and b'name="source_language"\r\n\r\nen' in b.ergebnis_tv
+    # das Transkript ging schon beim ersten Stand vorab an TubeVault, mit der Tonspur nur noch der Text der Spur
+    assert b.vorab == [{"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": "Hello."}]}]
     texte = json.loads(b.ergebnis_tv.split(b'name="texts"\r\n\r\n')[1].split(b"\r\n--")[0])
-    assert texte == {"transcript": {"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": "Hello."}]},
-                     "translation": {"language": "de", "segments": [{"start": 0.1, "end": 1.2, "text": "Hallo."}]}}
+    assert texte == {"translation": {"language": "de", "segments": [{"start": 0.1, "end": 1.2, "text": "Hallo."}]}}
     assert b.abgeholt and b.gescheitert is None
     assert not any((tmp_path / "arbeit").iterdir()), "Arbeitsordner ist aufgeräumt"
 
@@ -174,9 +185,37 @@ async def test_untertitel_gehen_als_segmente_mit(bauen):
 
 
 async def test_fehler_wird_sichtbar_gemeldet(bauen):
+    """Scheitert die Vertonung nach dem Transkribieren, ist das Transkript trotzdem bei TubeVault (vor der Meldung)."""
     n, b = bauen([{"zustand": "fehler", "fehler": "Sprechdienst weg\nTraceback ..."}])
     await n.schritt()
     assert b.gescheitert == {"note": "RuntimeError: Sprechdienst weg", "skipped": False} and b.ergebnis_tv is None
+    assert [t["language"] for t in b.vorab] == ["en"]
+
+
+async def test_transkript_geht_einmal_sobald_es_da_ist(bauen):
+    """Solange die Transkription arbeitet, geht nichts; dann genau einmal vorab, nicht noch einmal mit der Tonspur."""
+    laeuft = {"zustand": "laeuft", "fortschritt": 0.1, "schritt": "Transkription: arbeitet"}
+    n, b = bauen([laeuft, laeuft, {"zustand": "laeuft", "fortschritt": 0.4, "schritt": "Sprechen"}, laeuft, FERTIG])
+    b.transkript_da = False
+    original = b.vertonung
+
+    def transkript_ab_drittem_stand(r: httpx.Request) -> httpx.Response:
+        if r.url.path == "/api/v1/auftraege/a1" and len(b.staende) == 3:
+            b.transkript_da = True
+        return original(r)
+    n.vt = nv.Vertonung(httpx.AsyncClient(base_url="https://vt", transport=httpx.MockTransport(transkript_ab_drittem_stand)))
+    await n.schritt()
+    assert len(b.vorab) == 1 and b.gescheitert is None
+    assert b'"transcript"' not in b.ergebnis_tv and b'"translation"' in b.ergebnis_tv
+
+
+async def test_mitgeschickte_untertitel_kommen_nicht_zurueck(bauen):
+    """Gingen Untertitel als Segmente mit, transkribiert die Vertonung nicht; dann wird auch nichts vorab erfragt."""
+    untertitel = {"language": "en", "kind": "manual", "segments": [{"start": 0.0, "end": 1.5, "text": "Hello there."}]}
+    n, b = bauen([{"zustand": "laeuft", "fortschritt": 0.5, "schritt": "Sprechen"}, FERTIG], untertitel=untertitel)
+    b.transkript_da = False
+    await n.schritt()
+    assert b.vorab == [] and b.gescheitert is None
 
 
 async def test_unbekannte_stimme_scheitert_mit_auswahl(bauen):

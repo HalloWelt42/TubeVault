@@ -216,6 +216,30 @@ async def test_gleiche_sprache_heisst_neu_gesprochen(client, videos, tmp_path):
     assert listed["de1"] == ["neu"]
 
 
+async def test_transkript_kommt_sofort_und_bleibt_bei_fehler(client, videos, tmp_path, monkeypatch):
+    """Das Transkript geht an TubeVault, sobald der Bearbeiter es hat (vor der Tonspur): sofort KI-Transkript und
+    sichtbar; scheitert die Vertonung danach, bleibt es. Nach dem Ende des Auftrags nimmt TubeVault nichts mehr an."""
+    from app.database import db
+    from app.services import transcripts
+    monkeypatch.setattr(transcripts, "SUBTITLES_DIR", tmp_path / "subtitles")
+    await client.post("/api/dubbing/requests", json={"video_id": "en1"})
+    abgeholt = (await client.post("/api/dubbing/claim", json={"worker": "mac"})).json()
+    nr = abgeholt["request"]["id"]
+    transkript = {"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": "Good evening."},
+                                                 {"start": 1.2, "end": 2.0, "text": "Welcome."}]}
+    r = await client.post(abgeholt["transcript_url"], json=transkript)
+    assert r.status_code == 200 and r.json()["transcript_chunks"] == 1, r.text
+    assert (tmp_path / "subtitles" / "en1" / "ki.en.vtt").is_file()
+    assert await db.fetch_val("SELECT kind FROM transcripts WHERE video_id = 'en1'") == "ai"
+    assert await db.fetch_val("SELECT status FROM ai_transcriptions WHERE video_id = 'en1'") == "done"
+
+    assert (await client.post(f"/api/dubbing/requests/{nr}/fail", json={"note": "Sprechdienst fiel aus"})).status_code == 200
+    assert (tmp_path / "subtitles" / "en1" / "ki.en.vtt").is_file()
+    assert await db.fetch_val("SELECT kind FROM transcripts WHERE video_id = 'en1'") == "ai"
+    assert (await client.post(abgeholt["transcript_url"], json=transkript)).status_code == 409
+    assert (await client.post("/api/dubbing/requests/999/transcript", json=transkript)).status_code == 404
+
+
 @needs_ffmpeg
 async def test_texte_kommen_mit_der_tonspur(client, videos, tmp_path, monkeypatch):
     """Mit der Tonspur geliefert: das Transkript der Quelle wird KI-Transkript (durchsuchbar, erledigt den KI-Auftrag),

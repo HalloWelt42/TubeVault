@@ -7,9 +7,10 @@ Nachvertoner holt Aufträge ab und gibt sie an die Apps, die die Arbeit tun:
   private Stimmen, die die Erlaubnisliste der Vertonung dem Nachvertoner
   freigibt (Vorgabe "Zeit Stimme"); die fremden (aus Videos gesammelt, nur
   vorübergehend) und die eingebauten Stimmen des Sprachmodells werden nie
-  angeboten. Zurück an TubeVault geht nur die
-  neue Tonspur samt ihren Texten: das Transkript der Quelle (wenn die
-  Vertonung transkribieren ließ; wird KI-Transkript) und der Text der neuen
+  angeboten. Zurück an TubeVault gehen das Transkript der Quelle (wenn die
+  Vertonung transkribieren ließ; wird KI-Transkript), sobald die Vertonung
+  es hat, nicht erst mit der Tonspur (es bleibt, auch wenn die Vertonung
+  danach scheitert), und am Ende die neue Tonspur mit dem Text der neuen
   Tonspur an seinen Zeiten (wird Untertitel "Text der Vertonung"). In der
   Kellerwolke bleibt nichts liegen (der Auftrag geht mit "nicht behalten" an
   die Vertonung und wird nach dem Abliefern abgeholt).

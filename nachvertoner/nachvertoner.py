@@ -12,8 +12,11 @@ Vertonen (je Auftrag):
     1. Auftrag bei TubeVault abholen, Untertitel der Quelle erfragen, Video laden, nur den Ton herauslösen.
     2. Ton an den Dienst der Vertonung (Stimme aus Privat oder Fremd, nie eine eingebaute des Sprachmodells; die
        Dateien bleiben nicht in der Kellerwolke: behalten=false).
-    3. Fortschritt als Lebenszeichen an TubeVault; zieht TubeVault den Auftrag zurück, wird abgebrochen.
-    4. Tonspur abliefern, der Vertonung "abgeholt" melden (dann liegt dort alles im Papierkorb).
+    3. Fortschritt als Lebenszeichen an TubeVault; zieht TubeVault den Auftrag zurück, wird abgebrochen. Transkribiert
+       die Vertonung selbst, geht ihr Transkript an TubeVault, sobald es da ist (nicht erst mit der Tonspur); es
+       bleibt dort, auch wenn die Vertonung danach scheitert.
+    4. Tonspur abliefern (mit dem Text der neuen Tonspur, und dem Transkript, falls es noch nicht vorab ging), der
+       Vertonung "abgeholt" melden (dann liegt dort alles im Papierkorb).
 
 KI-Transkript (nur wenn nichts zu vertonen ist):
     Ton in den eigenen Zweig der Kellerwolke, Weitergabe an die Transkription mit der Sprache des Videos, Transkript
@@ -175,6 +178,11 @@ class TubeVault:
             return None, antwort.get("reason") or "keine Untertitel vorhanden"
         return t, UNTERTITEL_ARTEN.get(t.get("kind"), "vorhandenes Transkript")
 
+    async def transkript_liefern(self, url: str, transkript: dict) -> None:
+        """Das Transkript der Quelle vorab, an dieselbe Adresse, die die Untertitel anbietet (409: nicht mehr in Arbeit)."""
+        r = await self.c.post(url, json=transkript, timeout=120)
+        r.raise_for_status()
+
     async def laden(self, url: str, ziel: Path) -> None:
         async with self.c.stream("GET", url) as r:
             r.raise_for_status()
@@ -252,13 +260,38 @@ class Vertonung:
                     datei.write(stueck)
 
     async def texte(self, auftrag: str) -> dict:
-        """Transkript der Quelle (wenn die Vertonung transkribieren ließ) und Text der neuen Tonspur; vor `abgeholt`."""
+        """Transkript der Quelle (wenn die Vertonung transkribieren ließ), sobald es da ist, auch während des Laufs; den
+        Text der neuen Tonspur erst, wenn der Auftrag fertig ist. Vor `abgeholt`."""
         r = await self.c.get(f"/api/v1/dienst/{auftrag}/texte", timeout=60)
         r.raise_for_status()
         return r.json()
 
     async def abgeholt(self, auftrag: str) -> None:
         await self.c.post(f"/api/v1/dienst/{auftrag}/abgeholt", timeout=60)
+
+
+class TranskriptVorab:
+    """Gibt das Transkript, das die Vertonung selbst machen ließ, an TubeVault weiter, sobald es da ist (einmal je
+    Auftrag). Fehlschläge halten das Vertonen nicht auf: dann beim nächsten Stand, sonst mit der Tonspur."""
+
+    def __init__(self, vertonung: Vertonung, tubevault: TubeVault, auftrag: str, url: str, erwartet: bool) -> None:
+        self.vt, self.tv, self.auftrag, self.url = vertonung, tubevault, auftrag, url
+        self.offen = erwartet
+        self.geliefert = False
+
+    async def versuchen(self) -> None:
+        if not self.offen:
+            return
+        try:
+            transkript = texte_fuer_tubevault(await self.vt.texte(self.auftrag)).get("transcript")
+            if transkript is None:
+                return
+            await self.tv.transkript_liefern(self.url, transkript)
+        except Exception as f:  # noqa: BLE001 - die Tonspur bringt es sonst mit
+            log.warning("Transkript für Auftrag %s noch nicht weitergegeben (%s)", self.auftrag, f)
+            return
+        self.offen, self.geliefert = False, True
+        log.info("Transkript für Auftrag %s an TubeVault (%d Sätze)", self.auftrag, len(transkript["segments"]))
 
 
 def texte_fuer_tubevault(texte: dict) -> dict:
@@ -323,7 +356,9 @@ class Nachvertoner:
             video.unlink(missing_ok=True)
             await melden(0.06, "An die Vertonung")
             auftrag = await self.vt.vertonen(ton, titel, ausgang, ziel, stimme_id, (untertitel or {}).get("segments"), original)
-            ergebnis = await self._verfolgen(auftrag, melden)
+            # Ohne mitgeschickte Untertitel (oder mit Originalstimmen) transkribiert die Vertonung selbst
+            vorab = TranskriptVorab(self.vt, self.tv, auftrag, abgeholt["transcript_url"], erwartet=original or not untertitel)
+            ergebnis = await self._verfolgen(auftrag, melden, vorab.versuchen)
             await melden(0.96, "Tonspur abliefern")
             spur = ordner / f"{ziel}.m4a"
             await geduldig(lambda: self.vt.ergebnis(ergebnis["plan_id"], spur), was="Vertonung")
@@ -331,6 +366,8 @@ class Nachvertoner:
             daten = {"source_language": erkannt, "voice": ORIGINALSTIMMEN if original else name}
             try:      # Transkript und Text der Tonspur mit ihr abliefern; fehlen sie, kommt die Spur trotzdem
                 texte = texte_fuer_tubevault(await geduldig(lambda: self.vt.texte(auftrag), was="Vertonung"))
+                if vorab.geliefert:
+                    texte.pop("transcript", None)
                 if texte:
                     daten["texts"] = json.dumps(texte, ensure_ascii=False)
             except Exception:  # noqa: BLE001
@@ -351,10 +388,12 @@ class Nachvertoner:
         finally:
             shutil.rmtree(ordner, ignore_errors=True)
 
-    async def _verfolgen(self, auftrag: str, melden) -> dict:
-        """Bis der Auftrag der Vertonung endet; der Fortschritt belegt 8 bis 95 Prozent des Ganzen."""
+    async def _verfolgen(self, auftrag: str, melden, unterwegs) -> dict:
+        """Bis der Auftrag der Vertonung endet; der Fortschritt belegt 8 bis 95 Prozent des Ganzen. `unterwegs` läuft
+        bei jedem Stand, auch dem letzten (so kommt ein Transkript noch an, wenn der Auftrag danach scheiterte)."""
         while True:
             st = await geduldig(lambda: self.vt.stand(auftrag), was="Vertonung")
+            await unterwegs()
             if st["zustand"] == "fertig":
                 return st.get("ergebnis") or {}
             if st["zustand"] in ("fehler", "abgebrochen"):

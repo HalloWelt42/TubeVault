@@ -4,7 +4,8 @@ TubeVault - Nachvertonung und zusätzliche Tonspuren (Router) v1.1.0
 Zwei Nutzer dieser Schnittstelle:
   - die Oberfläche: Videos vormerken, Warteliste ansehen, Tonspur umschalten
   - der Nachvertoner (eigenes Programm auf einem leistungsfähigen Rechner):
-    Auftrag abholen, Lebenszeichen senden, Tonspur abliefern
+    Auftrag abholen, Lebenszeichen senden, Transkript sofort und Tonspur am
+    Ende abliefern
 
 Die Erweiterung ist abschaltbar (Einstellung dub.enabled). Ist sie aus,
 nimmt die Warteliste nichts an; vorhandene Tonspuren bleiben abspielbar.
@@ -194,6 +195,16 @@ async def dubbing_transcript(request_id: int):
     return await transcripts.for_dubbing(request.video_id, request.subtitles)
 
 
+@router.post("/api/dubbing/requests/{request_id}/transcript")
+async def dubbing_transcript_delivered(request_id: int, result: transcripts.AiResult):
+    """Das Transkript der Quelle, sobald der Bearbeiter es hat, nicht erst mit
+    der Tonspur: abgelegt wie ein KI-Transkript und sofort sichtbar. Es bleibt,
+    auch wenn die Vertonung danach scheitert oder abgebrochen wird. Nur während
+    der Auftrag in Arbeit ist (sonst 409)."""
+    job = await _in_arbeit(request_id)
+    return {"ok": True, "transcript_chunks": await transcripts.from_dubbing(job.video_id, result)}
+
+
 @router.post("/api/dubbing/requests/{request_id}/progress")
 async def dubbing_progress(request_id: int, request: ProgressRequest):
     """Lebenszeichen mit Fortschritt. 409, wenn der Auftrag nicht mehr in
@@ -210,10 +221,20 @@ async def dubbing_failed(request_id: int, request: FailRequest):
     return {"ok": True}
 
 
+async def _in_arbeit(request_id: int) -> dubbing.DubRequest:
+    job = await dubbing.get(request_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    if job.status != "working":
+        raise HTTPException(status_code=409, detail="Auftrag ist nicht mehr in Arbeit")
+    return job
+
+
 class DubTexts(BaseModel):
     """Was bei der Nachvertonung an Text entstand (beides wahlweise): das
     Transkript der Quelle (wird KI-Transkript, wenn es noch keines vom Autor
-    gibt) und der Text der neuen Tonspur mit ihren Zeiten (wird Untertitel)."""
+    gibt; wer es früher hat, liefert es vorab an .../transcript) und der Text
+    der neuen Tonspur mit ihren Zeiten (wird Untertitel, gehört zur Spur)."""
     transcript: Optional[transcripts.AiResult] = None
     translation: Optional[transcripts.AiResult] = None
 
@@ -230,11 +251,7 @@ async def dubbing_result(
     am Video gespeichert; erst dann gilt der Auftrag als fertig. Mitgelieferte
     Texte werden mit der Spur übernommen (für jeden Bearbeiter gleich, nicht an
     eine bestimmte Umgebung gebunden)."""
-    job = await dubbing.get(request_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
-    if job.status != "working":
-        raise HTTPException(status_code=409, detail="Auftrag ist nicht mehr in Arbeit")
+    job = await _in_arbeit(request_id)
     try:
         mitgeliefert = DubTexts.model_validate_json(texts) if texts else None
     except ValueError as e:
