@@ -151,3 +151,12 @@ button.tv-zustand { border: 0; cursor: pointer; font-family: inherit; }
 .tv-leise { color: var(--tv-text-2); }
 .tv-schwach { color: var(--tv-text-3); }
 .tv-klein { font-size: var(--tv-gr-klein); }
+
+/* Tippen ohne Zoom am Telefon (HELF-69, dieselbe Regel wie im Appkern, appkern-oberflaeche/stil/rahmen.css): auf Geräten
+   mit Finger jedes Eingabefeld 17 px; unter 16 px vergrößert iOS beim Tippen die Seite und sie bleibt so. Zoomen mit
+   zwei Fingern bleibt erlaubt. :root doppelt, damit Klassen mit Element es nicht unterbieten. */
+@media (pointer: coarse) {
+  :root:root :is(input, select, textarea, [contenteditable]:not([contenteditable="false"]), .cm-editor) {
+    font-size: 17px;
+  }
+}
