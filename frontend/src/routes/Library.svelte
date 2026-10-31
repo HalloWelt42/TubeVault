@@ -5,6 +5,7 @@
   import { onVideoMutation } from '../lib/utils/videoMutations.js';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
+  import { videoPage } from '../lib/utils/videoPages.js';
   import { createVideoListFilters } from '../lib/utils/videoListFilters.svelte.js';
   import VideoCard from '../lib/components/video/VideoCard.svelte';
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
@@ -37,21 +38,26 @@
     } catch {}
   }
 
-  // Zentraler List-Loader (page darin nicht-reaktiv, Stale-Guard inklusive)
-  const list = createListLoader(async (page) => {
+  // Zentraler List-Loader (page darin nicht-reaktiv, Stale-Guard inklusive). Nachgeladen wird ab dem
+  // letzten Eintrag (Cursor), damit beim Archivieren einzelner Kacheln dahinter nichts übersprungen wird.
+  const list = createListLoader(async (page, after) => {
     const params = {
-      page, per_page: getSettingNum('general.videos_per_page', 24),
+      per_page: getSettingNum('general.videos_per_page', 24),
       is_archived: false, ...filters.apiParams(),
-      ...(page === 1 ? { with_language_counts: true } : {}),
+      ...(!after ? { with_language_counts: true } : {}),
     };
     try {
-      const result = await api.getVideos(params);
-      if (page === 1) {
-        totalBytes = result.total_bytes || 0;
-        languageCounts = result.language_counts || [];
+      const seite = await videoPage(params, page, after);
+      if (!after) {
+        totalBytes = seite.result.total_bytes || 0;
+        languageCounts = seite.result.language_counts || [];
       }
-      return { items: result.videos || [], total: result.total || 0 };
-    } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
+      return seite;
+    } catch (e) {
+      toast.error('Fehler: ' + e.message);
+      if (after) throw e;            // Nachladen: die Liste bleibt, der nächste Anstoß versucht es noch einmal
+      return { items: [], total: 0 };
+    }
   });
 
   // Debounced Reset-Load – verhindert Request-Flut bei schnellen Filter-Änderungen

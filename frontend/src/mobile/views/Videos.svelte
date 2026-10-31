@@ -3,6 +3,7 @@
   import { api } from '../../lib/api/client.js';
   import { getSettingNum } from '../../lib/stores/settings.js';
   import { createListLoader } from '../../lib/utils/listLoader.svelte.js';
+  import { videoPage } from '../../lib/utils/videoPages.js';
   import { go } from '../router.js';
   import VideoRow from '../parts/VideoRow.svelte';
   import { nearEnd } from '../parts/nearEnd.js';
@@ -21,14 +22,11 @@
     try { return localStorage.getItem(AREA_KEY) === 'archive' ? 'archive' : 'library'; } catch { return 'library'; }
   }
 
-  const list = createListLoader(async (page) => {
-    const result = await api.getVideos({
-      page, per_page: getSettingNum('general.videos_per_page', 24),
-      sort_by: 'upload_date', sort_order: 'desc',
-      is_archived: area === 'archive',
-    });
-    return { items: result.videos || [], total: result.total || 0 };
-  });
+  const list = createListLoader((page, after) => videoPage({
+    per_page: getSettingNum('general.videos_per_page', 24),
+    sort_by: 'upload_date', sort_order: 'desc',
+    is_archived: area === 'archive',
+  }, page, after));
 
   let failed = $state(false);
 

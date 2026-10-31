@@ -14,6 +14,7 @@
   import MultiFilter from '../lib/components/common/MultiFilter.svelte';
   import { infiniteScroll } from '../lib/utils/infiniteScroll.js';
   import { createListLoader } from '../lib/utils/listLoader.svelte.js';
+  import { videoPage } from '../lib/utils/videoPages.js';
   import PageHeader from '../lib/components/common/PageHeader.svelte';
   import TagFilterBar from '../lib/components/common/TagFilterBar.svelte';
   import BatchToolbar from '../lib/components/common/BatchToolbar.svelte';
@@ -37,17 +38,22 @@
 
   // Zentraler List-Loader: page ist darin bewusst nicht-reaktiv,
   // dadurch kann der Filter-$effect das Nachladen nicht mehr zurücksetzen.
-  const list = createListLoader(async (page) => {
+  // Nachladen ab dem letzten Eintrag (Cursor): beim Dearchivieren einzelner Kacheln fehlt dahinter nichts
+  const list = createListLoader(async (page, after) => {
     const params = {
-      page, per_page: getSettingNum('general.videos_per_page', 24),
+      per_page: getSettingNum('general.videos_per_page', 24),
       is_archived: true, ...filters.apiParams(),
-      ...(page === 1 ? { with_language_counts: true } : {}),
+      ...(!after ? { with_language_counts: true } : {}),
     };
     try {
-      const result = await api.getVideos(params);
-      if (page === 1) languageCounts = result.language_counts || [];
-      return { items: result.videos || [], total: result.total || 0 };
-    } catch (e) { toast.error('Fehler: ' + e.message); return { items: [], total: 0 }; }
+      const seite = await videoPage(params, page, after);
+      if (!after) languageCounts = seite.result.language_counts || [];
+      return seite;
+    } catch (e) {
+      toast.error('Fehler: ' + e.message);
+      if (after) throw e;            // Nachladen: die Liste bleibt, der nächste Anstoß versucht es noch einmal
+      return { items: [], total: 0 };
+    }
   });
 
   function clearFilters() {

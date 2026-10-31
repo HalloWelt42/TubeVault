@@ -73,6 +73,7 @@ class VideoListResponse(BaseModel):
     per_page: int = 24
     total_pages: int = 1
     language_counts: Optional[list[LanguageCount]] = None   # nur auf Wunsch (with_language_counts)
+    next_cursor: Optional[str] = None   # Cursor für die Seite dahinter (after=...); None am Ende der Liste
 
 
 class VideoInfo(BaseModel):

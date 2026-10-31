@@ -22,9 +22,14 @@
  *   $effect(() => { filterA; filterB; list.load(true); });   // Filter tracken OK
  *   <div use:infiniteScroll={{ onLoadMore: list.loadMore, canLoad: list.canLoad }}>
  *
- * fetchPage(page) muss { items, total? , hasMore? } liefern:
+ * fetchPage(page, after) muss { items, total?, hasMore?, next? } liefern:
  *   - hasMore (bool) gewinnt, sonst wird über total abgeleitet,
- *   - fehlt beides → keine weiteren Seiten (defensiv).
+ *   - fehlt beides → keine weiteren Seiten (defensiv),
+ *   - next: Cursor der Schnittstelle für die Seite dahinter. Liefert sie einen,
+ *     lädt loadMore ab diesem Cursor (after) statt ab dem Versatz der Seite.
+ *     Nur so geht beim Rollen nichts verloren, wenn zwischen zwei Seiten etwas
+ *     aus der Trefferliste fällt (archiviert, umgestuft): mit dem Versatz
+ *     rückt alles nach vorn und die nächste Seite springt darüber (HELF-71).
  * Veraltete Antworten (Filterwechsel während ein Request läuft) werden über
  * eine Laufnummer verworfen — kein Durcheinander mehr bei schnellem Filtern.
  *
@@ -48,8 +53,11 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
   let hasEarlier = $state(false);
 
   let page = 1;   // ABSICHTLICH nicht reaktiv (siehe Kopf-Kommentar)
+  let after = null;   // Cursor für die nächste Seite (wenn die Schnittstelle einen liefert), ebenso nicht reaktiv
   let firstPage = 1;   // erste geladene Seite, ebenso nicht reaktiv
   let runId = 0;  // Stale-Guard: nur die jüngste Antwort zählt
+  let failedAt = 0;   // letzter Fehlschlag beim Nachladen: kurz Ruhe, sonst hämmert der Rollwächter
+  const RETRY_AFTER_MS = 3000;
 
   function unseen(incoming, base) {
     const seen = new Set(base.map(keyOf));
@@ -66,6 +74,7 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
     const incoming = res?.items || [];
     const base = reset ? [] : items;
     items = [...base, ...unseen(incoming, base)];
+    after = res?.next ?? null;
     if (typeof res?.total === 'number') total = res.total;
     if (typeof res?.hasMore === 'boolean') hasMore = res.hasMore;
     // Eine leere Seite beendet das Nachladen auch dann, wenn total mehr verspricht
@@ -77,6 +86,7 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
     const myRun = ++runId;
     if (reset) {
       page = from;
+      after = null;
       firstPage = from;
       hasEarlier = from > 1;
       loading = true;
@@ -84,9 +94,14 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
       loadingMore = true;
     }
     try {
-      const res = await fetchPage(page);
+      const res = await fetchPage(page, after);
       if (myRun !== runId) return; // überholt (Filter wechselte zwischendurch)
       applyResult(res, reset);
+    } catch (e) {
+      // Scheitert das Nachladen (Netz, Neustart), bleibt die Liste, wie sie ist, und der nächste
+      // Anstoß versucht dieselbe Seite noch einmal. Früher endete die Liste dann still.
+      if (reset) throw e;
+      if (myRun === runId) { page -= 1; failedAt = Date.now(); }
     } finally {
       if (myRun === runId) { loading = false; loadingMore = false; }
     }
@@ -104,7 +119,7 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
     const myRun = ++runId;
     loadingMore = true;
     try {
-      const res = await fetchPage(firstPage - 1);
+      const res = await fetchPage(firstPage - 1, null);
       if (myRun !== runId) return;
       firstPage -= 1;
       hasEarlier = firstPage > 1;
@@ -126,6 +141,6 @@ export function createListLoader(fetchPage, { keyOf = (item) => item?.id } = {})
     load,
     loadMore,
     loadEarlier,
-    canLoad: () => hasMore && !loading && !loadingMore,
+    canLoad: () => hasMore && !loading && !loadingMore && Date.now() - failedAt > RETRY_AFTER_MS,
   };
 }

@@ -65,11 +65,11 @@ describe('Mitten in einer langen Liste', () => {
     const found = await loadAround({ list, pageSize: PAGE, locate: async () => 9876, clearFilters: () => false });
     expect(found).toBe(true);
     expect(fetchPage).toHaveBeenCalledTimes(1);
-    expect(fetchPage).toHaveBeenCalledWith(99);
+    expect(fetchPage).toHaveBeenCalledWith(99, null);   // Sprung über den Versatz, ohne Cursor
     expect(list.items.some((t) => t.id === 't9876')).toBe(true);
     expect(list.hasEarlier).toBe(true);
     await list.loadEarlier();
-    expect(fetchPage).toHaveBeenLastCalledWith(98);
+    expect(fetchPage).toHaveBeenLastCalledWith(98, null);
     expect(list.items[0].id).toBe('t9700');
     expect(list.items).toHaveLength(200);
   });

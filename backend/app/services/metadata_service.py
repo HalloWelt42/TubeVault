@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 
 from app.database import db
+from app.services import keyset
 from app.utils.file_utils import now_sqlite
 from app.utils.tag_utils import sanitize_tags
 
@@ -62,8 +63,13 @@ class MetadataService:
         has_extra_audio: bool | None = None,
         languages: list[str] | None = None,
         with_language_counts: bool = False,
+        after: str | None = None,
     ) -> dict:
         """Videos mit Paginierung, Filter und Sortierung abrufen.
+        after: Cursor aus next_cursor einer vorigen Seite; dann folgt die Seite
+        direkt hinter deren letztem Eintrag (page zählt nicht). Zum Nachladen
+        beim Rollen: verschiebt sich der Bestand dazwischen, geht nichts
+        verloren und nichts kommt doppelt (keyset.py).
         Mehrfachfilter: category_ids, channel_ids, video_types als Komma-getrennte Werte.
         is_archived: True=nur archivierte, False=nur nicht-archivierte, None=alle.
         languages: Sprachkürzel (language.parse_filter), "und" = ohne Sprache.
@@ -101,38 +107,49 @@ class MetadataService:
             sort_by = "created_at"
         order = "DESC" if sort_order.lower() == "desc" else "ASC"
 
-        # ORDER BY – is_favorite ist virtuell und wird via EXISTS gebaut.
-        # Tiebreaker created_at DESC, damit neue Videos bei gleichem
+        # Sortierung – is_favorite ist virtuell und wird via EXISTS gebaut.
+        # Zweiter Schlüssel created_at DESC, damit neue Videos bei gleichem
         # Sortierwert oben bleiben (wichtig bei NULL-Feldern wie upload_date).
         # v.id als letzter Schlüssel macht die Reihenfolge eindeutig: ohne ihn
         # ist sie bei Gleichstand (hunderte Videos mit demselben Upload-Tag)
         # zufällig, und seitenweises Nachladen liefert Videos doppelt oder nie.
+        # NULLs ans Ende bei DESC, sonst stünden unbekannte Upload-Daten oben.
+        desc = order == "DESC"
         if sort_by == "is_favorite":
-            order_by = (
-                f"(EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id)) {order}, "
-                f"v.created_at DESC, v.id"
-            )
+            first = keyset.SortKey("(EXISTS (SELECT 1 FROM favorites f WHERE f.video_id = v.id))", desc, not desc)
         else:
-            # NULLs ans Ende bei DESC, sonst stehen unbekannte Upload-Daten oben
-            null_placement = "NULLS LAST" if order == "DESC" else "NULLS FIRST"
-            order_by = f"v.{sort_by} {order} {null_placement}, v.created_at DESC, v.id"
+            first = keyset.SortKey(f"v.{sort_by}", desc, not desc)
+        keys = [first, keyset.SortKey("v.created_at", True, False), keyset.SortKey("v.id", False, False)]
+        signature = f"{sort_by}:{order}"
 
         # Anzahl und Gesamtgröße aller Treffer
         summary = await db.fetch_one(
             f"SELECT COUNT(*) AS n, COALESCE(SUM(v.file_size), 0) AS bytes FROM videos v {where}", params)
         total = summary["n"]
 
-        # Paginierte Ergebnisse
-        offset = (page - 1) * per_page
+        # Eine Seite: ab Cursor (Nachladen) oder ab Versatz (erste Seite, Sprung)
+        page_where, page_params, offset = where, list(params), (page - 1) * per_page
+        if after:
+            condition, condition_params = keyset.after_condition(keys, keyset.decode(after, signature))
+            page_where = f"{where} AND {condition}" if where else f"WHERE {condition}"
+            page_params += condition_params
+            offset = 0
         rows = await db.fetch_all(
             f"""SELECT v.*,
                        (SELECT GROUP_CONCAT(CASE WHEN a.origin = 'revoice' THEN 'neu' ELSE a.language END)
-                        FROM audio_tracks a WHERE a.video_id = v.id) AS extra_audio
-                FROM videos v {where}
-                ORDER BY {order_by}
+                        FROM audio_tracks a WHERE a.video_id = v.id) AS extra_audio,
+                       {first.expr} AS _key0, v.created_at AS _key1, v.id AS _key2
+                FROM videos v {page_where}
+                ORDER BY {keyset.order_by(keys)}
                 LIMIT ? OFFSET ?""",
-            params + [per_page, offset]
+            page_params + [per_page + 1, offset]   # eine mehr: gibt es danach noch etwas?
         )
+        has_more = len(rows) > per_page
+        rows = [dict(r) for r in rows[:per_page]]
+        cursor = keyset.next_cursor(signature, rows[-1] if rows else None, ["_key0", "_key1", "_key2"], has_more)
+        for r in rows:
+            for k in ("_key0", "_key1", "_key2"):
+                r.pop(k, None)
 
         total_pages = max(1, (total + per_page - 1) // per_page)
 
@@ -144,6 +161,7 @@ class MetadataService:
             "per_page": per_page,
             "total_pages": total_pages,
             "language_counts": language_counts,
+            "next_cursor": cursor,
         }
 
     async def _filters(

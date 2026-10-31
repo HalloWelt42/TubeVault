@@ -41,21 +41,28 @@ async def list_videos(
     has_extra_audio: Optional[bool] = None,
     language: Optional[list[str]] = Query(None, description="Sprachkürzel, mehrfach oder kommagetrennt; und = ohne Sprache"),
     with_language_counts: bool = False,
+    after: Optional[str] = Query(None, description="Cursor (next_cursor der vorigen Seite): Seite direkt dahinter"),
 ):
     """Alle Videos abrufen (paginiert, filterbar, sortierbar). Mehrfachfilter via Komma-getrennte IDs.
-    with_language_counts: Zähler je Sprache für den Sprachfilter (alle übrigen Filter gelten)."""
+    with_language_counts: Zähler je Sprache für den Sprachfilter (alle übrigen Filter gelten).
+    Nachladen beim Rollen mit after statt page: dann geht nichts verloren, wenn sich der Bestand
+    zwischen zwei Seiten ändert."""
+    from app.services import keyset
     from app.services import language as language_service
-    result = await metadata_service.get_videos(
-        page=page, per_page=per_page, status=status,
-        sort_by=sort_by, sort_order=sort_order,
-        search=search, category_id=category_id,
-        category_ids=category_ids,
-        channel_id=channel_id, channel_ids=channel_ids,
-        tag=tag, tags=tags, video_type=video_type, video_types=video_types,
-        is_archived=is_archived, is_music=is_music, has_extra_audio=has_extra_audio,
-        languages=language_service.parse_filter(language), with_language_counts=with_language_counts,
-    )
-    return result
+    try:
+        return await metadata_service.get_videos(
+            page=page, per_page=per_page, status=status,
+            sort_by=sort_by, sort_order=sort_order,
+            search=search, category_id=category_id,
+            category_ids=category_ids,
+            channel_id=channel_id, channel_ids=channel_ids,
+            tag=tag, tags=tags, video_type=video_type, video_types=video_types,
+            is_archived=is_archived, is_music=is_music, has_extra_audio=has_extra_audio,
+            languages=language_service.parse_filter(language), with_language_counts=with_language_counts,
+            after=after,
+        )
+    except keyset.CursorError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/stats")
