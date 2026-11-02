@@ -19,9 +19,11 @@
   import LanguageLabel from '../common/LanguageLabel.svelte';
   import { setVideoMusic } from '../../utils/videoMusic.js';
 
-  // onPlay: statt einfach zu öffnen, z.B. in einer Warteschlange abspielen
-  let { video, showArchiveBtn = true, onUpdate = null, onPlay = null } = $props();
+  // onPlay: statt einfach zu öffnen, z.B. in einer Warteschlange abspielen.
+  // archived: die Liste weiß, welchen Teil des Bestands sie zeigt (ihre Einträge tragen is_archived nicht mit)
+  let { video, showArchiveBtn = true, onUpdate = null, onPlay = null, archived = undefined } = $props();
   let hidden = $state(false);
+  let isArchived = $derived(archived ?? !!video.is_archived);
   let musicChoice = $state(null);  // hier umgeschaltet; sonst gilt, was das Video mitbringt
   let isMusic = $derived(musicChoice ?? !!video.is_music);
 
@@ -36,13 +38,15 @@
     else navigate(`/watch/${video.id}`);
   }
 
-  async function archiveVideo(e) {
+  // Archivieren und Dearchivieren: die Kachel verschwindet aus der Liste, in der sie stand
+  async function toggleArchive(e) {
     e.stopPropagation();
+    const war = isArchived;
     try {
-      await api.archiveVideo(video.id);
+      await (war ? api.unarchiveVideo(video.id) : api.archiveVideo(video.id));
       hidden = true;
-      toast.success('Archiviert');
-      onUpdate?.();   // die Liste des Aufrufers neu laden
+      toast.success(war ? 'Dearchiviert' : 'Archiviert');
+      onUpdate?.(video.id);   // der Aufrufer nimmt sie aus seiner Liste
     } catch (err) { toast.error(err.message); }
   }
 
@@ -106,9 +110,9 @@
       <HoverActionBtn variant={isMusic ? 'accent' : null} onclick={toggleMusic} title={isMusic ? 'Keine Musik' : 'Als Musik'}>
         <i class="fa-solid fa-music"></i>
       </HoverActionBtn>
-      {#if showArchiveBtn && !video.is_archived}
-        <HoverActionBtn variant="warn" onclick={archiveVideo} title="Archivieren">
-          <i class="fa-solid fa-box-archive"></i>
+      {#if showArchiveBtn}
+        <HoverActionBtn variant="warn" onclick={toggleArchive} title={isArchived ? 'Dearchivieren' : 'Archivieren'}>
+          <i class="fa-solid {isArchived ? 'fa-box-open' : 'fa-box-archive'}"></i>
         </HoverActionBtn>
       {/if}
     </HoverActionOverlay>
