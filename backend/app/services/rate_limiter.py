@@ -128,6 +128,11 @@ class RateLimiter:
             }
         self._stats[category][event] = self._stats[category].get(event, 0) + 1
 
+    def in_backoff(self, category: str) -> bool:
+        """True, solange die Kategorie nach einem Rate-Limit über ihrem Standardabstand liegt."""
+        default = DEFAULT_INTERVALS.get(category, 1.0)
+        return self.intervals.get(category, default) > default
+
     def is_youtube_healthy(self) -> bool:
         """YouTube-Gesundheit: basiert auf ECHTEN YouTube-Blocks (429 etc.),
         NICHT auf normalen Fehlern (Video unavailable, private etc.)."""
@@ -157,7 +162,7 @@ class RateLimiter:
             result[cat] = {
                 "interval_current": current,
                 "interval_default": default,
-                "in_backoff": current > default,
+                "in_backoff": self.in_backoff(cat),
                 "error_count": self._error_counts.get(cat, 0),
                 "yt_blocks": s.get("yt_blocks", 0),
                 **(self._stats.get(cat, {})),

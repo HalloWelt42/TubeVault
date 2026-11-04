@@ -796,10 +796,15 @@ async def auto_enrich(video_id: str):
             await _log_attempt("chapter_thumbs", False, error=str(e)[:200])
 
     # ─── Untertitel (nur wenn "Untertitel herunterladen" an ist, in den
-    #     eingestellten Sprachen; die erste gefundene genügt) ───
+    #     eingestellten Sprachen; die erste gefundene genügt).
+    #     Während die Quelle Untertitel drosselt, wartet der Abruf je Sprache bis zu 120 s hinter allen anderen;
+    #     beim Öffnen eines Videos hielte das die Anfrage über den Zeitablauf des Proxys hinaus (HELF-158). Dann
+    #     ohne Eintrag überspringen, das nächste Öffnen versucht es erneut. ───
     from app.services.download_options import subtitle_languages
+    from app.services.rate_limiter import rate_limiter
     languages = await subtitle_languages()
-    if languages and await _should_enrich("subtitles"):
+    source_throttled = rate_limiter.in_backoff("caption") or rate_limiter.in_backoff("pytubefix")
+    if languages and not source_throttled and await _should_enrich("subtitles"):
         try:
             from app.config import SUBTITLES_DIR
             sdir = SUBTITLES_DIR / video_id
