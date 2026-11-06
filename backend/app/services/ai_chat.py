@@ -43,14 +43,14 @@ def _is_text_model(entry: dict) -> bool:
 async def _list_models(url: str) -> Optional[str]:
     if await semantic_index.via_leitstelle():
         # Die Leitstelle entscheidet; hier nur, ob sie TubeVault ein Sprachmodell im Heimnetz anbietet
-        async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
+        async with semantic_index.ki_client(_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
             response = await client.get(f"{url}/models")
             response.raise_for_status()
         eigene = [e for e in response.json().get("data", [])
                   if not (e.get("x-leitstelle") or {}).get("extern") and "text" in ((e.get("x-leitstelle") or {}).get("faehigkeiten") or [])]
         return LEITSTELLE_WAEHLT if eigene else None
     root = re.sub(r"/v1$", "", url)
-    async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
+    async with semantic_index.ki_client(_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
         # Dienste mit Ladezustand (/api/v0/models): ein geladenes Sprachmodell
         try:
             response = await client.get(f"{root}/api/v0/models")
@@ -72,7 +72,7 @@ async def extern_choices() -> dict:
         return {"options": [], "state": "Gilt nur über die Leitstelle (Weg zum KI-Dienst)"}
     url = (await setting_values.get("ai.leitstelle_url")).strip().rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
+        async with semantic_index.ki_client(_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
             response = await client.get(f"{url}/models")
             response.raise_for_status()
     except httpx.HTTPError as e:
@@ -145,7 +145,7 @@ async def complete_json(system: str, user: str, name: str, schema: dict,
         "response_format": {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}},
     }
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with semantic_index.ki_client(timeout) as client:
             response = await client.post(f"{cfg[0]}/chat/completions", json=payload,
                                          headers=await semantic_index.headers(f"Textaufgabe {name}"))
             response.raise_for_status()

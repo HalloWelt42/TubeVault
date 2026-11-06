@@ -46,8 +46,12 @@ services:
       # Eigene Musiksammlung (FLAC usw.) als zweite Quelle der Musik, nur lesend:
       # mit TUBEVAULT_MUSIC_SOURCE in der .env der Musikordner, sonst ein leerer Ordner.
       - ${TUBEVAULT_MUSIC_SOURCE:-${TUBEVAULT_INDEX:?}/data/musik}:/app/data/musik:ro
+      # Zertifikat der Hausstelle (dasselbe wie für den Nachvertoner): ihm vertraut der KI-Client, damit die
+      # Leitstelle über HTTPS geht
+      - ${NACHVERTONER_CA:?NACHVERTONER_CA fehlt in .env (Zertifikat der Hausstelle)}:/zertifikate/rootCA.pem:ro
     environment:
       - PYTHONUNBUFFERED=1
+      - TUBEVAULT_CA_DATEI=/zertifikate/rootCA.pem
       # Zeitzone für Tageszähler und das nächtliche Drip-Fenster. Zeitstempel in
       # der Datenbank bleiben davon unabhängig Weltzeit (UTC).
       - TZ=${TZ:-Europe/Berlin}

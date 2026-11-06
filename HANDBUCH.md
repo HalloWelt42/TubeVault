@@ -14,7 +14,7 @@ schluessel_orte:
   - "Pi: `{{umgebung:NACHVERTONER_SCHLUESSEL}}`, Modus 0600 (App-Schlüssel des Nachvertoners bei der Kellerwolke)"
   - "Datenbank: Schlüssel der Leitstelle in den Einstellungen von TubeVault"
 einrichten: einrichten.sh
-stand: 6a1aa85
+stand: abdf80c
 ---
 
 # TubeVault
@@ -90,7 +90,9 @@ Probe: `crontab -l` zeigt die drei Zeilen; nach fünf Minuten steht in `/tmp/tub
 
 ### 5. Leitstelle und Nachvertoner
 
-Frisch unter Einstellungen die Route der KI auf die [[Leitstelle]] stellen und ihren Schlüssel eintragen; in der
+Frisch unter Einstellungen die Route der KI auf die [[Leitstelle]] stellen, ihre Adresse über HTTPS
+(etwa `https://<pi>:8531/v1`) und ihren Schlüssel eintragen; dem Zertifikat vertraut das Backend über die Hausstelle
+(`{{umgebung:NACHVERTONER_CA}}`, im Container `TUBEVAULT_CA_DATEI`). In der
 [[Vertonung]] dem Nachvertoner die Stimmen freigeben, die er nutzen darf.
 
 Probe: `docker logs tubevault-nachvertoner` zeigt, dass er Aufträge abholt, und eine Frage an die KI in TubeVault bekommt

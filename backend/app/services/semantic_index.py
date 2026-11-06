@@ -18,14 +18,18 @@ Aufbau:
     semantic_dirty     Warteliste geänderter Videos (per Trigger gefüllt)
 """
 import asyncio
+import functools
 import hashlib
 import json
 import logging
+import os
+import ssl
 import time
 from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import quote
 
+import certifi
 import httpx
 
 from app.database import db
@@ -156,6 +160,22 @@ async def fill_codes(connection, table: str, key: str) -> int:
 
 # ─── Einstellungen und Erreichbarkeit ─────────────────────────────────
 
+@functools.cache
+def tls_pruefung() -> ssl.SSLContext:
+    """Zertifikatsprüfung für den KI-Dienst: die üblichen Stellen und dazu die Zertifikatsstelle aus TUBEVAULT_CA_DATEI
+    (die Hausstelle, von der die Leitstelle im Heimnetz ihr HTTPS-Zertifikat hat)."""
+    kontext = ssl.create_default_context(cafile=certifi.where())
+    ca = os.environ.get("TUBEVAULT_CA_DATEI", "").strip()
+    if ca:
+        kontext.load_verify_locations(ca)
+    return kontext
+
+
+def ki_client(timeout: float, **kwargs) -> httpx.AsyncClient:
+    """Der eine Weg zum KI-Dienst (direkt oder Leitstelle), mit der Zertifikatsprüfung oben."""
+    return httpx.AsyncClient(timeout=timeout, verify=tls_pruefung(), **kwargs)
+
+
 async def via_leitstelle() -> bool:
     return (await setting_values.get("ai.route")) == "leitstelle"
 
@@ -190,7 +210,7 @@ async def headers(purpose: str, background: bool = False) -> dict[str, str]:
 
 async def embed_texts(texts: list[str], url: str, model: str, timeout: float,
                       purpose: str = "Einbetten", background: bool = False) -> list[list[float]]:
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with ki_client(timeout) as client:
         response = await client.post(f"{url}/embeddings", json={"model": model, "input": texts},
                                      headers=await headers(purpose, background))
         response.raise_for_status()

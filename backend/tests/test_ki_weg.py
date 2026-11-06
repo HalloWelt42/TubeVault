@@ -88,3 +88,31 @@ def test_schluessel_wird_geprueft():
     assert settings_schema.validate("ai.leitstelle_key", " ls_abc ") == "ls_abc"
     with pytest.raises(ValueError):
         settings_schema.validate("ai.leitstelle_url", "leitstelle:8530")
+
+
+def test_ki_client_vertraut_der_hausstelle(monkeypatch, tmp_path):
+    """Leitstelle über HTTPS (Hausstelle): der KI-Client prüft gegen die üblichen Stellen und TUBEVAULT_CA_DATEI."""
+    ohne = len(semantic_index.tls_pruefung().get_ca_certs())
+    hausstelle = tmp_path / "rootCA.pem"
+    hausstelle.write_text(_FREMDE_STELLE)
+    monkeypatch.setenv("TUBEVAULT_CA_DATEI", str(hausstelle))
+    semantic_index.tls_pruefung.cache_clear()
+    try:
+        assert len(semantic_index.tls_pruefung().get_ca_certs()) == ohne + 1
+        assert isinstance(semantic_index.ki_client(5), httpx.AsyncClient)
+    finally:
+        monkeypatch.delenv("TUBEVAULT_CA_DATEI")
+        semantic_index.tls_pruefung.cache_clear()
+
+
+# Wegwerf-Wurzelzertifikat (nur der öffentliche Teil, Schlüssel verworfen); sicher nicht unter den üblichen Stellen
+_FREMDE_STELLE = """-----BEGIN CERTIFICATE-----
+MIIBKDCBzgIJAOQX6sMq/hz9MAoGCCqGSM49BAMCMBsxGTAXBgNVBAMMEEhhdXNz
+dGVsbGUgUHJvYmUwIBcNMjYxMTA2MjI1OTM4WhgPMjEyNjEwMTMyMjU5MzhaMBsx
+GTAXBgNVBAMMEEhhdXNzdGVsbGUgUHJvYmUwWTATBgcqhkjOPQIBBggqhkjOPQMB
+BwNCAAS0lbhJ/hsjhNNkEk/FNOKabhHNDMKrx3NImSCUwAlvgrKnKOV+lkqkUP9F
++I5MsfUCEH1IPO0ftSNYtdiXurRQMAoGCCqGSM49BAMCA0kAMEYCIQClrPuzdmu6
+FzHPbWt5oM1wFxAKcMlAhLXkKrfX2nTCoAIhAPiA0bmvJKpEMnuCJTFhutxOSkc2
+Ncox/Bo+wseCaC7r
+-----END CERTIFICATE-----
+"""
