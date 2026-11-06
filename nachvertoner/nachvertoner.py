@@ -48,6 +48,8 @@ from appkern.kellerwolke import Kellerwolke, NichtErreichbar, pfad_aus
 
 log = logging.getLogger("nachvertoner")
 OHNE_FRIST = httpx.Timeout(None, connect=30)
+#: Fristen zur Kellerwolke wie im Appkern: kurz für Anfragen, lang zum Lesen großer Dateien
+KELLERWOLKE_FRIST = httpx.Timeout(30.0, read=300.0)
 UNTERTITEL_ARTEN = {"manual": "Untertitel vom Autor", "auto": "Untertitel der Quelle, automatisch", "ai": "KI-Transkript"}
 ORIGINALSTIMMEN = "Originalstimmen"   # Wahl in TubeVault: je Sprecher seine eigene Stimme, die Vorgabestimme als Ersatz
 TRANSKRIPT_ORDNER = "Transkripte"   # Arbeitsordner im eigenen Zweig der Kellerwolke, nur Arbeitskopien
@@ -524,13 +526,20 @@ def ssl_kontext(ca_datei: str | None) -> ssl.SSLContext | bool:
     return ssl.create_default_context(cafile=ca_datei) if ca_datei else True
 
 
+def kellerwolke_client(s: Einstellungen) -> httpx.AsyncClient:
+    """Verbindung zur Kellerwolke: dieselbe Zertifikatsstelle wie für die Vertonung, damit https mit dem Zertifikat
+    der Hausstelle geht (KW-4); ohne eigenen Client prüfte der Appkern nur gegen die üblichen Stellen."""
+    return httpx.AsyncClient(timeout=KELLERWOLKE_FRIST, verify=ssl_kontext(s.ca_datei))
+
+
 async def haupt(args) -> int:
     s = Einstellungen.aus_umgebung()
     s.arbeit.mkdir(parents=True, exist_ok=True)
     async with httpx.AsyncClient(base_url=s.tubevault, timeout=OHNE_FRIST) as tv, \
             httpx.AsyncClient(base_url=s.vertonung, timeout=OHNE_FRIST, verify=ssl_kontext(s.ca_datei),
-                              headers={"Authorization": f"Bearer {s.schluessel}"}) as vt:
-        kw = Kellerwolke(s.kellerwolke, s.schluessel)
+                              headers={"Authorization": f"Bearer {s.schluessel}"}) as vt, \
+            kellerwolke_client(s) as kw_client:
+        kw = Kellerwolke(s.kellerwolke, s.schluessel, client=kw_client)
         try:
             n = Nachvertoner(s, TubeVault(tv), Vertonung(vt), kw)
             if args.pruefen:

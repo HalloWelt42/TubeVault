@@ -347,3 +347,55 @@ async def test_ton_wird_nur_umgepackt_nie_neu_kodiert(tmp_path):
         stroeme = json.loads(probe.stdout)["streams"]
         assert ton.suffix == ".mka" and [s["codec_type"] for s in stroeme] == ["audio"]
         assert stroeme[0]["codec_name"] == {"libopus": "opus", "aac": "aac"}[ton_kodierung]
+
+
+def _hausstelle(ordner: Path) -> tuple[Path, Path, Path]:
+    """Eine eigene Zertifikatsstelle und ein Zertifikat für 127.0.0.1, wie die Hausstelle im Heimnetz."""
+    def ossl(*a: str) -> None:
+        subprocess.run(["openssl", *a], check=True, capture_output=True, cwd=ordner)
+    (ordner / "ca.ext").write_text("basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n"
+                                   "subjectKeyIdentifier=hash\n")
+    ossl("req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=Hausstelle", "-keyout", "ca.key", "-out", "ca.csr")
+    ossl("x509", "-req", "-in", "ca.csr", "-signkey", "ca.key", "-days", "2", "-extfile", "ca.ext", "-out", "ca.pem")
+    ossl("req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=127.0.0.1", "-keyout", "server.key", "-out", "server.csr")
+    (ordner / "san.ext").write_text("subjectAltName=IP:127.0.0.1\nbasicConstraints=CA:FALSE\n"
+                                    "authorityKeyIdentifier=keyid,issuer\nextendedKeyUsage=serverAuth\n")
+    ossl("x509", "-req", "-in", "server.csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial", "-days", "2",
+         "-extfile", "san.ext", "-out", "server.pem")
+    return ordner / "ca.pem", ordner / "server.pem", ordner / "server.key"
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="openssl fehlt")
+async def test_kellerwolke_ueber_https_mit_der_hausstelle(tmp_path):
+    """KW-4: Die Kellerwolke läuft nur noch über https mit dem Zertifikat der Hausstelle. Der Nachvertoner muss ihr
+    mit der eingestellten Zertifikatsstelle vertrauen, wie schon der Vertonung; ohne sie scheitert die Prüfung."""
+    import http.server
+    import ssl
+    import threading
+
+    ca, zert, schluessel = _hausstelle(tmp_path)
+
+    class Antwort(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *a):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Antwort)
+    kontext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    kontext.load_cert_chain(zert, schluessel)
+    server.socket = kontext.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    adresse = f"https://127.0.0.1:{server.server_address[1]}/api/health"
+    try:
+        async with nv.kellerwolke_client(SimpleNamespace(ca_datei=str(ca))) as c:
+            assert (await c.get(adresse)).text == "ok"
+        async with nv.kellerwolke_client(SimpleNamespace(ca_datei=None)) as c:
+            with pytest.raises(httpx.ConnectError):
+                await c.get(adresse)
+    finally:
+        server.shutdown()
