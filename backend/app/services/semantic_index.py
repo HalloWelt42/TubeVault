@@ -192,7 +192,9 @@ async def config() -> Optional[tuple[str, str]]:
 
 async def headers(purpose: str, background: bool = False) -> dict[str, str]:
     """Köpfe einer KI-Anfrage. Über die Leitstelle: Schlüssel, lesbarer Titel (prozentkodiert, Köpfe
-    tragen nur ASCII) und bei Stapelarbeit der Vorrang Hintergrund. Direkt: keine."""
+    tragen nur ASCII) und bei Stapelarbeit der Vorrang Hintergrund und die Art Masse (Leitstelle
+    docs/ARBEITSLOGIK.md, LS-24: Masse kommt nach jeder Einzelarbeit und rechnet nur auf einem ruhigen Mac).
+    Direkt: keine."""
     if not await via_leitstelle():
         return {}
     result = {"X-Leitstelle-Titel": quote(f"TubeVault: {purpose}")}
@@ -201,6 +203,7 @@ async def headers(purpose: str, background: bool = False) -> dict[str, str]:
         result["Authorization"] = f"Bearer {key}"
     if background:
         result["X-Leitstelle-Prioritaet"] = "hintergrund"
+        result["X-Leitstelle-Art"] = "masse"
     # Erlaubnisliste externer Modelle: ohne sie weicht die Leitstelle nie nach extern aus
     extern = (await setting_values.get("ai.leitstelle_extern")).strip()
     if extern:

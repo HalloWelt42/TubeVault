@@ -41,8 +41,10 @@ async def test_leitstelle_adresse_schluessel_titel_vorrang(ki):
     kopf = await semantic_index.headers("Gesagtes einbetten", background=True)
     assert kopf["Authorization"] == "Bearer ls_geheim"
     assert kopf["X-Leitstelle-Prioritaet"] == "hintergrund"
+    assert kopf["X-Leitstelle-Art"] == "masse", "Stapel sind Masse (LS-24)"
     assert kopf["X-Leitstelle-Titel"].isascii() and unquote(kopf["X-Leitstelle-Titel"]) == "TubeVault: Gesagtes einbetten"
-    assert "X-Leitstelle-Prioritaet" not in await semantic_index.headers("Bedeutungssuche")
+    suche = await semantic_index.headers("Bedeutungssuche")
+    assert "X-Leitstelle-Prioritaet" not in suche and "X-Leitstelle-Art" not in suche, "die Suche ist ein Einzelauftrag"
 
 
 async def test_umschalten_zurueck_ohne_neustart(ki):
