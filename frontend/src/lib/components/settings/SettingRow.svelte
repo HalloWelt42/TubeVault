@@ -5,7 +5,7 @@
     toggle    Schalter
     duration  Zahl mit Einheit Stunden oder Tage (gespeichert in Sekunden)
     number    Zahl; mit zero_label zusätzlich "ohne Grenze" (gespeichert als 0)
-    select    Auswahl
+    select    Auswahl; mit options_from liefert ein Dienst die Auswahl live (Einzelwahl, gespeichert als Wert)
     text      Textfeld
     secret    verdecktes Textfeld mit Auge (Schlüssel)
     choices   Mehrfachwahl aus einer Auswahl, die options_from live liefert (gespeichert durch Komma getrennt)
@@ -18,15 +18,20 @@
 
   let { def, value, onSave = () => {} } = $props();
 
-  // choices: Auswahl live holen; Eingetragenes, das nicht mehr angeboten wird, bleibt sichtbar und abwählbar
+  // choices und select mit options_from: Auswahl live holen; Eingetragenes, das nicht (mehr) angeboten wird,
+  // bleibt sichtbar (choices: abwählbar)
+  let live = $derived(!!def.options_from && (def.kind === 'choices' || def.kind === 'select'));
   let angebot = $state({ options: [], state: '' });
   $effect(() => {
-    if (def.kind !== 'choices' || !def.options_from) return;
+    if (!live) return;
     api.request(def.options_from).then((a) => (angebot = a)).catch(() => (angebot = { options: [], state: 'Auswahl nicht abrufbar' }));
   });
-  let gewaehlt = $derived(String(value || '').split(',').map((x) => x.trim()).filter(Boolean));
-  let wahl = $derived([...angebot.options, ...gewaehlt.filter((g) => !angebot.options.some((o) => o.value === g))
-    .map((g) => ({ value: g, label: g, hint: 'nicht mehr angeboten' }))]);
+  let gewaehlt = $derived(def.kind === 'choices' ? String(value || '').split(',').map((x) => x.trim()).filter(Boolean)
+    : [String(value ?? '')].filter(Boolean));
+  let wahl = $derived(live
+    ? [...angebot.options, ...gewaehlt.filter((g) => !angebot.options.some((o) => o.value === g))
+        .map((g) => ({ value: g, label: g, hint: 'nicht angeboten' }))]
+    : (def.options || []).map((o) => ({ value: o, label: def.option_labels?.[o] || o, hint: '' })));
   function umschalten(w) {
     onSave((gewaehlt.includes(w) ? gewaehlt.filter((x) => x !== w) : [...gewaehlt, w]).join(','));
   }
@@ -81,9 +86,12 @@
       {/if}
 
     {:else if def.kind === 'select'}
-      <select class="tv-eingabe" value={value} onchange={(e) => onSave(e.target.value)}>
-        {#each def.options as option}<option value={option}>{def.option_labels?.[option] || option}</option>{/each}
-      </select>
+      <div class="wahlen">
+        <select class="tv-eingabe" onchange={(e) => onSave(e.target.value)}>
+          {#each wahl as o (o.value)}<option value={o.value} selected={o.value === value} title={o.hint}>{o.label}</option>{/each}
+        </select>
+        {#if live && angebot.state}<div class="stand">{angebot.state}</div>{/if}
+      </div>
 
     {:else if def.kind === 'choices'}
       <div class="wahlen">

@@ -40,11 +40,12 @@ async def get_settings_schema():
 
 @router.get("/options/{key}")
 async def get_setting_options(key: str):
-    """Live-Auswahl einer Einstellung der Art choices (zum Beispiel die externen
+    """Live-Auswahl einer Einstellung der Art choices oder select (zum Beispiel die
     Modelle der Leitstelle) bzw. Vorschläge einer der Art names (Interpreten)."""
     from app.services import ai_chat, music_artists
     providers = {
         "ai.leitstelle_extern": ai_chat.extern_choices,
+        "ai.leitstelle_text_model": ai_chat.text_model_choices,
         music_artists.WHOLE: lambda: music_artists.suggestions(music_artists.WHOLE),
         music_artists.SPLIT: lambda: music_artists.suggestions(music_artists.SPLIT),
     }
@@ -99,8 +100,9 @@ async def _notify_services(key: str) -> None:
     from app.services import shared_cache
     shared_cache.forget("background_overview")
     if key.startswith("ai."):
-        from app.services import semantic_index
+        from app.services import ai_chat, semantic_index
         semantic_index.reset_availability()
+        ai_chat.forget_model()   # Weg oder Sprachmodell gewechselt: nicht bis zum Ablauf beim alten bleiben
     if key in ("rss.interval", "rss.max_interval"):
         from app.services.rss_service import rss_service
         await rss_service.recompute_intervals()

@@ -37,7 +37,8 @@ Angaben des Nachvertoners stehen in der `.env` neben `docker-compose.yml`, nie i
 
 - Pi nach [[Grundlage Pi]] mit Docker, einer schnellen Platte für den Index und einer großen für die Medien; ffmpeg im
   System des Pi (der Nachvertoner nutzt es über eingehängte Dateien).
-- [[Leitstelle]] für die KI (Einstellung der Route auf die Leitstelle mit ihrem Schlüssel).
+- [[Leitstelle]] für die KI (Einstellung der Route auf die Leitstelle mit ihrem Schlüssel); das Sprachmodell nennt
+  TubeVault selbst, die Leitstelle muss es TubeVault anbieten.
 - [[Vertonung]] und ein App-Zugang der [[Kellerwolke]] für den Nachvertoner.
 - Anmeldedaten der Videoplattform in `config/cookies.txt`; ein Zeitplan auf dem Pi frischt sie alle sechs Stunden auf.
 
@@ -92,7 +93,10 @@ Probe: `crontab -l` zeigt die drei Zeilen; nach fünf Minuten steht in `/tmp/tub
 
 Frisch unter Einstellungen die Route der KI auf die [[Leitstelle]] stellen, ihre Adresse über HTTPS
 (etwa `https://<pi>:8531/v1`) und ihren Schlüssel eintragen; dem Zertifikat vertraut das Backend über die Hausstelle
-(`{{umgebung:NACHVERTONER_CA}}`, im Container `TUBEVAULT_CA_DATEI`). In der
+(`{{umgebung:NACHVERTONER_CA}}`, im Container `TUBEVAULT_CA_DATEI`). Dort steht auch "Sprachmodell über die
+Leitstelle" (Vorgabe `qwen/qwen3-next-80b`): mit diesem Modell fragt TubeVault Textaufgaben an, die Leitstelle wählt
+nie selbst; zur Wahl stehen die Sprachmodelle, die die Leitstelle TubeVault anbietet. Die Einbettung nennt ihr Modell
+fest (`text-embedding-bge-m3`), auch das muss die Leitstelle TubeVault anbieten. In der
 [[Vertonung]] dem Nachvertoner die Stimmen freigeben, die er nutzen darf.
 
 Probe: `docker logs tubevault-nachvertoner` zeigt, dass er Aufträge abholt, und eine Frage an die KI in TubeVault bekommt

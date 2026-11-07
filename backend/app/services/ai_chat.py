@@ -2,12 +2,13 @@
 TubeVault - Lokale KI: Sprachmodell für Textaufgaben
 
 Derselbe KI-Dienst wie die Bedeutungssuche (Einstellung ai.url, OpenAI-
-kompatibel) beantwortet auch Textaufgaben, z.B. Themen benennen. Welches
-Sprachmodell, legt TubeVault nicht fest. Direkt: genommen wird ein Modell, das
-der Dienst gerade geladen hat - so lädt nie ein zweites großes Modell nach;
-kennt der Dienst keinen Ladezustand, gilt das erste Sprachmodell seiner Liste.
-Über die Leitstelle wählt sie (Kette der Anwendung TubeVault); externe Modelle
-nur über die Erlaubnisliste ai.leitstelle_extern, nie durch eigene Wahl.
+kompatibel) beantwortet auch Textaufgaben, z.B. Themen benennen. Direkt:
+genommen wird ein Modell, das der Dienst gerade geladen hat - so lädt nie ein
+zweites großes Modell nach; kennt der Dienst keinen Ladezustand, gilt das erste
+Sprachmodell seiner Liste. Über die Leitstelle nennt TubeVault immer selbst das
+Modell aus der Einstellung ai.leitstelle_text_model (LS-19: die Leitstelle wählt
+nie); es gilt, solange die Leitstelle es TubeVault anbietet. Ausweichen nach
+extern nur über die Erlaubnisliste ai.leitstelle_extern.
 
 Antworten kommen als JSON nach Schema; Prosa wird vor dem Speichern auf
 gerade Zeichen gebracht (Modelle halten sich nicht verlässlich daran).
@@ -28,7 +29,7 @@ _MODEL_TTL_S = 60
 _LIST_TIMEOUT_S = 5
 _ANSWER_TIMEOUT_S = 300
 _model: tuple[float, Optional[str]] = (0.0, None)
-LEITSTELLE_WAEHLT = "leitstelle"     # Modellname, mit dem die Leitstelle selbst nach der Kette wählt
+TEXT = "text"                        # Fähigkeit eines Sprachmodells in der Liste der Leitstelle
 
 
 class ChatUnavailable(Exception):
@@ -40,15 +41,27 @@ def _is_text_model(entry: dict) -> bool:
     return kind in ("llm", "vlm") or (not kind and "embed" not in (entry.get("id") or "").lower())
 
 
+async def _leitstelle_text_models(url: str) -> list[dict]:
+    """Die Sprachmodelle (Fähigkeit text), die die Leitstelle TubeVault unter /models anbietet."""
+    async with semantic_index.ki_client(_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
+        response = await client.get(f"{url}/models")
+        response.raise_for_status()
+    return [e for e in response.json().get("data", [])
+            if TEXT in ((e.get("x-leitstelle") or {}).get("faehigkeiten") or [])]
+
+
+async def _leitstelle_model(url: str) -> Optional[str]:
+    """Das eingestellte Sprachmodell, sofern die Leitstelle es TubeVault anbietet (sonst antwortete sie 404)."""
+    model = await setting_values.get("ai.leitstelle_text_model")
+    if any(e.get("id") == model for e in await _leitstelle_text_models(url)):
+        return model
+    logger.info(f"[KI] Die Leitstelle bietet das eingestellte Sprachmodell {model} nicht an")
+    return None
+
+
 async def _list_models(url: str) -> Optional[str]:
     if await semantic_index.via_leitstelle():
-        # Die Leitstelle entscheidet; hier nur, ob sie TubeVault ein Sprachmodell im Heimnetz anbietet
-        async with semantic_index.ki_client(_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
-            response = await client.get(f"{url}/models")
-            response.raise_for_status()
-        eigene = [e for e in response.json().get("data", [])
-                  if not (e.get("x-leitstelle") or {}).get("extern") and "text" in ((e.get("x-leitstelle") or {}).get("faehigkeiten") or [])]
-        return LEITSTELLE_WAEHLT if eigene else None
+        return await _leitstelle_model(url)
     root = re.sub(r"/v1$", "", url)
     async with semantic_index.ki_client(_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
         # Dienste mit Ladezustand (/api/v0/models): ein geladenes Sprachmodell
@@ -66,21 +79,43 @@ async def _list_models(url: str) -> Optional[str]:
         return entries[0]["id"] if entries else None
 
 
-async def extern_choices() -> dict:
-    """Auswahl für die Erlaubnisliste: die externen Sprachmodelle, die die Leitstelle TubeVault anbietet."""
+async def _leitstelle_offer() -> tuple[list[dict], str]:
+    """Sprachmodelle der Leitstelle für eine Auswahl in den Einstellungen, oder ([], Grund)."""
     if not await semantic_index.via_leitstelle():
-        return {"options": [], "state": "Gilt nur über die Leitstelle (Weg zum KI-Dienst)"}
+        return [], "Gilt nur über die Leitstelle (Weg zum KI-Dienst)"
     url = (await setting_values.get("ai.leitstelle_url")).strip().rstrip("/")
     try:
-        async with semantic_index.ki_client(_LIST_TIMEOUT_S, headers=await semantic_index.headers("Modelle lesen")) as client:
-            response = await client.get(f"{url}/models")
-            response.raise_for_status()
+        return await _leitstelle_text_models(url), ""
     except httpx.HTTPError as e:
-        return {"options": [], "state": f"Leitstelle antwortet nicht ({e.__class__.__name__})"}
+        return [], f"Leitstelle antwortet nicht ({e.__class__.__name__})"
+
+
+async def text_model_choices() -> dict:
+    """Auswahl für ai.leitstelle_text_model: alle Sprachmodelle, die die Leitstelle TubeVault anbietet."""
+    models, reason = await _leitstelle_offer()
+    if reason:
+        return {"options": [], "state": reason}
     options = []
-    for e in response.json().get("data", []):
+    for e in models:
         x = e.get("x-leitstelle") or {}
-        if not x.get("extern") or "text" not in (x.get("faehigkeiten") or []):
+        hint = "extern, Texte verlassen das Heimnetz" if x.get("extern") else "im Heimnetz"
+        if x.get("geladen"):
+            hint += ", geladen"
+        options.append({"value": e["id"], "label": x.get("name") or e["id"], "hint": hint})
+    state = f"gefunden: {len(options)} Sprachmodelle" if options else \
+        "Die Leitstelle bietet TubeVault kein Sprachmodell an (Leitstelle, Anwendungen)"
+    return {"options": options, "state": state}
+
+
+async def extern_choices() -> dict:
+    """Auswahl für die Erlaubnisliste: die externen Sprachmodelle, die die Leitstelle TubeVault anbietet."""
+    models, reason = await _leitstelle_offer()
+    if reason:
+        return {"options": [], "state": reason}
+    options = []
+    for e in models:
+        x = e.get("x-leitstelle") or {}
+        if not x.get("extern"):
             continue
         brief = x.get("steckbrief") or {}
         hint = brief.get("zweck") or "extern"

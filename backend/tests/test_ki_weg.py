@@ -59,7 +59,7 @@ async def test_leitstelle_ohne_adresse_ist_aus(ki):
 
 
 async def test_anfragen_tragen_die_koepfe(ki, monkeypatch):
-    """Einbettung und Textaufgabe schicken die Köpfe wirklich mit (Transport-Attrappe)."""
+    """Einbettung und Textaufgabe schicken die Köpfe und ein echtes Modell wirklich mit (Transport-Attrappe)."""
     await ki("ai.route", "leitstelle")
     gesehen: list[httpx.Request] = []
 
@@ -74,12 +74,15 @@ async def test_anfragen_tragen_die_koepfe(ki, monkeypatch):
     echter_client = httpx.AsyncClient
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: echter_client(transport=httpx.MockTransport(antwort), **kw))
     ai_chat.forget_model()
-    await semantic_index.embed_texts(["hallo"], "http://leitstelle.test:8530/v1", "m", 4, purpose="Bedeutungssuche")
+    adresse, einbettungsmodell = await semantic_index.config()
+    await semantic_index.embed_texts(["hallo"], adresse, einbettungsmodell, 4, purpose="Bedeutungssuche")
     await ai_chat.complete_json("s", "u", "themen", {"type": "object"})
     assert [r.url.host for r in gesehen] == ["leitstelle.test"] * 3
     assert all(r.headers["authorization"] == "Bearer ls_geheim" for r in gesehen)
     assert unquote(gesehen[-1].headers["x-leitstelle-titel"]) == "TubeVault: Textaufgabe themen"
-    assert json.loads(gesehen[-1].content)["model"] == "leitstelle", "über die Leitstelle wählt sie das Modell"
+    modell = json.loads(gesehen[-1].content)["model"]
+    assert modell == "qwen/qwen3-next-80b" != "leitstelle", "TubeVault nennt das eingestellte Modell, nie den Platzhalter"
+    assert json.loads(gesehen[0].content)["model"] == semantic_index.EMBEDDING_MODEL, "auch die Einbettung nennt ihr Modell"
 
 
 def test_schluessel_wird_geprueft():

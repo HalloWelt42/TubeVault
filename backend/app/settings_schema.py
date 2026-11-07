@@ -46,8 +46,8 @@ class SettingDef(BaseModel):
     options: Optional[list[str]] = None
     option_labels: Optional[dict[str, str]] = None   # Anzeige je Auswahlwert
     zero_label: Optional[str] = None   # 0 bedeutet "ohne Grenze"; so heißt es in der Oberfläche
-    options_from: Optional[str] = None # choices, names: Adresse, die Auswahl bzw. Vorschläge live liefert
-                                       # (GET, {options: [{value, label, hint}], state})
+    options_from: Optional[str] = None # choices, names, select: Adresse, die Auswahl bzw. Vorschläge live liefert
+                                       # (GET, {options: [{value, label, hint}], state}); select dann ohne options
 
 
 SETTINGS: list[SettingDef] = [
@@ -157,6 +157,15 @@ SETTINGS: list[SettingDef] = [
                description="Externe Modelle (etwa bei Hetzner), auf die die Leitstelle ausweichen darf, wenn die "
                            "eigenen Rechner lange belegt sind; dabei verlassen Texte das Heimnetz. Nur wählen, wo "
                            "die Qualität reicht. Leer: alles bleibt im Heimnetz. Gilt über die Leitstelle."),
+    # Sprachmodell über die Leitstelle (LS-19, Nutzer 07.11.2026: welches Modell, entscheidet nur die App, nie die
+    # Leitstelle). Direkt bleibt es beim Sprachmodell, das der KI-Dienst geladen hat.
+    SettingDef(key="ai.leitstelle_text_model", default="qwen/qwen3-next-80b", kind="select", category="ai",
+               section="extensions", options_from="/api/settings/options/ai.leitstelle_text_model",
+               label="Sprachmodell über die Leitstelle",
+               description="Mit diesem Modell fragt TubeVault Textaufgaben (etwa Themen benennen) bei der Leitstelle "
+                           "an; die Leitstelle wählt nie selbst. Zur Wahl stehen die Sprachmodelle, die sie TubeVault "
+                           "anbietet. Gilt über die Leitstelle; direkt nimmt TubeVault das Sprachmodell, das der "
+                           "KI-Dienst gerade geladen hat."),
     SettingDef(key="ai.precision", default="ausgewogen", kind="select", category="ai", section="extensions",
                options=["weit", "ausgewogen", "genau", "sehr_genau"],
                option_labels={"weit": "Weit", "ausgewogen": "Ausgewogen", "genau": "Genau",
@@ -292,6 +301,14 @@ def validate(key: str, raw) -> str:
         if whole or number == int(number):
             return str(int(round(number)))
         return str(number)
+
+    if definition.kind == "select" and definition.options_from:
+        # Auswahl liefert der anbietende Dienst live (hier die Leitstelle); geprüft wird die Form des Namens
+        if not value:
+            raise ValueError(f"{definition.label}: bitte eine Auswahl treffen")
+        if len(value) > 200 or any(c in value for c in "\r\n"):
+            raise ValueError(f"{definition.label}: ungültiger Name")
+        return value
 
     if definition.kind == "select":
         if value not in (definition.options or []):
