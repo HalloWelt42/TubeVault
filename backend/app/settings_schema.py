@@ -143,7 +143,7 @@ SETTINGS: list[SettingDef] = [
                            "Bewertungen, Liedtexte und alle anderen Anbindungen bleiben direkt."),
     SettingDef(key="ai.leitstelle_url", default="", kind="text", category="ai", section="extensions",
                label="Adresse der Leitstelle",
-               description="Fassade der Leitstelle, z.B. http://192.168.1.20:8530/v1. Gilt, wenn der Weg "
+               description="Fassade der Leitstelle, z.B. https://192.168.1.20:8531/v1. Gilt, wenn der Weg "
                            "zum KI-Dienst auf Leitstelle steht."),
     SettingDef(key="ai.leitstelle_key", default="", kind="secret", category="ai", section="extensions",
                label="Schlüssel der Leitstelle",
