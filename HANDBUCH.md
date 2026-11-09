@@ -14,7 +14,7 @@ schluessel_orte:
   - "Pi: `{{umgebung:NACHVERTONER_SCHLUESSEL}}`, Modus 0600 (App-Schlüssel des Nachvertoners bei der Kellerwolke)"
   - "Datenbank: Schlüssel der Leitstelle in den Einstellungen von TubeVault"
 einrichten: einrichten.sh
-stand: abdf80c
+stand: f330720
 ---
 
 # TubeVault
@@ -29,7 +29,9 @@ von TubeVault und lässt sie über die [[Vertonung]] sprechen; er meldet sich mi
 
 Auf dem Pi laufen vier Container aus `docker-compose.yml` im Klon `{{wurzel}}`: Backend (Schnittstelle, Port
 {{port:docker-compose.yml/tubevault-backend}}), Oberfläche (nginx, Port {{port:docker-compose.yml/tubevault-frontend}}),
-der Token-Dienst für den Abruf und der Nachvertoner. Der Index liegt auf der schnellen Platte
+der Token-Dienst für den Abruf und der Nachvertoner. Beide Ports gelten nur am Pi selbst (127.0.0.1); im Heimnetz
+erreicht man TubeVault nur über den [[Vorbau]] des Pi (HTTPS, Anmeldung mit dem Konto der [[Kellerwolke]], Programme
+mit ihrem App-Schlüssel), die frühere http-Adresse leitet dorthin um. Der Index liegt auf der schnellen Platte
 (`{{umgebung:TUBEVAULT_INDEX}}`), die Medien auf der großen (`{{umgebung:TUBEVAULT_MEDIEN}}`). Beide Ordner und die
 Angaben des Nachvertoners stehen in der `.env` neben `docker-compose.yml`, nie im Repo; ohne sie startet nichts.
 
@@ -75,7 +77,7 @@ an, baut und startet alle Container (`docker compose up -d --build`). Aus der Si
 `{{umgebung:TUBEVAULT_INDEX}}/data` legen.
 
 Probe: `curl -s http://127.0.0.1:{{port:docker-compose.yml/tubevault-backend}}/api/system/health` auf dem Pi antwortet,
-und die Oberfläche auf Port {{port:docker-compose.yml/tubevault-frontend}} zeigt Bibliothek und Abos.
+und die Oberfläche über den [[Vorbau]] des Pi zeigt Bibliothek und Abos.
 
 ### 4. Zeitpläne auf dem Pi
 

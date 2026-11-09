@@ -23,8 +23,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: tubevault-backend
+    # nur am Pi selbst (HELF-169): im Heimnetz über den Vorbau des Pi (HTTPS), die Oberfläche reicht /api durch
     ports:
-      - "8031:8031"
+      - "127.0.0.1:8031:8031"
     volumes:
       # Basis: DB + temp auf schneller Platte
       - ${TUBEVAULT_INDEX:?TUBEVAULT_INDEX fehlt in .env (Index auf schneller Platte)}/data:/app/data
@@ -95,8 +96,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: tubevault-frontend
+    # nur am Pi selbst (HELF-169): im Heimnetz über den Vorbau des Pi (HTTPS), die frühere Adresse leitet dorthin um
     ports:
-      - "8032:80"
+      - "127.0.0.1:8032:80"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80"]

@@ -38,7 +38,7 @@ einrichten() {
   ordner_anlegen
   cd "$KLON"
   docker compose up -d --build
-  echo "TubeVault läuft: Oberfläche Port 8032, Schnittstelle Port 8031 (docker compose ps)"
+  echo "TubeVault läuft: Oberfläche Port 8032, Schnittstelle Port 8031, beide nur am Pi; im Heimnetz über den Vorbau (docker compose ps)"
 }
 
 # veröffentlichter Port der Oberfläche laut docker-compose.yml (er steht nur dort)
