@@ -63,6 +63,11 @@ _NOT_A_SHORT_ENTRY = f"""
         (new.published IS NOT NULL AND substr(new.published, 1, 10) < '{SHORTS_START}')
         OR new.channel_id IN (SELECT channel_id FROM short_exempt_channels))"""
 SHORT_RULES_SQL = f"""
+CREATE TABLE IF NOT EXISTS short_allowed_channels (
+    channel_id TEXT PRIMARY KEY,
+    channel_name TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS short_exempt_channels (
     channel_id TEXT PRIMARY KEY,
     channel_name TEXT,
@@ -284,13 +289,50 @@ async def shorts_excluded() -> bool:
     return value == "true"
 
 
+def visible_when_excluded(alias: str = "") -> str:
+    """SQL-Bedingung für Abfragen über videos oder rss_entries, solange Shorts
+    ausgeschlossen sind: kein Short, oder Short eines Kanals, dessen Shorts der
+    Nutzer ausdrücklich zugelassen hat (short_allowed_channels)."""
+    prefix = f"{alias}." if alias else ""
+    return (f"(COALESCE({prefix}video_type, 'video') <> 'short'"
+            f" OR {prefix}channel_id IN (SELECT channel_id FROM short_allowed_channels))")
+
+
 async def without_shorts(alias: str = "") -> str:
     """SQL-Baustein (mit führendem AND) für Abfragen über videos oder
     rss_entries; leer, solange Shorts nicht ausgeschlossen sind."""
     if not await shorts_excluded():
         return ""
-    column = f"{alias}.video_type" if alias else "video_type"
-    return f" AND COALESCE({column}, 'video') <> 'short'"
+    return f" AND {visible_when_excluded(alias)}"
+
+
+# ─── Shorts je Kanal ausdrücklich zulassen ────────────────────────────
+
+async def is_channel_short_allowed(channel_id: str) -> bool:
+    return bool(await db.fetch_val(
+        "SELECT 1 FROM short_allowed_channels WHERE channel_id = ?", (channel_id,)))
+
+
+async def set_channel_short_allowed(channel_id: str, allowed: bool, channel_name: Optional[str] = None) -> None:
+    """Shorts dieses Kanals trotz "Shorts ausschliessen" zeigen und laden
+    (oder die Freigabe zurücknehmen). Am Typ der Einträge ändert sich nichts."""
+    if not allowed:
+        await db.execute("DELETE FROM short_allowed_channels WHERE channel_id = ?", (channel_id,))
+        return
+    name = channel_name or await db.fetch_val(
+        "SELECT channel_name FROM subscriptions WHERE channel_id = ?", (channel_id,))
+    await db.execute(
+        "INSERT OR IGNORE INTO short_allowed_channels (channel_id, channel_name) VALUES (?, ?)",
+        (channel_id, name))
+
+
+async def hidden_short_count(channel_id: str) -> int:
+    """Katalogeinträge des Kanals, die nur wegen "Shorts ausschliessen" fehlen."""
+    if not await shorts_excluded() or await is_channel_short_allowed(channel_id):
+        return 0
+    return await db.fetch_val(
+        "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ? AND video_type = 'short'",
+        (channel_id,)) or 0
 
 
 async def delete_shorts() -> int:

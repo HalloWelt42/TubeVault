@@ -100,6 +100,8 @@ export const api = {
     request(`/api/cleanup/ids?view=${view}${channelId ? `&channel_id=${encodeURIComponent(channelId)}` : ''}`),
   cleanupChannels: () => request('/api/cleanup/channels'),
   cleanupExemptChannels: () => request('/api/cleanup/exempt-channels'),
+  setShortAllowed: (channelId, allowed) =>
+    request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/short-allowed`, { method: 'PUT', body: JSON.stringify({ allowed }) }),
   setShortExempt: (channelId, exempt) =>
     request(`/api/subscriptions/channel/${encodeURIComponent(channelId)}/short-exempt`, { method: 'PUT', body: JSON.stringify({ exempt }) }),
   setMusicChannel: (channelId, music) =>

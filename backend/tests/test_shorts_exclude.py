@@ -62,3 +62,34 @@ async def test_nur_bestaetigte_shorts_werden_geloescht(stock, test_db):
     assert await vc.delete_shorts() == 1
     remaining = {r["id"] for r in await test_db.fetch_all("SELECT id FROM videos")}
     assert remaining == {"normalvideo", "vermutetsho"}
+
+
+async def test_kanal_freigabe_zeigt_seine_shorts(stock, set_setting, test_db):
+    """Ausdrücklich freigegebener Kanal: seine Shorts erscheinen trotz Ausschluss,
+    der Typ bleibt Short; andere Kanäle bleiben ohne Shorts."""
+    await set_setting("shorts.exclude", "true")
+    await test_db.execute("INSERT INTO subscriptions (channel_id, channel_name) VALUES ('UCy', 'Anderer')")
+    await test_db.execute(
+        "INSERT INTO rss_entries (video_id, channel_id, title, video_type, published) "
+        "VALUES ('fremdershort', 'UCy', 'Fremd', 'short', '2026-01-03')")
+    assert await vc.hidden_short_count("UCx") == 3
+
+    await vc.set_channel_short_allowed("UCx", True)
+    assert await vc.hidden_short_count("UCx") == 0
+    assert await _ids() == {"normalvideo", "bestaetigts", "vermutetsho"}
+    feed = {e["video_id"] for e in (await rss_service.get_new_videos())["entries"]}
+    assert feed == {"neuesvideo1", "neuershort"}
+    assert await test_db.fetch_val("SELECT video_type FROM videos WHERE id = 'bestaetigts'") == "short"
+
+    await vc.set_channel_short_allowed("UCx", False)
+    assert await _ids() == {"normalvideo"}
+
+
+async def test_kanalseite_zaehlt_wie_die_liste(stock, set_setting):
+    from app.routers.subscriptions import _get_channel_videos_impl
+    await set_setting("shorts.exclude", "true")
+    page = await _get_channel_videos_impl("UCx", "all", "all", "newest", 1, 50, False)
+    assert page["total"] == len(page["videos"]) == page["source_counts"]["all"] == 2
+    await vc.set_channel_short_allowed("UCx", True)
+    page = await _get_channel_videos_impl("UCx", "all", "all", "newest", 1, 50, False)
+    assert page["source_counts"]["all"] == 5

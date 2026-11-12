@@ -71,6 +71,16 @@ export function createChannelActions({ patch, reload, confirm, removed = () => {
     } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
   }
 
+  async function setShortAllowed(sub, on) {
+    try {
+      await api.setShortAllowed(sub.channel_id, on);
+      patch(sub, { short_allowed: on });
+      toast.success(on ? `${channelName(sub)}: Shorts werden gezeigt`
+                       : `${channelName(sub)}: Shorts wieder ausgeschlossen`);
+      reload();
+    } catch (e) { toast.error(`${channelName(sub)}: ${e.message}`); }
+  }
+
   async function runCheck(sub) {
     if (checking[sub.id]) return null;
     checking[sub.id] = true;
@@ -163,7 +173,7 @@ export function createChannelActions({ patch, reload, confirm, removed = () => {
     setEnabled: (sub, on) => change(sub, { enabled: on }, on ? 'Prüfung an' : 'Prüfung abgeschaltet'),
     setQuality: (sub, value) => change(sub, { download_quality: value || null },
       value ? `Qualität ${qualityShort(value)}` : 'Qualität aus den Einstellungen'),
-    setDrip, setSuggest, setMusic, setShortExempt, checkNow, scanFully,
+    setDrip, setSuggest, setMusic, setShortExempt, setShortAllowed, checkNow, scanFully,
     remove: (sub) => removeChannels([sub]),
   };
 }

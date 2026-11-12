@@ -10,7 +10,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-from app.services import language, watch_state
+from app.services import language, video_classifier, watch_state
 from app.services.search.query import Location, Query
 
 Length = Literal["kurz", "mittel", "lang", "sehr_lang"]
@@ -105,7 +105,7 @@ def video_sql(f: SearchFilters, alias: str = "v", *, shorts_excluded: bool,
     """WHERE-Baustein für fertige Videos (Bibliothek, Archiv, eigene)."""
     conditions = [f"{alias}.status = 'ready'"]
     if shorts_excluded:
-        conditions.append(f"COALESCE({alias}.video_type, 'video') <> 'short'")
+        conditions.append(video_classifier.visible_when_excluded(alias))
     more, params = _common(f, duration=f"{alias}.duration", date=f"{alias}.upload_date",
                            lang=f"{alias}.language", channel=f"{alias}.channel_name", with_language=with_language)
     conditions.extend(more)
@@ -132,7 +132,7 @@ def feed_sql(f: SearchFilters, alias: str = "r", channel_alias: str = "s", *, sh
                   f"COALESCE({alias}.feed_status, 'active') <> 'dismissed'",
                   f"NOT EXISTS (SELECT 1 FROM videos lv WHERE lv.id = {alias}.video_id AND lv.status = 'ready')"]
     if shorts_excluded:
-        conditions.append(f"COALESCE({alias}.video_type, 'video') <> 'short'")
+        conditions.append(video_classifier.visible_when_excluded(alias))
     more, params = _common(f, duration=f"{alias}.duration", date=f"{alias}.published",
                            lang=f"{alias}.language", channel=f"{channel_alias}.channel_name",
                            with_language=with_language)

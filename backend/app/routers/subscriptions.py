@@ -105,6 +105,8 @@ async def get_channel_detail(channel_id: str):
         return {
             "channel_id": channel_id,
             "short_exempt": await video_classifier.is_channel_exempt(channel_id),
+            "short_allowed": await video_classifier.is_channel_short_allowed(channel_id),
+            "hidden_shorts": await video_classifier.hidden_short_count(channel_id),
             "music_channel": await music_flag.is_music_channel(channel_id),
             "channel_name": first_video["channel_name"] if first_video else channel_id,
             "channel_url": f"https://www.youtube.com/channel/{channel_id}",
@@ -115,12 +117,14 @@ async def get_channel_detail(channel_id: str):
             "type_counts": {"video": 0, "short": 0, "live": 0},
         }
 
-    # Statistiken
+    # Statistiken; ausgeschlossene Shorts zählen wie in der Liste nicht mit
     rss_count = await db.fetch_val(
-        "SELECT COUNT(*) FROM rss_entries WHERE channel_id = ?", (channel_id,)
+        f"SELECT COUNT(*) FROM rss_entries r WHERE r.channel_id = ?{await video_classifier.without_shorts('r')}",
+        (channel_id,)
     ) or 0
     new_count = await db.fetch_val(
-        f"SELECT COUNT(*) FROM rss_entries r WHERE r.channel_id = ? AND {feed_scope.new_entry('r')}",
+        f"SELECT COUNT(*) FROM rss_entries r WHERE r.channel_id = ? AND {feed_scope.new_entry('r')}"
+        f"{await video_classifier.without_shorts('r')}",
         (channel_id,)
     ) or 0
     downloaded_count = await db.fetch_val(
@@ -183,6 +187,7 @@ async def get_channel_detail(channel_id: str):
     result["total_views"] = total_views
     result["needs_scan"] = not result.get("last_scanned")
     result["type_counts"] = type_counts
+    result["hidden_shorts"] = await video_classifier.hidden_short_count(channel_id)
     result["channel_tags_parsed"] = channel_tags
     return result
 
@@ -401,6 +406,7 @@ async def _get_channel_videos_impl(
         # 2) Nur heruntergeladene Videos OHNE RSS-Eintrag (nur wenn kein Typ-Filter)
         if video_type == "all":
             local_title_sql, local_title_params = _title_filter(q, "title")
+            local_title_sql = await video_classifier.without_shorts() + local_title_sql
             if seen_ids:
                 placeholders = ",".join(["?"] * len(seen_ids))
                 extra_rows = await db.fetch_all(
@@ -408,7 +414,7 @@ async def _get_channel_videos_impl(
                                thumbnail_path, upload_date, upload_date as published,
                                status as video_status, view_count, description, language, language_source,
                                1 as is_downloaded, 0 as is_in_queue,
-                               'downloaded' as source, 'video' as video_type
+                               'downloaded' as source, COALESCE(video_type, 'video') as video_type
                         FROM videos
                         WHERE status = 'ready'
                           AND (channel_id = ? OR id IN (SELECT video_id FROM rss_entries WHERE channel_id = ?))
@@ -422,7 +428,7 @@ async def _get_channel_videos_impl(
                               thumbnail_path, upload_date, upload_date as published,
                               status as video_status, view_count, description, language, language_source,
                               1 as is_downloaded, 0 as is_in_queue,
-                              'downloaded' as source, 'video' as video_type
+                              'downloaded' as source, COALESCE(video_type, 'video') as video_type
                        FROM videos
                        WHERE status = 'ready'
                          AND (channel_id = ? OR id IN (SELECT video_id FROM rss_entries WHERE channel_id = ?)){local_title_sql}
@@ -467,6 +473,9 @@ async def _get_channel_videos_impl(
         vt_filter_dl = "AND re2.video_type = ?"
         vt_params_dl.append(video_type)
 
+    # Zählt wie die Liste: ausgeschlossene Shorts fehlen auch hier
+    vt_filter_rss += await video_classifier.without_shorts("re")
+    vt_filter_dl += await video_classifier.without_shorts("v")
     rss_count = await db.fetch_val(
         f"""SELECT COUNT(*) FROM rss_entries re
             WHERE re.channel_id = ? AND COALESCE(re.feed_status, 'active') IN ('active','later')
@@ -537,6 +546,18 @@ async def set_short_exempt(channel_id: str, request: ShortExemptRequest):
     werden seine Shorts sofort zu Videos; beim Ausschalten bleibt alles."""
     changed = await video_classifier.set_channel_exempt(channel_id, request.exempt)
     return {"channel_id": channel_id, "short_exempt": request.exempt, "changed": changed}
+
+
+class ShortAllowedRequest(BaseModel):
+    allowed: bool
+
+
+@router.put("/channel/{channel_id}/short-allowed")
+async def set_short_allowed(channel_id: str, request: ShortAllowedRequest):
+    """Shorts dieses Kanals trotz "Shorts ausschliessen" zeigen und laden,
+    oder die Freigabe zurücknehmen. Der Typ der Videos bleibt unverändert."""
+    await video_classifier.set_channel_short_allowed(channel_id, request.allowed)
+    return {"channel_id": channel_id, "short_allowed": request.allowed}
 
 
 class MusicChannelRequest(BaseModel):

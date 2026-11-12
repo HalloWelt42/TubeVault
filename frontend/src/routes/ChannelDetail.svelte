@@ -64,7 +64,7 @@
     const types = channel.type_counts || {};
     const shown = [['all', 'Alle', channel.rss_entry_count, 'fa-layer-group']];
     if (types.video) shown.push(['video', 'Videos', types.video, 'fa-video']);
-    if (types.short && $settings['shorts.exclude'] !== 'true') shown.push(['short', 'Shorts', types.short, 'fa-mobile-screen']);
+    if (types.short && ($settings['shorts.exclude'] !== 'true' || channel.short_allowed)) shown.push(['short', 'Shorts', types.short, 'fa-mobile-screen']);
     if (types.live) shown.push(['live', 'Live', types.live, 'fa-tower-broadcast']);
     shown.push(['playlists', 'Playlists', playlistCount, 'fa-list-ul']);
     if (channel.subscribed) shown.push(['diagnose', 'Diagnose', null, 'fa-stethoscope']);
@@ -319,6 +319,11 @@
           <div class="tv-leer">
             <p>Dieser Kanal ist noch nicht ganz gescannt: bekannt sind nur die neuesten Videos.</p>
             <button class="tv-knopf haupt" onclick={startScan} disabled={scan.running}><i class="fa-solid fa-satellite-dish"></i> Ganz scannen</button>
+          </div>
+        {:else if channel.hidden_shorts && !query}
+          <div class="tv-leer">
+            <p><span class="zahl">{num(channel.hidden_shorts)}</span> Shorts dieses Kanals sind ausgeblendet, weil Shorts ausgeschlossen sind.</p>
+            <button class="tv-knopf haupt" onclick={() => actions.setShortAllowed(channel, true)}><i class="fa-solid fa-mobile-screen"></i> Shorts dieses Kanals zeigen</button>
           </div>
         {:else}
           <div class="tv-leer">{query ? `Kein Titel mit "${query}" in dieser Ansicht.` : 'Keine Videos in dieser Ansicht.'}</div>

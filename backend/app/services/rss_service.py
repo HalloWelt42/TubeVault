@@ -519,7 +519,9 @@ class RSSService:
 
         max_age = await self._limit("rss.max_age_days")
         cutoff = past_sqlite(days=max_age) if max_age else None   # None: alle Videos
-        shorts_excluded = await video_classifier.shorts_excluded()
+        # Ausgeschlossene Shorts nicht automatisch laden, ausser der Kanal ist freigegeben
+        shorts_excluded = (await video_classifier.shorts_excluded()
+                           and not await video_classifier.is_channel_short_allowed(channel_id))
 
         new_count = 0
         for v in fresh:
@@ -1152,7 +1154,8 @@ class RSSService:
                       COALESCE(coverage.wanted_count, 0) AS wanted_count,
                       COALESCE(coverage.have_count, 0) AS have_count,
                       EXISTS (SELECT 1 FROM music_channels m WHERE m.channel_id = s.channel_id) AS music_channel,
-                      EXISTS (SELECT 1 FROM short_exempt_channels x WHERE x.channel_id = s.channel_id) AS short_exempt
+                      EXISTS (SELECT 1 FROM short_exempt_channels x WHERE x.channel_id = s.channel_id) AS short_exempt,
+                      EXISTS (SELECT 1 FROM short_allowed_channels a WHERE a.channel_id = s.channel_id) AS short_allowed
                FROM subscriptions s
                LEFT JOIN feed ON feed.channel_id = s.channel_id
                LEFT JOIN coverage ON coverage.channel_id = s.channel_id
@@ -1170,6 +1173,7 @@ class RSSService:
                                                    scanned=bool(item.get("last_scanned")))
             item["music_channel"] = bool(item["music_channel"])
             item["short_exempt"] = bool(item["short_exempt"])
+            item["short_allowed"] = bool(item["short_allowed"])
             subscriptions.append(item)
         return subscriptions
 

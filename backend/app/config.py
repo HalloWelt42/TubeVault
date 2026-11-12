@@ -54,7 +54,7 @@ DEFAULT_FORMAT = os.getenv("DEFAULT_FORMAT", "mp4")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", str(1024 * 1024)))  # 1MB
 
 # Versioning
-VERSION = "2.93.4"
+VERSION = "2.94.0"
 APP_NAME = "TubeVault"
 
 # CORS – immer offen, keine Einschränkungen

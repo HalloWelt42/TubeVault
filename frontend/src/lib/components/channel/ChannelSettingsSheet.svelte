@@ -11,6 +11,7 @@
   import { onMount } from 'svelte';
   import { api } from '../../api/client.js';
   import { toast } from '../../stores/notifications.js';
+  import { settings } from '../../stores/settings.js';
   import ActionMenu from '../common/ActionMenu.svelte';
   import {
     DRIP_CHOICES, QUICK_QUALITIES, channelName, coverageNote, coverageShare, coverageTitle, dripCount,
@@ -20,8 +21,8 @@
   let {
     sub,                    // Abo wie aus api.getSubscriptions
     actions,                // Einzel-Aktionen der Seite: setAuto, setDrip, setDripCount, setArchive,
-                            // setQuality, setAudioOnly, setMusic, setShortExempt, setSuggest, setEnabled,
-                            // checkNow, scanFully, remove, refreshSoon
+                            // setQuality, setAudioOnly, setMusic, setShortExempt, setShortAllowed,
+                            // setSuggest, setEnabled, checkNow, scanFully, remove, refreshSoon
     checking = false,       // Prüfung dieses Kanals läuft
     showProblems = false,   // Problem-Videos gleich aufgeklappt
     onClose,
@@ -185,6 +186,12 @@
         <div class="t">Nie als Short führen<div class="e">Kurze, aber vollwertige Videos bleiben Videos</div></div>
         {@render toggle(sub.short_exempt, 'Videos dieses Kanals nie als Short führen; beim Abschalten bleiben bestehende Videos Videos', (on) => actions.setShortExempt(sub, on))}
       </div>
+      {#if $settings['shorts.exclude'] === 'true'}
+        <div class="zeile">
+          <div class="t">Shorts zeigen<div class="e">Trotz "Shorts ausschließen" für diesen Kanal</div></div>
+          {@render toggle(sub.short_allowed, 'Shorts dieses Kanals zeigen und laden, obwohl Shorts sonst ausgeschlossen sind', (on) => actions.setShortAllowed(sub, on))}
+        </div>
+      {/if}
       <div class="zeile">
         <div class="t">In Vorschlägen<div class="e">Videos tauchen im Zufallsvorschlag auf</div></div>
         {@render toggle(!sub.suggest_exclude, 'Videos dieses Kanals im Zufallsvorschlag zeigen; beim Einschalten entfallen die Ausnahmen einzelner Videos', (on) => actions.setSuggest(sub, on))}
