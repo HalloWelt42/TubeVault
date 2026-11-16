@@ -13,6 +13,8 @@ Kontrakt:
   gemerkte Stellen bleiben; pausiert wird nichts mitgeschrieben.
 - Jede Sammlung lässt sich ganz als Ton abspielen, auch Nicht-Musik.
 """
+from datetime import date
+
 import pytest
 
 from app.routers import collections as collections_router, favorites, playlists
@@ -122,7 +124,9 @@ async def test_verlauf_entfernen_und_leeren_behaelt_stellen(test_db):
     assert await metadata_service.restore_history("fertig00001", entfernt) == 1
     assert (await metadata_service.get_watch_history())["total"] == 3
     await metadata_service.remove_from_history("fertig00001")
-    assert await metadata_service.clear_watch_history(older_than_days=30) == 1      # nur der von 2020
+    # Grenze relativ zu heute: der Eintrag vom 15.10.2026 bleibt, nur der von 2020 geht
+    keep_days = (date.today() - date(2026, 10, 15)).days + 1
+    assert await metadata_service.clear_watch_history(older_than_days=keep_days) == 1
     assert [v["id"] for v in (await metadata_service.get_watch_history())["videos"]] == ["angef000001"]
     await metadata_service.clear_watch_history()
     assert (await metadata_service.get_watch_history())["total"] == 0

@@ -36,11 +36,28 @@ from app.config import (
 from app.database import db
 from app.services.rate_limiter import rate_limiter
 from app.services.job_service import STOP_PAUSE, job_service
-from app.services import audiobook_flag, deleted_videos, download_options, music_flag, reupload_guard, video_classifier
+from app.services import (audiobook_flag, deleted_videos, download_options, music_flag, reupload_guard,
+                          setting_values, video_classifier)
 from app.utils.file_utils import now_sqlite, future_sqlite, is_media_file, MIN_MEDIA_BYTES
 from app.utils.pytube_client import make_youtube
 from app.utils.ytdlp_adapter import DownloadStopped
 from app.utils.tag_utils import sanitize_tags
+
+# Reihenfolge der Video-Codecs innerhalb einer Auflösung (Einstellung download.codec)
+CODEC_ORDERS = {"kompatibel": ("h264", "vp9", "av1"), "klein": ("av1", "vp9", "h264")}
+_CODEC_PREFIXES = {"avc": "h264", "av01": "av1", "vp09": "vp9", "vp9": "vp9"}
+
+
+def codec_family(stream) -> str:
+    """h264 | av1 | vp9 | Rohname - aus der Codec-Kennung eines Stroms (z.B. avc1.640028)."""
+    codecs = getattr(stream, "codecs", None) or [""]
+    tag = (codecs[0] or "").lower()
+    return next((family for prefix, family in _CODEC_PREFIXES.items() if tag.startswith(prefix)), tag)
+
+
+def codec_rank(stream, order) -> int:
+    family = codec_family(stream)
+    return order.index(family) if family in order else len(order)
 
 logger = logging.getLogger(__name__)
 
@@ -1507,6 +1524,7 @@ class DownloadService:
         req_itag = opts.get("itag")
         req_audio_itag = opts.get("audio_itag")
         is_audio_only = opts.get("audio_only", False) or quality == "audio_only"
+        codec_order = CODEC_ORDERS.get(await setting_values.get("download.codec"), CODEC_ORDERS["kompatibel"])
 
         # Geladen wird in einen Arbeitsordner NEBEN den fertigen Dateien. Erst
         # ein vollständiges, geprüftes Ergebnis ersetzt die bisherige Datei
@@ -1607,7 +1625,7 @@ class DownloadService:
                         aus = yt.streams.get_audio_only()
             else:
                 progressive = self._pick_progressive(yt, quality, fmt)
-                separate = self._pick_adaptive_video(yt, quality) if merge else None
+                separate = self._pick_adaptive_video(yt, quality, codec_order) if merge else None
                 vs = self._closest_to_wish(quality, progressive, separate)
                 if vs is not None and vs is separate and vs is not progressive:
                     aus = yt.streams.get_audio_only()
@@ -1874,49 +1892,44 @@ class DownloadService:
         if s: return s
         return yt.streams.filter(progressive=True).order_by("resolution").desc().first()
 
-    def _pick_adaptive_video(self, yt, quality):
-        """Wählt den adaptiven Video-Stream passend zur gewünschten Qualität.
+    def _pick_adaptive_video(self, yt, quality, codec_order=("h264", "vp9", "av1")):
+        """Videostrom (ohne Ton) zur gewünschten Qualität.
 
         Regel: Wenn der Nutzer eine konkrete Auflösung wählt (144p-2160p),
-        bekommt er genau diese Auflösung (falls verfügbar) — NIE mehr!
+        bekommt er genau diese Auflösung (falls verfügbar) - NIE mehr!
         Erst wenn die exakte Auflösung nicht da ist, wird die nächst-kleinere
         unter dem Ziel gewählt (kein Upscale zu 4K bei Wunsch 1080p).
         'best' nimmt die höchste verfügbare.
+        Innerhalb einer Auflösung entscheidet codec_order (Einstellung
+        download.codec); früher kam der Codec zufällig (HELF-242).
         """
         all_video = list(yt.streams.filter(adaptive=True, type="video"))
         if not all_video:
             return None
 
-        if quality == "best":
-            return yt.streams.filter(adaptive=True, type="video").order_by("resolution").desc().first()
-
-        # Ziel-Höhe aus Qualität ableiten
-        target_map = {"2160p": 2160, "1440p": 1440, "1080p": 1080, "720p": 720,
-                      "480p": 480, "360p": 360, "240p": 240, "144p": 144}
-        target = target_map.get(quality)
-        if not target:
-            # Unbekannte Quality → Fallback wie best
-            return yt.streams.filter(adaptive=True, type="video").order_by("resolution").desc().first()
-
-        # 1) Exakt passende Auflösung?
-        exact = yt.streams.filter(adaptive=True, type="video", resolution=quality).order_by("resolution").desc().first()
-        if exact:
-            return exact
-
-        # 2) Nächst-kleinere Auflösung unter target (nie höher als gewünscht)
         def _h(s):
             r = getattr(s, "resolution", "") or ""
             if r.endswith("p") and r[:-1].isdigit():
                 return int(r[:-1])
             return 0
 
-        below = [s for s in all_video if 0 < _h(s) <= target]
-        if below:
-            below.sort(key=_h, reverse=True)  # höchste unter target
-            return below[0]
+        def _best_codec(streams):
+            return min(streams, key=lambda s: codec_rank(s, codec_order))
 
-        # 3) Alles liegt über dem Wunsch: das Kleinste nehmen (nie mehr als nötig)
-        return min(all_video, key=lambda s: _h(s) or 10**6)
+        def _at(height):
+            return _best_codec([s for s in all_video if _h(s) == height])
+
+        heights = sorted({_h(s) for s in all_video if _h(s) > 0}, reverse=True)
+        target = {"2160p": 2160, "1440p": 1440, "1080p": 1080, "720p": 720,
+                  "480p": 480, "360p": 360, "240p": 240, "144p": 144}.get(quality)
+        if not heights:
+            return _best_codec(all_video)
+        if quality == "best" or not target:
+            return _at(heights[0])
+        # Exakt passende oder nächst-kleinere Auflösung (nie höher als gewünscht);
+        # liegt alles darüber, die kleinste (nie mehr als nötig)
+        below = [h for h in heights if h <= target]
+        return _at(below[0] if below else heights[-1])
 
     def _res_num(self, s):
         if not s: return 0

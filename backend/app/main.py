@@ -278,6 +278,9 @@ async def lifespan(app: FastAPI):
     from app.services import language_assign
     task_manager.register("languages", "Sprache von Videos, Feed und Kanälen zuordnen",
                           language_assign.worker, auto_restart=True, essential=False)
+    from app.services import playback_media
+    task_manager.register("playback_media", "Kompatible Fassungen umpacken und umwandeln",
+                          playback_media.worker, auto_restart=True, essential=False)
     from app.services import loop_watch
     task_manager.register("loop_watch", "Hänger der Ereignisschleife melden",
                           loop_watch.loop, auto_restart=True, essential=False)

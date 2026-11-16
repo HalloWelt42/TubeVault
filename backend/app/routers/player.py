@@ -10,14 +10,66 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
+from pydantic import BaseModel
 
 from app.database import db
 from app.config import THUMBNAILS_DIR
+from app.services import playback_media
 from app.services.archive_service import archive_service
 from app.utils.range_file import range_response
 from app.utils.video_ids import is_source_video
 
 router = APIRouter(prefix="/api/player", tags=["Player"])
+
+
+# ─── Abspielbare Fassung je Gerät (HELF-242) ─────────────────────────
+
+class RepackPreview(BaseModel):
+    candidates: int          # Videos in mkv oder webm
+    size_bytes: int
+
+
+@router.get("/compatible/repack", response_model=RepackPreview)
+async def repack_preview():
+    """Wie viele Videos das Umpacken prüfen würde (nur H.264 wird umgepackt)."""
+    candidates = await playback_media.repack_candidates()
+    return RepackPreview(candidates=len(candidates), size_bytes=sum(c.size_bytes for c in candidates))
+
+
+@router.post("/compatible/repack")
+async def repack_all():
+    """H.264-Videos in mkv oder webm als mp4 umpacken (Original bleibt)."""
+    ids = [c.video_id for c in await playback_media.repack_candidates()]
+    if not ids:
+        raise HTTPException(status_code=409, detail="Keine Videos in mkv oder webm ohne kompatible Fassung")
+    return await playback_media.request(
+        ids, "umpacken", f"Für Telefone umpacken ({playback_media.videos_text(len(ids))})")
+
+
+@router.get("/{video_id}/media", response_model=playback_media.PlaybackMedia)
+async def playback_info(video_id: str):
+    """Angaben der Datei für die Prüfung im Player, dazu die kompatible Fassung."""
+    try:
+        return await playback_media.describe(video_id)
+    except playback_media.Unavailable:
+        raise HTTPException(status_code=404, detail="Video-Datei nicht verfügbar")
+
+
+@router.get("/{video_id}/compatible")
+async def stream_compatible(video_id: str, request: Request):
+    path = await playback_media.compatible_file(video_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Keine kompatible Fassung")
+    return range_response(str(path), request, media_type="video/mp4")
+
+
+@router.post("/{video_id}/compatible")
+async def make_compatible(video_id: str):
+    """Kompatible Fassung für dieses Video anlegen (umpacken oder umwandeln)."""
+    title = await db.fetch_val("SELECT title FROM videos WHERE id = ?", (video_id,))
+    if title is None:
+        raise HTTPException(status_code=404, detail="Video nicht gefunden")
+    return await playback_media.request([video_id], "bei_bedarf", f"Für dieses Gerät: {title[:80]}")
 
 
 @router.get("/{video_id}")

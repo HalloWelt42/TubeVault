@@ -19,6 +19,8 @@
   import { videoSession } from '../../lib/stores/videoSession.svelte.js';
   import { removeFromPlaylist } from '../../lib/utils/playlistRemoval.js';
   import DeviceSheet from '../parts/DeviceSheet.svelte';
+  import CompatibleNotice from '../../lib/components/watch/CompatibleNotice.svelte';
+  import { PlayableSource } from '../../lib/utils/playableSource.svelte.js';
 
   /** handoff: von einem anderen Gerät übernommen, an der Stelle startAt sofort weiter */
   let { id, listId = null, shuffle = false, startAt = 0, handoff = false } = $props();
@@ -36,6 +38,8 @@
   let showDescription = $state(false);
   let queued = $state(false);
   let player = $state(null);
+  const source = new PlayableSource();   // Original oder kompatible Fassung, je nach Gerät
+  $effect(() => () => source.close());
   let tracks = $state([]);          // zusätzliche Tonspuren (z.B. Nachvertonung)
   let activeTrackId = $state(null); // null = Original-Ton
   let trackAudio = $state(null);
@@ -112,6 +116,7 @@
     try {
       video = await api.getVideoPreview(id);
       if (!video.preview_mode) {
+        source.open(id);
         api.checkFavorite(id).then(r => { isFav = !!r.is_favorite; }).catch(() => {});
         api.getChapters(id).then(r => { chapters = r.chapters || []; }).catch(() => {});
         loadSkipRanges(id).then(r => { if (loadedId === id) skipRanges = r; });
@@ -124,6 +129,7 @@
   }
 
   function onLoadedMetadata() {
+    if (source.rejected(player)) return;
     keepVolume(player);
     if (handoff && !startUsed) {
       startUsed = true;
@@ -272,10 +278,12 @@
       <div class="stage poster">
         <img src={api.rssThumbUrl(id)} alt="" />
       </div>
+    {:else if source.blocked}
+      <CompatibleNotice {source} duration={video.duration} />
     {:else}
       <!-- svelte-ignore a11y_media_has_caption -->
-      <video class="stage" class:fill={filled} bind:this={player} src={api.streamUrl(id)} poster={api.thumbnailUrl(id)}
-             controls playsinline preload="metadata"
+      <video class="stage" class:fill={filled} bind:this={player} src={source.url} poster={api.thumbnailUrl(id)}
+             controls playsinline preload="metadata" onerror={() => source.rejected(player)}
              onloadedmetadata={onLoadedMetadata} ontimeupdate={skipAds} onplay={onPlay} onpause={onPause} onended={onEnded}></video>
     {/if}
 

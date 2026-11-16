@@ -37,6 +37,8 @@
   import { videoSession } from '../lib/stores/videoSession.svelte.js';
   import { playlistIdOf, removeFromPlaylist } from '../lib/utils/playlistRemoval.js';
   import DeviceButton from '../lib/components/remote/DeviceButton.svelte';
+  import CompatibleNotice from '../lib/components/watch/CompatibleNotice.svelte';
+  import { PlayableSource } from '../lib/utils/playableSource.svelte.js';
 
   marked.setOptions({ breaks: true, gfm: true });
   function renderMarkdown(text) {
@@ -159,6 +161,8 @@
   }
   let thumbKey = $state(Date.now());  // Cache-Busting für Thumbnails
   let mediaKey = $state(0);           // wird erhöht, wenn die Videodatei ersetzt wurde
+  const source = new PlayableSource();   // Original oder kompatible Fassung, je nach Gerät
+  $effect(() => () => source.close());
 
 
   async function loadVideo() {
@@ -184,6 +188,7 @@
       video = v;
 
       if (!previewMode) {
+        source.open(id);
         const favCheck = await api.checkFavorite(id);
         isFav = favCheck.is_favorite;
         loadChapters(id);
@@ -346,6 +351,7 @@
 
   // Position
   function onVideoLoaded() {
+    if (source.rejected(videoEl)) return;
     if (!video || positionRestored) return;
     positionRestored = true;
 
@@ -778,12 +784,16 @@
       </div>
     {:else}
       <div class="player-wrap">
+        {#if source.blocked}
+          <CompatibleNotice {source} duration={video.duration} />
+        {:else}
         <!-- svelte-ignore a11y_media_has_caption -->
         <video
           bind:this={videoEl}
           class="video-player"
           class:inverted={invertColors}
-          src={mediaKey ? `${api.streamUrl(video.id)}?v=${mediaKey}` : api.streamUrl(video.id)}
+          src={source.url && mediaKey ? `${source.url}?v=${mediaKey}` : source.url}
+          onerror={() => source.rejected(videoEl)}
           poster={`${api.thumbnailUrl(video.id)}?v=${thumbKey}`}
           controls
           preload="metadata"
@@ -794,6 +804,7 @@
           ontimeupdate={onTimeUpdate}
           crossorigin="anonymous"
         ></video>
+        {/if}
         <div class="player-tools">
           <a
             class="ptool-btn"

@@ -11,6 +11,8 @@
   import { navigate } from '../../router/router.js';
   import { api } from '../../api/client.js';
   import { loadSkipRanges, skipTarget } from '../../utils/adSkip.js';
+  import { PlayableSource } from '../../utils/playableSource.svelte.js';
+  import CompatibleNotice from '../watch/CompatibleNotice.svelte';
 
   let videoEl = $state(null);
   let audioOnly = $state(false);
@@ -19,6 +21,8 @@
   let duration = $state(0);
   let seekHover = $state(false);
   let skipRanges = [];   // Werbestellen des laufenden Videos
+  const source = new PlayableSource();   // Original oder kompatible Fassung, je nach Gerät
+  $effect(() => () => source.close());
 
   // Init-Tracking
   let _initDone = false;
@@ -44,6 +48,7 @@
       _shouldPlay = mp.isPlaying ?? true;
       audioOnly = mp.audioOnly ?? false;
       skipRanges = [];
+      source.open(vid);
       loadSkipRanges(vid).then(r => { if (_initVideoId === vid) skipRanges = r; });
       // Bibliothek-Nachbarn laden wenn keine Queue
       if (!$playlistQueue.active && vid !== _neighborsFor) {
@@ -118,9 +123,8 @@
     const t = title || getQueueTitle(videoId) || videoId;
     const ch = channelName || getQueueChannel(videoId) || '';
 
-    // Direkt neue Source laden + .load() für Browser
-    videoEl.src = api.streamUrl(videoId);
-    videoEl.load();
+    // Neue Quelle: Original oder kompatible Fassung; src folgt source.url
+    source.open(videoId);
 
     // Init-State vorbereiten
     _initDone = false;
@@ -244,12 +248,17 @@
 {#if mp.active && mp.videoId}
   <div class="mini-player" class:audio-only={audioOnly}>
     <div class="mp-video-wrap">
+      {#if source.blocked}
+        <CompatibleNotice {source} />
+      {/if}
       <!-- svelte-ignore a11y_media_has_caption -->
       <video
         bind:this={videoEl}
         class="mp-video"
-        class:hidden={audioOnly}
-        src={api.streamUrl(mp.videoId)}
+        class:hidden={audioOnly || source.blocked}
+        src={source.url}
+        onerror={() => source.rejected(videoEl)}
+        onloadedmetadata={() => source.rejected(videoEl)}
         poster={api.thumbnailUrl(mp.videoId)}
         preload="auto"
         oncanplay={onCanPlay}

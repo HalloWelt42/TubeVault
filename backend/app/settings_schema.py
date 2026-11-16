@@ -83,6 +83,13 @@ SETTINGS: list[SettingDef] = [
                section="downloads", options=VIDEO_QUALITIES, label="Standard-Qualität",
                description="Gilt für alle Downloads, wenn weder der Auftrag noch der Kanal eine "
                            "Qualität vorgibt."),
+    SettingDef(key="download.codec", default="kompatibel", kind="select", category="download",
+               section="downloads", options=["kompatibel", "klein"],
+               option_labels={"kompatibel": "Kompatibel (H.264)", "klein": "Klein (AV1, VP9)"},
+               label="Video-Codec",
+               description="Kompatibel spielt auf jedem Gerät, auch auf älteren Telefonen. Klein spart "
+                           "etwa ein Drittel Platz, braucht aber neuere Geräte. Gibt die Quelle den "
+                           "Codec in der Auflösung nicht her, kommt der nächste."),
     SettingDef(key="download.auto_subtitle", default="false", kind="toggle", category="download",
                section="downloads", label="Untertitel mitladen",
                description="Beim Download und beim Öffnen eines Videos, in den genannten Sprachen."),

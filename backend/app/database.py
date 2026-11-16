@@ -1106,6 +1106,9 @@ class Database:
         # sicherstellen; den Bestand richtet die Regel beim ersten Mal)
         from app.services import video_classifier as _video_classifier
         await _video_classifier.install_rules(self._connection)
+        # Angaben der Videodateien für die abspielbare Fassung je Gerät (HELF-242)
+        from app.services import playback_media as _playback_media
+        await _playback_media.install_schema(self._connection)
         if current_version < 41:
             logger.info("Migration v41: Short-Regel (Stichtag 14.09.2020, Kanal-Ausnahmen)")
 

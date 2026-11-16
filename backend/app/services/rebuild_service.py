@@ -22,6 +22,7 @@ import logging
 from app.database import db
 from app.services import meta_sidecar, music_files
 from app.services.storage import storage
+from app.services.playback_media import COMPATIBLE_NAME
 from app.services.userdata_export import TABLES, userdata_root
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,8 @@ def _find_media_file(folder):
     best, best_size = None, -1
     try:
         for f in folder.iterdir():
-            if f.is_file() and f.suffix.lower() in MEDIA_EXTS:
+            # Die kompatible Fassung (playback_media) ist nie das Original
+            if f.is_file() and f.suffix.lower() in MEDIA_EXTS and f.name != COMPATIBLE_NAME:
                 size = f.stat().st_size
                 if size > best_size:
                     best, best_size = f, size

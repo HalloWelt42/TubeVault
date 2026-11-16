@@ -1,10 +1,12 @@
 <!--
   Wartung (Einstellungen, Abschnitt System): Datenbank bereinigen mit Protokoll,
-  Anmeldedaten der Quelle (cookies.txt), alle Einstellungen zurücksetzen.
+  Anmeldedaten der Quelle (cookies.txt), Videos für Telefone umpacken,
+  alle Einstellungen zurücksetzen.
 -->
 <script>
   import { api } from '../../api/client.js';
   import { toast } from '../../stores/notifications.js';
+  import { formatSize } from '../../utils/format.js';
 
   let { confirm, onReset = () => {} } = $props();   // confirm: ConfirmDialog.ask
 
@@ -13,7 +15,28 @@
   let cookies = $state(null);
   let cookiesBusy = $state(false);
 
+  let repack = $state(null);          // { candidates, size_bytes }: Videos in mkv oder webm
+  let repacking = $state(false);
+
   $effect(() => { api.getCookiesStatus().then(s => cookies = s).catch(() => {}); });
+  $effect(() => { api.getRepackPreview().then(r => repack = r).catch(() => {}); });
+
+  const videosText = (count) => (count === 1 ? '1 Video' : `${count} Videos`);
+
+  async function repackAll() {
+    if (!await confirm('Für Telefone umpacken?',
+      `${videosText(repack.candidates)} in mkv oder webm werden geprüft. Steckt H.264 drin, entsteht ohne Neukodieren `
+      + 'eine mp4-Fassung neben dem Original; das Original bleibt. AV1 und VP9 bleiben liegen und lassen sich '
+      + 'beim Abspielen einzeln umwandeln.', { confirmLabel: 'Umpacken' })) return;
+    repacking = true;
+    try {
+      await api.repackAll();
+      toast.success('Umpacken läuft, Fortschritt unter Aktivitäten');
+      repack = await api.getRepackPreview();
+    }
+    catch (e) { toast.error(e.message); }
+    repacking = false;
+  }
 
   async function fullCleanup() {
     cleaning = true;
@@ -74,6 +97,14 @@
       <i class="fa-solid {cleaning ? 'fa-spinner fa-spin' : 'fa-broom'}"></i> {cleaning ? 'Bereinigt ...' : 'Datenbank bereinigen'}</button>
     <span class="tv-schwach tv-klein">Einträge ohne Datei, verwaiste Zuordnungen, alte Aufträge, Zwischenablage, Verdichten</span>
   </div>
+  {#if repack?.candidates}
+    <div class="zeile">
+      <button class="tv-knopf klein" onclick={repackAll} disabled={repacking}>
+        <i class="fa-solid {repacking ? 'fa-spinner fa-spin' : 'fa-mobile-screen'}"></i> Für Telefone umpacken</button>
+      <span class="tv-schwach tv-klein"><span class="zahl">{videosText(repack.candidates)}</span> in mkv oder webm
+        (<span class="zahl">{formatSize(repack.size_bytes)}</span>), die manche Telefone nicht abspielen</span>
+    </div>
+  {/if}
   {#if protocol}
     <div class="protokoll">
       <div class="tv-etikett">Protokoll · <span class="zahl">{protocol.totals.cleaned} bereinigt, {protocol.totals.freed_human} frei</span></div>
