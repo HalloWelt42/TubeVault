@@ -84,7 +84,7 @@ async def test_db():
     db_file = tmp / "tubevault.db"
 
     # Neue Instance bauen, global austauschen
-    test_instance = Database(db_path=db_file)
+    test_instance = Database(db_path=db_file, allow_create=True)
     await test_instance.connect()
     original = db_mod.db
     db_mod.db = test_instance

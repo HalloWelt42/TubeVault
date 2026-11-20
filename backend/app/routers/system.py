@@ -616,32 +616,18 @@ async def cleanup_temp():
 
 
 @router.post("/cleanup-ghosts")
-async def cleanup_ghost_entries():
-    """Ghost-Einträge finden und bereinigen: Videos mit status='ready' aber ohne Datei."""
-    from pathlib import Path
+async def cleanup_ghost_entries(force: bool = Query(False, description=(
+        "Auch markieren, wenn ungewöhnlich viel fehlt (nur nach dem Löschen vieler Dateien von Hand)"))):
+    """Ghost-Einträge finden und bereinigen: Videos mit status='ready' aber ohne Datei.
 
-    rows = await db.fetch_all(
-        "SELECT id, title, file_path, status FROM videos WHERE status = 'ready'"
-    )
-    from app.utils.file_utils import is_media_file
-    ghosts = []
-    for row in rows:
-        fp = row["file_path"]
-        if not is_media_file(fp):
-            ghosts.append({"id": row["id"], "title": row["title"], "file_path": fp})
-
-    if not ghosts:
-        return {"ghosts_found": 0, "cleaned": 0, "entries": []}
-
-    # Ghost-Einträge auf status='ghost' setzen (nicht löschen, recoverable)
-    for g in ghosts:
-        await db.execute(
-            "UPDATE videos SET status = 'ghost' WHERE id = ?", (g["id"],))
-
+    Markiert nur, wenn der Bestand erreichbar ist (ghost_videos, NETZ-28); sonst nennt blocked_reason den Grund."""
+    from app.services import ghost_videos
+    result = await ghost_videos.mark_ghosts(force=force)
     return {
-        "ghosts_found": len(ghosts),
-        "cleaned": len(ghosts),
-        "entries": ghosts,
+        "ghosts_found": result.found,
+        "cleaned": result.marked,
+        "blocked_reason": result.blocked_reason,
+        "entries": [e.model_dump() for e in result.entries],
     }
 
 
@@ -665,12 +651,12 @@ async def full_cleanup():
 
     # 1. Ghost-Videos (status='ready' ohne Datei)
     try:
-        ready = await db.fetch_all("SELECT id, title, file_path FROM videos WHERE status = 'ready'")
-        from app.utils.file_utils import is_media_file
-        ghosts = [r for r in ready if not is_media_file(r["file_path"])]
-        for g in ghosts:
-            await db.execute("UPDATE videos SET status = 'ghost' WHERE id = ?", (g["id"],))
-        log("ghost_videos", f"{len(ghosts)} Videos ohne Datei → status='ghost'", len(ghosts))
+        from app.services import ghost_videos
+        result = await ghost_videos.mark_ghosts()
+        if result.blocked_reason:
+            log("ghost_videos", f"ausgesetzt, nichts markiert: {result.blocked_reason}")
+        else:
+            log("ghost_videos", f"{result.marked} Videos ohne Datei → status='ghost'", result.marked)
     except Exception as e:
         log_error("ghost_videos", e)
 

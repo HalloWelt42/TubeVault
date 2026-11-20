@@ -139,13 +139,17 @@ async def _resume_interrupted_upgrades():
     """Altlast heilen: Früher setzte "neu laden" das Video auf 'upgrading' und
     löschte die Datei vorab. Scheiterte der Download, blieb das Video für immer
     unsichtbar. Solche Videos kehren in die Listen zurück; fehlt die Datei,
-    wird der vom Nutzer gewünschte Download erneut eingereiht."""
+    wird der vom Nutzer gewünschte Download erneut eingereiht. Ist der Medienordner nicht erreichbar (NETZ-28),
+    wird nichts eingereiht: Die Datei fehlt dann nicht wirklich."""
+    from app.config import VIDEOS_DIR
+    from app.services import missing_guard
     from app.utils.file_utils import is_media_file
     rows = await db.fetch_all(
         "SELECT id, file_path FROM videos WHERE status = 'upgrading'")
+    reachable = bool(rows) and await asyncio.to_thread(missing_guard.root_reachable, VIDEOS_DIR)
     for row in rows:
         await db.execute("UPDATE videos SET status = 'ready' WHERE id = ?", (row["id"],))
-        if is_media_file(row["file_path"]):
+        if not reachable or is_media_file(row["file_path"]):
             continue
         try:
             await download_service.add_to_queue(
@@ -164,20 +168,17 @@ async def _ghost_check_bg():
     band den Port erst danach). Jetzt: einmal die Zeilen laden, die stat()-Schleife
     in einem Thread abarbeiten (Event-Loop bleibt frei), nur die tatsaechlichen
     Ghosts per DB-Update markieren.
+
+    Markiert wird nur, wenn der Bestand erreichbar ist (ghost_videos, NETZ-28): Startet der Rechner vor dem
+    Netzlaufwerk, bleibt jedes Video, wie es ist.
     """
     try:
-        from app.utils.file_utils import is_media_file
-        rows = await db.fetch_all(
-            "SELECT id, file_path FROM videos WHERE status = 'ready'")
-
-        def _find_ghosts(rs):
-            return [gr["id"] for gr in rs if not is_media_file(gr["file_path"])]
-
-        ghost_ids = await asyncio.to_thread(_find_ghosts, rows)
-        for gid in ghost_ids:
-            await db.execute("UPDATE videos SET status = 'ghost' WHERE id = ?", (gid,))
-        if ghost_ids:
-            logger.info(f"[STARTUP] {len(ghost_ids)} Ghost-Einträge bereinigt (keine Datei)")
+        from app.services import ghost_videos
+        result = await ghost_videos.mark_ghosts()
+        if result.blocked_reason:
+            logger.warning(f"[STARTUP] Ghost-Prüfung ausgesetzt: {result.blocked_reason}")
+        elif result.marked:
+            logger.info(f"[STARTUP] {result.marked} Ghost-Einträge bereinigt (keine Datei)")
     except Exception as e:
         logger.warning(f"[STARTUP] Ghost-Check Fehler: {e}")
 

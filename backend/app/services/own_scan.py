@@ -26,7 +26,7 @@ from app.config import SCAN_DIR
 from app.database import db
 from app.models.own_files import (Decision, Finding, Match, OwnFile, OwnFolder, ScanPhase,
                                   ScanState)
-from app.services import own_inventory, own_matching
+from app.services import missing_guard, own_inventory, own_matching
 from app.services.own_inventory import FileFacts, ListingProgress
 from app.utils.file_utils import now_sqlite
 
@@ -219,6 +219,11 @@ async def _sync(path: str, listed: list[own_inventory.ListedFile]) -> None:
         elif not row["present"]:
             returned.append((row["id"],))
     gone = [(row["id"],) for rel, row in known.items() if rel not in seen and row["present"]]
+    # Bricht das Laufwerk mitten im Auflisten weg, gilt nicht die halbe Sammlung als verschwunden (NETZ-28)
+    present = sum(1 for row in known.values() if row["present"])
+    verdict = await asyncio.to_thread(missing_guard.judge, len(gone), present, [collection_root()], "Eigene Videos")
+    if not verdict.allowed:
+        gone = []
     connection = db.conn
     await connection.executemany("INSERT INTO own_files (rel_path, size, mtime) VALUES (?, ?, ?)", new)
     await connection.executemany(

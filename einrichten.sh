@@ -28,6 +28,13 @@ ordner_anlegen() {
   fi
   for o in "${ORDNER_INDEX[@]}"; do mkdir -p "$index/$o"; done
   for o in "${ORDNER_MEDIEN[@]}"; do mkdir -p "$medien/$o"; done
+  # TubeVault legt nie von selbst eine neue Datenbank an (NETZ-28); bei der Einrichtung ohne Datenbank erlaubt es die
+  # Marke genau einmal, das Backend entfernt sie nach dem ersten Start
+  if [ ! -f "$index/data/db/tubevault.db" ]; then
+    mkdir -p "$index/data/db"
+    touch "$index/data/db/.neu-einrichten"
+    echo "Keine Datenbank unter $index/data/db: TubeVault legt beim ersten Start eine neue an" >&2
+  fi
 }
 
 einrichten() {

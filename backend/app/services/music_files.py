@@ -36,6 +36,7 @@ from pydantic import BaseModel
 
 from app.config import MUSIC_COVERS_DIR, MUSIC_FILES_DIR
 from app.database import db
+from app.services import missing_guard
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +343,10 @@ async def scan() -> ScanResult:
         known = {r["path"]: (r["size"], r["mtime"]) for r in await db.fetch_all("SELECT path, size, mtime FROM music_files")}
         changed = [p for p, stamp in found.items() if known.get(p) != stamp]
         removed = [p for p in known if p not in found]
+        # Fällt die Sammlung während des Durchgehens weg, fehlt scheinbar ein großer Teil: dann nichts austragen (NETZ-28)
+        verdict = await asyncio.to_thread(missing_guard.judge, len(removed), len(known), [root()], "Musiksammlung")
+        if not verdict.allowed:
+            removed = []
         for start in range(0, len(changed), 100):
             batch = changed[start:start + 100]
             infos = await asyncio.to_thread(lambda b=batch: [(p, read_tags(root() / p)) for p in b])

@@ -14,7 +14,7 @@ schluessel_orte:
   - "Pi: `{{umgebung:NACHVERTONER_SCHLUESSEL}}`, Modus 0600 (App-Schlüssel des Nachvertoners bei der Kellerwolke)"
   - "Datenbank: Schlüssel der Leitstelle in den Einstellungen von TubeVault"
 einrichten: einrichten.sh
-stand: f330720
+stand: 3b372c0
 ---
 
 # TubeVault
@@ -46,8 +46,8 @@ Angaben des Nachvertoners stehen in der `.env` neben `docker-compose.yml`, nie i
 
 ## Neu einrichten
 
-Zwei Wege. Aus der Sicherung: die Datenbank (jüngste Kopie aus `exports/backups`) nach
-`{{umgebung:TUBEVAULT_INDEX}}/data` zurückspielen, `config/` und die Schlüsseldatei des Nachvertoners zurücklegen; die
+Zwei Wege. Aus der Sicherung: die Datenbank (jüngste Kopie aus `exports/backups`) als
+`{{umgebung:TUBEVAULT_INDEX}}/data/db/tubevault.db` zurückspielen, `config/` und die Schlüsseldatei des Nachvertoners zurücklegen; die
 Medien bleiben auf der großen Platte. Frisch: leerer Index, Abos und Einstellungen neu; vorhandene Medien lassen sich
 über den Scan wieder einordnen.
 
@@ -73,8 +73,13 @@ Probe: `grep -c -E '^(TUBEVAULT_INDEX|TUBEVAULT_MEDIEN|NACHVERTONER_[A-Z]+)=' {{
 ### 3. Einrichten und starten
 
 `./einrichten.sh` im Klon: legt die Ordner unter `{{umgebung:TUBEVAULT_INDEX}}` und `{{umgebung:TUBEVAULT_MEDIEN}}`
-an, baut und startet alle Container (`docker compose up -d --build`). Aus der Sicherung die Datenbank vorher nach
-`{{umgebung:TUBEVAULT_INDEX}}/data` legen.
+an, baut und startet alle Container (`docker compose up -d --build`). Aus der Sicherung die Datenbank vorher als
+`{{umgebung:TUBEVAULT_INDEX}}/data/db/tubevault.db` ablegen.
+
+TubeVault legt nie von selbst eine neue Datenbank an: Fehlt sie, startet das Backend nicht (meist ist dann ein
+Laufwerk nicht eingehängt). Findet `einrichten.sh` keine Datenbank, legt es die Marke
+`{{umgebung:TUBEVAULT_INDEX}}/data/db/.neu-einrichten` an; nur damit entsteht beim ersten Start eine neue, und das
+Backend entfernt die Marke danach.
 
 Probe: `curl -s http://127.0.0.1:{{port:docker-compose.yml/tubevault-backend}}/api/system/health` auf dem Pi antwortet,
 und die Oberfläche über den [[Vorbau]] des Pi zeigt Bibliothek und Abos.
@@ -124,8 +129,8 @@ ein Lauf getan hat, steht in `logs/backup.log`. Das Werkzeug Sicherungen holt de
 schreibt TubeVault zusätzlich täglich als Dateien nach `exports/userdata`. Videos, Ton und Untertitel auf der großen
 Platte werden nicht gesichert.
 
-Zurückspielen: `docker compose stop tubevault-backend`, die Sicherung als Datenbank nach
-`{{umgebung:TUBEVAULT_INDEX}}/data` kopieren (Name wie die bisherige Datei), `docker compose start tubevault-backend`;
+Zurückspielen: `docker compose stop tubevault-backend`, die Sicherung als
+`{{umgebung:TUBEVAULT_INDEX}}/data/db/tubevault.db` kopieren, `docker compose start tubevault-backend`;
 Probe wie in Schritt 3.
 
 ## Wenn etwas klemmt
@@ -139,3 +144,10 @@ Probe wie in Schritt 3.
 - Der Nachvertoner arbeitet nicht: Schlüsseldatei oder Zertifikat der Hausstelle fehlen (`docker logs tubevault-nachvertoner`),
   oder die Vertonung ist nicht erreichbar.
 - Neue Netze lassen sich nicht anlegen: siehe [[Grundlage Pi]], Adressbereiche für Docker-Netze.
+- Das Backend startet nicht, `docker logs tubevault-backend` meldet "Datenbank nicht gefunden": Index-Laufwerk
+  eingehängt? Die Datenbank gehört nach `{{umgebung:TUBEVAULT_INDEX}}/data/db/tubevault.db` (aus der Sicherung
+  zurückspielen, siehe oben). Eine neue legt nur die bewusste Einrichtung an (Marke `.neu-einrichten`).
+- Das Protokoll meldet "[BESTAND] ... nichts als fehlend markiert": Medienordner nicht erreichbar oder auf einmal fehlt
+  mehr als 2 % (Netzlaufwerk weg, Platte nicht eingehängt). Videos, Musik und eigene Videos bleiben unverändert; ist
+  das Laufwerk zurück, läuft beim nächsten Start bzw. Einlesen alles normal. Wer bewusst viele Dateien von Hand
+  gelöscht hat, markiert sie mit `POST /api/system/cleanup-ghosts?force=true`.

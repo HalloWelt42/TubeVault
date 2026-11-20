@@ -13,6 +13,9 @@ from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
+# Erlaubt einmalig das Anlegen einer neuen Datenbank (einrichten.sh, Neueinrichtung); wird danach entfernt
+NEU_EINRICHTEN_MARKE = ".neu-einrichten"
+
 SCHEMA_VERSION = 61
 
 SCHEMA_SQL = """
@@ -411,12 +414,33 @@ _CONNECTIONS = itertools.count(1)
 class Database:
     """Async SQLite Database Manager."""
 
-    def __init__(self, db_path: Path = DB_PATH):
+    def __init__(self, db_path: Path = DB_PATH, allow_create: bool = False):
         self.db_path = db_path
+        self.allow_create = allow_create
         self._connection: aiosqlite.Connection | None = None
         self._generation = 0
 
+    def _ensure_may_open(self) -> None:
+        """Nie still eine neue, leere Datenbank anlegen (NETZ-28).
+
+        Fehlt die Datei, ist fast immer ein Laufwerk nicht eingehängt oder ein Ordner falsch angebunden; eine neue leere
+        Datenbank würde dann die echte verdecken, und die Bereinigungen räumten nach ihr auf. Neu angelegt wird nur bei
+        einer bewussten Einrichtung: einrichten.sh legt dafür die Marke NEU_EINRICHTEN_MARKE neben die Datenbank, oder
+        der Aufrufer erlaubt es ausdrücklich (Tests, Testdaten)."""
+        if self.db_path.exists():
+            return
+        marke = self.db_path.parent / NEU_EINRICHTEN_MARKE
+        if self.allow_create or marke.exists():
+            logger.info(f"Neue Datenbank wird angelegt: {self.db_path}")
+            return
+        logger.critical(f"ABBRUCH: Datenbank nicht gefunden: {self.db_path}. Laufwerk eingehängt?")
+        raise SystemExit(
+            f"Datenbank nicht gefunden: {self.db_path}. TubeVault legt keine neue an, solange nicht eingerichtet wird "
+            f"(Marke {NEU_EINRICHTEN_MARKE} neben der Datenbank, siehe HANDBUCH.md)."
+        )
+
     async def connect(self):
+        self._ensure_may_open()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = await aiosqlite.connect(str(self.db_path))
         self._generation = next(_CONNECTIONS)
@@ -427,6 +451,7 @@ class Database:
         await self._connection.execute("PRAGMA journal_mode=WAL")
         await self._connection.execute("PRAGMA foreign_keys=ON")
         await self._init_schema()
+        (self.db_path.parent / NEU_EINRICHTEN_MARKE).unlink(missing_ok=True)
         logger.info(f"Datenbank verbunden: {self.db_path}")
 
     async def audit_identity(self) -> dict:

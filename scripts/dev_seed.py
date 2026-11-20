@@ -74,6 +74,7 @@ async def seed() -> None:
 
     ensure_directories()
     (DEV_DIR / "config").mkdir(parents=True, exist_ok=True)
+    db.allow_create = True  # Testdaten: eine neue Datenbank ist hier gewollt
     await db.connect()
 
     clip = DEV_DIR / "clip.mp4"

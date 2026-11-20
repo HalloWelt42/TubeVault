@@ -330,7 +330,7 @@ async def test_migration_erhaelt_kategorien_und_zuordnungen(tmp_path):
     """Eine Datenbank mit Stand v51 (Zuordnung nur Video und Kategorie)."""
     from app.database import Database
     path = tmp_path / "alt.db"
-    old = Database(db_path=path)
+    old = Database(db_path=path, allow_create=True)
     await old.connect()
     await old.conn.executescript("""
         DROP TRIGGER IF EXISTS trg_category_dirty_insert; DROP TRIGGER IF EXISTS trg_category_dirty_update;
