@@ -3,8 +3,8 @@ zweck: "Das eigene Videoarchiv: Kanäle abonnieren, Videos und Ton laden, ansehe
 geraet: [pi]
 abhaengigkeiten: [kellerwolke, leitstelle, vertonung]
 daten:
-  - "Pi: Index unter `{{umgebung:TUBEVAULT_INDEX}}` (`data/` mit der Datenbank, rund 13 GB; `thumbnails/`, `avatars/`, `metadata/`, `banners/`, `nachvertoner/`)"
-  - "Pi: Medien unter `{{umgebung:TUBEVAULT_MEDIEN}}` (`videos/`, `audio/`, `subtitles/`, `exports/` mit den Sicherungen der Datenbank)"
+  - "Pi: Index unter `{{umgebung:TUBEVAULT_INDEX}}` (`data/` mit der Datenbank und `texts/<id>/` mit Beschreibung, Kapiteln und `info.json`, rund 13 GB; `thumbnails/`, `avatars/`, `metadata/`, `banners/`, `subtitles/`, `nachvertoner/`)"
+  - "Pi: Medien unter `{{umgebung:TUBEVAULT_MEDIEN}}`, nur Video und Ton (`videos/`, `audio/`) und `exports/` mit den Sicherungen der Datenbank"
   - "Pi: `{{wurzel}}/config` (Laufzeit-Konfiguration, Anmeldedaten der Videoplattform) und `{{wurzel}}/.env` (Ordner und Adressen des Betriebs)"
 sicherung:
   - "die Datenbank sichert `scripts/backup_db.sh` über die Schnittstelle nach `{{umgebung:TUBEVAULT_MEDIEN}}/exports/backups`: ein Zeitplan auf dem Pi ruft es sonntags um 3 Uhr, eine neue entsteht frühestens am siebten Kalendertag nach der jüngsten; vor dem Ausrollen `scripts/backup_db.sh --vor-ausrollen`, das nur sichert, wenn die jüngste älter als 24 Stunden ist; nie ohne Änderung; höchstens drei Stände (Vorgaben in `backend/app/config.py`, in der `.env` überschreibbar)"
@@ -14,7 +14,7 @@ schluessel_orte:
   - "Pi: `{{umgebung:NACHVERTONER_SCHLUESSEL}}`, Modus 0600 (App-Schlüssel des Nachvertoners bei der Kellerwolke)"
   - "Datenbank: Schlüssel der Leitstelle in den Einstellungen von TubeVault"
 einrichten: einrichten.sh
-stand: 3b372c0
+stand: 1de3267
 ---
 
 # TubeVault

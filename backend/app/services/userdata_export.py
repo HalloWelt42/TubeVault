@@ -2,7 +2,7 @@
 TubeVault – Userdata-Export Service v1.0.0
 
 Täglicher JSONL-Export aller NUTZER-Daten – also allem, was sich NICHT aus
-den info.json-Sidecars neben den Videos rekonstruieren lässt:
+den info.json-Sidecars (texts/<id>/info.json) rekonstruieren lässt:
 favorites, watch_history, categories (+ Zuordnungen und Regeln), playlists (+ Inhalte,
 auch Dateien der Sammlung), subscriptions, blocked_channels, ignored_videos,
 Musikkanäle, ausgeschlossene Alben, Hörbuch-Stand sowie die Nutzerfelder aus

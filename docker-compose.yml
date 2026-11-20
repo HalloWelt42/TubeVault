@@ -9,9 +9,11 @@
 #
 # Ordner und Adressen des Betriebs stehen in der .env neben dieser Datei (nie im
 # Repo), Beispiele in .env.example:
-#   TUBEVAULT_INDEX    Index auf schneller Platte (data, thumbnails, avatars,
-#                      metadata, banners, nachvertoner)
-#   TUBEVAULT_MEDIEN   Medien auf großer Platte (videos, audio, subtitles, exports)
+#   TUBEVAULT_INDEX    Index auf schneller Platte (data mit Datenbank und Texten samt
+#                      info.json, thumbnails, avatars, metadata, banners, subtitles,
+#                      nachvertoner)
+#   TUBEVAULT_MEDIEN   Medien auf großer Platte (videos, audio, exports); nur Video
+#                      und Ton, dazu die Sicherungen der Datenbank (NETZ-29)
 #   NACHVERTONER_*     Schlüsseldatei, Hausstelle, Vertonung und Kellerwolke
 
 services:
@@ -38,7 +40,7 @@ services:
       # Medien auf großer Platte
       - ${TUBEVAULT_MEDIEN:?TUBEVAULT_MEDIEN fehlt in .env (Medien auf großer Platte)}/videos:/app/data/videos
       - ${TUBEVAULT_MEDIEN:?}/audio:/app/data/audio
-      - ${TUBEVAULT_MEDIEN:?}/subtitles:/app/data/subtitles
+      - ${TUBEVAULT_INDEX:?}/subtitles:/app/data/subtitles
       - ${TUBEVAULT_MEDIEN:?}/exports:/app/data/exports
       # Sammlung alter Videos für "Eigene Videos" (wahlweise): ohne Angabe der
       # leere Ordner scan im Datenverzeichnis, mit TUBEVAULT_SCAN_SOURCE in der

@@ -14,8 +14,8 @@ set -euo pipefail
 HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WARTEN_S=240
 PROBE_COMPOSE=(-f docker-compose.yml -f deploy/probelauf.compose.yml)
-ORDNER_INDEX=(data thumbnails avatars metadata banners nachvertoner)
-ORDNER_MEDIEN=(videos audio subtitles exports)
+ORDNER_INDEX=(data thumbnails avatars metadata banners subtitles nachvertoner)
+ORDNER_MEDIEN=(videos audio exports)
 
 # Ordner, die docker-compose.yml einhängt, unter Index und Medien aus der .env von $KLON
 ordner_anlegen() {

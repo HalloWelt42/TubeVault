@@ -2,7 +2,8 @@
 Tests für den Meta-Sidecar Service (Phase 5 – Meta-Redundanz).
 
 Pin-Punkte:
-- info.json entsteht NEBEN dem Video (videos_root/<id>/info.json)
+- info.json liegt im Text-Ordner des Videos auf dem Index (texts_root/<id>/info.json, NETZ-29),
+  geschrieben nur, wenn der Video-Ordner existiert
 - Inhalt ist pure Funktion der DB-Zeile: tags als echte Liste, keine
   Zeitstempel, keine Nutzerdaten (rating/play_count/notes)
 - Idempotent: unveränderte Daten → kein zweites Schreiben
@@ -23,6 +24,11 @@ def videos_root(tmp_path, monkeypatch):
     root.mkdir()
     monkeypatch.setenv("TUBEVAULT_VIDEOS_ROOT", str(root))
     return root
+
+
+def _info(vid):
+    """Ort der info.json: Text-Ordner des Videos (Fixture own_texts_root setzt TUBEVAULT_TEXTS_ROOT)."""
+    return meta_sidecar.sidecar_path(vid)
 
 
 async def _insert_video(db, vid="testvid0001", **extra):
@@ -61,12 +67,14 @@ class TestPayload:
 
 
 class TestWrite:
-    async def test_schreibt_neben_das_video(self, test_db, videos_root):
+    async def test_schreibt_in_den_text_ordner_auf_dem_index(self, test_db, videos_root, tmp_path):
         vid = await _insert_video(test_db)
         (videos_root / vid).mkdir()
         res = await meta_sidecar.write_sidecar(vid)
         assert res == {"written": True}
-        data = json.loads((videos_root / vid / "info.json").read_text("utf-8"))
+        assert _info(vid) == tmp_path / "texts" / vid / "info.json"
+        assert not (videos_root / vid / "info.json").exists()   # die große Platte trägt nur Videos und Ton
+        data = json.loads(_info(vid).read_text("utf-8"))
         assert data["id"] == vid
         assert data["tags"] == ["a", "b"]
 
@@ -84,7 +92,7 @@ class TestWrite:
         await test_db.execute("UPDATE videos SET title='Neu' WHERE id=?", (vid,))
         res = await meta_sidecar.write_sidecar(vid)
         assert res == {"written": True}
-        data = json.loads((videos_root / vid / "info.json").read_text("utf-8"))
+        data = json.loads(_info(vid).read_text("utf-8"))
         assert data["title"] == "Neu"
 
     async def test_legt_keinen_ordner_an(self, test_db, videos_root):
@@ -119,6 +127,6 @@ class TestReadUndBackfill:
         (videos_root / v1).mkdir()  # nur v1 hat einen Ordner
         await test_db.execute("INSERT INTO sidecar_stale (video_id) VALUES (?), (?)", (v1, v2))
         assert await meta_sidecar.refresh_stale(throttle_every=0, limit=10) == 2
-        assert (videos_root / v1 / "info.json").exists()
+        assert _info(v1).exists()
         assert not (videos_root / v2).exists()
         assert await test_db.fetch_val("SELECT COUNT(*) FROM sidecar_stale") == 0

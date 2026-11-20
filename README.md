@@ -141,11 +141,11 @@ TubeVault trennt Index und Medien bewusst auf zwei Platten:
 
 | Was | Wohin | Angabe in der `.env` | Beispiel |
 |---|---|---|---|
-| Index: Datenbank, Vorschaubilder, Texte | schnelle Platte | `TUBEVAULT_INDEX` | `/srv/tubevault` |
-| Medien: Videos, Ton, Untertitel, Sicherungen | große Platte | `TUBEVAULT_MEDIEN` | `/mnt/platte/tubevault` |
+| Index: Datenbank, Vorschaubilder, Texte, Untertitel, `info.json` | schnelle Platte | `TUBEVAULT_INDEX` | `/srv/tubevault` |
+| Medien: nur Videos und Ton, dazu die Sicherungen der Datenbank | große Platte | `TUBEVAULT_MEDIEN` | `/mnt/platte/tubevault` |
 
 Beide Ordner sind Pflicht: `docker-compose.yml` hängt sie ein und startet ohne sie nicht. Vorlage ist `.env.example`
-(dort auch die Angaben des Nachvertoners); die `.env` liegt neben `docker-compose.yml` und nie im Repo. Die Datenbank ist nur der Index. Beschreibungen, Kapitel und Notizen liegen als Dateien im Texte-Verzeichnis, die Metadaten zusätzlich als `info.json` neben jedem Video.
+(dort auch die Angaben des Nachvertoners); die `.env` liegt neben `docker-compose.yml` und nie im Repo. Die Datenbank ist nur der Index. Beschreibungen, Kapitel und Notizen liegen als Dateien im Texte-Verzeichnis, die Metadaten zusätzlich als `info.json` im Text-Ordner jedes Videos (`texts/<id>/`, gleich benannt wie der Video-Ordner).
 
 Zwei Quellen lassen sich wahlweise in der `.env` einbinden, beide nur lesend:
 

@@ -1,10 +1,15 @@
 """
 TubeVault – Meta-Sidecar Service v1.0.0
 
-Bewusste Meta-Redundanz: neben jedem Video liegt eine info.json mit den
-wichtigsten Metadaten aus der DB (VIDEOS_DIR/<id>/info.json). Geht die DB
-verloren, lässt sich der Index aus den Dateien wiederherstellen – ohne
-Internet. Die DB bleibt Index (Regel R1), die Datei repliziert den Eintrag.
+Bewusste Meta-Redundanz: zu jedem Video liegt eine info.json mit den
+wichtigsten Metadaten aus der DB. Geht die DB verloren, lässt sich der Index
+aus den Dateien wiederherstellen – ohne Internet. Die DB bleibt Index (Regel
+R1), die Datei repliziert den Eintrag.
+
+Ort (NETZ-29): TEXTS_DIR/<id>/info.json auf dem schnellen Index, gleich benannt
+wie der Video-Ordner und neben Beschreibung und Kapiteln. Die große Platte trägt
+nur Videos und Ton. Gegen den Ausfall des Index schützt dessen nächtliche
+Sicherung (Entscheidung des Nutzers 20.11.2026).
 
 Idempotent: Der Inhalt ist eine pure Funktion der DB-Zeile (bewusst KEINE
 Zeitstempel im Payload) – unveränderte Daten führen zu keinem erneuten
@@ -39,8 +44,13 @@ _FIELDS = [
 
 
 def sidecar_path(video_id: str):
-    """VIDEOS_DIR/<id>/info.json – direkt neben video.mp4."""
-    return storage.videos_root / video_id / SIDECAR_NAME
+    """TEXTS_DIR/<id>/info.json – im Text-Ordner des Videos auf dem Index."""
+    return storage.video_dir(video_id) / SIDECAR_NAME
+
+
+def media_dir(video_id: str):
+    """Der Video-Ordner auf der großen Platte; nur wenn es ihn gibt, gehört eine info.json dazu."""
+    return storage.videos_root / video_id
 
 
 def build_payload(row) -> dict:
@@ -71,7 +81,7 @@ async def write_sidecar(video_id: str) -> dict:
 
     Rückgabe: {"written": True} | {"skipped": True, "reason": ...} |
               {"missing": True} | {"error": ...}
-    Es wird nur in EXISTIERENDE Video-Ordner geschrieben – für Einträge
+    Geschrieben wird nur, wenn der Video-Ordner existiert – für Einträge
     ohne Ordner (RSS-Platzhalter, Ghosts) entstehen keine Leichen-Ordner.
     """
     try:
@@ -80,10 +90,12 @@ async def write_sidecar(video_id: str) -> dict:
             return {"missing": True}
         content = _canonical(build_payload(row))
         target = sidecar_path(video_id)
+        media = media_dir(video_id)
 
         def _write() -> dict:
-            if not target.parent.is_dir():
+            if not media.is_dir():
                 return {"skipped": True, "reason": "kein Video-Ordner"}
+            target.parent.mkdir(parents=True, exist_ok=True)
             if target.exists():
                 try:
                     if target.read_text(encoding="utf-8") == content:

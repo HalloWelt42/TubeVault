@@ -3,8 +3,9 @@ TubeVault – Rebuild Service v1.0.0
 
 Offline-Wiederaufbau des DB-Index aus den redundanten Dateien:
 
-1. rebuild_from_sidecars(): scannt VIDEOS_DIR/<id>/info.json (Sidecars aus
-   meta_sidecar) und legt fehlende videos-Zeilen wieder an – Videodatei wird
+1. rebuild_from_sidecars(): geht die Video-Ordner VIDEOS_DIR/<id> durch, liest
+   je Ordner TEXTS_DIR/<id>/info.json (Sidecars aus meta_sidecar) und legt
+   fehlende videos-Zeilen wieder an – Videodatei wird
    im Ordner gesucht (größte Mediendatei, deckt auch video_tmp.*-Altlasten ab),
    Beschreibung kommt aus TEXTS_DIR/<id>/description.txt falls vorhanden.
    Bestehende DB-Einträge werden NIE überschrieben (DB bleibt führend).
@@ -88,7 +89,7 @@ async def rebuild_from_sidecars(dry_run: bool = False,
                 rebuild_state["existing"] += 1
                 continue
             data = await asyncio.to_thread(
-                meta_sidecar.read_sidecar_file, folder / meta_sidecar.SIDECAR_NAME)
+                meta_sidecar.read_sidecar_file, meta_sidecar.sidecar_path(folder.name))
             if not data or data.get("id") != folder.name:
                 rebuild_state["invalid"] += 1
                 continue

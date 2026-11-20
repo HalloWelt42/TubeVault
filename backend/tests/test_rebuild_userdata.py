@@ -147,7 +147,7 @@ class TestRebuild:
     async def test_rebuild_stellt_geloeschtes_video_wieder_her(self, test_db, roots):
         vid = await _seed(test_db)
         await self._make_sidecar_folder(test_db, roots, vid)
-        (roots / "texts" / vid).mkdir()
+        (roots / "texts" / vid).mkdir(exist_ok=True)   # info.json hat den Text-Ordner schon angelegt (NETZ-29)
         (roots / "texts" / vid / "description.txt").write_text("Beschreibung!", "utf-8")
         await test_db.execute("DELETE FROM videos WHERE id=?", (vid,))
 
@@ -183,7 +183,8 @@ class TestRebuild:
     async def test_ordner_ohne_sidecar_oder_media(self, test_db, roots):
         (roots / "videos" / "ohnesidecar1").mkdir()
         (roots / "videos" / "ohnemedia001").mkdir()
-        (roots / "videos" / "ohnemedia001" / "info.json").write_text(
+        (roots / "texts" / "ohnemedia001").mkdir()
+        (roots / "texts" / "ohnemedia001" / "info.json").write_text(
             json.dumps({"sidecar_version": 1, "id": "ohnemedia001"}), "utf-8")
         res = await rebuild_service.rebuild_from_sidecars(throttle_every=0)
         assert res["invalid"] == 1

@@ -71,7 +71,7 @@ def ablage(tmp_path, monkeypatch):
 async def test_diagnose_zaehlt_alle_dateien(test_db, ablage):
     await _kanal(test_db)
     # Video 0: alles da; Video 1: nur das Video, Beschreibung nur in der Datenbank
-    for name in ("videos/seite000000/video.mp4", "videos/seite000000/info.json", "thumbs/seite000000.jpg",
+    for name in ("videos/seite000000/video.mp4", "texts/seite000000/info.json", "thumbs/seite000000.jpg",
                  "texts/seite000000/description.txt", "subtitles/seite000000/a.de.vtt",
                  "videos/seite000001/video.mp4", "avatars/" + KANAL + ".jpg"):
         (ablage / name).parent.mkdir(parents=True, exist_ok=True)

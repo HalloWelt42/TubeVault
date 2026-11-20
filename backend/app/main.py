@@ -123,7 +123,7 @@ async def _rss_cron_loop():
 
 async def _userdata_export_loop():
     """Täglicher Nutzerdaten-Export (JSONL + Rotation) – Teil der
-    Meta-Redundanz: zusammen mit den info.json-Sidecars neben den Videos
+    Meta-Redundanz: zusammen mit den info.json-Sidecars (texts/<id>/info.json)
     lässt sich die DB komplett offline wiederherstellen."""
     await asyncio.sleep(180)  # Systemstart abwarten
     while True:
